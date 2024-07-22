@@ -9,14 +9,17 @@ import to.bitkit.ldk.Ldk
 import to.bitkit.ldk.init
 import to.bitkit.ldk.ldkDir
 import to.bitkit.ui.MainActivity
+import to.bitkit.ui.initNotificationChannel
+import to.bitkit.ui.logFcmToken
 import java.io.File
 
 class LauncherActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        warmupNode(filesDir.absolutePath)
-        startActivity(Intent(this, MainActivity::class.java))
+        initNotificationChannel()
+        logFcmToken()
+        // warmupNode(filesDir.absolutePath)
+        // startActivity(Intent(this, MainActivity::class.java))
     }
 }
 

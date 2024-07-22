@@ -141,9 +141,9 @@ object Bdk {
         } catch (e: Throwable) {
             // if mnemonic doesn't exist, generate one and save it
             Log.d(_BDK, "No mnemonic backup, we'll create a new wallet")
-            val mnemonic = Mnemonic(WordCount.WORDS12)
-            mnemonicFile.writeText(mnemonic.asString())
-            mnemonic.asString()
+            val mnemonic = Mnemonic(WordCount.WORDS12).asString()
+            mnemonicFile.writeText(mnemonic)
+            mnemonic
         }
     }
 }

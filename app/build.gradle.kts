@@ -97,9 +97,11 @@ dependencies {
     // Saved state module for ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
 
+    // Compose Navigation
     val composeNavigationVersion = "2.7.7"
     implementation("androidx.navigation:navigation-compose:$composeNavigationVersion")
     androidTestImplementation("androidx.navigation:navigation-testing:$composeNavigationVersion")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Compose Tooling for Android Studio Preview
     val composeToolingVersion = "1.6.8"
@@ -110,7 +112,11 @@ dependencies {
     val hiltVersion = "2.51.1"
     implementation("com.google.dagger:hilt-android:$hiltVersion")
     ksp("com.google.dagger:hilt-android-compiler:$hiltVersion")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+
+    // WorkManager
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Material Design
     implementation("com.google.android.material:material:1.12.0")
