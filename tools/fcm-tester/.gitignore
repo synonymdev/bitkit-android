@@ -1,0 +1,5 @@
+node_modules
+
+# Secrets
+google-services.json
+service-account.json

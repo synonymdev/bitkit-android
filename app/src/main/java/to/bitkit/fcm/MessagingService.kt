@@ -1,10 +1,23 @@
 package to.bitkit.fcm
 
+import android.content.Context
 import android.util.Log
+import androidx.hilt.work.HiltWorker
+import androidx.work.CoroutineWorker
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import kotlinx.coroutines.delay
 import to.bitkit._FCM
+import to.bitkit.data.RestApi
+import to.bitkit.data.Syncer
 import to.bitkit.ui.payInvoice
+import to.bitkit.warmupNode
 import java.util.Date
 
 internal class MessagingService : FirebaseMessagingService() {
@@ -33,7 +46,7 @@ internal class MessagingService : FirebaseMessagingService() {
             Log.d(_FCM, "\n")
 
             if (message.needsScheduling()) {
-                scheduleJob()
+                scheduleJob(message.data)
             } else {
                 handleNow(message.data)
             }
@@ -42,7 +55,7 @@ internal class MessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * TODO Handle message within 10 seconds.
+     * Handle message within 10 seconds.
      */
     private fun handleNow(data: Map<String, String>) {
         val bolt11 = data["bolt11"].orEmpty()
@@ -54,19 +67,67 @@ internal class MessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * TODO Schedule async work using WorkManager for long-running tasks (10 seconds or more)
+     * Schedule async work using WorkManager for tasks of 10+ seconds.
      */
-    private fun scheduleJob() {
-        TODO("Not yet implemented: scheduleJob")
+    private fun scheduleJob(messageData: Map<String, String>) {
+        val work = OneTimeWorkRequest.Builder(PayWorker::class.java)
+            .setInputData(
+                Data.Builder()
+                    .putString("bolt11", messageData["bolt11"].orEmpty())
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(this)
+            .beginWith(work)
+            .enqueue()
     }
 
     private fun RemoteMessage.needsScheduling(): Boolean {
-        // return notification == null && data.isNotEmpty()
-        return false
+        return notification == null &&
+            data.containsKey("bolt11")
     }
 
     override fun onNewToken(token: String) {
         this.token = token
         Log.d(_FCM, "onNewToken: $token")
+    }
+}
+
+@HiltWorker
+class PayWorker @AssistedInject constructor(
+    @Assisted private val appContext: Context,
+    @Assisted private val workerParams: WorkerParameters,
+    private val syncer: Syncer,
+    private val restApi: RestApi,
+) : CoroutineWorker(appContext, workerParams) {
+    override suspend fun doWork(): Result {
+        Log.d(_FCM, "Node waking up from notification…")
+        warmupNode(appContext.filesDir.absolutePath)
+            .let { Log.d(_FCM, "Node wakeup result: $it…") }
+
+        Log.d(_FCM, "Syncing BDK & LDK from notification…")
+        syncer.sync()
+
+        restApi.connectPeer()
+            .let { Log.d(_FCM, "Connect peer from notification result: $it") }
+
+        workerParams.inputData.getString("bolt11")?.let { bolt11 ->
+            delay(1500) // sleep on bg queue
+            val isSuccess = payInvoice(bolt11)
+            if (isSuccess) {
+                return Result.success()
+            } else {
+                return Result.failure(
+                    Data.Builder()
+                        .putString("reason:", "payment error")
+                        .build()
+                )
+            }
+        }
+        return Result.failure(
+            Data.Builder()
+                .putString("reason:", "bolt11 field missing")
+                .build()
+        )
     }
 }

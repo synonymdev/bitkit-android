@@ -82,7 +82,6 @@ class LdkSyncer @Inject constructor(
                 }
 
             }
-
         }
 
         // Add confirmed Tx from filtered Transaction Ids

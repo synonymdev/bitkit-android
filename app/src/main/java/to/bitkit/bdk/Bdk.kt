@@ -22,7 +22,7 @@ import org.ldk.structs.Result_NoneAPIErrorZ
 import org.ldk.structs.Result_ThirtyTwoBytesAPIErrorZ
 import org.ldk.structs.UserConfig
 import org.ldk.util.UInt128
-import to.bitkit.NETWORK
+import to.bitkit.BDK_NETWORK
 import to.bitkit._BDK
 import to.bitkit._LDK
 import to.bitkit.bdk.Bdk.wallet
@@ -43,12 +43,12 @@ object Bdk {
 
     private fun initWallet() {
         val mnemonic = loadMnemonic()
-        val key = DescriptorSecretKey(NETWORK, Mnemonic.fromString(mnemonic), null)
+        val key = DescriptorSecretKey(BDK_NETWORK, Mnemonic.fromString(mnemonic), null)
 
         wallet = Wallet(
-            Descriptor.newBip84(key, KeychainKind.INTERNAL, NETWORK),
-            Descriptor.newBip84(key, KeychainKind.EXTERNAL, NETWORK),
-            NETWORK,
+            Descriptor.newBip84(key, KeychainKind.INTERNAL, BDK_NETWORK),
+            Descriptor.newBip84(key, KeychainKind.EXTERNAL, BDK_NETWORK),
+            BDK_NETWORK,
             DatabaseConfig.Memory,
         )
 
@@ -86,7 +86,7 @@ object Bdk {
     fun getLdkEntropy(): ByteArray {
         val mnemonic = loadMnemonic()
         val key = DescriptorSecretKey(
-            network = NETWORK,
+            network = BDK_NETWORK,
             mnemonic = Mnemonic.fromString(mnemonic),
             password = null,
         )
@@ -141,9 +141,9 @@ object Bdk {
         } catch (e: Throwable) {
             // if mnemonic doesn't exist, generate one and save it
             Log.d(_BDK, "No mnemonic backup, we'll create a new wallet")
-            val mnemonic = Mnemonic(WordCount.WORDS12)
-            mnemonicFile.writeText(mnemonic.asString())
-            mnemonic.asString()
+            val mnemonic = Mnemonic(WordCount.WORDS12).asString()
+            mnemonicFile.writeText(mnemonic)
+            mnemonic
         }
     }
 }

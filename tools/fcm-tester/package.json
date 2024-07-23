@@ -1,0 +1,17 @@
+{
+  "name": "admin-sdk-google",
+  "version": "1.0.0",
+  "description": "Helper to test FCM notifications",
+  "type":"module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js token",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "ovitrif@proton.me",
+  "license": "MIT",
+  "devDependencies": {
+    "googleapis": "^140.0.1"
+  },
+  "private": true
+}

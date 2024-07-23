@@ -161,7 +161,7 @@ internal fun ldkLocalBalance(): String {
     return localBalance.toString()
 }
 
-internal fun payInvoice(bolt11Invoice: String) {
+internal fun payInvoice(bolt11Invoice: String): Boolean {
     Log.d(_LDK, "Paying invoice: $bolt11Invoice")
 
     val invoice = decodeInvoice(bolt11Invoice)
@@ -173,34 +173,30 @@ internal fun payInvoice(bolt11Invoice: String) {
     )
     if (res.is_ok) {
         Log.d(_LDK, "Payment successful")
+        return true
     }
 
     val error = res as? Result_ThirtyTwoBytesPaymentErrorZ.Result_ThirtyTwoBytesPaymentErrorZ_Err
     val invoiceError = error?.err as? PaymentError.Invoice
     if (invoiceError != null) {
         Log.d(_LDK, "Payment failed: $invoiceError")
+        return true
     }
 
-    val sendingError = error?.err as? PaymentError.Sending
-    if (sendingError != null) {
-        when (val failure = sendingError.sending) {
-            RetryableSendFailure.LDKRetryableSendFailure_DuplicatePayment -> {
-                Log.d(_LDK, "Payment failed: DuplicatePayment")
-            }
+    when (val failure = (error?.err as? PaymentError.Sending)?.sending) {
+        RetryableSendFailure.LDKRetryableSendFailure_DuplicatePayment ->
+            Log.e(_LDK, "Payment failed: DuplicatePayment")
 
-            RetryableSendFailure.LDKRetryableSendFailure_PaymentExpired -> {
-                Log.d(_LDK, "Payment failed: PaymentExpired")
-            }
+        RetryableSendFailure.LDKRetryableSendFailure_PaymentExpired ->
+            Log.e(_LDK, "Payment failed: PaymentExpired")
 
-            RetryableSendFailure.LDKRetryableSendFailure_RouteNotFound -> {
-                Log.d(_LDK, "Payment failed: RouteNotFound")
-            }
+        RetryableSendFailure.LDKRetryableSendFailure_RouteNotFound ->
+            Log.e(_LDK, "Payment failed: RouteNotFound")
 
-            else -> {
-                Log.d(_LDK, "Payment failed with unknown error: $failure")
-            }
-        }
+        else ->
+            Log.e(_LDK, "Payment failed with unknown error: $failure")
     }
+    return false
 }
 
 internal fun decodeInvoice(bolt11Invoice: String): Bolt11Invoice? {

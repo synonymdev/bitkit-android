@@ -3,7 +3,6 @@ package to.bitkit.ldk
 import android.util.Log
 import org.ldk.batteries.ChannelManagerConstructor
 import org.ldk.batteries.NioPeerHandler
-import org.ldk.enums.Network
 import org.ldk.structs.BroadcasterInterface
 import org.ldk.structs.ChainMonitor
 import org.ldk.structs.ChannelHandshakeConfig
@@ -24,6 +23,7 @@ import org.ldk.structs.Result_NetworkGraphDecodeErrorZ
 import org.ldk.structs.Result_ProbabilisticScorerDecodeErrorZ
 import org.ldk.structs.UserConfig
 import org.ldk.structs.WatchedOutput
+import to.bitkit.LDK_NETWORK
 import to.bitkit._LDK
 import to.bitkit.bdk.Bdk
 import to.bitkit.data.WatchedTransaction
@@ -78,7 +78,7 @@ fun Ldk.init(
 
     initNetworkGraph(logger)
 
-    val filter: Filter = Filter.new_impl(LdkFilter)
+    val filter = Filter.new_impl(LdkFilter)
     chainMonitor = ChainMonitor.of(
         Option_FilterZ.some(filter),
         txBroadcaster,
@@ -104,79 +104,61 @@ fun Ldk.init(
     }
 
     try {
-        if (serializedChannelManager?.isNotEmpty() == true) {
+        val entropySource = keysManager.inner.as_EntropySource()
+        val nodeSigner = keysManager.inner.as_NodeSigner()
+        val signerProvider = keysManager.inner.as_SignerProvider()
+        val pScoringDecayParams = ProbabilisticScoringDecayParameters.with_default()
+        val pScoringFeeParams = ProbabilisticScoringFeeParameters.with_default()
+
+        val constructor = if (serializedChannelManager?.isNotEmpty() == true) {
             // Restore from disk
-            val constructor = ChannelManagerConstructor(
+            ChannelManagerConstructor(
                 serializedChannelManager,
                 serializedChannelMonitors,
                 userConfig,
-                keysManager.inner.as_EntropySource(),
-                keysManager.inner.as_NodeSigner(),
-                keysManager.inner.as_SignerProvider(),
+                entropySource,
+                nodeSigner,
+                signerProvider,
                 feeEstimator,
                 chainMonitor,
                 filter,
                 networkGraph.write(),
-                ProbabilisticScoringDecayParameters.with_default(),
-                ProbabilisticScoringFeeParameters.with_default(),
+                pScoringDecayParams,
+                pScoringFeeParams,
                 scorer.write(),
                 null,
                 txBroadcaster,
                 logger,
             )
-
-            channelManagerConstructor = constructor
-            channelManager = constructor.channel_manager
-            nioPeerHandler = constructor.nio_peer_handler
-            peerManager = constructor.peer_manager
-            networkGraph = constructor.net_graph
-
-            constructor.chain_sync_completed(
-                LdkEventHandler,
-                true
-            )
-
-            constructor.nio_peer_handler.bind_listener(
-                InetSocketAddress(
-                    "127.0.0.1",
-                    9777
-                )
-            )
-
         } else {
             // Start from scratch
-            val constructor = ChannelManagerConstructor(
-                Network.LDKNetwork_Regtest,
+            ChannelManagerConstructor(
+                LDK_NETWORK,
                 userConfig,
                 latestBlockHash.toByteArray(),
                 latestBlockHeight,
-                keysManager.inner.as_EntropySource(),
-                keysManager.inner.as_NodeSigner(),
-                keysManager.inner.as_SignerProvider(),
+                entropySource,
+                nodeSigner,
+                signerProvider,
                 feeEstimator,
                 chainMonitor,
                 networkGraph,
-                ProbabilisticScoringDecayParameters.with_default(),
-                ProbabilisticScoringFeeParameters.with_default(),
+                pScoringDecayParams,
+                pScoringFeeParams,
                 null,
                 txBroadcaster,
                 logger,
             )
-
-            channelManagerConstructor = constructor
-            channelManager = constructor.channel_manager
-            peerManager = constructor.peer_manager
-            nioPeerHandler = constructor.nio_peer_handler
-            networkGraph = constructor.net_graph
-
-            constructor.chain_sync_completed(LdkEventHandler, true)
-            constructor.nio_peer_handler.bind_listener(
-                InetSocketAddress(
-                    "127.0.0.1",
-                    9777,
-                )
-            )
         }
+        channelManagerConstructor = constructor
+        channelManager = constructor.channel_manager
+        peerManager = constructor.peer_manager
+        nioPeerHandler = constructor.nio_peer_handler
+        networkGraph = constructor.net_graph
+
+        constructor.chain_sync_completed(LdkEventHandler, true)
+        nioPeerHandler.bind_listener(InetSocketAddress("127.0.0.1", 9777))
+
         return true
     } catch (e: Exception) {
         Log.d(_LDK, "Error starting LDK:\n" + e.message)
@@ -185,56 +167,52 @@ fun Ldk.init(
 }
 
 private fun initKeysManager(entropy: ByteArray) {
-    val startTimeSecs = System.currentTimeMillis() / 1000
-    val startTimeNano = (System.currentTimeMillis() * 1000).toInt()
+    val timeMillis = System.currentTimeMillis()
+    val startTimeSecs = timeMillis / 1000
+    val startTimeNano = (timeMillis * 1000).toInt()
     Ldk.keysManager = LdkKeysManager(
         entropy,
         startTimeSecs,
         startTimeNano,
-        Bdk.wallet
+        Bdk.wallet,
     )
 }
 
 private fun initNetworkGraph(logger: Logger) {
-    val graphFile = File(ldkDir + "/" + "network-graph.bin")
+    val graphFile = File("$ldkDir/network-graph.bin")
     if (graphFile.exists()) {
-        Log.d(_LDK, "Network graph found and loaded from disk.")
-        (NetworkGraph.read(
-            graphFile.readBytes(), logger,
-        ) as? Result_NetworkGraphDecodeErrorZ.Result_NetworkGraphDecodeErrorZ_OK)?.let { res ->
-            Ldk.networkGraph = res.res
+        when (val graph = NetworkGraph.read(graphFile.readBytes(), logger)) {
+            is Result_NetworkGraphDecodeErrorZ.Result_NetworkGraphDecodeErrorZ_OK -> {
+                Ldk.networkGraph = graph.res
+            }
         }
+        Log.d(_LDK, "Network graph found and loaded from disk.")
     } else {
-        Log.d(_LDK, "Network graph not found on disk, syncing from scratch.")
-        Ldk.networkGraph = NetworkGraph.of(Network.LDKNetwork_Regtest, logger)
+        Ldk.networkGraph = NetworkGraph.of(LDK_NETWORK, logger)
+        Log.d(_LDK, "Network graph not found on disk, synced from scratch.")
     }
 }
 
 private fun initProbabilisticScorer(logger: Logger) {
+    val decayParams = ProbabilisticScoringDecayParameters.with_default()
     val scorerFile = File("$ldkDir/scorer.bin")
-    if (scorerFile.exists()) {
-        val scorerReaderResult = ProbabilisticScorer.read(
-            scorerFile.readBytes(), ProbabilisticScoringDecayParameters.with_default(),
-            Ldk.networkGraph, logger
-        )
-        if (scorerReaderResult.is_ok) {
-            val probabilisticScorer =
-                (scorerReaderResult as Result_ProbabilisticScorerDecodeErrorZ.Result_ProbabilisticScorerDecodeErrorZ_OK).res
-            Ldk.scorer = MultiThreadedLockableScore.of(probabilisticScorer.as_Score())
-            Log.d(_LDK, "Probabilistic Scorer found and loaded from on disk.")
+    val scorer = if (scorerFile.exists()) {
+        val read = ProbabilisticScorer
+            .read(scorerFile.readBytes(), decayParams, Ldk.networkGraph, logger)
+        if (read.is_ok) {
+            check(read is Result_ProbabilisticScorerDecodeErrorZ.Result_ProbabilisticScorerDecodeErrorZ_OK)
+            Log.d(_LDK, "Probabilistic Scorer found and loaded from disk.")
+            // return:
+            read.res
         } else {
-            Log.d(_LDK, "Error loading Probabilistic Scorer.")
-            val decayParams = ProbabilisticScoringDecayParameters.with_default()
-            val probabilisticScorer = ProbabilisticScorer.of(
-                decayParams,
-                Ldk.networkGraph, logger
-            )
-            Ldk.scorer = MultiThreadedLockableScore.of(probabilisticScorer.as_Score())
-            Log.d(_LDK, "Probabilistic Scorer not found on disk, started from scratch.")
+            Log.d(_LDK, "Error loading Probabilistic Scorer, started from scratch.")
+            // return:
+            ProbabilisticScorer.of(decayParams, Ldk.networkGraph, logger)
         }
     } else {
-        val decayParams = ProbabilisticScoringDecayParameters.with_default()
-        val probabilisticScorer = ProbabilisticScorer.of(decayParams, Ldk.networkGraph, logger)
-        Ldk.scorer = MultiThreadedLockableScore.of(probabilisticScorer.as_Score())
+        Log.d(_LDK, "Probabilistic Scorer not found on disk, started from scratch.")
+        // return:
+        ProbabilisticScorer.of(decayParams, Ldk.networkGraph, logger)
     }
+    Ldk.scorer = MultiThreadedLockableScore.of(scorer.as_Score())
 }
