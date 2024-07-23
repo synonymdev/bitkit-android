@@ -1,0 +1,62 @@
+package to.bitkit
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.Application
+import android.os.Bundle
+import dagger.hilt.android.HiltAndroidApp
+import kotlin.reflect.typeOf
+
+@HiltAndroidApp
+internal class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        unregisterActivityLifecycleCallbacks(currentActivity).also { currentActivity = null }
+    }
+
+    companion object {
+        @SuppressLint("StaticFieldLeak") // Should be safe given its manual memory management
+        internal var currentActivity: CurrentActivity? = null
+    }
+
+    inner class CurrentActivity : ActivityLifecycleCallbacks {
+        var value: Activity? = null
+            private set
+
+        override fun onActivityCreated(activity: Activity, bundle: Bundle?) {
+            this.value = activity
+        }
+
+        override fun onActivityStarted(activity: Activity) {
+            this.value = activity
+        }
+
+        override fun onActivityResumed(activity: Activity) {
+            this.value = activity
+        }
+
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
+    }
+}
+
+/**
+ * Returns the current activity of the application.
+ *
+ * **NEVER** store the result to a variable, further calls to such reference can lead to memory leaks.
+ *
+ * **ALWAYS** retrieve the current activity functionally, processing on the result of this function.
+ * */
+internal inline fun <reified T> currentActivity(): T {
+    when (val activity = App.currentActivity?.value) {
+        is T -> return activity
+        else -> throw IllegalArgumentException("Current Activity is not '${typeOf<T>()}'")
+    }
+}
