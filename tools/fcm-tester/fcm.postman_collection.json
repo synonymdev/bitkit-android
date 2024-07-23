@@ -1,0 +1,52 @@
+{
+	"info": {
+		"_postman_id": "4832eca8-8592-4e0e-95aa-a16f17be45c4",
+		"name": "fcm",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "2381817"
+	},
+	"item": [
+		{
+			"name": "messages:send",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{bearerToken}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"message\": {\n    \"token\": \"{{deviceToken}}\",\n    \"data\": {\n      \"bolt11\": \"_paste_bolt11_invoice_over_here_\"\n    }\n  }\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://fcm.googleapis.com/v1/projects/snbkandroid/messages:send",
+					"protocol": "https",
+					"host": [
+						"fcm",
+						"googleapis",
+						"com"
+					],
+					"path": [
+						"v1",
+						"projects",
+						"snbkandroid",
+						"messages:send"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

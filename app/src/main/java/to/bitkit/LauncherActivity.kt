@@ -18,8 +18,8 @@ class LauncherActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         initNotificationChannel()
         logFcmToken()
-        // warmupNode(filesDir.absolutePath)
-        // startActivity(Intent(this, MainActivity::class.java))
+        warmupNode(filesDir.absolutePath)
+        startActivity(Intent(this, MainActivity::class.java))
     }
 }
 

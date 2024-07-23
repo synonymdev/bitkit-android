@@ -84,7 +84,7 @@ internal class MessagingService : FirebaseMessagingService() {
 
     private fun RemoteMessage.needsScheduling(): Boolean {
         return notification == null &&
-                data.containsKey("bolt11")
+            data.containsKey("bolt11")
     }
 
     override fun onNewToken(token: String) {

@@ -86,8 +86,8 @@ class MainActivity : ComponentActivity() {
                                         title = "Bitkit Notification",
                                         text = "Short custom notification description",
                                         bigText = "Much longer text that cannot fit one line " +
-                                                "because the lightning channel has been updated " +
-                                                "via a push notification bro…",
+                                            "because the lightning channel has been updated " +
+                                            "via a push notification bro…",
                                     )
                                 }
                                 Unit

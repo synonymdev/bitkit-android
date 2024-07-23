@@ -1,0 +1,9 @@
+{
+  "message": {
+    "token": "{{deviceToken}}",
+    "notification": {
+      "body": "This is an FCM notification message!",
+      "title": "FCM Message 2"
+    }
+  }
+}

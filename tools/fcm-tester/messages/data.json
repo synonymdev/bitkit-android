@@ -1,0 +1,8 @@
+{
+  "message": {
+    "token": "{{deviceToken}}",
+    "data": {
+      "key": "value"
+    }
+  }
+}
