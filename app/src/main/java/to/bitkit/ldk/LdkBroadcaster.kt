@@ -7,7 +7,7 @@ import kotlinx.coroutines.launch
 import org.bitcoindevkit.Transaction
 import org.ldk.structs.BroadcasterInterface
 import to.bitkit._LDK
-import to.bitkit.bdk.Bdk
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.ext.toHex
 
 object LdkBroadcaster : BroadcasterInterface.BroadcasterInterfaceInterface {
@@ -19,7 +19,7 @@ object LdkBroadcaster : BroadcasterInterface.BroadcasterInterfaceInterface {
                     val uByteArray = txByteArray.toUByteArray()
                     val transaction = Transaction(uByteArray.toList())
 
-                    Bdk.broadcastRawTx(transaction)
+                    BitcoinService.shared.broadcastRawTx(transaction)
                     Log.d(_LDK, "Broadcasted raw tx: ${txByteArray.toHex()}")
                 }
             }

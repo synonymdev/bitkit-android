@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.ldk.enums.Currency
 import org.ldk.enums.RetryableSendFailure
@@ -22,14 +21,16 @@ import org.ldk.structs.Result_ThirtyTwoBytesPaymentErrorZ
 import org.ldk.structs.Retry
 import org.ldk.structs.UtilMethods
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.LnPeer
 import to.bitkit.PEER
-import to.bitkit.PORT
 import to.bitkit.SEED
 import to.bitkit._LDK
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ldk.Ldk
 import to.bitkit.ldk.LdkLogger
-import to.bitkit.lightningService
+import to.bitkit.node.LightningService
+import to.bitkit.node.connectPeer
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,43 +46,46 @@ class MainViewModel @Inject constructor(
     val peers = mutableStateListOf<String>()
     val channels = mutableStateListOf<ChannelDetails>()
 
+    private val lightningService = LightningService.shared
+    private val bitcoinService = BitcoinService.shared
+
     init {
         sync()
     }
 
     fun sync() {
-        viewModelScope.launch(ioDispatcher) {
-            delay(1500)
-            syncUi()
+        viewModelScope.launch {
+            ldkNodeId.value = lightningService.nodeId()
+            ldkBalance.value = lightningService.balances().totalOnchainBalanceSats.toString()
+
+            btcAddress.value = bitcoinService.address()
+            btcBalance.value = bitcoinService.balance().total.toString()
+            mnemonic.value = SEED
+
+            peers.clear()
+            peers += lightningService.peers().mapNotNull { it.takeIf { p -> p.isConnected }?.nodeId }
+
+            channels.clear()
+            channels += lightningService.channels()
         }
     }
 
-    private fun syncUi() {
-        ldkNodeId.value = lightningService.nodeId().toString()
-        ldkBalance.value = lightningService.balances()?.totalOnchainBalanceSats.toString()
-
-        btcAddress.value = "TODO"
-        btcBalance.value = "TODO"
-        mnemonic.value = SEED
-
-        peers += lightningService.peers()?.map { it.nodeId }.orEmpty()
-        channels += lightningService.channels().orEmpty()
-    }
-
     fun getNewAddress() {
-        TODO("Not implemented")
+        btcAddress.value = bitcoinService.newAddress()
     }
 
-    fun connectPeer(pubKey: String = PEER, port: String = PORT) {
-        TODO("Not implemented")
+    fun connectPeer(pubKey: String = PEER.nodeId, host: String = PEER.host, port: String = PEER.port) {
+        lightningService.connectPeer(LnPeer(pubKey, host, port))
+        sync()
     }
 
     private fun disconnectPeer() {
-        TODO("Not implemented")
+        lightningService.node.disconnect(PEER.nodeId)
+        sync()
     }
 
     fun togglePeerConnection() {
-        if (peers.contains(PEER)) {
+        if (peers.contains(PEER.nodeId)) {
             disconnectPeer()
         } else {
             connectPeer()

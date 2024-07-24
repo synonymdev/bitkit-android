@@ -56,7 +56,7 @@ fun ChannelsScreen(
         ) {
             Button(
                 onClick = {
-                    Channel.open(PEER)
+                    Channel.open(PEER.nodeId)
                     viewModel.sync()
                 },
                 enabled = viewModel.peers.isNotEmpty()
@@ -92,7 +92,7 @@ fun ChannelsScreen(
                             outbound = outbound.toString(),
                             inbound = inbound.toString(),
                             onClose = {
-                                Channel.close(channelId, PEER)
+                                Channel.close(channelId, PEER.nodeId)
                                 viewModel.sync()
                             },
                         )

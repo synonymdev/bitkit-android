@@ -3,15 +3,12 @@ package to.bitkit
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.node.LightningService
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.initNotificationChannel
 import to.bitkit.ui.logFcmToken
 import kotlin.io.path.Path
-
-internal val lightningService: LightningService by lazy {
-    LightningService()
-}
 
 class LauncherActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,9 +21,12 @@ class LauncherActivity : AppCompatActivity() {
 }
 
 internal fun warmupNode(basePath: String) {
-    lightningService.apply {
+    LightningService.shared.apply {
         init(basePath)
         start()
+        sync()
+    }
+    BitcoinService.shared.apply {
         sync()
     }
 }

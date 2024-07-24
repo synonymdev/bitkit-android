@@ -3,6 +3,7 @@ package to.bitkit.ldk
 import android.util.Log
 import org.ldk.batteries.ChannelManagerConstructor
 import org.ldk.batteries.NioPeerHandler
+import org.ldk.enums.Network
 import org.ldk.structs.BroadcasterInterface
 import org.ldk.structs.ChainMonitor
 import org.ldk.structs.ChannelHandshakeConfig
@@ -23,9 +24,8 @@ import org.ldk.structs.Result_NetworkGraphDecodeErrorZ
 import org.ldk.structs.Result_ProbabilisticScorerDecodeErrorZ
 import org.ldk.structs.UserConfig
 import org.ldk.structs.WatchedOutput
-import to.bitkit.LDK_NETWORK
 import to.bitkit._LDK
-import to.bitkit.bdk.Bdk
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.data.WatchedTransaction
 import to.bitkit.ext.toByteArray
 import java.io.File
@@ -33,6 +33,8 @@ import java.net.InetSocketAddress
 
 @JvmField
 var ldkDir: String = ""
+
+val network = Network.LDKNetwork_Regtest
 
 object Ldk {
     lateinit var channelManager: ChannelManager
@@ -62,7 +64,7 @@ object Ldk {
     }
 }
 
-fun Ldk.init(
+fun Ldk.nit(
     entropy: ByteArray,
     latestBlockHeight: Int,
     latestBlockHash: String,
@@ -133,7 +135,7 @@ fun Ldk.init(
         } else {
             // Start from scratch
             ChannelManagerConstructor(
-                LDK_NETWORK,
+                network,
                 userConfig,
                 latestBlockHash.toByteArray(),
                 latestBlockHeight,
@@ -174,7 +176,7 @@ private fun initKeysManager(entropy: ByteArray) {
         entropy,
         startTimeSecs,
         startTimeNano,
-        Bdk.wallet,
+        BitcoinService.shared.wallet,
     )
 }
 
@@ -188,7 +190,7 @@ private fun initNetworkGraph(logger: Logger) {
         }
         Log.d(_LDK, "Network graph found and loaded from disk.")
     } else {
-        Ldk.networkGraph = NetworkGraph.of(LDK_NETWORK, logger)
+        Ldk.networkGraph = NetworkGraph.of(network, logger)
         Log.d(_LDK, "Network graph not found on disk, synced from scratch.")
     }
 }

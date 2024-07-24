@@ -5,15 +5,23 @@ import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.Env
+import to.bitkit.LnPeer
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit._LDK
 import to.bitkit.ldkDir
 
 internal class LightningService {
-    private var node: Node? = null
+    companion object {
+        val shared by lazy {
+            LightningService()
+        }
+    }
+
+    lateinit var node: Node
 
     fun init(cwd: String) {
         val dir = ldkDir(cwd)
@@ -23,7 +31,7 @@ internal class LightningService {
             defaultConfig().apply {
                 storageDirPath = dir
                 logDirPath = dir
-                network = Env.Network.ldkNetwork
+                network = Env.Network.ldk
                 logLevel = LogLevel.TRACE
 
                 trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
@@ -61,32 +69,34 @@ internal class LightningService {
 
         Log.i(_LDK, "Node started.")
 
-        node.connectToTrustedPeers()
+        connectToTrustedPeers()
     }
 
-    // private fun Node.listenForEvents(onEvent: (Event) -> Unit) {
-    //     Log.d(_LDK, "listenForEvents() Not yet implemented")
-    // }
+    // private fun Node.listenForEvents(onEvent: (Event) -> Unit) {}
 
-    private fun Node.connectToTrustedPeers() {
+    private fun connectToTrustedPeers() {
         for (peer in Env.trustedLnPeers) {
-            Log.d(_LDK, "Connecting peer: $peer")
-            val res = runCatching {
-                connect(peer.nodeId, peer.address(), persist = true)
-            }
-            Log.d(_LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} to peer: $peer")
+            connectPeer(peer)
         }
     }
 
     fun sync() {
-        node?.syncWallets()
+        node.syncWallets()
     }
 
     // region State
-    fun nodeId() = node?.nodeId()
-    fun balances() = node?.listBalances()
-    fun status() = node?.status()
-    fun peers() = node?.listPeers()
-    fun channels() = node?.listChannels()
-    fun payments() = node?.listPayments()
+    fun nodeId() = node.nodeId()
+    fun balances() = node.listBalances()
+    fun status() = node.status()
+    fun peers(): List<PeerDetails> = node.listPeers()
+    fun channels() = node.listChannels()
+    fun payments() = node.listPayments()
+}
+
+internal fun LightningService.connectPeer(peer: LnPeer) {
+    Log.d(_LDK, "Connecting peer: $peer")
+    val res = runCatching {
+        node.connect(peer.nodeId, peer.address(), persist = true)
+    }
+    Log.d(_LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }

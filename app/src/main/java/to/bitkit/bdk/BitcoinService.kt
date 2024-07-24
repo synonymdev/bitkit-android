@@ -5,7 +5,6 @@ import org.bitcoindevkit.AddressIndex
 import org.bitcoindevkit.Blockchain
 import org.bitcoindevkit.BlockchainConfig
 import org.bitcoindevkit.DatabaseConfig
-import org.bitcoindevkit.DerivationPath
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
 import org.bitcoindevkit.EsploraConfig
@@ -17,42 +16,50 @@ import org.bitcoindevkit.Script
 import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Wallet
-import org.bitcoindevkit.WordCount
 import org.ldk.structs.Result_NoneAPIErrorZ
 import org.ldk.structs.Result_ThirtyTwoBytesAPIErrorZ
 import org.ldk.structs.UserConfig
 import org.ldk.util.UInt128
-import to.bitkit.BDK_NETWORK
+import to.bitkit.Env
 import to.bitkit.REST
+import to.bitkit.SEED
 import to.bitkit._BDK
 import to.bitkit._LDK
-import to.bitkit.bdk.Bdk.wallet
 import to.bitkit.ext.toByteArray
 import to.bitkit.ext.toHex
 import to.bitkit.ldk.Ldk
-import to.bitkit.ldk.ldkDir
-import java.io.File
 
-object Bdk {
-    lateinit var wallet: Wallet
-    private val blockchain = createBlockchain()
-
-    init {
-        initWallet()
+internal class BitcoinService {
+    companion object {
+        val shared by lazy {
+            BitcoinService()
+        }
     }
 
-    private fun initWallet() {
-        val mnemonic = loadMnemonic()
-        val key = DescriptorSecretKey(BDK_NETWORK, Mnemonic.fromString(mnemonic), null)
+    val wallet by lazy {
+        val network = Env.Network.bdk
+        val mnemonic = Mnemonic.fromString(SEED)
+        val key = DescriptorSecretKey(network, mnemonic, null)
 
-        wallet = Wallet(
-            Descriptor.newBip84(key, KeychainKind.INTERNAL, BDK_NETWORK),
-            Descriptor.newBip84(key, KeychainKind.EXTERNAL, BDK_NETWORK),
-            BDK_NETWORK,
-            DatabaseConfig.Memory,
+        Wallet(
+            descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
+            changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
+            network = network,
+            databaseConfig = DatabaseConfig.Memory,
         )
-
-        Log.d(_BDK, "Created/restored wallet with mnemonic $mnemonic")
+    }
+    private val blockchain by lazy {
+        Blockchain(
+            BlockchainConfig.Esplora(
+                EsploraConfig(
+                    baseUrl = REST,
+                    proxy = null,
+                    concurrency = 5u,
+                    stopGap = 20u,
+                    timeout = null,
+                )
+            )
+        )
     }
 
     fun sync() {
@@ -60,42 +67,10 @@ object Bdk {
             blockchain = blockchain,
             progress = object : Progress {
                 override fun update(progress: Float, message: String?) {
-                    Log.d(_BDK, "updating wallet $progress $message")
+                    Log.d(_BDK, "Updating wallet: $progress $message")
                 }
             }
         )
-    }
-
-    fun getHeight(): UInt {
-        try {
-            return blockchain.getHeight()
-        } catch (ex: Exception) {
-            throw Error("Esplora server is not running.", ex)
-        }
-    }
-
-    fun getBlockHash(height: UInt): String {
-        try {
-            return blockchain.getBlockHash(height)
-        } catch (ex: Exception) {
-            throw Error("Esplora server is not running.", ex)
-        }
-    }
-
-    @OptIn(ExperimentalUnsignedTypes::class)
-    fun getLdkEntropy(): ByteArray {
-        val mnemonic = loadMnemonic()
-        val key = DescriptorSecretKey(
-            network = BDK_NETWORK,
-            mnemonic = Mnemonic.fromString(mnemonic),
-            password = null,
-        )
-        val derivationPath = DerivationPath("m/535h")
-        val child = key.derive(derivationPath)
-        val entropy = child.secretBytes().toUByteArray().toByteArray()
-
-        Log.d(_LDK, "LDK entropy: ${entropy.toHex()}")
-        return entropy
     }
 
     @OptIn(ExperimentalUnsignedTypes::class)
@@ -121,53 +96,15 @@ object Bdk {
     }
 
     fun broadcastRawTx(tx: Transaction) {
-        val blockchain = createBlockchain()
         blockchain.broadcast(tx)
-
         Log.d(_BDK, "Broadcasted transaction ID: ${tx.txid()}")
     }
 
-    private fun createBlockchain(): Blockchain {
-        return Blockchain(
-            BlockchainConfig.Esplora(
-                EsploraConfig(REST, null, 5u, 20u, null)
-            )
-        )
-    }
+    fun newAddress() = wallet.getAddress(AddressIndex.New).address.asString()
 
-    private fun loadMnemonic(): String {
-        return try {
-            mnemonicPhrase()
-        } catch (e: Throwable) {
-            // if mnemonic doesn't exist, generate one and save it
-            Log.d(_BDK, "No mnemonic backup, we'll create a new wallet")
-            val mnemonic = Mnemonic(WordCount.WORDS12).asString()
-            mnemonicFile.writeText(mnemonic)
-            mnemonic
-        }
-    }
-}
-
-private val mnemonicFile = File("$ldkDir/mnemonic.txt")
-
-internal fun mnemonicPhrase(): String {
-    return mnemonicFile.readText()
-}
-
-internal fun btcAddress(): String {
-    return wallet.getAddress(AddressIndex.LastUnused).address.asString()
-}
-
-internal fun newAddress(): String {
-    val new = wallet.getAddress(AddressIndex.New).address.asString()
-    Log.d(_BDK, "New bitcoin address: $new")
-    return new
-}
-
-internal fun btcBalance(): String {
-    val balance = wallet.getBalance()
-    Log.d(_BDK, "BTC balance: $balance")
-    return "${balance.total}"
+    // region State
+    fun balance() = wallet.getBalance()
+    fun address() = wallet.getAddress(AddressIndex.LastUnused).address.asString()
 }
 
 internal object Channel {

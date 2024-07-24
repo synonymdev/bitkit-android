@@ -22,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.bitkit.PEER
-import to.bitkit.PORT
 import to.bitkit.R
 import to.bitkit.ui.MainViewModel
 
@@ -36,8 +35,8 @@ fun PeersScreen(
             .fillMaxSize()
             .padding(horizontal = 24.dp),
     ) {
-        var pubKey by remember { mutableStateOf(PEER) }
-        var port by remember { mutableStateOf(PORT) }
+        var pubKey by remember { mutableStateOf(PEER.nodeId) }
+        var port by remember { mutableStateOf(PEER.port) }
 
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),

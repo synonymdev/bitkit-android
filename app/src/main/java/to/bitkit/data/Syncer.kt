@@ -4,7 +4,7 @@ import android.util.Log
 import org.ldk.structs.TwoTuple_usizeTransactionZ
 import to.bitkit._DEV
 import to.bitkit._LDK
-import to.bitkit.bdk.Bdk
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.ext.toByteArray
 import to.bitkit.ext.toHex
 import to.bitkit.ldk.Ldk
@@ -22,7 +22,7 @@ class LdkSyncer @Inject constructor(
     override suspend fun sync() {
         Log.d(_DEV, "BDK & LDK syncing…")
 
-        Bdk.sync()
+        BitcoinService.shared.sync()
 
         val channelManager = Ldk.channelManager
         val chainMonitor = Ldk.chainMonitor

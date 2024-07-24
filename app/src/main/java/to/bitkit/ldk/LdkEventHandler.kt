@@ -10,8 +10,7 @@ import org.ldk.structs.Result_TransactionNoneZ
 import org.ldk.structs.TxOut
 import org.ldk.util.UInt128
 import to.bitkit._LDK
-import to.bitkit.bdk.Bdk
-import to.bitkit.bdk.newAddress
+import to.bitkit.bdk.BitcoinService
 import to.bitkit.ext.toHex
 import to.bitkit.ldk.Ldk.channelManager
 import kotlin.random.Random
@@ -54,12 +53,12 @@ private fun handleEvent(event: Event) {
                 event.output_script[0].toInt() == 0 &&
                 event.output_script[1].toInt() == 32
             ) {
-                val rawTx = Bdk.buildFundingTx(event.channel_value_satoshis, event.output_script)
+                val rawTx = BitcoinService.shared.buildFundingTx(event.channel_value_satoshis, event.output_script)
                 try {
                     val fundingTx = channelManager.funding_transaction_generated(
                         event.temporary_channel_id,
                         event.counterparty_node_id,
-                        rawTx.serialize().toUByteArray().toByteArray()
+                        rawTx.serialize().toUByteArray().toByteArray(),
                     )
                     when (fundingTx) {
                         is Result_NoneAPIErrorZ.Result_NoneAPIErrorZ_OK ->
@@ -173,7 +172,7 @@ private fun handleEvent(event: Event) {
             Log.d(_LDK, "event: SpendableOutputs")
             val outputs = event.outputs
             try {
-                val address = newAddress()
+                val address = BitcoinService.shared.newAddress()
                 val script = Address(address).scriptPubkey().toBytes().toUByteArray().toByteArray()
                 val txOut: Array<TxOut> = arrayOf()
                 val res = Ldk.keysManager.inner.spend_spendable_outputs(
