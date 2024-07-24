@@ -21,10 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import to.bitkit.PEER
+import to.bitkit.PORT
 import to.bitkit.R
 import to.bitkit.ui.MainViewModel
-import to.bitkit.ui.PEER
-import to.bitkit.ui.PORT
 
 @Composable
 fun PeersScreen(

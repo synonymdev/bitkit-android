@@ -71,7 +71,7 @@ dependencies {
     // BDK & LDK
     implementation("org.bitcoindevkit:bdk-android:0.30.0")
     implementation(fileTree("libs") { include("*.aar") })
-    // implementation("org.lightningdevkit:ldk-node-jvm:0.3.0")
+    implementation("org.lightningdevkit:ldk-node-android:0.3.0")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")

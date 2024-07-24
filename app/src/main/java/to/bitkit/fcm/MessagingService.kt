@@ -14,8 +14,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
 import to.bitkit._FCM
-import to.bitkit.data.RestApi
-import to.bitkit.data.Syncer
 import to.bitkit.ui.payInvoice
 import to.bitkit.warmupNode
 import java.util.Date
@@ -97,19 +95,10 @@ internal class MessagingService : FirebaseMessagingService() {
 class PayWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
-    private val syncer: Syncer,
-    private val restApi: RestApi,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        Log.d(_FCM, "Node waking up from notification…")
+        Log.d(_FCM, "Node wakeup from notification…")
         warmupNode(appContext.filesDir.absolutePath)
-            .let { Log.d(_FCM, "Node wakeup result: $it…") }
-
-        Log.d(_FCM, "Syncing BDK & LDK from notification…")
-        syncer.sync()
-
-        restApi.connectPeer()
-            .let { Log.d(_FCM, "Connect peer from notification result: $it") }
 
         workerParams.inputData.getString("bolt11")?.let { bolt11 ->
             delay(1500) // sleep on bg queue

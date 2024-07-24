@@ -35,12 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import to.bitkit.PEER
 import to.bitkit.R
 import to.bitkit.bdk.Channel
-import to.bitkit.ext.toHex
 import to.bitkit.ui.MainViewModel
-import to.bitkit.ui.PEER
-import to.bitkit.ui.ldkLocalBalance
 
 @Composable
 fun ChannelsScreen(
@@ -77,18 +75,13 @@ fun ChannelsScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 ConnectPeerIcon(viewModel.peers, viewModel::togglePeerConnection)
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "${ldkLocalBalance()} sats",
-                    style = MaterialTheme.typography.titleSmall,
-                )
             }
 
             viewModel.channels.forEach {
-                val isUsable = it._is_usable
-                val channelId = it._channel_id.toHex()
-                val outbound = it._outbound_capacity_msat / 1000
-                val inbound = it._inbound_capacity_msat / 1000
+                val isUsable = it.isUsable
+                val channelId = it.channelId
+                val outbound = it.outboundCapacityMsat / 1000.toULong()
+                val inbound = it.inboundCapacityMsat / 1000.toULong()
                 Card(
                     elevation = CardDefaults.cardElevation(2.5.dp),
                 ) {

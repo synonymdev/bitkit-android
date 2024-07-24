@@ -23,6 +23,7 @@ import org.ldk.structs.Result_ThirtyTwoBytesAPIErrorZ
 import org.ldk.structs.UserConfig
 import org.ldk.util.UInt128
 import to.bitkit.BDK_NETWORK
+import to.bitkit.REST
 import to.bitkit._BDK
 import to.bitkit._LDK
 import to.bitkit.bdk.Bdk.wallet
@@ -30,7 +31,6 @@ import to.bitkit.ext.toByteArray
 import to.bitkit.ext.toHex
 import to.bitkit.ldk.Ldk
 import to.bitkit.ldk.ldkDir
-import to.bitkit.ui.REST
 import java.io.File
 
 object Bdk {
