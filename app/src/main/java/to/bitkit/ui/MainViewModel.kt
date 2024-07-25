@@ -9,8 +9,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.LnPeer
-import to.bitkit.PEER
 import to.bitkit.SEED
 import to.bitkit.bdk.BitcoinService
 import to.bitkit.di.IoDispatcher
@@ -32,7 +32,7 @@ class MainViewModel @Inject constructor(
     val btcBalance = mutableStateOf("Loading…")
     val mnemonic = mutableStateOf(SEED)
 
-    val peers = mutableStateListOf<String>()
+    val peers = mutableStateListOf<PeerDetails>()
     val channels = mutableStateListOf<ChannelDetails>()
 
     val lightningService = LightningService.shared
@@ -53,7 +53,7 @@ class MainViewModel @Inject constructor(
             mnemonic.value = SEED
             peers.apply {
                 clear()
-                this += lightningService.peers.mapNotNull { it.takeIf { p -> p.isConnected }?.nodeId }
+                this += lightningService.peers
             }
             channels.apply {
                 clear()
@@ -66,37 +66,53 @@ class MainViewModel @Inject constructor(
         btcAddress.value = node.onchainPayment().newAddress()
     }
 
-    fun connectPeer(pubKey: String = PEER.nodeId, host: String = PEER.host, port: String = PEER.port) {
-        lightningService.connectPeer(LnPeer(pubKey, host, port))
-        sync()
+    fun connectPeer(peer: LnPeer) {
+        lightningService.connectPeer(peer)
+        peers.replaceAll {
+            it.apply {
+                return@replaceAll it.copy(isConnected = it.nodeId == nodeId)
+            }
+        }
     }
 
-    fun disconnectPeer() {
-        node.disconnect(PEER.nodeId)
-        sync()
+    fun disconnectPeer(nodeId: String) {
+        node.disconnect(nodeId)
+        peers.replaceAll {
+            it.apply {
+                if (it.nodeId == nodeId) {
+                    return@replaceAll it.copy(isConnected = false)
+                }
+            }
+        }
     }
 
     fun payInvoice(invoice: String) {
-        lightningService.payInvoice(invoice)
-        sync()
+        viewModelScope.launch {
+            lightningService.payInvoice(invoice)
+            sync()
+        }
     }
 
     fun createInvoice() = lightningService.createInvoice()
 
     fun openChannel() {
-        lightningService.openChannel()
-        sync()
+        viewModelScope.launch {
+            lightningService.openChannel()
+            sync()
+        }
     }
 
     fun closeChannel(channel: ChannelDetails) {
-        lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+        viewModelScope.launch {
+            lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+        }
         sync()
     }
 }
 
 fun MainViewModel.refresh() {
     viewModelScope.launch {
-        val text = "Refreshing…".also {
+        "Refreshing…".also {
             ldkNodeId.value = it
             ldkBalance.value = it
             btcAddress.value = it
@@ -104,7 +120,6 @@ fun MainViewModel.refresh() {
         }
         peers.apply {
             clear()
-            this += text
         }
         delay(50)
         lightningService.sync()
@@ -112,10 +127,5 @@ fun MainViewModel.refresh() {
     }
 }
 
-fun MainViewModel.togglePeerConnection() {
-    if (peers.contains(PEER.nodeId)) {
-        disconnectPeer()
-    } else {
-        connectPeer()
-    }
-}
+fun MainViewModel.togglePeerConnection(peer: PeerDetails) =
+    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(LnPeer(peer.nodeId, peer.address))

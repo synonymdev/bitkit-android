@@ -17,10 +17,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import to.bitkit.LnPeer
 import to.bitkit.PEER
 import to.bitkit.R
 import to.bitkit.ui.MainViewModel
-import to.bitkit.ui.shared.ConnectedPeers
+import to.bitkit.ui.shared.InfoField
+import to.bitkit.ui.shared.Peers
+import to.bitkit.ui.togglePeerConnection
 
 @Composable
 fun PeersScreen(
@@ -33,6 +36,7 @@ fun PeersScreen(
             .padding(horizontal = 24.dp),
     ) {
         var pubKey by remember { mutableStateOf(PEER.nodeId) }
+        val host by remember { mutableStateOf(PEER.host) }
         var port by remember { mutableStateOf(PEER.port) }
 
         Column(
@@ -49,6 +53,7 @@ fun PeersScreen(
                 textStyle = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
+            InfoField(value = host, label = "Host")
             OutlinedTextField(
                 label = { Text("Port") },
                 value = port,
@@ -56,10 +61,10 @@ fun PeersScreen(
                 textStyle = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(onClick = { viewModel.connectPeer(pubKey, port) }) {
+            Button(onClick = { viewModel.connectPeer(LnPeer(pubKey, host, port)) }) {
                 Text(stringResource(R.string.connect))
             }
         }
-        ConnectedPeers(viewModel.peers)
+        Peers(viewModel.peers, viewModel::togglePeerConnection)
     }
 }

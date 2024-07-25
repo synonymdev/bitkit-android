@@ -98,8 +98,8 @@ internal fun LightningService.connectPeer(peer: LnPeer) {
     Log.d(_LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }
 
-internal fun LightningService.openChannel() {
-    val peer = peers().first()
+internal suspend fun LightningService.openChannel() {
+    val peer = peers.first()
 
     // sendToAddress
     // mine 6 blocks & wait for esplora to pick up block
@@ -116,8 +116,8 @@ internal fun LightningService.openChannel() {
     )
     sync()
 
-    val channelPending = node.waitNextEvent()
-    check(channelPending is Event.ChannelPending)
+    val pendingEvent = node.nextEventAsync()
+    check(pendingEvent is Event.ChannelPending)
     Log.d(_LDK, "Channel pending with peer: ${peer.address}")
     node.eventHandled()
 
@@ -131,8 +131,8 @@ internal fun LightningService.openChannel() {
 
     sync()
 
-    val channelReadyEvent = node.waitNextEvent()
-    check(channelReadyEvent is Event.ChannelPending)
+    val readyEvent = node.nextEventAsync()
+    check(readyEvent is Event.ChannelReady)
     node.eventHandled()
 
     // wait for counterparty to pickup event: ChannelReady
@@ -140,12 +140,13 @@ internal fun LightningService.openChannel() {
     Log.i(_LDK, "Channel ready: $userChannelId")
 }
 
-internal fun LightningService.closeChannel(userChannelId: String, counterpartyNodeId: String) {
+internal suspend fun LightningService.closeChannel(userChannelId: String, counterpartyNodeId: String) {
     node.closeChannel(userChannelId, counterpartyNodeId)
 
-    val event = node.waitNextEvent()
+    val event = node.nextEventAsync()
     check(event is Event.ChannelClosed)
     Log.i(_LDK, "Channel closed: $userChannelId")
+    node.eventHandled()
 
     // mine 1 block & wait for esplora to pick up block
     sync()
@@ -155,22 +156,22 @@ internal fun LightningService.createInvoice(): String {
     return node.bolt11Payment().receive(amountMsat = 112u, description = "description", expirySecs = 7200u)
 }
 
-internal fun LightningService.payInvoice(invoice: String): Boolean {
+internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
     Log.d(_LDK, "Paying invoice: $invoice")
 
     node.bolt11Payment().send(invoice)
 
-    val event = node.waitNextEvent()
+    val event = node.nextEventAsync()
     if (event is Event.PaymentSuccessful) {
-        Log.i(_LDK, "Payment successful.")
+        Log.i(_LDK, "Payment successful for invoice: $invoice")
     } else if (event is Event.PaymentFailed) {
         Log.e(_LDK, "Payment error: ${event.reason}")
         return false
     }
     node.eventHandled()
 
-    val endEvent = node.waitNextEvent()
-    check(endEvent is Event.PaymentReceived)
+    val receivedEvent = node.nextEventAsync()
+    check(receivedEvent is Event.PaymentReceived)
     node.eventHandled()
 
     return true

@@ -19,8 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.CopyToClipboardButton
-import to.bitkit.ui.InfoField
 import to.bitkit.ui.MainViewModel
+import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun PaymentsScreen(
@@ -47,8 +47,8 @@ fun PaymentsScreen(
 
         val invoiceToSend by remember { mutableStateOf(viewModel.createInvoice()) }
         InfoField(
-            label = "Send invoice",
             value = invoiceToSend,
+            label = "Send invoice",
             trailingIcon = { CopyToClipboardButton(invoiceToSend) },
         )
     }

@@ -56,11 +56,17 @@ internal object Env {
         }
 }
 
-internal data class LnPeer(
+data class LnPeer(
     val nodeId: String,
     val host: String,
     val port: String,
 ) {
+    constructor(nodeId: String, address: String) : this(
+        nodeId,
+        address.substringBefore(":"),
+        address.substringAfter(":"),
+    )
+
     fun address() = "$host:$port"
     override fun toString() = "$nodeId@${address()}"
 }

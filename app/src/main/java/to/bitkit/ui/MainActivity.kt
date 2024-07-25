@@ -44,7 +44,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
-import to.bitkit.ui.shared.ConnectedPeers
+import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
@@ -60,7 +61,8 @@ class MainActivity : ComponentActivity() {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ConnectedPeers(viewModel.peers)
+                            Peers(viewModel.peers, viewModel::togglePeerConnection)
+                            Channels(viewModel.channels, viewModel::closeChannel)
                         }
                     }
                 }

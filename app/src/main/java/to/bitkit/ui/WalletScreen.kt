@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -15,7 +14,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.shared.util.ellipsisVisualTransformation
+import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun WalletScreen(
@@ -96,25 +94,6 @@ fun WalletScreen(
         }
         content()
     }
-}
-
-@Composable
-internal fun InfoField(
-    value: String,
-    label: String,
-    trailingIcon: @Composable (() -> Unit)? = null,
-) {
-    OutlinedTextField(
-        label = { Text(label) },
-        value = value,
-        onValueChange = {},
-        textStyle = MaterialTheme.typography.labelSmall,
-        trailingIcon = trailingIcon,
-        readOnly = true,
-        singleLine = true,
-        visualTransformation = ellipsisVisualTransformation(40),
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 @Composable
