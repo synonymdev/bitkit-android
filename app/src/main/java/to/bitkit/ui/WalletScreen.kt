@@ -3,9 +3,6 @@ package to.bitkit.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -31,12 +28,9 @@ fun WalletScreen(
     viewModel: MainViewModel,
     content: @Composable () -> Unit = {},
 ) {
-    Spacer(modifier = Modifier.size(48.dp))
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
+        modifier = Modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(

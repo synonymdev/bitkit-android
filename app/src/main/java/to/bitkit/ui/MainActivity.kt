@@ -8,11 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationAdd
@@ -60,10 +61,8 @@ class MainActivity : ComponentActivity() {
             AppThemeSurface {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Peers(viewModel.peers, viewModel::togglePeerConnection)
-                            Channels(viewModel.channels, viewModel::closeChannel)
-                        }
+                        Peers(viewModel.peers, viewModel::togglePeerConnection)
+                        Channels(viewModel.channels, viewModel::closeChannel)
                     }
                 }
             }
@@ -146,12 +145,17 @@ private fun MainScreen(
             }
         },
     ) { padding ->
-        Box(Modifier.padding(padding)) {
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
             AppNavHost(
                 navController = navController,
                 viewModel = viewModel,
-                startDestination = Routes.Wallet.destination,
                 walletScreen = startContent,
+                modifier = Modifier.padding(24.dp),
             )
         }
     }

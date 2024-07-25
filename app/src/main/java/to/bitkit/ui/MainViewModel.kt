@@ -13,7 +13,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.bdk.BitcoinService
-import to.bitkit.di.IoDispatcher
+import to.bitkit.di.BgDispatcher
 import to.bitkit.ldk.LightningService
 import to.bitkit.ldk.closeChannel
 import to.bitkit.ldk.connectPeer
@@ -24,7 +24,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
     val ldkNodeId = mutableStateOf("Loading…")
     val ldkBalance = mutableStateOf("Loading…")
@@ -41,24 +41,24 @@ class MainViewModel @Inject constructor(
     private val node = lightningService.node
 
     init {
-        sync()
+        viewModelScope.launch {
+            sync()
+        }
     }
 
     fun sync() {
-        viewModelScope.launch {
-            ldkNodeId.value = lightningService.nodeId
-            ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
-            btcAddress.value = bitcoinService.address
-            btcBalance.value = bitcoinService.balance.total.toString()
-            mnemonic.value = SEED
-            peers.apply {
-                clear()
-                this += lightningService.peers
-            }
-            channels.apply {
-                clear()
-                this += lightningService.channels
-            }
+        ldkNodeId.value = lightningService.nodeId
+        ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
+        btcAddress.value = bitcoinService.address
+        btcBalance.value = bitcoinService.balance.total.toString()
+        mnemonic.value = SEED
+        peers.apply {
+            clear()
+            this += lightningService.peers
+        }
+        channels.apply {
+            clear()
+            this += lightningService.channels
         }
     }
 
@@ -87,7 +87,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun payInvoice(invoice: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             lightningService.payInvoice(invoice)
             sync()
         }
@@ -96,17 +96,17 @@ class MainViewModel @Inject constructor(
     fun createInvoice() = lightningService.createInvoice()
 
     fun openChannel() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             lightningService.openChannel()
             sync()
         }
     }
 
     fun closeChannel(channel: ChannelDetails) {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+            sync()
         }
-        sync()
     }
 }
 

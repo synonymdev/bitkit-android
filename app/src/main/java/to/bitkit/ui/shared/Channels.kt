@@ -22,6 +22,10 @@ import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,7 +36,7 @@ import to.bitkit.R
 
 @Composable
 internal fun Channels(
-    channels: List<ChannelDetails>,
+    channels: SnapshotStateList<ChannelDetails>,
     onChannelClose: (ChannelDetails) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -52,11 +56,18 @@ internal fun Channels(
                 elevation = CardDefaults.cardElevation(2.5.dp),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    val outbound by remember(it) {
+                        mutableStateOf(it.outboundCapacityMsat / 1000u)
+                    }
+                    val inbound by remember(it) {
+                        mutableStateOf(it.inboundCapacityMsat / 1000u)
+                    }
+
                     ChannelItem(
                         isUsable = it.isUsable,
                         channelId = it.channelId,
-                        outbound = (it.outboundCapacityMsat / 1000u).toString(),
-                        inbound = (it.inboundCapacityMsat / 1000u).toString(),
+                        outbound = outbound.toString(),
+                        inbound = inbound.toString(),
                         onClose = { onChannelClose(it) },
                     )
                 }

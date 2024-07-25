@@ -12,6 +12,7 @@ import to.bitkit.LnPeer
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit._LDK
+import to.bitkit.bdk.BitcoinService
 
 class LightningService {
     companion object {
@@ -55,21 +56,15 @@ class LightningService {
         Log.i(_LDK, "Node initialised.")
     }
 
-    fun start(/* onEvent: ((Event) -> Unit)? = null */) {
-        val node = checkNotNull(this.node) { "LDK node is not initialised" }
-
-        // onEvent?.let { node.listenForEvents(it) }
-
+    fun start() {
+        check(::node.isInitialized) { "LDK node is not initialised" }
         Log.d(_LDK, "Starting node...")
 
         node.start()
 
         Log.i(_LDK, "Node started.")
-
         connectToTrustedPeers()
     }
-
-    // private fun Node.listenForEvents(onEvent: (Event) -> Unit) {}
 
     private fun connectToTrustedPeers() {
         for (peer in Env.trustedLnPeers) {
@@ -117,15 +112,14 @@ internal suspend fun LightningService.openChannel() {
     sync()
 
     val pendingEvent = node.nextEventAsync()
-    check(pendingEvent is Event.ChannelPending)
+    check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
     Log.d(_LDK, "Channel pending with peer: ${peer.address}")
     node.eventHandled()
-
-    // wait for counterparty to pickup event: ChannelPending
 
     val fundingTxid = pendingEvent.fundingTxo.txid
     Log.d(_LDK, "Channel funding txid: $fundingTxid")
 
+    // wait for counterparty to pickup event: ChannelPending
     // wait for esplora to pick up tx: fundingTx
     // mine 6 blocks & wait for esplora to pick up block
 
@@ -170,9 +164,16 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
     }
     node.eventHandled()
 
-    val receivedEvent = node.nextEventAsync()
-    check(receivedEvent is Event.PaymentReceived)
-    node.eventHandled()
-
     return true
+}
+
+internal fun warmupNode(basePath: String) {
+    LightningService.shared.apply {
+        init(basePath)
+        start()
+        sync()
+    }
+    BitcoinService.shared.apply {
+        sync()
+    }
 }

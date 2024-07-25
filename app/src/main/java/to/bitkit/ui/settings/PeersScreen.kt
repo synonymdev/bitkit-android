@@ -2,9 +2,7 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -31,9 +29,7 @@ fun PeersScreen(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
+        modifier = Modifier,
     ) {
         var pubKey by remember { mutableStateOf(PEER.nodeId) }
         val host by remember { mutableStateOf(PEER.host) }

@@ -3,10 +3,6 @@ package to.bitkit.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,20 +15,15 @@ import to.bitkit.ui.shared.Channels
 fun ChannelsScreen(
     viewModel: MainViewModel,
 ) {
-    Spacer(modifier = Modifier.size(48.dp))
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
+        modifier = Modifier,
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = {
-                    viewModel.openChannel()
-                },
+                onClick = { viewModel.openChannel() },
                 enabled = viewModel.peers.isNotEmpty()
             ) {
                 Text("Open Channel")
@@ -42,5 +33,6 @@ fun ChannelsScreen(
             channels = viewModel.channels,
             onChannelClose = viewModel::closeChannel,
         )
+        PayInvoice(viewModel::payInvoice)
     }
 }
