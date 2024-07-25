@@ -47,7 +47,7 @@ class MainViewModel @Inject constructor(
     fun sync() {
         viewModelScope.launch {
             ldkNodeId.value = lightningService.nodeId
-            ldkBalance.value = lightningService.balances.totalOnchainBalanceSats.toString()
+            ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
             btcAddress.value = bitcoinService.address
             btcBalance.value = bitcoinService.balance.total.toString()
             mnemonic.value = SEED
