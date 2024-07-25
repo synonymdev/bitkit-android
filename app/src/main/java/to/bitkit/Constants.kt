@@ -1,5 +1,7 @@
 package to.bitkit
 
+import android.util.Log
+import kotlin.io.path.Path
 import org.bitcoindevkit.Network as BdkNetwork
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
@@ -22,6 +24,20 @@ internal object Env {
 
     object LdkStorage {
         lateinit var path: String
+
+        fun init(base: String): String {
+            require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
+            return Path(base, "ldk")
+                .toFile()
+                // .also {
+                //     if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
+                // }
+                .absolutePath
+                .also {
+                    path = it
+                    Log.d(_LDK, "Storage path: $it")
+                }
+        }
     }
 
     object Network {

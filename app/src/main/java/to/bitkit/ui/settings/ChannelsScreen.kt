@@ -35,10 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import to.bitkit.PEER
 import to.bitkit.R
-import to.bitkit.bdk.Channel
 import to.bitkit.ui.MainViewModel
+import to.bitkit.ui.togglePeerConnection
 
 @Composable
 fun ChannelsScreen(
@@ -56,8 +55,7 @@ fun ChannelsScreen(
         ) {
             Button(
                 onClick = {
-                    Channel.open(PEER.nodeId)
-                    viewModel.sync()
+                    viewModel.openChannel()
                 },
                 enabled = viewModel.peers.isNotEmpty()
             ) {
@@ -78,23 +76,16 @@ fun ChannelsScreen(
             }
 
             viewModel.channels.forEach {
-                val isUsable = it.isUsable
-                val channelId = it.channelId
-                val outbound = it.outboundCapacityMsat / 1000.toULong()
-                val inbound = it.inboundCapacityMsat / 1000.toULong()
                 Card(
                     elevation = CardDefaults.cardElevation(2.5.dp),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         ChannelItem(
-                            isActive = isUsable,
-                            channelId = channelId,
-                            outbound = outbound.toString(),
-                            inbound = inbound.toString(),
-                            onClose = {
-                                Channel.close(channelId, PEER.nodeId)
-                                viewModel.sync()
-                            },
+                            isActive = it.isUsable,
+                            channelId = it.channelId,
+                            outbound = (it.outboundCapacityMsat / 1000u).toString(),
+                            inbound = (it.inboundCapacityMsat / 1000u).toString(),
+                            onClose = { viewModel.closeChannel(it) },
                         )
                     }
                 }

@@ -3,12 +3,6 @@ package to.bitkit.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-class WatchedTransaction(
-    val id: ByteArray,
-    @Suppress("unused")
-    val scriptPubKey: ByteArray,
-)
-
 @Serializable
 data class Tx(
     val txid: String,
@@ -23,13 +17,6 @@ data class TxStatus(
     val blockHeight: Int? = null,
     @SerialName("block_hash")
     val blockHash: String? = null,
-)
-
-class ConfirmedTx(
-    val tx: ByteArray,
-    val blockHeight: Int,
-    val blockHeader: String,
-    val merkleProofPos: Int,
 )
 
 @Serializable

@@ -21,7 +21,6 @@ import to.bitkit.R
 import to.bitkit.ui.CopyToClipboardButton
 import to.bitkit.ui.InfoField
 import to.bitkit.ui.MainViewModel
-import to.bitkit.ui.payInvoice
 
 @Composable
 fun PaymentsScreen(
@@ -42,7 +41,7 @@ fun PaymentsScreen(
             minLines = 5,
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = { payInvoice(invoiceToPay) }) {
+        Button(onClick = { viewModel.payInvoice(invoiceToPay) }) {
             Text(text = stringResource(R.string.pay))
         }
 

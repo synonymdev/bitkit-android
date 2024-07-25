@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.util.ellipsisVisualTransformation
 
 @Composable
 fun WalletScreen(
@@ -110,6 +111,8 @@ internal fun InfoField(
         textStyle = MaterialTheme.typography.labelSmall,
         trailingIcon = trailingIcon,
         readOnly = true,
+        singleLine = true,
+        visualTransformation = ellipsisVisualTransformation(40),
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -121,7 +124,8 @@ internal fun CopyToClipboardButton(text: String) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
             contentDescription = null,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(16.dp),
         )
     }
 }
+

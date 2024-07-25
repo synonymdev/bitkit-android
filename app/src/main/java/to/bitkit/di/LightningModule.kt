@@ -4,13 +4,12 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import to.bitkit.data.LdkSyncer
-import to.bitkit.data.Syncer
+import to.bitkit.ldk.LightningService
 
 @Suppress("unused")
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class LdkModule {
+abstract class LightningModule {
     @Binds
-    abstract fun bindSyncer(ldkSyncer: LdkSyncer): Syncer
+    abstract fun bindLightningService(service: LightningService): LightningService
 }

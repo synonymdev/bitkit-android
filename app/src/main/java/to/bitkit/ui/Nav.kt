@@ -24,7 +24,7 @@ fun AppNavHost(
     navController: NavHostController,
     viewModel: MainViewModel = hiltViewModel(),
     startDestination: String = "",
-    startContent: @Composable () -> Unit = {},
+    walletScreen: @Composable () -> Unit = {},
 ) {
     // val screenViewModel = viewModel<ScreenViewModel>()
     with(Routes) {
@@ -32,7 +32,7 @@ fun AppNavHost(
             navController = navController,
             startDestination = startDestination,
         ) {
-            composable(Wallet.destination) { startContent() }
+            composable(Wallet.destination) { walletScreen() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
             composable(Peers.destination) { PeersScreen(viewModel) }
             composable(Channels.destination) { ChannelsScreen(viewModel) }

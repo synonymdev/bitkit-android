@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.NotificationAdd
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -44,6 +44,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
+import to.bitkit.ui.shared.ConnectedPeers
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
@@ -57,44 +58,9 @@ class MainActivity : ComponentActivity() {
             enableEdgeToEdge()
             AppThemeSurface {
                 MainScreen(viewModel) {
-                    val context = LocalContext.current
-
                     WalletScreen(viewModel) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                text = "Other",
-                                style = MaterialTheme.typography.titleLarge,
-                            )
-
-                            var canPush by remember {
-                                mutableStateOf(!context.requiresPermission(notificationPermission))
-                            }
-
-                            // Request Permissions
-                            val permissionLauncher = rememberLauncherForActivityResult(
-                                ActivityResultContracts.RequestPermission()
-                            ) {
-                                canPush = it
-                                toast("Permission ${if (it) "Granted" else "Denied"}")
-                            }
-
-                            val onNotificationsClick = {
-                                if (context.requiresPermission(notificationPermission)) {
-                                    permissionLauncher.launch(notificationPermission)
-                                } else {
-                                    pushNotification(
-                                        title = "Bitkit Notification",
-                                        text = "Short custom notification description",
-                                        bigText = "Much longer text that cannot fit one line " +
-                                            "because the lightning channel has been updated " +
-                                            "via a push notification bro…",
-                                    )
-                                }
-                                Unit
-                            }
-                            Button(onClick = onNotificationsClick) {
-                                Text(text = if (canPush) "Notify" else "Request Permissions")
-                            }
+                            ConnectedPeers(viewModel.peers)
                         }
                     }
                 }
@@ -141,7 +107,8 @@ private fun MainScreen(
                     Text(stringResource(R.string.app_name))
                 },
                 actions = {
-                    IconButton(viewModel::sync) {
+                    NotificationButton()
+                    IconButton(viewModel::refresh) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
@@ -182,8 +149,49 @@ private fun MainScreen(
                 navController = navController,
                 viewModel = viewModel,
                 startDestination = Routes.Wallet.destination,
-                startContent = startContent,
+                walletScreen = startContent,
             )
         }
     }
 }
+
+@Composable
+private fun NotificationButton() {
+    val context = LocalContext.current
+    var canPush by remember {
+        mutableStateOf(!context.requiresPermission(notificationPermission))
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        canPush = it
+        toast("Permission ${if (it) "Granted" else "Denied"}")
+    }
+
+    val onClick = {
+        if (context.requiresPermission(notificationPermission)) {
+            permissionLauncher.launch(notificationPermission)
+        } else {
+            pushNotification(
+                title = "Bitkit Notification",
+                text = "Short custom notification description",
+                bigText = "Much longer text that cannot fit one line " +
+                    "because the lightning channel has been updated " +
+                    "via a push notification bro…",
+            )
+        }
+        Unit
+    }
+    val icon by remember {
+        derivedStateOf { if (canPush) Icons.Default.NotificationAdd else Icons.Default.NotificationsNone }
+    }
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier,
+        )
+    }
+}
+

@@ -14,7 +14,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
 import to.bitkit._FCM
-import to.bitkit.ui.payInvoice
+import to.bitkit.ldk.LightningService
+import to.bitkit.ldk.payInvoice
 import to.bitkit.warmupNode
 import java.util.Date
 
@@ -56,12 +57,7 @@ internal class MessagingService : FirebaseMessagingService() {
      * Handle message within 10 seconds.
      */
     private fun handleNow(data: Map<String, String>) {
-        val bolt11 = data["bolt11"].orEmpty()
-        if (bolt11.isNotEmpty()) {
-            payInvoice(bolt11)
-            return
-        }
-        Log.d(_FCM, "handleNow() not yet implemented")
+        Log.e(_FCM, "handleNow() not yet implemented")
     }
 
     /**
@@ -102,7 +98,7 @@ class PayWorker @AssistedInject constructor(
 
         workerParams.inputData.getString("bolt11")?.let { bolt11 ->
             delay(1500) // sleep on bg queue
-            val isSuccess = payInvoice(bolt11)
+            val isSuccess = LightningService.shared.payInvoice(bolt11)
             if (isSuccess) {
                 return Result.success()
             } else {
@@ -113,6 +109,7 @@ class PayWorker @AssistedInject constructor(
                 )
             }
         }
+
         return Result.failure(
             Data.Builder()
                 .putString("reason:", "bolt11 field missing")
