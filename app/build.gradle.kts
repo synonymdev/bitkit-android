@@ -68,14 +68,15 @@ android {
 }
 
 dependencies {
+    implementation(fileTree("libs") { include("*.aar") })
+
     // BDK & LDK
     implementation("org.bitcoindevkit:bdk-android:0.30.0")
-    implementation(fileTree("libs") { include("*.aar") })
-    // implementation("org.lightningdevkit:ldk-node-jvm:0.3.0")
+    implementation("org.lightningdevkit:ldk-node-android:0.3.0")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.activity:activity-compose:1.9.1")
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
@@ -83,19 +84,14 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
 
     // Lifecycle
-    val lifecycleVersion = "2.8.3"
+    val lifecycleVersion = "2.8.4"
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion")
-    // ViewModel utilities for Compose
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
-    // LiveData
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:$lifecycleVersion")
-    // Lifecycles only (without ViewModel or LiveData)
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion")
-    // Lifecycle utilities for Compose
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycleVersion")
-    // Saved state module for ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion") // ViewModel utils for Compose
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:$lifecycleVersion") // LiveData
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion") // Lifecycles wo ViewModel/LiveData
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycleVersion") // Lifecycle utils for Compose
+    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion") // Saved state for ViewModel
 
     // Compose Navigation
     val composeNavigationVersion = "2.7.7"
@@ -121,7 +117,7 @@ dependencies {
     // Material Design
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.material:material-icons-extended:1.7.0-beta05")
+    implementation("androidx.compose.material:material-icons-extended:1.7.0-beta06")
 
     // Ktor
     val ktorVersion = "2.3.8"

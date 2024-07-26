@@ -4,13 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material3.Button
@@ -24,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun SettingsScreen(
@@ -32,10 +30,7 @@ fun SettingsScreen(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier,
     ) {
         Text(
             text = "Settings",
@@ -97,14 +92,9 @@ private fun SettingButton(label: String, onClick: () -> Unit) {
 private fun Mnemonic(
     mnemonic: String,
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        InfoField(
-            value = mnemonic,
-            label = stringResource(R.string.mnemonic),
-            trailingIcon = { CopyToClipboardButton(mnemonic) },
-        )
-    }
+    InfoField(
+        value = mnemonic,
+        label = stringResource(R.string.mnemonic),
+        trailingIcon = { CopyToClipboardButton(mnemonic) },
+    )
 }

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -22,17 +23,18 @@ import to.bitkit.ui.settings.PeersScreen
 @Composable
 fun AppNavHost(
     navController: NavHostController,
+    modifier: Modifier = Modifier,
     viewModel: MainViewModel = hiltViewModel(),
-    startDestination: String = "",
-    startContent: @Composable () -> Unit = {},
+    walletScreen: @Composable () -> Unit = {},
 ) {
     // val screenViewModel = viewModel<ScreenViewModel>()
     with(Routes) {
         NavHost(
             navController = navController,
-            startDestination = startDestination,
+            startDestination = Wallet.destination,
+            modifier = modifier,
         ) {
-            composable(Wallet.destination) { startContent() }
+            composable(Wallet.destination) { walletScreen() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
             composable(Peers.destination) { PeersScreen(viewModel) }
             composable(Channels.destination) { ChannelsScreen(viewModel) }

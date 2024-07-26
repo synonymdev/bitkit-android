@@ -2,9 +2,7 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -19,9 +17,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.CopyToClipboardButton
-import to.bitkit.ui.InfoField
 import to.bitkit.ui.MainViewModel
-import to.bitkit.ui.payInvoice
+import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun PaymentsScreen(
@@ -29,28 +26,36 @@ fun PaymentsScreen(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
+        modifier = Modifier,
     ) {
-        var invoiceToPay by remember { mutableStateOf("") }
-        OutlinedTextField(
-            label = { Text("Pay invoice") },
-            value = invoiceToPay,
-            onValueChange = { invoiceToPay = it },
-            textStyle = MaterialTheme.typography.labelSmall,
-            minLines = 5,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = { payInvoice(invoiceToPay) }) {
-            Text(text = stringResource(R.string.pay))
-        }
+        PayInvoice(viewModel::payInvoice)
 
         val invoiceToSend by remember { mutableStateOf(viewModel.createInvoice()) }
         InfoField(
-            label = "Send invoice",
             value = invoiceToSend,
+            label = "Send invoice",
             trailingIcon = { CopyToClipboardButton(invoiceToSend) },
         )
+    }
+}
+
+@Composable
+internal fun PayInvoice(
+    onClick: (String) -> Unit,
+) {
+    var invoiceToPay by remember { mutableStateOf("") }
+    OutlinedTextField(
+        label = { Text("Pay invoice") },
+        value = invoiceToPay,
+        onValueChange = { invoiceToPay = it },
+        textStyle = MaterialTheme.typography.labelSmall,
+        minLines = 5,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(onClick = {
+        onClick(invoiceToPay)
+        invoiceToPay = ""
+    }) {
+        Text(text = stringResource(R.string.pay))
     }
 }
