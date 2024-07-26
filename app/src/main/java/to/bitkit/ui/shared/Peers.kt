@@ -46,7 +46,7 @@ internal fun Peers(
             )
         }
         Column {
-            peers.sortedBy { it.isConnected }.forEachIndexed { i, it ->
+            peers.sortedByDescending { it.isConnected }.forEachIndexed { i, it ->
                 if (i > 0 && peers.size > 1) {
                     HorizontalDivider()
                 }

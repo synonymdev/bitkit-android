@@ -17,6 +17,13 @@ object Tag {
 internal const val HOST = "10.0.2.2"
 internal const val REST = "https://electrs-regtest.synonym.to"
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
+
+internal val PEER_REMOTE = LnPeer(
+    nodeId = "027b2b7158f8f4995629eaa7710aa06bb0d1d9d53adfd6dfff60a91314726f352b",
+    host = HOST,
+    port = "9735",
+)
+
 internal val PEER = LnPeer(
     nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
     host = HOST,
@@ -31,16 +38,14 @@ internal object Env {
 
         fun init(base: String): String {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
-            return Path(base, Network.ldk.name.lowercase(), "ldk")
+            path = Path(base, Network.ldk.name.lowercase(), "ldk")
                 .toFile()
                 // .also {
                 //     if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
                 // }
                 .absolutePath
-                .also {
-                    path = it
-                    Log.d(LDK, "Storage path: $it")
-                }
+            Log.d(LDK, "Storage path: $path")
+            return path
         }
     }
 
@@ -50,7 +55,8 @@ internal object Env {
     }
 
     val trustedLnPeers = listOf(
-        PEER,
+        PEER_REMOTE,
+        // PEER,
     )
 
     val ldkRgsServerUrl: String?

@@ -8,13 +8,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import to.bitkit.R
 
-
 @Composable
 internal fun moneyString(
-    ldkBalance: String,
+    value: String,
     currency: String = stringResource(R.string.sat),
 ) = buildAnnotatedString {
-    append("$ldkBalance ")
+    append("$value ")
     withStyle(SpanStyle(color = colorScheme.onBackground.copy(0.5f))) {
         append(currency)
     }
