@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,7 +28,7 @@ import to.bitkit.R
 
 @Composable
 internal fun Peers(
-    peers: List<PeerDetails>,
+    peers: SnapshotStateList<PeerDetails>,
     onToggle: (PeerDetails) -> Unit,
 ) {
     Column(
@@ -68,22 +69,22 @@ internal fun Peers(
 
 @Composable
 private fun TogglePeerIcon(
-    isConnected: Boolean,
+    isActive: Boolean,
     onClick: () -> Unit,
 ) {
     val (icon, color) = Pair(
-        if (isConnected) Icons.Default.Link else Icons.Default.LinkOff,
-        if (isConnected) colorScheme.secondary else colorScheme.error,
+        if (isActive) Icons.Default.Cloud else Icons.Default.CloudOff,
+        if (isActive) colorScheme.primary else colorScheme.error,
     )
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .border(BorderStroke(1.12.dp, colorScheme.onBackground.copy(alpha = .52f)), MaterialTheme.shapes.medium)
+            .border(BorderStroke(1.2.dp, colorScheme.onBackground.copy(alpha = .2f)), MaterialTheme.shapes.medium)
             .size(28.dp),
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = stringResource(R.string.status),
             tint = color,
             modifier = Modifier.size(16.dp),
         )

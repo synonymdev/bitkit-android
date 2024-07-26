@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.colorScheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,8 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
@@ -52,8 +53,9 @@ internal fun Channels(
         }
 
         channels.forEach {
-            Card(
-                elevation = CardDefaults.cardElevation(2.5.dp),
+            OutlinedCard(
+                elevation = CardDefaults.cardElevation(.5.dp),
+                colors = CardDefaults.outlinedCardColors(colorScheme.background),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     val outbound by remember(it) {
@@ -64,10 +66,10 @@ internal fun Channels(
                     }
 
                     ChannelItem(
-                        isUsable = it.isUsable,
+                        isActive = it.isUsable,
                         channelId = it.channelId,
-                        outbound = outbound.toString(),
-                        inbound = inbound.toString(),
+                        outbound = outbound.toInt(),
+                        inbound = inbound.toInt(),
                         onClose = { onChannelClose(it) },
                     )
                 }
@@ -78,10 +80,10 @@ internal fun Channels(
 
 @Composable
 private fun ChannelItem(
-    isUsable: Boolean,
+    isActive: Boolean,
     channelId: String,
-    outbound: String,
-    inbound: String,
+    outbound: Int,
+    inbound: Int,
     onClose: () -> Unit,
 ) {
     Column(
@@ -90,18 +92,17 @@ private fun ChannelItem(
         Text(
             text = channelId,
             style = MaterialTheme.typography.labelSmall,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
         )
-        Card(
-            colors = CardDefaults.cardColors(colorScheme.background),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Card {
             LinearProgressIndicator(
-                color = if (isUsable) colorScheme.secondary else colorScheme.error,
-                trackColor = Color.Transparent,
-                progress = {
-                    (inbound.toDouble() / (outbound.toDouble() + inbound.toDouble())).toFloat()
-                },
-                modifier = Modifier.height(8.dp),
+                color = if (isActive) colorScheme.primary else colorScheme.error,
+                trackColor = colorScheme.surfaceVariant,
+                progress = (inbound.toDouble() / (outbound + inbound))::toFloat,
+                modifier = Modifier
+                    .height(8.dp)
+                    .fillMaxWidth(),
             )
         }
         Row(
@@ -112,9 +113,14 @@ private fun ChannelItem(
             Text(text = "$inbound sats", style = MaterialTheme.typography.labelSmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val (icon, color) = Pair(
+                if (isActive) Icons.Default.Cloud else Icons.Default.CloudOff,
+                if (isActive) colorScheme.primary else colorScheme.error,
+            )
             Icon(
-                imageVector = if (isUsable) Icons.Default.Cloud else Icons.Default.CloudOff,
+                imageVector = icon,
                 contentDescription = stringResource(R.string.status),
+                tint = color,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(modifier = Modifier.weight(1f))

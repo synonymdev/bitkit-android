@@ -29,10 +29,7 @@ fun ChannelsScreen(
                 Text("Open Channel")
             }
         }
-        Channels(
-            channels = viewModel.channels,
-            onChannelClose = viewModel::closeChannel,
-        )
+        Channels(viewModel.channels, viewModel::closeChannel)
         PayInvoice(viewModel::payInvoice)
     }
 }

@@ -14,6 +14,7 @@ import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.bdk.BitcoinService
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.syncTo
 import to.bitkit.ldk.LightningService
 import to.bitkit.ldk.closeChannel
 import to.bitkit.ldk.connectPeer
@@ -52,14 +53,8 @@ class MainViewModel @Inject constructor(
         btcAddress.value = bitcoinService.address
         btcBalance.value = bitcoinService.balance.total.toString()
         mnemonic.value = SEED
-        peers.apply {
-            clear()
-            this += lightningService.peers
-        }
-        channels.apply {
-            clear()
-            this += lightningService.channels
-        }
+        peers.syncTo(lightningService.peers)
+        channels.syncTo(lightningService.channels)
     }
 
     fun getNewAddress() {
@@ -69,21 +64,17 @@ class MainViewModel @Inject constructor(
     fun connectPeer(peer: LnPeer) {
         lightningService.connectPeer(peer)
         peers.replaceAll {
-            it.apply {
-                return@replaceAll it.copy(isConnected = it.nodeId == nodeId)
-            }
+            it.run { copy(isConnected = it.nodeId == nodeId) }
         }
+        channels.syncTo(lightningService.channels)
     }
 
     fun disconnectPeer(nodeId: String) {
         node.disconnect(nodeId)
         peers.replaceAll {
-            it.apply {
-                if (it.nodeId == nodeId) {
-                    return@replaceAll it.copy(isConnected = false)
-                }
-            }
+            it.takeIf { it.nodeId == nodeId }?.copy(isConnected = false) ?: it
         }
+        channels.syncTo(lightningService.channels)
     }
 
     fun payInvoice(invoice: String) {
@@ -118,9 +109,9 @@ fun MainViewModel.refresh() {
             btcAddress.value = it
             btcBalance.value = it
         }
-        peers.apply {
-            clear()
-        }
+        peers.clear()
+        channels.clear()
+
         delay(50)
         lightningService.sync()
         sync()
