@@ -168,12 +168,16 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
 }
 
 internal fun warmupNode(basePath: String) {
-    LightningService.shared.apply {
-        init(basePath)
-        start()
-        sync()
-    }
-    BitcoinService.shared.apply {
-        sync()
+    runCatching {
+        LightningService.shared.apply {
+            init(basePath)
+            start()
+            sync()
+        }
+        BitcoinService.shared.apply {
+            sync()
+        }
+    }.onFailure {
+        Log.e(_LDK, "Warmup error:", it)
     }
 }
