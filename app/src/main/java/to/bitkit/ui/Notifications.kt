@@ -14,7 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.R
-import to.bitkit._FCM
+import to.bitkit.Tag.FCM
 import to.bitkit.currentActivity
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
@@ -85,10 +85,10 @@ internal fun Activity.pushNotification(
 fun logFcmToken() {
     FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
         if (!task.isSuccessful) {
-            Log.w(_FCM, "FCM registration token error:\n", task.exception)
+            Log.w(FCM, "FCM registration token error:", task.exception)
             return@OnCompleteListener
         }
         val token = task.result
-        Log.d(_FCM, "FCM registration token: $token")
+        Log.d(FCM, "FCM registration token: $token")
     })
 }

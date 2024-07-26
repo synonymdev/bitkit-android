@@ -11,7 +11,7 @@ import to.bitkit.Env
 import to.bitkit.LnPeer
 import to.bitkit.REST
 import to.bitkit.SEED
-import to.bitkit._LDK
+import to.bitkit.Tag.LDK
 import to.bitkit.bdk.BitcoinService
 
 class LightningService {
@@ -49,20 +49,20 @@ class LightningService {
                 setEntropyBip39Mnemonic(mnemonic = SEED, passphrase = null)
             }
 
-        Log.d(_LDK, "Building node...")
+        Log.d(LDK, "Building node...")
 
         node = builder.build()
 
-        Log.i(_LDK, "Node initialised.")
+        Log.i(LDK, "Node initialised.")
     }
 
     fun start() {
         check(::node.isInitialized) { "LDK node is not initialised" }
-        Log.d(_LDK, "Starting node...")
+        Log.d(LDK, "Starting node...")
 
         node.start()
 
-        Log.i(_LDK, "Node started.")
+        Log.i(LDK, "Node started.")
         connectToTrustedPeers()
     }
 
@@ -86,11 +86,11 @@ class LightningService {
 }
 
 internal fun LightningService.connectPeer(peer: LnPeer) {
-    Log.d(_LDK, "Connecting peer: $peer")
+    Log.d(LDK, "Connecting peer: $peer")
     val res = runCatching {
         node.connect(peer.nodeId, peer.address(), persist = true)
     }
-    Log.d(_LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
+    Log.d(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }
 
 internal suspend fun LightningService.openChannel() {
@@ -113,11 +113,11 @@ internal suspend fun LightningService.openChannel() {
 
     val pendingEvent = node.nextEventAsync()
     check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
-    Log.d(_LDK, "Channel pending with peer: ${peer.address}")
+    Log.d(LDK, "Channel pending with peer: ${peer.address}")
     node.eventHandled()
 
     val fundingTxid = pendingEvent.fundingTxo.txid
-    Log.d(_LDK, "Channel funding txid: $fundingTxid")
+    Log.d(LDK, "Channel funding txid: $fundingTxid")
 
     // wait for counterparty to pickup event: ChannelPending
     // wait for esplora to pick up tx: fundingTx
@@ -131,7 +131,7 @@ internal suspend fun LightningService.openChannel() {
 
     // wait for counterparty to pickup event: ChannelReady
     val userChannelId = readyEvent.userChannelId
-    Log.i(_LDK, "Channel ready: $userChannelId")
+    Log.i(LDK, "Channel ready: $userChannelId")
 }
 
 internal suspend fun LightningService.closeChannel(userChannelId: String, counterpartyNodeId: String) {
@@ -139,7 +139,7 @@ internal suspend fun LightningService.closeChannel(userChannelId: String, counte
 
     val event = node.nextEventAsync()
     check(event is Event.ChannelClosed)
-    Log.i(_LDK, "Channel closed: $userChannelId")
+    Log.i(LDK, "Channel closed: $userChannelId")
     node.eventHandled()
 
     // mine 1 block & wait for esplora to pick up block
@@ -151,15 +151,15 @@ internal fun LightningService.createInvoice(): String {
 }
 
 internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
-    Log.d(_LDK, "Paying invoice: $invoice")
+    Log.d(LDK, "Paying invoice: $invoice")
 
     node.bolt11Payment().send(invoice)
 
     val event = node.nextEventAsync()
     if (event is Event.PaymentSuccessful) {
-        Log.i(_LDK, "Payment successful for invoice: $invoice")
+        Log.i(LDK, "Payment successful for invoice: $invoice")
     } else if (event is Event.PaymentFailed) {
-        Log.e(_LDK, "Payment error: ${event.reason}")
+        Log.e(LDK, "Payment error: ${event.reason}")
         return false
     }
     node.eventHandled()
@@ -167,10 +167,10 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
     return true
 }
 
-internal fun warmupNode(basePath: String) {
+internal fun warmupNode(cwd: String) {
     runCatching {
         LightningService.shared.apply {
-            init(basePath)
+            init(cwd)
             start()
             sync()
         }
@@ -178,6 +178,6 @@ internal fun warmupNode(basePath: String) {
             sync()
         }
     }.onFailure {
-        Log.e(_LDK, "Warmup error:", it)
+        Log.e(LDK, "Warmup error:", it)
     }
 }

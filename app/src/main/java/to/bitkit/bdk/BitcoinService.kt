@@ -15,7 +15,7 @@ import org.bitcoindevkit.Wallet
 import to.bitkit.Env
 import to.bitkit.REST
 import to.bitkit.SEED
-import to.bitkit._BDK
+import to.bitkit.Tag.BDK
 
 internal class BitcoinService {
     companion object {
@@ -55,7 +55,7 @@ internal class BitcoinService {
             blockchain = blockchain,
             progress = object : Progress {
                 override fun update(progress: Float, message: String?) {
-                    Log.d(_BDK, "Updating wallet: $progress $message")
+                    Log.d(BDK, "Updating wallet: $progress $message")
                 }
             }
         )

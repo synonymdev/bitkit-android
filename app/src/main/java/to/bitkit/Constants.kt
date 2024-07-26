@@ -1,17 +1,21 @@
 package to.bitkit
 
 import android.util.Log
+import to.bitkit.Tag.LDK
 import kotlin.io.path.Path
 import org.bitcoindevkit.Network as BdkNetwork
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
-internal const val _DEV = "_DEV"
-internal const val _FCM = "_FCM"
-internal const val _LDK = "_LDK"
-internal const val _BDK = "_BDK"
+object Tag {
+    internal const val FCM = "FCM"
+    internal const val LDK = "LDK"
+    internal const val BDK = "BDK"
+    internal const val DEV = "DEV"
+    internal const val APP = "APP"
+}
 
 internal const val HOST = "10.0.2.2"
-internal const val REST = "http://$HOST:3002"
+internal const val REST = "https://electrs-regtest.synonym.to"
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
 internal val PEER = LnPeer(
     nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
@@ -27,7 +31,7 @@ internal object Env {
 
         fun init(base: String): String {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
-            return Path(base, "ldk")
+            return Path(base, Network.ldk.name.lowercase(), "ldk")
                 .toFile()
                 // .also {
                 //     if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
@@ -35,7 +39,7 @@ internal object Env {
                 .absolutePath
                 .also {
                     path = it
-                    Log.d(_LDK, "Storage path: $it")
+                    Log.d(LDK, "Storage path: $it")
                 }
         }
     }

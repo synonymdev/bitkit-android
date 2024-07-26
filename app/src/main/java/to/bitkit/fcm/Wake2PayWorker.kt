@@ -8,7 +8,7 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import to.bitkit._FCM
+import to.bitkit.Tag.FCM
 import to.bitkit.ldk.LightningService
 import to.bitkit.ldk.payInvoice
 import to.bitkit.ldk.warmupNode
@@ -19,7 +19,7 @@ class Wake2PayWorker @AssistedInject constructor(
     @Assisted private val workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        Log.d(_FCM, "Node wakeup from notification…")
+        Log.d(FCM, "Node wakeup from notification…")
 
         warmupNode(appContext.filesDir.absolutePath)
 
