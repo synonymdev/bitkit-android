@@ -88,7 +88,7 @@ class LightningService {
 internal fun LightningService.connectPeer(peer: LnPeer) {
     Log.d(LDK, "Connecting peer: $peer")
     val res = runCatching {
-        node.connect(peer.nodeId, peer.address(), persist = true)
+        node.connect(peer.nodeId, peer.address, persist = true)
     }
     Log.d(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }

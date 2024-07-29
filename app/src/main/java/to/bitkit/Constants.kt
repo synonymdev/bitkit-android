@@ -6,6 +6,7 @@ import kotlin.io.path.Path
 import org.bitcoindevkit.Network as BdkNetwork
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
+@Suppress("unused")
 object Tag {
     internal const val FCM = "FCM"
     internal const val LDK = "LDK"
@@ -19,7 +20,7 @@ internal const val REST = "https://electrs-regtest.synonym.to"
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
 
 internal val PEER_REMOTE = LnPeer(
-    nodeId = "027b2b7158f8f4995629eaa7710aa06bb0d1d9d53adfd6dfff60a91314726f352b",
+    nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
     host = HOST,
     port = "9735",
 )
@@ -30,6 +31,7 @@ internal val PEER = LnPeer(
     port = "9736",
 )
 
+@Suppress("unused")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
 
@@ -40,9 +42,6 @@ internal object Env {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
             path = Path(base, Network.ldk.name.lowercase(), "ldk")
                 .toFile()
-                // .also {
-                //     if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
-                // }
                 .absolutePath
             Log.d(LDK, "Storage path: $path")
             return path
@@ -77,6 +76,6 @@ data class LnPeer(
         address.substringAfter(":"),
     )
 
-    fun address() = "$host:$port"
-    override fun toString() = "$nodeId@${address()}"
+    val address get() = "$host:$port"
+    override fun toString() = "$nodeId@${address}"
 }

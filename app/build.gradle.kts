@@ -1,26 +1,21 @@
 plugins {
-    id("com.android.application")
-    id("kotlin-android")
-    id("org.jetbrains.kotlin.plugin.serialization")
-    id("com.google.devtools.ksp")
-    id("com.google.dagger.hilt.android")
-    id("com.google.gms.google-services")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.google.services)
 }
-
 android {
     namespace = "to.bitkit"
     compileSdk = 34
-    ndkVersion = "26.1.10909125"
-
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -58,6 +53,7 @@ android {
         compose = true
     }
     composeOptions {
+        // https://developer.android.com/jetpack/androidx/releases/compose-kotlin#pre-release_kotlin_compatibility
         kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
@@ -66,76 +62,58 @@ android {
         }
     }
 }
-
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
-
-    // BDK & LDK
-    implementation("org.bitcoindevkit:bdk-android:0.30.0")
-    implementation("org.lightningdevkit:ldk-node-android:0.3.0")
-
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.activity:activity-compose:1.9.1")
-
+    implementation(libs.core.ktx)
+    implementation(libs.appcompat)
+    implementation(libs.activity.compose)
+    implementation(libs.material)
+    // BDK + LDK
+    implementation(libs.bdk.android)
+    implementation(libs.ldk.node.android)
     // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-messaging")
-    implementation("com.google.firebase:firebase-analytics")
-
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.analytics)
     // Lifecycle
-    val lifecycleVersion = "2.8.4"
-    // ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion") // ViewModel utils for Compose
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:$lifecycleVersion") // LiveData
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion") // Lifecycles wo ViewModel/LiveData
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycleVersion") // Lifecycle utils for Compose
-    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion") // Saved state for ViewModel
-
+    implementation(libs.lifecycle.viewmodel.ktx)
+    implementation(libs.lifecycle.viewmodel.compose) // ViewModel utils for Compose
+    implementation(libs.lifecycle.livedata.ktx) // LiveData
+    implementation(libs.lifecycle.runtime.ktx) // Lifecycles wo ViewModel/LiveData
+    implementation(libs.lifecycle.runtime.compose) // Lifecycle utils for Compose
+    implementation(libs.lifecycle.viewmodel.savedstate) // Saved state for ViewModel
+    // Compose
+    implementation(platform(libs.compose.bom))
+    androidTestImplementation(platform(libs.compose.bom))
+    implementation(libs.material3)
+    implementation(libs.material.icons.extended)
+    implementation(libs.ui.tooling.preview)
+    debugImplementation(libs.ui.tooling)
+    debugImplementation(libs.ui.test.manifest)
+    androidTestImplementation(libs.ui.test.junit4)
     // Compose Navigation
-    val composeNavigationVersion = "2.7.7"
-    implementation("androidx.navigation:navigation-compose:$composeNavigationVersion")
-    androidTestImplementation("androidx.navigation:navigation-testing:$composeNavigationVersion")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-    // Compose Tooling for Android Studio Preview
-    val composeToolingVersion = "1.6.8"
-    implementation("androidx.compose.ui:ui-tooling-preview:$composeToolingVersion")
-    debugImplementation("androidx.compose.ui:ui-tooling:$composeToolingVersion")
-
-    // Dagger-Hilt
-    val hiltVersion = "2.51.1"
-    implementation("com.google.dagger:hilt-android:$hiltVersion")
-    ksp("com.google.dagger:hilt-android-compiler:$hiltVersion")
-    ksp("androidx.hilt:hilt-compiler:1.2.0")
-
+    implementation(libs.navigation.compose)
+    androidTestImplementation(libs.navigation.testing)
+    implementation(libs.hilt.navigation.compose)
+    // Hilt - DI
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.android.compiler)
+    ksp(libs.hilt.compiler)
     // WorkManager
-    implementation("androidx.hilt:hilt-work:1.2.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-
-    // Material Design
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.material:material-icons-extended:1.7.0-beta06")
-
-    // Ktor
-    val ktorVersion = "2.3.8"
-    implementation("io.ktor:ktor-client-core:$ktorVersion")
-    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
-    implementation("io.ktor:ktor-client-cio:$ktorVersion")
-    implementation("io.ktor:ktor-client-logging:$ktorVersion")
-    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.2.11")
-
-    // Testing
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.8")
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.6.8")
-
+    implementation(libs.hilt.work)
+    implementation(libs.work.runtime.ktx)
+    // Ktor - Networking
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.logging)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    debugImplementation(libs.slf4j.simple)
+    // Test + Debug
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.junit.ext)
+    testImplementation(libs.junit)
     // Other
-    implementation("com.google.guava:guava:31.1-android") // for ByteArray.toHex()+
+    implementation(libs.guava) // for ByteArray.toHex()+
 }

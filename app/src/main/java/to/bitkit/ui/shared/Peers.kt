@@ -45,23 +45,21 @@ internal fun Peers(
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        Column {
-            peers.sortedByDescending { it.isConnected }.forEachIndexed { i, it ->
-                if (i > 0 && peers.size > 1) {
-                    HorizontalDivider()
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TogglePeerIcon(it.isConnected) { onToggle(it) }
-                    Text(
-                        text = it.nodeId,
-                        style = MaterialTheme.typography.labelSmall,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1,
-                    )
-                }
+        peers.sortedByDescending { it.isConnected }.forEachIndexed { i, it ->
+            if (i > 0 && peers.size > 1) {
+                HorizontalDivider()
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TogglePeerIcon(it.isConnected) { onToggle(it) }
+                Text(
+                    text = it.nodeId,
+                    style = MaterialTheme.typography.labelSmall,
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                )
             }
         }
     }
