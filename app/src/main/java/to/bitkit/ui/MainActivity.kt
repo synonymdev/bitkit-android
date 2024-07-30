@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationAdd
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -61,6 +63,12 @@ class MainActivity : ComponentActivity() {
             AppThemeSurface {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
+                        Row {
+                            Button(onClick = viewModel::debugDb) {
+                                Text(text = "Debug DB")
+                            }
+                        }
+
                         Peers(viewModel.peers, viewModel::togglePeerConnection)
                         Channels(viewModel.channels, viewModel::closeChannel)
                     }
@@ -200,4 +208,3 @@ private fun NotificationButton() {
         )
     }
 }
-

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.room)
 }
 android {
     namespace = "to.bitkit"
@@ -42,11 +43,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
     buildFeatures {
         buildConfig = true
@@ -110,10 +111,23 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     debugImplementation(libs.slf4j.simple)
+    // Room - DB
+    implementation(libs.room.ktx)
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
+    testImplementation(libs.room.testing)
     // Test + Debug
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.junit.ext)
     testImplementation(libs.junit)
     // Other
     implementation(libs.guava) // for ByteArray.toHex()+
+}
+ksp {
+    // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0
+    // arg("room.generateKotlin", "true")
+}
+// https://developer.android.com/jetpack/androidx/releases/room#gradle-plugin
+room {
+    schemaDirectory("$projectDir/schemas")
 }

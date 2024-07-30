@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -12,7 +13,9 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
+import to.bitkit.Tag.DEV
 import to.bitkit.bdk.BitcoinService
+import to.bitkit.data.AppDb
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.syncTo
 import to.bitkit.ldk.LightningService
@@ -26,6 +29,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val appDb: AppDb,
 ) : ViewModel() {
     val ldkNodeId = mutableStateOf("Loading…")
     val ldkBalance = mutableStateOf("Loading…")
@@ -97,6 +101,14 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
             sync()
+        }
+    }
+
+    fun debugDb() {
+        viewModelScope.launch {
+            appDb.configDao().getAll().collect {
+                Log.d(DEV, "${it.count()} entities in DB: $it")
+            }
         }
     }
 }

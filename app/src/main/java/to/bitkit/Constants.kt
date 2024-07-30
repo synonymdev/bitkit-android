@@ -2,17 +2,17 @@ package to.bitkit
 
 import android.util.Log
 import to.bitkit.Tag.LDK
+import to.bitkit.env.Network
 import kotlin.io.path.Path
-import org.bitcoindevkit.Network as BdkNetwork
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
 @Suppress("unused")
-object Tag {
-    internal const val FCM = "FCM"
-    internal const val LDK = "LDK"
-    internal const val BDK = "BDK"
-    internal const val DEV = "DEV"
-    internal const val APP = "APP"
+internal object Tag {
+    const val FCM = "FCM"
+    const val LDK = "LDK"
+    const val BDK = "BDK"
+    const val DEV = "DEV"
+    const val APP = "APP"
 }
 
 internal const val HOST = "10.0.2.2"
@@ -40,7 +40,7 @@ internal object Env {
 
         fun init(base: String): String {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
-            path = Path(base, Network.ldk.name.lowercase(), "ldk")
+            path = Path(base, network.id, "ldk")
                 .toFile()
                 .absolutePath
             Log.d(LDK, "Storage path: $path")
@@ -48,10 +48,7 @@ internal object Env {
         }
     }
 
-    object Network {
-        val ldk: LdkNetwork = LdkNetwork.REGTEST
-        val bdk = BdkNetwork.REGTEST
-    }
+    val network = Network.Regtest
 
     val trustedLnPeers = listOf(
         PEER_REMOTE,
@@ -59,7 +56,7 @@ internal object Env {
     )
 
     val ldkRgsServerUrl: String?
-        get() = when (Network.ldk) {
+        get() = when (network.ldk) {
             LdkNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             else -> null
         }

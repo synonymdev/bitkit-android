@@ -30,7 +30,7 @@ class LightningService {
             defaultConfig().apply {
                 storageDirPath = dir
                 logDirPath = dir
-                network = Env.Network.ldk
+                network = Env.network.ldk
                 logLevel = LogLevel.TRACE
 
                 trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
