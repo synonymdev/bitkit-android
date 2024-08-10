@@ -23,6 +23,8 @@ internal class App : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
+
+        Env.LdkStorage.init(filesDir.absolutePath)
     }
 
     override fun onTerminate() {

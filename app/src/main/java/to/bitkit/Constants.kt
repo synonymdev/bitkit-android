@@ -3,6 +3,7 @@ package to.bitkit
 import android.util.Log
 import to.bitkit.Tag.LDK
 import to.bitkit.env.Network
+import java.nio.file.Files
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
@@ -42,6 +43,10 @@ internal object Env {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
             path = Path(base, network.id, "ldk")
                 .toFile()
+                .also {
+                    if (Files.notExists(it.toPath()))
+                    if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
+                }
                 .absolutePath
             Log.d(LDK, "Storage path: $path")
             return path

@@ -23,8 +23,9 @@ class LightningService {
 
     lateinit var node: Node
 
-    fun init(cwd: String) {
-        val dir = Env.LdkStorage.init(cwd)
+    fun init(cwd: String? = null) {
+        if (cwd != null) Env.LdkStorage.init(cwd) // Allows manual config in unit tests
+        val dir = Env.LdkStorage.path
 
         val builder = Builder.fromConfig(
             defaultConfig().apply {
@@ -167,10 +168,10 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
     return true
 }
 
-internal fun warmupNode(cwd: String) {
+internal fun warmupNode() {
     runCatching {
         LightningService.shared.apply {
-            init(cwd)
+            init()
             start()
             sync()
         }
