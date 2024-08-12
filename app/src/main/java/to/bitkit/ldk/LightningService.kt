@@ -23,23 +23,23 @@ class LightningService {
 
     lateinit var node: Node
 
-    fun init(cwd: String? = null) {
-        if (cwd != null) Env.LdkStorage.init(cwd) // Allows manual config in unit tests
+    fun init(mnemonic: String = SEED) {
         val dir = Env.LdkStorage.path
 
-        val builder = Builder.fromConfig(
-            defaultConfig().apply {
-                storageDirPath = dir
-                logDirPath = dir
-                network = Env.network.ldk
-                logLevel = LogLevel.TRACE
+        val builder = Builder
+            .fromConfig(
+                defaultConfig().apply {
+                    storageDirPath = dir
+                    logDirPath = dir
+                    network = Env.network.ldk
+                    logLevel = LogLevel.TRACE
 
-                trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
-                anchorChannelsConfig = AnchorChannelsConfig(
-                    trustedPeersNoReserve = trustedPeers0conf,
-                    perChannelReserveSats = 2000u, // TODO set correctly
-                )
-            })
+                    trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
+                    anchorChannelsConfig = AnchorChannelsConfig(
+                        trustedPeersNoReserve = trustedPeers0conf,
+                        perChannelReserveSats = 2000u, // TODO set correctly
+                    )
+                })
             .apply {
                 setEsploraServer(REST)
                 if (Env.ldkRgsServerUrl != null) {
@@ -47,7 +47,7 @@ class LightningService {
                 } else {
                     setGossipSourceP2p()
                 }
-                setEntropyBip39Mnemonic(mnemonic = SEED, passphrase = null)
+                setEntropyBip39Mnemonic(mnemonic, passphrase = null)
             }
 
         Log.d(LDK, "Building node...")
@@ -65,6 +65,12 @@ class LightningService {
 
         Log.i(LDK, "Node started.")
         connectToTrustedPeers()
+    }
+
+    fun stop() {
+        Log.d(LDK, "Stopping node...")
+        node.stop()
+        Log.i(LDK, "Node stopped.")
     }
 
     private fun connectToTrustedPeers() {
@@ -127,7 +133,7 @@ internal suspend fun LightningService.openChannel() {
     sync()
 
     val readyEvent = node.nextEventAsync()
-    check(readyEvent is Event.ChannelReady)
+    check(readyEvent is Event.ChannelReady) { "Expected ChannelReady event, got $readyEvent" }
     node.eventHandled()
 
     // wait for counterparty to pickup event: ChannelReady
@@ -139,7 +145,7 @@ internal suspend fun LightningService.closeChannel(userChannelId: String, counte
     node.closeChannel(userChannelId, counterpartyNodeId)
 
     val event = node.nextEventAsync()
-    check(event is Event.ChannelClosed)
+    check(event is Event.ChannelClosed) { "Expected ChannelClosed event, got $event" }
     Log.i(LDK, "Channel closed: $userChannelId")
     node.eventHandled()
 
@@ -156,13 +162,22 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
 
     node.bolt11Payment().send(invoice)
 
-    val event = node.nextEventAsync()
-    if (event is Event.PaymentSuccessful) {
-        Log.i(LDK, "Payment successful for invoice: $invoice")
-    } else if (event is Event.PaymentFailed) {
-        Log.e(LDK, "Payment error: ${event.reason}")
-        return false
+    when (val event = node.nextEventAsync()) {
+        is Event.PaymentSuccessful -> {
+            Log.i(LDK, "Payment successful for invoice: $invoice")
+        }
+
+        is Event.PaymentFailed -> {
+            Log.e(LDK, "Payment error: ${event.reason}")
+            return false
+        }
+
+        else -> {
+            Log.e(LDK, "Expected PaymentSuccessful/PaymentFailed event, got $event")
+            return false
+        }
     }
+
     node.eventHandled()
 
     return true

@@ -7,8 +7,10 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.ldk.structs.KeysManager
+import to.bitkit.Env
 import to.bitkit.Tag.LDK
 import to.bitkit.ext.hex
+import java.io.File
 import javax.inject.Inject
 import kotlin.io.path.Path
 import org.ldk.structs.Result_C2Tuple_ThirtyTwoBytesChannelMonitorZDecodeErrorZ.Result_C2Tuple_ThirtyTwoBytesChannelMonitorZDecodeErrorZ_OK as ChannelMonitorDecodeResultTuple
@@ -17,46 +19,50 @@ import org.ldk.structs.UtilMethods.C2Tuple_ThirtyTwoBytesChannelMonitorZ_read as
 class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private lateinit var db: SQLiteDatabase
-
     fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
-        Log.d(LDK, "Checking migration eligibility")
+        Log.d(LDK, "Migrating LDK backup…")
 
-        val file = Path(context.filesDir.absolutePath, LdkNodeDataDbHelper.DB_NAME).toFile()
+        val file = Path(Env.LdkStorage.path, LDK_DB_NAME).toFile()
 
         // Skip if db already exists
         if (file.exists()) {
-            Log.d(LDK, "Migration skipped: ldk-node db exists at: $file.")
+            Log.d(LDK, "Migration skipped: ldk-node db exists at: $file")
             return
         }
 
-        val path = file.absolutePath
+        val path = file.path
         Log.d(LDK, "Creating ldk-node db at: $path")
-        db = LdkNodeDataDbHelper(context, path).writableDatabase
-
         Log.d(LDK, "Seeding ldk-node db with LDK backup data…")
 
-        insertManager(manager)
-        insertMonitors(seed, monitors)
+        LdkNodeDataDbHelper(context, path).writableDatabase.use {
+            it.beginTransaction()
+            try {
+                it.insertManager(manager)
+                it.insertMonitors(seed, monitors)
 
-        // TODO check if needed
-        db.close()
+                it.execSQL("DROP TABLE IF EXISTS android_metadata")
+                it.setTransactionSuccessful()
+            } finally {
+                it.endTransaction()
+            }
+        }
+
+        File("$path-journal").delete()
 
         Log.i(LDK, "Migrated LDK backup to ldk-node db at: $path")
     }
 
-    private fun insertManager(manager: ByteArray) {
+    private fun SQLiteDatabase.insertManager(manager: ByteArray) {
         val values = ContentValues().apply {
             put(PRIMARY_NAMESPACE, "")
             put(SECONDARY_NAMESPACE, "")
             put(KEY, "manager")
             put(VALUE, manager)
         }
-
-        db.insert(LDK_NODE_DATA, null, values)
+        insert(LDK_NODE_DATA, null, values)
     }
 
-    private fun insertMonitors(seed: ByteArray, monitors: List<ByteArray>) {
+    private fun SQLiteDatabase.insertMonitors(seed: ByteArray, monitors: List<ByteArray>) {
         val seconds = System.currentTimeMillis() / 1000L
         val nanoSeconds = (seconds * 1000 * 1000).toInt()
 
@@ -67,9 +73,8 @@ class MigrationService @Inject constructor(
             val channelMonitor = read32BytesChannelMonitor(monitor, entropySource, signerProvider).takeIf { it.is_ok }
                 ?.let { it as? ChannelMonitorDecodeResultTuple }?.res?._b
                 ?: throw Error("Could not read channel monitor using read32BytesChannelMonitor")
-
             val fundingTx = channelMonitor._funding_txo._a._txid?.reversedArray()?.hex
-                ?: throw Error("Could not read txid from funding tx OutPoint from channel monitor")
+                ?: throw Error("Could not read txid from funding tx OutPoint of channel monitor")
             val index = channelMonitor._funding_txo._a._index
             val key = "${fundingTx}_$index"
 
@@ -79,8 +84,7 @@ class MigrationService @Inject constructor(
                 put(KEY, key)
                 put(VALUE, monitor)
             }
-
-            db.insert(LDK_NODE_DATA, null, values)
+            insert(LDK_NODE_DATA, null, values)
 
             Log.d(LDK, "Inserted monitor: $key")
         }
@@ -92,10 +96,11 @@ class MigrationService @Inject constructor(
         private const val SECONDARY_NAMESPACE = "secondary_namespace"
         private const val KEY = "key"
         private const val VALUE = "value"
+        private const val LDK_DB_NAME = "$LDK_NODE_DATA.sqlite"
     }
 }
 
-private class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHelper(context, name, null, DB_VERSION) {
+private class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHelper(context, name, null, VERSION) {
     override fun onCreate(db: SQLiteDatabase) {
         val query = """
             |CREATE TABLE ldk_node_data (
@@ -112,7 +117,6 @@ private class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHe
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
     companion object {
-        const val DB_VERSION = 1
-        const val DB_NAME = "ldk_node_data.sqlite"
+        const val VERSION = 2
     }
 }

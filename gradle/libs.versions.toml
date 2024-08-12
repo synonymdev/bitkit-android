@@ -1,6 +1,6 @@
 [versions]
 activityCompose = "1.9.1"
-agp = "8.5.1"
+agp = "8.5.2"
 appcompat = "1.7.0"
 bdk = "0.31.1"
 composeBom = "2024.06.00" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
@@ -16,6 +16,7 @@ hiltWork = "1.2.0"
 junit = "4.13.2"
 junitExt = "1.2.1"
 kotlin = "1.9.24"
+kotlinTestJunit = "1.9.21"
 ksp = "1.9.24-1.0.20"
 ktor = "2.3.12"
 ldkNode = "0.3.0"
@@ -24,7 +25,7 @@ material = "1.12.0"
 navCompose = "2.7.7"
 room = "2.6.1"
 slf4j = "1.7.36"
-workRuntimeKtx = "2.9.0"
+workRuntimeKtx = "2.9.1"
 
 [libraries]
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -44,6 +45,7 @@ hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", ve
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltWork" }
 junit = { module = "junit:junit", version.ref = "junit" }
 junit-ext = { module = "androidx.test.ext:junit", version.ref = "junitExt" }
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlinTestJunit" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

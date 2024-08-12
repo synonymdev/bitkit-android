@@ -33,7 +33,7 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
-            // applicationIdSuffix = ".dev"
+            applicationIdSuffix = ".dev"
         }
         release {
             isMinifyEnabled = false
@@ -120,7 +120,9 @@ dependencies {
     // Test + Debug
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.junit.ext)
+    androidTestImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test.junit)
     // Other
     implementation(libs.guava) // for ByteArray.toHex()+
 }

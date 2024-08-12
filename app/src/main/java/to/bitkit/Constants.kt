@@ -1,13 +1,14 @@
+@file:Suppress("unused")
+
 package to.bitkit
 
 import android.util.Log
 import to.bitkit.Tag.LDK
 import to.bitkit.env.Network
-import java.nio.file.Files
+import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
-@Suppress("unused")
 internal object Tag {
     const val FCM = "FCM"
     const val LDK = "LDK"
@@ -23,16 +24,15 @@ internal const val SEED = "universe more push obey later jazz huge buzz magnet t
 internal val PEER_REMOTE = LnPeer(
     nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
     host = HOST,
-    port = "9735",
+    port = "9736",
 )
 
 internal val PEER = LnPeer(
     nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
     host = HOST,
-    port = "9736",
+    port = "9737",
 )
 
-@Suppress("unused")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
 
@@ -41,12 +41,12 @@ internal object Env {
 
         fun init(base: String): String {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
+            if (::path.isInitialized) {
+                Log.w(LDK, "Storage path already set: $path")
+            }
             path = Path(base, network.id, "ldk")
                 .toFile()
-                .also {
-                    if (Files.notExists(it.toPath()))
-                    if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
-                }
+                .ensureDir()
                 .absolutePath
             Log.d(LDK, "Storage path: $path")
             return path
