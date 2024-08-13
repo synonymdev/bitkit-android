@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,16 +45,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
+
+    @Inject
+    private lateinit var keychain: KeychainStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +73,14 @@ class MainActivity : ComponentActivity() {
                         Row {
                             Button(onClick = viewModel::debugDb) {
                                 Text(text = "Debug DB")
+                            }
+                            val scope = rememberCoroutineScope()
+                            Button(onClick = {
+                                scope.launch {
+                                    keychain.add("test", "test".toByteArray())
+                                }
+                            }) {
+                                Text(text = "Test Keychain")
                             }
                         }
 
