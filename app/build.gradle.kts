@@ -66,6 +66,7 @@ android {
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
+    implementation(platform(libs.kotlin.bom))
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
     implementation(libs.activity.compose)
