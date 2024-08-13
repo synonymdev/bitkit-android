@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
 
     @Inject
-    private lateinit var keychain: KeychainStore
+    lateinit var keychain: KeychainStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
