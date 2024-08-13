@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.activity.compose)
     implementation(libs.material)
+    implementation(libs.datastore.preferences)
     // BDK + LDK
     implementation(libs.bdk.android)
     implementation(libs.ldk.node.android)
