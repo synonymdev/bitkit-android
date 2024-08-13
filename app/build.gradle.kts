@@ -121,9 +121,9 @@ dependencies {
     // Test + Debug
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.junit.ext)
-    androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(kotlin("test"))
+    testImplementation(kotlin("test"))
     testImplementation(libs.junit)
-    testImplementation(libs.kotlin.test.junit)
     // Other
     implementation(libs.guava) // for ByteArray.toHex()+
 }
