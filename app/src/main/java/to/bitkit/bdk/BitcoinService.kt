@@ -25,7 +25,7 @@ internal class BitcoinService {
     }
 
     private val wallet by lazy {
-        val network = Env.Network.bdk
+        val network = Env.network.bdk
         val mnemonic = Mnemonic.fromString(SEED)
         val key = DescriptorSecretKey(network, mnemonic, null)
 

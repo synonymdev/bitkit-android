@@ -21,7 +21,7 @@ class Wake2PayWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         Log.d(FCM, "Node wakeup from notification…")
 
-        warmupNode(appContext.filesDir.absolutePath)
+        warmupNode()
 
         val bolt11 = workerParams.inputData.getString("bolt11") ?: return Result.failure(
             Data.Builder()

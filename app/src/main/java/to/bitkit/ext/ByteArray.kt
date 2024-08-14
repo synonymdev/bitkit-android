@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package to.bitkit.ext
 
 import com.google.common.io.BaseEncoding
@@ -8,14 +10,24 @@ fun ByteArray.toHex(): String {
     return BaseEncoding.base16().encode(this).lowercase()
 }
 
-fun String.toByteArray(): ByteArray {
+// TODO check if this can be replaced with existing ByteArray.toHex()
+val ByteArray.hex: String get() = joinToString("") { "%02x".format(it) }
+
+fun String.asByteArray(): ByteArray {
     return BaseEncoding.base16().decode(this.uppercase())
 }
 
-fun convertToByteArray(obj: Any): ByteArray {
+val String.hex: ByteArray get() {
+    check(length % 2 == 0) { "Cannot convert string of uneven length to hex ByteArray: $this" }
+    return chunked(2)
+        .map { it.toInt(16).toByte() }
+        .toByteArray()
+}
+
+fun Any.convertToByteArray(): ByteArray {
     val bos = ByteArrayOutputStream()
     val oos = ObjectOutputStream(bos)
-    oos.writeObject(obj)
+    oos.writeObject(this)
     oos.flush()
     return bos.toByteArray()
 }

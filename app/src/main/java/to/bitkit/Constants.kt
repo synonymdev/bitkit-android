@@ -1,26 +1,36 @@
+@file:Suppress("unused")
+
 package to.bitkit
 
 import android.util.Log
 import to.bitkit.Tag.LDK
+import to.bitkit.env.Network
+import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
-import org.bitcoindevkit.Network as BdkNetwork
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
-object Tag {
-    internal const val FCM = "FCM"
-    internal const val LDK = "LDK"
-    internal const val BDK = "BDK"
-    internal const val DEV = "DEV"
-    internal const val APP = "APP"
+internal object Tag {
+    const val FCM = "FCM"
+    const val LDK = "LDK"
+    const val BDK = "BDK"
+    const val DEV = "DEV"
+    const val APP = "APP"
 }
 
 internal const val HOST = "10.0.2.2"
 internal const val REST = "https://electrs-regtest.synonym.to"
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
+
+internal val PEER_REMOTE = LnPeer(
+    nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
+    host = HOST,
+    port = "9736",
+)
+
 internal val PEER = LnPeer(
     nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
     host = HOST,
-    port = "9736",
+    port = "9737",
 )
 
 internal object Env {
@@ -31,30 +41,27 @@ internal object Env {
 
         fun init(base: String): String {
             require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
-            return Path(base, Network.ldk.name.lowercase(), "ldk")
+            if (::path.isInitialized) {
+                Log.w(LDK, "Storage path already set: $path")
+            }
+            path = Path(base, network.id, "ldk")
                 .toFile()
-                // .also {
-                //     if (!it.mkdirs()) throw Error("Cannot create LDK data directory")
-                // }
+                .ensureDir()
                 .absolutePath
-                .also {
-                    path = it
-                    Log.d(LDK, "Storage path: $it")
-                }
+            Log.d(LDK, "Storage path: $path")
+            return path
         }
     }
 
-    object Network {
-        val ldk: LdkNetwork = LdkNetwork.REGTEST
-        val bdk = BdkNetwork.REGTEST
-    }
+    val network = Network.Regtest
 
     val trustedLnPeers = listOf(
-        PEER,
+        PEER_REMOTE,
+        // PEER,
     )
 
     val ldkRgsServerUrl: String?
-        get() = when (Network.ldk) {
+        get() = when (network.ldk) {
             LdkNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             else -> null
         }
@@ -71,6 +78,6 @@ data class LnPeer(
         address.substringAfter(":"),
     )
 
-    fun address() = "$host:$port"
-    override fun toString() = "$nodeId@${address()}"
+    val address get() = "$host:$port"
+    override fun toString() = "$nodeId@${address}"
 }

@@ -2,7 +2,7 @@ package to.bitkit.fcm
 
 import android.util.Log
 import androidx.work.Data
-import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -50,7 +50,7 @@ internal class FcmService : FirebaseMessagingService() {
      * Schedule async work via WorkManager for tasks of 10+ seconds.
      */
     private fun scheduleJob(messageData: Map<String, String>) {
-        val work = OneTimeWorkRequest.Builder(Wake2PayWorker::class.java)
+        val work = OneTimeWorkRequestBuilder<Wake2PayWorker>()
             .setInputData(
                 Data.Builder()
                     .putString("bolt11", messageData["bolt11"].orEmpty())

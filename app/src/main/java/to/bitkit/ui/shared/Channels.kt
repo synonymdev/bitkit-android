@@ -109,8 +109,8 @@ private fun ChannelItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(text = "$outbound sats", style = MaterialTheme.typography.labelSmall)
-            Text(text = "$inbound sats", style = MaterialTheme.typography.labelSmall)
+            Text(moneyString("$outbound"), style = MaterialTheme.typography.labelSmall)
+            Text(moneyString("$inbound"), style = MaterialTheme.typography.labelSmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             val (icon, color) = Pair(
