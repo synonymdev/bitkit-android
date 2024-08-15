@@ -34,30 +34,26 @@ class KeychainStore @Inject constructor(
 
     // TODO throw if not found?
     private suspend fun load(key: String): ByteArray? {
-        val prefKey = indexed(key)
-        return prefs.data.map { it[prefKey]?.fromBase64() }.first()
+        return prefs.data.map { it[key.indexed]?.fromBase64() }.first()
     }
 
     suspend fun saveString(key: String, value: String) = save(key, value.let { keyStore.encrypt(it) })
 
     private suspend fun save(key: String, encryptedValue: ByteArray) {
         require(!exists(key)) { "Entry $key exists. Explicitly delete it first to update value." }
-        val prefKey = indexed(key)
-        prefs.edit { it[prefKey] = encryptedValue.toBase64() }
+        prefs.edit { it[key.indexed] = encryptedValue.toBase64() }
 
         Log.i(APP, "Saved $key to keychain")
     }
 
     suspend fun delete(key: String) {
-        val prefKey = indexed(key)
-        prefs.edit { it.remove(prefKey) }
+        prefs.edit { it.remove(key.indexed) }
 
         Log.d(APP, "Deleted $key from keychain")
     }
 
     suspend fun exists(key: String): Boolean {
-        val prefKey = indexed(key)
-        return prefs.data.map { it.contains(prefKey) }.first()
+        return prefs.data.map { it.contains(key.indexed) }.first()
     }
 
     suspend fun wipe() {
@@ -69,5 +65,5 @@ class KeychainStore @Inject constructor(
     /**
      * Generates a preferences key for storing a value associated with a specific wallet index.
      */
-    private fun indexed(key: String) = "$walletIndex:$key".let(::stringPreferencesKey)
+    private val String.indexed get() = "$walletIndex:$this".let(::stringPreferencesKey)
 }
