@@ -54,10 +54,11 @@ class MainViewModel @Inject constructor(
     }
 
     fun sync() {
+        bitcoinService.sync()
         ldkNodeId.value = lightningService.nodeId
         ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
         btcAddress.value = bitcoinService.address
-        btcBalance.value = bitcoinService.balance.total.toString()
+        btcBalance.value = bitcoinService.balance?.total?.toSat().toString()
         mnemonic.value = SEED
         peers.syncTo(lightningService.peers)
         channels.syncTo(lightningService.channels)

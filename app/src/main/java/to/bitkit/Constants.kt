@@ -9,6 +9,7 @@ import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
+// region globals
 internal object Tag {
     const val FCM = "FCM"
     const val LDK = "LDK"
@@ -32,7 +33,9 @@ internal val PEER = LnPeer(
     host = HOST,
     port = "9737",
 )
+// endregion
 
+// region env
 internal object Env {
     val isDebug = BuildConfig.DEBUG
 
@@ -71,6 +74,7 @@ internal object Env {
             else -> null
         }
 }
+// endregion
 
 data class LnPeer(
     val nodeId: String,

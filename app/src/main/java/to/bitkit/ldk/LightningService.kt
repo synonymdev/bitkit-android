@@ -199,7 +199,7 @@ internal fun warmupNode() {
             sync()
         }
         BitcoinService.shared.apply {
-            sync()
+            fullScan()
         }
     }.onFailure {
         Log.e(LDK, "Warmup error:", it)
