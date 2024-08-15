@@ -22,33 +22,30 @@ class KeychainStore @Inject constructor(
     @ApplicationContext private val context: Context,
     db: AppDb,
 ) {
-    private val Context.prefs: DataStore<Preferences> by preferencesDataStore("keychain")
+    private val alias = "keychain"
+
+    private val Context.prefs: DataStore<Preferences> by preferencesDataStore(alias)
     private val prefs = context.prefs
 
+    private val keyStore by lazy { AndroidKeyStore(alias) }
     private val walletIndex by lazy { db.configDao().getAll().map { it.first().walletIndex }.toString() }
 
+    suspend fun loadString(key: String): String? = load(key)?.let { keyStore.decrypt(it) }
+
     // TODO throw if not found?
-    suspend fun load(key: String): ByteArray? {
+    private suspend fun load(key: String): ByteArray? {
         val prefKey = indexed(key)
         return prefs.data.map { it[prefKey]?.fromBase64() }.first()
     }
 
-    suspend fun loadString(key: String): String? {
-        // TODO decrypt
-        return load(key)?.toString(Charsets.UTF_8)
-    }
+    suspend fun saveString(key: String, value: String) = save(key, value.let { keyStore.encrypt(it) })
 
-    suspend fun save(key: String, encryptedValue: ByteArray) {
+    private suspend fun save(key: String, encryptedValue: ByteArray) {
         require(!exists(key)) { "Entry $key exists. Explicitly delete it first to update value." }
         val prefKey = indexed(key)
         prefs.edit { it[prefKey] = encryptedValue.toBase64() }
 
         Log.i(APP, "Saved $key to keychain")
-    }
-
-    suspend fun saveString(key: String, value: String) {
-        // TODO encrypt
-        save(key, value.toByteArray())
     }
 
     suspend fun delete(key: String) {
