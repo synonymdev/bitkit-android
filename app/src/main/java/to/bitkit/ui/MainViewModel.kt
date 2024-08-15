@@ -16,6 +16,7 @@ import to.bitkit.SEED
 import to.bitkit.Tag.DEV
 import to.bitkit.bdk.BitcoinService
 import to.bitkit.data.AppDb
+import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.syncTo
 import to.bitkit.ldk.LightningService
@@ -29,6 +30,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val keychain: KeychainStore,
     private val appDb: AppDb,
 ) : ViewModel() {
     val ldkNodeId = mutableStateOf("Loading…")
@@ -109,6 +111,16 @@ class MainViewModel @Inject constructor(
             appDb.configDao().getAll().collect {
                 Log.d(DEV, "${it.count()} entities in DB: $it")
             }
+        }
+    }
+
+    fun debugKeychain() {
+        viewModelScope.launch {
+            val key = "test"
+            if (keychain.exists(key)) {
+                keychain.delete(key)
+            }
+            keychain.saveString(key, "testValue")
         }
     }
 }

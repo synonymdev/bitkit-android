@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +36,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,7 +45,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.ext.requiresPermission
@@ -70,17 +69,12 @@ class MainActivity : ComponentActivity() {
             AppThemeSurface {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
-                        Row {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Button(onClick = viewModel::debugDb) {
                                 Text(text = "Debug DB")
                             }
-                            val scope = rememberCoroutineScope()
-                            Button(onClick = {
-                                scope.launch {
-                                    keychain.add("test", "test".toByteArray())
-                                }
-                            }) {
-                                Text(text = "Test Keychain")
+                            Button(onClick = viewModel::debugKeychain) {
+                                Text(text = "Debug Keychain")
                             }
                         }
 
