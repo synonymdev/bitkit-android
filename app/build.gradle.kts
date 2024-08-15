@@ -63,6 +63,13 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    @Suppress("UnstableApiUsage")
+    testOptions {
+        unitTests {
+            // isReturnDefaultValues = true     // mockito
+            // isIncludeAndroidResources = true // robolectric
+        }
+    }
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
@@ -124,7 +131,11 @@ dependencies {
     androidTestImplementation(libs.junit.ext)
     androidTestImplementation(kotlin("test"))
     testImplementation(kotlin("test"))
-    testImplementation(libs.junit)
+    testImplementation(libs.junit.junit)
+    // testImplementation("androidx.test:core:1.6.1")
+    // testImplementation("org.mockito:mockito-core:5.12.0")
+    // testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    // testImplementation("org.robolectric:robolectric:4.13")
     // Other
     implementation(libs.guava) // for ByteArray.toHex()+
 }

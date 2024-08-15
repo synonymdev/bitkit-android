@@ -44,7 +44,7 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltCompiler" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltWork" }
-junit = { module = "junit:junit", version.ref = "junit" }
+junit-junit = { group = "junit", name = "junit", version.ref = "junit" }
 junit-ext = { module = "androidx.test.ext:junit", version.ref = "junitExt" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
