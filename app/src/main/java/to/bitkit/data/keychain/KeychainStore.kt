@@ -10,60 +10,69 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import to.bitkit.Tag.APP
 import to.bitkit.data.AppDb
+import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
 import javax.inject.Inject
 
 class KeychainStore @Inject constructor(
+    private val db: AppDb,
     @ApplicationContext private val context: Context,
-    db: AppDb,
-) {
+    @IoDispatcher private val dispatcher: CoroutineDispatcher,
+) : CoroutineScope {
+
+    private val job = Job()
+    override val coroutineContext = dispatcher + job
+
     private val alias = "keychain"
-
-    private val Context.prefs: DataStore<Preferences> by preferencesDataStore(alias)
-    private val prefs = context.prefs
-
     private val keyStore by lazy { AndroidKeyStore(alias) }
-    private val walletIndex by lazy { db.configDao().getAll().map { it.first().walletIndex }.toString() }
 
-    suspend fun loadString(key: String): String? = load(key)?.let { keyStore.decrypt(it) }
+    private val Context.keychain: DataStore<Preferences> by preferencesDataStore(alias, scope = this)
+    val snapshot get() = runBlocking(coroutineContext) { context.keychain.data.first() }
 
-    // TODO throw if not found?
-    private suspend fun load(key: String): ByteArray? {
-        return prefs.data.map { it[key.indexed]?.fromBase64() }.first()
+    fun loadString(key: String): String? = load(key)?.let { keyStore.decrypt(it) }
+
+    private fun load(key: String): ByteArray? {
+        // TODO throw/warn if not found
+        return snapshot[key.indexed]?.fromBase64()
     }
 
     suspend fun saveString(key: String, value: String) = save(key, value.let { keyStore.encrypt(it) })
 
     private suspend fun save(key: String, encryptedValue: ByteArray) {
         require(!exists(key)) { "Entry $key exists. Explicitly delete it first to update value." }
-        prefs.edit { it[key.indexed] = encryptedValue.toBase64() }
+        context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
 
-        Log.i(APP, "Saved $key to keychain")
+        Log.i(APP, "Saved to keychain: $key")
     }
 
     suspend fun delete(key: String) {
-        prefs.edit { it.remove(key.indexed) }
+        context.keychain.edit { it.remove(key.indexed) }
 
-        Log.d(APP, "Deleted $key from keychain")
+        Log.d(APP, "Deleted from keychain: $key ")
     }
 
-    suspend fun exists(key: String): Boolean {
-        return prefs.data.map { it.contains(key.indexed) }.first()
+    fun exists(key: String): Boolean {
+        return snapshot.contains(key.indexed)
     }
 
     suspend fun wipe() {
-        val keys = prefs.data.map { it.asMap().keys }.first()
-        prefs.edit { it.clear() }
-        Log.i(APP, "Deleted all entries from keychain: ${keys.joinToString()}")
+        val keys = snapshot.asMap().keys
+        context.keychain.edit { it.clear() }
+
+        Log.i(APP, "Deleted all keychain entries: ${keys.joinToString()}")
     }
 
-    /**
-     * Generates a preferences key for storing a value associated with a specific wallet index.
-     */
-    private val String.indexed get() = "$walletIndex:$this".let(::stringPreferencesKey)
+    private val String.indexed: Preferences.Key<String>
+        get() {
+            val walletIndex = runBlocking(coroutineContext) { db.configDao().getAll().first() }.first().walletIndex
+            return "${this}_$walletIndex".let(::stringPreferencesKey)
+        }
 }
