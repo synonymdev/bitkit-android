@@ -24,7 +24,7 @@ internal class App : Application(), Configuration.Provider {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
 
-        Env.LdkStorage.init(filesDir.absolutePath)
+        Env.Storage.init(filesDir.absolutePath)
     }
 
     override fun onTerminate() {

@@ -14,6 +14,7 @@ import to.bitkit.SEED
 import to.bitkit.Tag.LDK
 import to.bitkit.bdk.BitcoinService
 
+// TODO support concurrency
 class LightningService {
     companion object {
         val shared by lazy {
@@ -24,7 +25,7 @@ class LightningService {
     lateinit var node: Node
 
     fun init(mnemonic: String = SEED) {
-        val dir = Env.LdkStorage.path
+        val dir = Env.Storage.ldk
 
         val builder = Builder
             .fromConfig(
@@ -83,15 +84,17 @@ class LightningService {
         node.syncWallets()
     }
 
-    // region State
+    // region state
     val nodeId: String get() = node.nodeId()
     val balances get() = node.listBalances()
     val status get() = node.status()
     val peers get() = node.listPeers()
     val channels get() = node.listChannels()
     val payments get() = node.listPayments()
+    // endregion
 }
 
+// region peers
 internal fun LightningService.connectPeer(peer: LnPeer) {
     Log.d(LDK, "Connecting peer: $peer")
     val res = runCatching {
@@ -99,7 +102,9 @@ internal fun LightningService.connectPeer(peer: LnPeer) {
     }
     Log.d(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }
+// endregion
 
+// region channels
 internal suspend fun LightningService.openChannel() {
     val peer = peers.first()
 
@@ -152,7 +157,9 @@ internal suspend fun LightningService.closeChannel(userChannelId: String, counte
     // mine 1 block & wait for esplora to pick up block
     sync()
 }
+// endregion
 
+// region payments
 internal fun LightningService.createInvoice(): String {
     return node.bolt11Payment().receive(amountMsat = 112u, description = "description", expirySecs = 7200u)
 }
@@ -182,6 +189,7 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
 
     return true
 }
+// endregion
 
 internal fun warmupNode() {
     runCatching {
