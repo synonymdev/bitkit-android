@@ -7,10 +7,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.Tag.APP
+import to.bitkit.ext.callerName
+import to.bitkit.shared.measured
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import kotlin.coroutines.CoroutineContext
-import kotlin.system.measureTimeMillis
 
 enum class ServiceQueue {
     LDK, BDK, MIGRATION;
@@ -24,18 +25,14 @@ enum class ServiceQueue {
 
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
-        functionName: String = Thread.currentThread().stackTrace[1].methodName,
+        functionName: String = Thread.currentThread().callerName,
         block: suspend CoroutineScope.() -> T,
     ): T {
         return withContext(coroutineContext) {
             try {
-                var result: T
-                val timeElapsed = measureTimeMillis {
-                    result = block()
+                measured(functionName) {
+                    block()
                 }
-                Log.d(APP, "$functionName took ${timeElapsed / 1000.0} seconds on queue: $name")
-
-                return@withContext result
             } catch (e: Exception) {
                 Log.e(APP, "ServiceQueue.$name error", e)
                 throw e

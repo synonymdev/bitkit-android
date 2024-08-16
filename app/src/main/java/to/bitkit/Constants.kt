@@ -16,6 +16,7 @@ internal object Tag {
     const val BDK = "BDK"
     const val DEV = "DEV"
     const val APP = "APP"
+    const val PERF = "PERF"
 }
 
 internal const val HOST = "10.0.2.2"
