@@ -15,6 +15,7 @@ import to.bitkit.SEED
 import to.bitkit.Tag.BDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.ServiceQueue
 import javax.inject.Inject
 import kotlin.io.path.Path
 import kotlin.io.path.pathString
@@ -33,52 +34,66 @@ class BitcoinService @Inject constructor(
     private var hasSynced = false
 
     private val esploraClient by lazy { EsploraClient(url = REST) }
+    private val dbPath by lazy { Path(Env.Storage.bdk, "db.sqlite").pathString }
 
-    private val wallet by lazy {
+    private lateinit var wallet: Wallet
+
+    suspend fun setup() {
         val network = Env.network.bdk
         val mnemonic = Mnemonic.fromString(SEED)
         val key = DescriptorSecretKey(network, mnemonic, null)
 
-        val dbPath = Path(Env.Storage.bdk, "db.sqlite").pathString
+        Log.d(BDK, "Setting up wallet…")
 
-        Log.i(BDK, "Creating wallet…")
+        ServiceQueue.BDK.background {
+            wallet = Wallet(
+                descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
+                changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
+                persistenceBackendPath = dbPath,
+                network = network,
+            )
+        }
 
-        Wallet(
-            descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
-            changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
-            persistenceBackendPath = dbPath,
-            network = network,
-        )
+        Log.i(BDK, "Wallet set up")
     }
 
-    // region sync
-    fun sync() {
+    suspend fun syncWithRevealedSpks() {
         Log.d(BDK, "Wallet syncing…")
 
-        val request = wallet.startSyncWithRevealedSpks()
-        val update = esploraClient.sync(request, parallelRequests)
-        wallet.applyUpdate(update)
+        ServiceQueue.BDK.background {
+            val request = wallet.startSyncWithRevealedSpks()
+            val update = esploraClient.sync(request, parallelRequests)
+            wallet.applyUpdate(update)
+        }
 
         hasSynced = true
-        Log.d(BDK, "Wallet synced")
+        Log.i(BDK, "Wallet synced")
     }
 
-    fun fullScan() {
+    suspend fun fullScan() {
         Log.d(BDK, "Wallet full scan…")
 
-        val request = wallet.startFullScan()
-        val update = esploraClient.fullScan(request, stopGap, parallelRequests)
-        wallet.applyUpdate(update)
-        // TODO: Persist wallet once BDK is updated to beta release
+        ServiceQueue.BDK.background {
+            val request = wallet.startFullScan()
+            val update = esploraClient.fullScan(request, stopGap, parallelRequests)
+            wallet.applyUpdate(update)
+            // TODO: Persist wallet once BDK is updated to beta release
+        }
 
         hasSynced = true
 
-        Log.d(BDK, "Wallet fully scanned")
+        Log.i(BDK, "Wallet fully scanned")
     }
     // endregion
 
     // region state
     val balance get() = if (hasSynced) wallet.getBalance() else null
-    val address get() = wallet.revealNextAddress(KeychainKind.EXTERNAL).address.asString()
+
+    suspend fun getAddress(): String {
+        return ServiceQueue.BDK.background {
+            val addressInfo = wallet.revealNextAddress(KeychainKind.EXTERNAL).address
+            addressInfo.asString()
+        }
+    }
     // endregion
 }

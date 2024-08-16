@@ -218,6 +218,7 @@ internal suspend fun warmupNode() {
             sync()
         }
         BitcoinService.shared.apply {
+            setup()
             fullScan()
         }
     }.onFailure {
