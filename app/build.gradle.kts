@@ -63,13 +63,22 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    @Suppress("UnstableApiUsage")
+    testOptions {
+        unitTests {
+            // isReturnDefaultValues = true     // mockito
+            // isIncludeAndroidResources = true // robolectric
+        }
+    }
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
+    implementation(platform(libs.kotlin.bom))
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
     implementation(libs.activity.compose)
     implementation(libs.material)
+    implementation(libs.datastore.preferences)
     // BDK + LDK
     implementation(libs.bdk.android)
     implementation(libs.ldk.node.android)
@@ -120,9 +129,13 @@ dependencies {
     // Test + Debug
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.junit.ext)
-    androidTestImplementation(libs.kotlin.test.junit)
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(kotlin("test"))
+    testImplementation(kotlin("test"))
+    testImplementation(libs.junit.junit)
+    // testImplementation("androidx.test:core:1.6.1")
+    // testImplementation("org.mockito:mockito-core:5.12.0")
+    // testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    // testImplementation("org.robolectric:robolectric:4.13")
     // Other
     implementation(libs.guava) // for ByteArray.toHex()+
 }

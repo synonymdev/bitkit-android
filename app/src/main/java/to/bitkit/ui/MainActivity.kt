@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,15 +46,20 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
+import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
+
+    @Inject
+    lateinit var keychain: KeychainStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,9 +69,12 @@ class MainActivity : ComponentActivity() {
             AppThemeSurface {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
-                        Row {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Button(onClick = viewModel::debugDb) {
                                 Text(text = "Debug DB")
+                            }
+                            Button(onClick = viewModel::debugKeychain) {
+                                Text(text = "Debug Keychain")
                             }
                         }
 
