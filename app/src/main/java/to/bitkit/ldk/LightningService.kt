@@ -1,6 +1,8 @@
 package to.bitkit.ldk
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.Event
@@ -12,13 +14,17 @@ import to.bitkit.LnPeer
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit.Tag.LDK
+import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.bdk.BitcoinService
+import to.bitkit.di.BgDispatcher
+import javax.inject.Inject
 
-// TODO support concurrency
-class LightningService {
+class LightningService @Inject constructor(
+    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+) : BaseCoroutineScope(bgDispatcher) {
     companion object {
         val shared by lazy {
-            LightningService()
+            LightningService(Dispatchers.Default)
         }
     }
 

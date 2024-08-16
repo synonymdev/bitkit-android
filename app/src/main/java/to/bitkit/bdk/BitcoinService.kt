@@ -1,6 +1,8 @@
 package to.bitkit.bdk
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
 import org.bitcoindevkit.EsploraClient
@@ -11,14 +13,18 @@ import to.bitkit.Env
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit.Tag.BDK
+import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.di.BgDispatcher
+import javax.inject.Inject
 import kotlin.io.path.Path
 import kotlin.io.path.pathString
 
-// TODO support concurrency
-internal class BitcoinService {
+class BitcoinService @Inject constructor(
+    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+) : BaseCoroutineScope(bgDispatcher) {
     companion object {
         val shared by lazy {
-            BitcoinService()
+            BitcoinService(Dispatchers.Default)
         }
     }
 
