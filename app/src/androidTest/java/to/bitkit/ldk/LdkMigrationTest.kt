@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.ext.readAsset
@@ -25,13 +26,13 @@ class LdkMigrationTest {
         MigrationService(appContext).migrate(seed, manager, listOf(monitor))
 
         with(LightningService.shared) {
-            init(mnemonic)
-            start()
+            setup(mnemonic)
+            runBlocking { start() }
 
             assertTrue { nodeId == "02cd08b7b375e4263849121f9f0ffb2732a0b88d0fb74487575ac539b374f45a55" }
             assertTrue { channels.isNotEmpty() }
 
-            stop()
+            runBlocking { stop() }
         }
     }
 }

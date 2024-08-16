@@ -17,6 +17,7 @@ import to.bitkit.Tag.LDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.bdk.BitcoinService
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.ServiceQueue
 import javax.inject.Inject
 
 class LightningService @Inject constructor(
@@ -30,7 +31,7 @@ class LightningService @Inject constructor(
 
     lateinit var node: Node
 
-    fun init(mnemonic: String = SEED) {
+    fun setup(mnemonic: String = SEED) {
         val dir = Env.Storage.ldk
 
         val builder = Builder
@@ -57,37 +58,51 @@ class LightningService @Inject constructor(
                 setEntropyBip39Mnemonic(mnemonic, passphrase = null)
             }
 
-        Log.d(LDK, "Building node...")
+        Log.d(LDK, "Setting up node…")
 
         node = builder.build()
 
-        Log.i(LDK, "Node initialised.")
+        Log.i(LDK, "Node set up")
     }
 
-    fun start() {
+    suspend fun start() {
         check(::node.isInitialized) { "LDK node is not initialised" }
-        Log.d(LDK, "Starting node...")
 
-        node.start()
+        Log.d(LDK, "Starting node…")
 
-        Log.i(LDK, "Node started.")
+        ServiceQueue.LDK.background {
+            node.start()
+        }
+
+        Log.i(LDK, "Node started")
         connectToTrustedPeers()
     }
 
-    fun stop() {
-        Log.d(LDK, "Stopping node...")
-        node.stop()
+    suspend fun stop() {
+        Log.d(LDK, "Stopping node…")
+        ServiceQueue.LDK.background {
+            node.stop()
+        }
         Log.i(LDK, "Node stopped.")
     }
 
-    private fun connectToTrustedPeers() {
-        for (peer in Env.trustedLnPeers) {
-            connectPeer(peer)
+    private suspend fun connectToTrustedPeers() {
+        ServiceQueue.LDK.background {
+            for (peer in Env.trustedLnPeers) {
+                connectPeer(peer)
+            }
         }
     }
 
-    fun sync() {
-        node.syncWallets()
+    suspend fun sync() {
+        Log.d(LDK, "Syncing node…")
+
+        ServiceQueue.LDK.background {
+            node.syncWallets()
+            // setMaxDustHtlcExposureForCurrentChannels()
+        }
+
+        Log.i(LDK, "Node synced")
     }
 
     // region state
@@ -106,7 +121,7 @@ internal fun LightningService.connectPeer(peer: LnPeer) {
     val res = runCatching {
         node.connect(peer.nodeId, peer.address, persist = true)
     }
-    Log.d(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
+    Log.i(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
 }
 // endregion
 
@@ -117,8 +132,8 @@ internal suspend fun LightningService.openChannel() {
     // sendToAddress
     // mine 6 blocks & wait for esplora to pick up block
     // wait for esplora to pick up tx
-
     sync()
+
     node.connectOpenChannel(
         nodeId = peer.nodeId,
         address = peer.address,
@@ -131,16 +146,14 @@ internal suspend fun LightningService.openChannel() {
 
     val pendingEvent = node.nextEventAsync()
     check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
-    Log.d(LDK, "Channel pending with peer: ${peer.address}")
     node.eventHandled()
 
-    val fundingTxid = pendingEvent.fundingTxo.txid
-    Log.d(LDK, "Channel funding txid: $fundingTxid")
+    Log.d(LDK, "Channel pending with peer: ${peer.address}")
+    Log.d(LDK, "Channel funding txid: ${pendingEvent.fundingTxo.txid}")
 
     // wait for counterparty to pickup event: ChannelPending
     // wait for esplora to pick up tx: fundingTx
     // mine 6 blocks & wait for esplora to pick up block
-
     sync()
 
     val readyEvent = node.nextEventAsync()
@@ -148,8 +161,8 @@ internal suspend fun LightningService.openChannel() {
     node.eventHandled()
 
     // wait for counterparty to pickup event: ChannelReady
-    val userChannelId = readyEvent.userChannelId
-    Log.i(LDK, "Channel ready: $userChannelId")
+
+    Log.i(LDK, "Channel ready: ${readyEvent.userChannelId}")
 }
 
 internal suspend fun LightningService.closeChannel(userChannelId: String, counterpartyNodeId: String) {
@@ -157,11 +170,12 @@ internal suspend fun LightningService.closeChannel(userChannelId: String, counte
 
     val event = node.nextEventAsync()
     check(event is Event.ChannelClosed) { "Expected ChannelClosed event, got $event" }
-    Log.i(LDK, "Channel closed: $userChannelId")
     node.eventHandled()
 
     // mine 1 block & wait for esplora to pick up block
     sync()
+
+    Log.i(LDK, "Channel closed: $userChannelId")
 }
 // endregion
 
@@ -174,6 +188,7 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
     Log.d(LDK, "Paying invoice: $invoice")
 
     node.bolt11Payment().send(invoice)
+    node.eventHandled()
 
     when (val event = node.nextEventAsync()) {
         is Event.PaymentSuccessful -> {
@@ -191,16 +206,14 @@ internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
         }
     }
 
-    node.eventHandled()
-
     return true
 }
 // endregion
 
-internal fun warmupNode() {
+internal suspend fun warmupNode() {
     runCatching {
         LightningService.shared.apply {
-            init()
+            setup()
             start()
             sync()
         }
