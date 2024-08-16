@@ -16,6 +16,7 @@ class LauncherActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         initNotificationChannel()
         logFcmToken()
+        // TODO share mainViewModel in both activities, move warmupNode to it & call it suspending
         runBlocking { warmupNode() }
         startActivity(Intent(this, MainActivity::class.java))
     }

@@ -34,7 +34,7 @@ class BitcoinService @Inject constructor(
     private var hasSynced = false
 
     private val esploraClient by lazy { EsploraClient(url = REST) }
-    private val dbPath by lazy { Path(Env.Storage.bdk, "db.sqlite").pathString }
+    private val dbPath by lazy { Path(Env.Storage.bdk, "db.sqlite") }
 
     private lateinit var wallet: Wallet
 
@@ -49,7 +49,7 @@ class BitcoinService @Inject constructor(
             wallet = Wallet(
                 descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
                 changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
-                persistenceBackendPath = dbPath,
+                persistenceBackendPath = dbPath.pathString,
                 network = network,
             )
         }
@@ -84,7 +84,14 @@ class BitcoinService @Inject constructor(
 
         Log.i(BDK, "Wallet fully scanned")
     }
-    // endregion
+
+    fun wipeStorage() {
+        Log.w(BDK, "Wiping wallet storage…")
+
+        dbPath.toFile()?.parentFile?.deleteRecursively()
+
+        Log.i(BDK, "Wallet storage wiped")
+    }
 
     // region state
     val balance get() = if (hasSynced) wallet.getBalance() else null

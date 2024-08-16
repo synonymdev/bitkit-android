@@ -52,11 +52,11 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun sync() {
-        bitcoinService.sync()
+    private suspend fun sync() {
+        bitcoinService.syncWithRevealedSpks()
         ldkNodeId.value = lightningService.nodeId
         ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
-        btcAddress.value = bitcoinService.address
+        btcAddress.value = bitcoinService.getAddress()
         btcBalance.value = bitcoinService.balance?.total?.toSat().toString()
         mnemonic.value = SEED
         peers.syncTo(lightningService.peers)
@@ -106,6 +106,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // region debug
     fun debugDb() {
         viewModelScope.launch {
             appDb.configDao().getAll().collect {
@@ -123,6 +124,11 @@ class MainViewModel @Inject constructor(
             keychain.saveString(key, "testValue")
         }
     }
+
+    fun debugWipeBdk() {
+        bitcoinService.wipeStorage()
+    }
+    // endregion
 
     fun refresh() {
         viewModelScope.launch {
