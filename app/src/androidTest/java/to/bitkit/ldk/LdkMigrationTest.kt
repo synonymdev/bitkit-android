@@ -1,4 +1,4 @@
-package to.bitkit
+package to.bitkit.ldk
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -7,8 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.ext.readAsset
-import to.bitkit.ldk.LightningService
-import to.bitkit.ldk.MigrationService
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
