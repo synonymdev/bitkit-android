@@ -46,20 +46,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
-import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
-
-    @Inject
-    lateinit var keychain: KeychainStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

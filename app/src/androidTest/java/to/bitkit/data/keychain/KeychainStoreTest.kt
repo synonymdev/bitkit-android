@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class KeychainStoreTest : BaseTest() {
 
-    private val appContext: Context by lazy { ApplicationProvider.getApplicationContext() }
+    private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }
     private lateinit var db: AppDb
 
     private lateinit var sut: KeychainStore
@@ -53,7 +53,7 @@ class KeychainStoreTest : BaseTest() {
     fun dbSeed() = test {
         val config = db.configDao().getAll().first()
 
-        assertTrue { config.first().walletIndex == 0L }
+        assertEquals(0L, config.first().walletIndex)
     }
 
     @Test
@@ -67,11 +67,10 @@ class KeychainStoreTest : BaseTest() {
 
     @Test
     fun saveString_existingKey_shouldThrow() = test {
-        assertFailsWith<IllegalArgumentException> {
-            val key = "key"
-            sut.saveString(key, "value1")
-            sut.saveString(key, "value2")
-        }
+        val key = "key"
+        sut.saveString(key, "value1")
+
+        assertFailsWith<IllegalArgumentException> { sut.saveString(key, "value2") }
     }
 
     @Test
@@ -85,7 +84,11 @@ class KeychainStoreTest : BaseTest() {
     }
 
     @Test
-    fun exists() {
+    fun exists() = test {
+        val (key, value) = "keyToExist" to "value"
+        sut.saveString(key, value)
+
+        assertTrue { sut.exists(key) }
     }
 
     @Test

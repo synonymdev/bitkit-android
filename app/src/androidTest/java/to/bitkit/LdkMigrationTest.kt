@@ -1,6 +1,7 @@
 package to.bitkit
 
 import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
@@ -14,14 +15,14 @@ import kotlin.test.assertTrue
 class LdkMigrationTest {
     private val mnemonic = "pool curve feature leader elite dilemma exile toast smile couch crane public"
 
-    private val context: Context by lazy { InstrumentationRegistry.getInstrumentation().context }
-    private val appContext: Context by lazy { InstrumentationRegistry.getInstrumentation().targetContext }
+    private val testContext by lazy { InstrumentationRegistry.getInstrumentation().context }
+    private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }
 
     @Test
     fun nodeShouldStartFromBackupAfterMigration() {
-        val seed = context.readAsset("ldk-backup/seed.bin")
-        val manager = context.readAsset("ldk-backup/manager.bin")
-        val monitor = context.readAsset("ldk-backup/monitor.bin")
+        val seed = testContext.readAsset("ldk-backup/seed.bin")
+        val manager = testContext.readAsset("ldk-backup/manager.bin")
+        val monitor = testContext.readAsset("ldk-backup/monitor.bin")
 
         MigrationService(appContext).migrate(seed, manager, listOf(monitor))
 
