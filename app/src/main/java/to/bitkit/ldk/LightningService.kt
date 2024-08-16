@@ -202,6 +202,6 @@ internal fun warmupNode() {
             fullScan()
         }
     }.onFailure {
-        Log.e(LDK, "Warmup error:", it)
+        Log.e(LDK, "Node warmup error", it)
     }
 }

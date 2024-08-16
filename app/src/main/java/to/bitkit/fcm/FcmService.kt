@@ -1,9 +1,9 @@
 package to.bitkit.fcm
 
 import android.util.Log
-import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import to.bitkit.Tag.FCM
@@ -52,9 +52,9 @@ internal class FcmService : FirebaseMessagingService() {
     private fun scheduleJob(messageData: Map<String, String>) {
         val work = OneTimeWorkRequestBuilder<Wake2PayWorker>()
             .setInputData(
-                Data.Builder()
-                    .putString("bolt11", messageData["bolt11"].orEmpty())
-                    .build()
+                workDataOf(
+                    "bolt11" to messageData["bolt11"].orEmpty()
+                )
             )
             .build()
         WorkManager.getInstance(this)
@@ -72,4 +72,3 @@ internal class FcmService : FirebaseMessagingService() {
         Log.d(FCM, "FCM registration token refreshed: $token")
     }
 }
-

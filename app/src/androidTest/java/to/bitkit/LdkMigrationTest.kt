@@ -26,7 +26,7 @@ class LdkMigrationTest {
 
         MigrationService(appContext).migrate(seed, manager, listOf(monitor))
 
-        with(LightningService()) {
+        with(LightningService.shared) {
             init(mnemonic)
             start()
 

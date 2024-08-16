@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package to.bitkit.di
 
 import dagger.Module
@@ -23,7 +25,6 @@ annotation class IoDispatcher
 @Module
 @InstallIn(SingletonComponent::class)
 object DispatchersModule {
-
     @UiDispatcher
     @Provides
     fun provideUiDispatcher(): CoroutineDispatcher {
