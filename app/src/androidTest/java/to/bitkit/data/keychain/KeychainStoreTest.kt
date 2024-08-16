@@ -51,9 +51,9 @@ class KeychainStoreTest : BaseTest() {
 
     @Test
     fun dbSeed() = test {
-        val config = db.configDao().getAll().first()
+        val walletIndex = db.configDao().getAll().first().first().walletIndex
 
-        assertEquals(0L, config.first().walletIndex)
+        assertEquals(0L, walletIndex)
     }
 
     @Test
