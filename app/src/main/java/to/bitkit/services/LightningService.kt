@@ -11,6 +11,7 @@ import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.Env
 import to.bitkit.LnPeer
+import to.bitkit.LnPeer.Companion.toLnPeer
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit.Tag.LDK
@@ -109,7 +110,7 @@ class LightningService @Inject constructor(
     val nodeId: String get() = node.nodeId()
     val balances get() = node.listBalances()
     val status get() = node.status()
-    val peers get() = node.listPeers()
+    val peers get() = node.listPeers().map { it.toLnPeer() }
     val channels get() = node.listChannels()
     val payments get() = node.listPayments()
     // endregion
@@ -126,8 +127,7 @@ internal fun LightningService.connectPeer(peer: LnPeer) {
 // endregion
 
 // region channels
-internal suspend fun LightningService.openChannel() {
-    val peer = peers.first()
+internal suspend fun LightningService.openChannel(peer: LnPeer) {
 
     // sendToAddress
     // mine 6 blocks & wait for esplora to pick up block

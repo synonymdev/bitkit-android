@@ -10,7 +10,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.Tag.DEV
@@ -41,7 +40,7 @@ class MainViewModel @Inject constructor(
     val btcBalance = mutableStateOf("Loading…")
     val mnemonic = mutableStateOf(SEED)
 
-    val peers = mutableStateListOf<PeerDetails>()
+    val peers = mutableStateListOf<LnPeer>()
     val channels = mutableStateListOf<ChannelDetails>()
 
     private val node = lightningService.node
@@ -94,7 +93,7 @@ class MainViewModel @Inject constructor(
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
-            lightningService.openChannel()
+            lightningService.openChannel(peers.first())
             sync()
         }
     }
@@ -148,5 +147,5 @@ class MainViewModel @Inject constructor(
     }
 }
 
-fun MainViewModel.togglePeerConnection(peer: PeerDetails) =
-    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(LnPeer(peer.nodeId, peer.address))
+fun MainViewModel.togglePeerConnection(peer: LnPeer) =
+    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(peer)
