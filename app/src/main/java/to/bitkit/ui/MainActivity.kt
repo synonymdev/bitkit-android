@@ -55,10 +55,12 @@ import to.bitkit.ui.theme.AppThemeSurface
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
+    private val sharedViewModel: SharedViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        sharedViewModel.logInstanceHashCode()
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
