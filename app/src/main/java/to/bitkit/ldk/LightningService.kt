@@ -17,7 +17,7 @@ import to.bitkit.Tag.LDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.bdk.BitcoinService
 import to.bitkit.di.BgDispatcher
-import to.bitkit.di.ServiceQueue
+import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 
 class LightningService @Inject constructor(
