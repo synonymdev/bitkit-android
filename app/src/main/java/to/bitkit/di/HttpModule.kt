@@ -12,7 +12,9 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import to.bitkit.data.BlocktankApi
 import to.bitkit.data.EsploraApi
+import to.bitkit.data.LspApi
 import to.bitkit.data.RestApi
 import javax.inject.Singleton
 
@@ -41,6 +43,12 @@ object HttpModule {
                 json(json = json)
             }
         }
+    }
+
+    @Provides
+    @Singleton
+    fun provideLspApi(blocktankApi: BlocktankApi): LspApi {
+        return blocktankApi
     }
 
     @Provides

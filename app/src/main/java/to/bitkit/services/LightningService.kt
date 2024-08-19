@@ -106,6 +106,16 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node synced")
     }
 
+    suspend fun sign(message: String): String {
+        assertNodeIsInitialised()
+
+        return ServiceQueue.LDK.background {
+            node.signMessage(message.uByteList)
+        }
+    }
+
+    private fun assertNodeIsInitialised() = check(::node.isInitialized) { "LDK node is not initialised" }
+
     // region state
     val nodeId: String get() = node.nodeId()
     val balances get() = node.listBalances()
