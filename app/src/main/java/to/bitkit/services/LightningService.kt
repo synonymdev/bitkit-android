@@ -1,4 +1,4 @@
-package to.bitkit.ldk
+package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
@@ -16,9 +16,9 @@ import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit.Tag.LDK
 import to.bitkit.async.BaseCoroutineScope
-import to.bitkit.bdk.BitcoinService
-import to.bitkit.di.BgDispatcher
 import to.bitkit.async.ServiceQueue
+import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.uByteList
 import javax.inject.Inject
 
 class LightningService @Inject constructor(
@@ -67,7 +67,7 @@ class LightningService @Inject constructor(
     }
 
     suspend fun start() {
-        check(::node.isInitialized) { "LDK node is not initialised" }
+        assertNodeIsInitialised()
 
         Log.d(LDK, "Starting node…")
 
@@ -134,14 +134,17 @@ internal suspend fun LightningService.openChannel(peer: LnPeer) {
     // wait for esplora to pick up tx
     sync()
 
-    node.connectOpenChannel(
-        nodeId = peer.nodeId,
-        address = peer.address,
-        channelAmountSats = 50000u,
-        pushToCounterpartyMsat = null,
-        channelConfig = null,
-        announceChannel = true,
-    )
+    ServiceQueue.LDK.background {
+        node.connectOpenChannel(
+            nodeId = peer.nodeId,
+            address = peer.address,
+            channelAmountSats = 50000u,
+            pushToCounterpartyMsat = null,
+            channelConfig = null,
+            announceChannel = true,
+        )
+    }
+
     sync()
 
     val pendingEvent = node.nextEventAsync()

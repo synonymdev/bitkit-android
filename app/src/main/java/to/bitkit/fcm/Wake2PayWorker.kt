@@ -9,9 +9,9 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import to.bitkit.Tag.FCM
-import to.bitkit.ldk.LightningService
-import to.bitkit.ldk.payInvoice
-import to.bitkit.ldk.warmupNode
+import to.bitkit.services.LightningService
+import to.bitkit.services.payInvoice
+import to.bitkit.services.warmupNode
 
 @HiltWorker
 class Wake2PayWorker @AssistedInject constructor(

@@ -16,7 +16,7 @@ class SharedViewModel @Inject constructor(
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
         logInstanceHashCode()
-        runBlocking { to.bitkit.ldk.warmupNode() }
+        runBlocking { to.bitkit.services.warmupNode() }
     }
 
     fun logInstanceHashCode() {

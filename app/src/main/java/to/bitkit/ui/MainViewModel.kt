@@ -13,17 +13,17 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.Tag.DEV
-import to.bitkit.bdk.BitcoinService
+import to.bitkit.services.BitcoinService
 import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.syncTo
-import to.bitkit.ldk.LightningService
-import to.bitkit.ldk.closeChannel
-import to.bitkit.ldk.connectPeer
-import to.bitkit.ldk.createInvoice
-import to.bitkit.ldk.openChannel
-import to.bitkit.ldk.payInvoice
+import to.bitkit.services.LightningService
+import to.bitkit.services.closeChannel
+import to.bitkit.services.connectPeer
+import to.bitkit.services.createInvoice
+import to.bitkit.services.openChannel
+import to.bitkit.services.payInvoice
 import javax.inject.Inject
 
 @HiltViewModel
