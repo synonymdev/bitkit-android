@@ -1,12 +1,15 @@
 package to.bitkit.fcm
 
+import android.os.Bundle
 import android.util.Log
+import androidx.core.os.toPersistableBundle
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import to.bitkit.Tag.FCM
+import to.bitkit.ui.pushNotification
 import java.util.Date
 
 internal class FcmService : FirebaseMessagingService() {
@@ -15,10 +18,7 @@ internal class FcmService : FirebaseMessagingService() {
     /**
      * Act on received messages
      *
-     * To generate notifications as a result of a received FCM message, see:
-     * [MyFirebaseMessagingService.sendNotification](https://github.com/firebase/snippets-android/blob/ae9bd6ff8eccfb3eeba863d41eaca2b0e77eaa01/messaging/app/src/main/java/com/google/firebase/example/messaging/kotlin/MyFirebaseMessagingService.kt#L89-L124)
-     *
-     * [Debug messages not received](https://goo.gl/39bRNJ)
+     * [Debug](https://goo.gl/39bRNJ)
      */
     override fun onMessageReceived(message: RemoteMessage) {
         Log.d(FCM, "New FCM at: ${Date(message.sentTime)}")
@@ -26,6 +26,7 @@ internal class FcmService : FirebaseMessagingService() {
         message.notification?.run {
             Log.d(FCM, "FCM title: $title")
             Log.d(FCM, "FCM body: $body")
+            sendNotification(title, body, Bundle(message.data.toPersistableBundle()))
         }
 
         if (message.data.isNotEmpty()) {
@@ -37,6 +38,10 @@ internal class FcmService : FirebaseMessagingService() {
                 handleNow(message.data)
             }
         }
+    }
+
+    private fun sendNotification(title: String?, body: String?, extras: Bundle) {
+        pushNotification(title, body, extras)
     }
 
     /**
