@@ -21,17 +21,19 @@ import to.bitkit.data.LspApi
 import to.bitkit.data.RestApi
 import javax.inject.Singleton
 
+val json = Json {
+    prettyPrint = true
+    isLenient = true
+    ignoreUnknownKeys = true
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object HttpModule {
     @Provides
     @Singleton
     fun provideJson(): Json {
-        return Json {
-            prettyPrint = true
-            isLenient = true
-            ignoreUnknownKeys = true
-        }
+        return json
     }
 
     @Provides

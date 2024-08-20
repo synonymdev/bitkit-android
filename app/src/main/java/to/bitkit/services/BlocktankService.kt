@@ -7,6 +7,7 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.LspApi
 import to.bitkit.data.RegisterDeviceRequest
+import to.bitkit.data.TestNotificationRequest
 import to.bitkit.di.BgDispatcher
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -20,17 +21,16 @@ class BlocktankService @Inject constructor(
 ) : BaseCoroutineScope(bgDispatcher) {
 
     suspend fun registerDevice(deviceToken: String) {
-        // UserDefaults.standard.setValue(deviceToken, forKey: "deviceToken")
         val nodeId = requireNotNull(lightningService.nodeId) { "Node not started" }
 
-        Log.d(LSP, "Registering device for notifications")
+        Log.d(LSP, "Registering device for notifications…")
 
         val isoTimestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))
         val messageToSign = "bitkit-notifications$deviceToken$isoTimestamp"
 
         val signature = lightningService.sign(messageToSign)
 
-        // TODO: Use real public key to enable decryption of the push notification payload
+        // TODO: Use actual public key to enable decryption of the push notification payload
         val publicKey = "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"
 
         val payload = RegisterDeviceRequest(
@@ -44,6 +44,22 @@ class BlocktankService @Inject constructor(
 
         ServiceQueue.LSP.background {
             lspApi.registerDeviceForNotifications(payload)
+        }
+    }
+
+    suspend fun testNotification(deviceToken: String) {
+        Log.d(LSP, "Sending test notification to self…")
+
+        val payload = TestNotificationRequest(
+            data = TestNotificationRequest.Data(
+                source = "blocktank",
+                type = "incomingHtlc",
+                payload = TestNotificationRequest.Data.Payload(secretMessage = "hello")
+            )
+        )
+
+        ServiceQueue.LSP.background {
+            lspApi.testNotification(deviceToken, payload)
         }
     }
 }

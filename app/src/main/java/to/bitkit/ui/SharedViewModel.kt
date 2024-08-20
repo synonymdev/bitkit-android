@@ -32,8 +32,7 @@ class SharedViewModel @Inject constructor(
 
     fun registerForNotifications(fcmToken: String? = null) {
         viewModelScope.launch(bgDispatcher) {
-            val token = fcmToken ?: runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
-            requireNotNull(token) { "FCM token read error" }
+            val token = fcmToken ?: FirebaseMessaging.getInstance().token.await()
 
             runCatching {
                 blocktankService.registerDevice(token)

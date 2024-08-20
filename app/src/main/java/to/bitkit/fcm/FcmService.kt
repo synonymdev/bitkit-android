@@ -2,13 +2,18 @@ package to.bitkit.fcm
 
 import android.os.Bundle
 import android.util.Log
+import androidx.core.os.bundleOf
 import androidx.core.os.toPersistableBundle
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
 import to.bitkit.Tag.FCM
+import to.bitkit.di.json
 import to.bitkit.ui.pushNotification
 import java.util.Date
 
@@ -48,7 +53,29 @@ internal class FcmService : FirebaseMessagingService() {
      * Handle message within 10 seconds.
      */
     private fun handleNow(data: Map<String, String>) {
-        Log.e(FCM, "FCM handler not implemented for: $data")
+        val isHandled = data.runAs<EncryptedNotification> {
+            val extras = bundleOf(
+                "tag" to tag,
+                "sound" to sound,
+                "publicKey" to publicKey,
+            )
+
+            sendNotification(title, message, extras)
+        }
+        if (!isHandled) {
+            Log.e(FCM, "FCM handler not implemented for: $data")
+        }
+    }
+
+    private inline fun <reified T> Map<String, String>.runAs(block: T.() -> Unit): Boolean {
+        val encoded = json.encodeToString(this)
+        return try {
+            val decoded = json.decodeFromString<T>(encoded)
+            block(decoded)
+            true
+        } catch (e: SerializationException) {
+            false
+        }
     }
 
     /**
@@ -78,3 +105,14 @@ internal class FcmService : FirebaseMessagingService() {
         // TODO call sharedViewModel.registerForNotifications(token)
     }
 }
+
+@Serializable
+data class EncryptedNotification(
+    val cipher: String,
+    val iv: String,
+    val tag: String,
+    val sound: String,
+    val title: String,
+    val message: String,
+    val publicKey: String,
+)

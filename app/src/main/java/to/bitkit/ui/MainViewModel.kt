@@ -5,19 +5,22 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.Tag.DEV
-import to.bitkit.services.BitcoinService
 import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.syncTo
+import to.bitkit.services.BitcoinService
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.closeChannel
 import to.bitkit.services.connectPeer
@@ -31,6 +34,7 @@ class MainViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val bitcoinService: BitcoinService,
     private val lightningService: LightningService,
+    private val blocktankService: BlocktankService,
     private val keychain: KeychainStore,
     private val appDb: AppDb,
 ) : ViewModel() {
@@ -105,6 +109,23 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun refresh() {
+        viewModelScope.launch {
+            "Refreshing…".also {
+                ldkNodeId.value = it
+                ldkBalance.value = it
+                btcAddress.value = it
+                btcBalance.value = it
+            }
+            peers.clear()
+            channels.clear()
+
+            delay(50)
+            lightningService.sync()
+            sync()
+        }
+    }
+
     // region debug
     fun debugDb() {
         viewModelScope.launch {
@@ -127,24 +148,15 @@ class MainViewModel @Inject constructor(
     fun debugWipeBdk() {
         bitcoinService.wipeStorage()
     }
-    // endregion
 
-    fun refresh() {
-        viewModelScope.launch {
-            "Refreshing…".also {
-                ldkNodeId.value = it
-                ldkBalance.value = it
-                btcAddress.value = it
-                btcBalance.value = it
-            }
-            peers.clear()
-            channels.clear()
-
-            delay(50)
-            lightningService.sync()
-            sync()
+    fun debugLspNotifications() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = FirebaseMessaging.getInstance().token.await()
+            blocktankService.testNotification(token)
         }
     }
+
+    // endregion
 }
 
 fun MainViewModel.togglePeerConnection(peer: LnPeer) =

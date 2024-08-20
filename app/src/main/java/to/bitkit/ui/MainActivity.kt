@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 TextButton(sharedViewModel::registerForNotifications) { Text("Register Device") }
+                                TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
                             }
                         }
 
