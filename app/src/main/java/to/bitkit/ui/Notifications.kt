@@ -89,6 +89,7 @@ fun logFcmToken() {
             return@OnCompleteListener
         }
         val token = task.result
+        // TODO call sharedViewModel.registerForNotifications(token) and move the listener body to there
         Log.d(FCM, "FCM registration token: $token")
     })
 }

@@ -70,5 +70,6 @@ internal class FcmService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         this.token = token
         Log.d(FCM, "FCM registration token refreshed: $token")
+        // TODO call sharedViewModel.registerForNotifications(token)
     }
 }
