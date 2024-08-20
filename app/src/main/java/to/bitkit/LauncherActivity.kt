@@ -12,7 +12,7 @@ import to.bitkit.ui.logFcmToken
 
 @AndroidEntryPoint
 class LauncherActivity : AppCompatActivity() {
-    private val sharedViewModel: SharedViewModel by viewModels()
+    private val sharedViewModel by viewModels<SharedViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

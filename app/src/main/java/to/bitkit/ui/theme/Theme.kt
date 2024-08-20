@@ -10,7 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
-val Brand100 = Color(0xFFFFF1EE)
+val Gray100 = Color(0xFFF4F4F4)
+val Brand50 = Color(0xFFFFF1EE)
 val Brand500 = Color(0xFFEC5428)
 val Teal200 = Color(0xFF03DAC5)
 
@@ -18,9 +19,10 @@ private object ColorPalette {
     @Stable
     val Light = lightColorScheme(
         primary = Brand500,
-        primaryContainer = Brand100,
+        primaryContainer = Brand50,
         secondary = Teal200,
         background = Color.White,
+        surfaceVariant = Gray100,
         /* // Other default colors to override
         surface = Color.White,
         onPrimary = Color.White,
