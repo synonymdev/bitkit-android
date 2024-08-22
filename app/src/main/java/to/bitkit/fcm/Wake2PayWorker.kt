@@ -4,8 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
-import androidx.work.Data
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import to.bitkit.Tag.FCM
@@ -24,9 +24,7 @@ class Wake2PayWorker @AssistedInject constructor(
         warmupNode()
 
         val bolt11 = workerParams.inputData.getString("bolt11") ?: return Result.failure(
-            Data.Builder()
-                .putString("reason", "bolt11 field missing")
-                .build()
+            workDataOf("reason" to "bolt11 field missing")
         )
 
         val isSuccess = LightningService.shared.payInvoice(bolt11)
@@ -34,9 +32,7 @@ class Wake2PayWorker @AssistedInject constructor(
             Result.success()
         } else {
             Result.failure(
-                Data.Builder()
-                    .putString("reason", "payment error")
-                    .build()
+                workDataOf("reason" to "payment error")
             )
         }
     }

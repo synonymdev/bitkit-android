@@ -21,7 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationAdd
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -30,6 +29,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -46,20 +46,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
-import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
-
-    @Inject
-    lateinit var keychain: KeychainStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,12 +65,9 @@ class MainActivity : ComponentActivity() {
                 MainScreen(viewModel) {
                     WalletScreen(viewModel) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Button(onClick = viewModel::debugDb) {
-                                Text(text = "Debug DB")
-                            }
-                            Button(onClick = viewModel::debugKeychain) {
-                                Text(text = "Debug Keychain")
-                            }
+                            TextButton(onClick = viewModel::debugDb) { Text(text = "Debug DB") }
+                            TextButton(onClick = viewModel::debugKeychain) { Text(text = "Debug Keychain") }
+                            TextButton(onClick = viewModel::debugWipeBdk) { Text(text = "Wipe BDK") }
                         }
 
                         Peers(viewModel.peers, viewModel::togglePeerConnection)

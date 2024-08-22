@@ -3,18 +3,20 @@
 package to.bitkit
 
 import android.util.Log
-import to.bitkit.Tag.LDK
+import to.bitkit.Tag.APP
 import to.bitkit.env.Network
 import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
+// region globals
 internal object Tag {
     const val FCM = "FCM"
     const val LDK = "LDK"
     const val BDK = "BDK"
     const val DEV = "DEV"
     const val APP = "APP"
+    const val PERF = "PERF"
 }
 
 internal const val HOST = "10.0.2.2"
@@ -32,24 +34,31 @@ internal val PEER = LnPeer(
     host = HOST,
     port = "9737",
 )
+// endregion
 
+// region env
 internal object Env {
     val isDebug = BuildConfig.DEBUG
 
-    object LdkStorage {
-        lateinit var path: String
+    object Storage {
+        private var base = ""
+        fun init(basePath: String) {
+            require(basePath.isNotEmpty()) { "Base storage path cannot be empty" }
+            base = basePath
+            Log.i(APP, "Storage path: $basePath")
+        }
 
-        fun init(base: String): String {
-            require(base.isNotEmpty()) { "Base path for LDK storage cannot be empty" }
-            if (::path.isInitialized) {
-                Log.w(LDK, "Storage path already set: $path")
-            }
-            path = Path(base, network.id, "ldk")
+        val ldk get() = storagePathOf(0, network.id, "ldk")
+        val bdk get() = storagePathOf(0, network.id, "bdk")
+
+        private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
+            require(base.isNotEmpty()) { "Base storage path cannot be empty" }
+            val absolutePath = Path(base, network, "wallet$walletIndex", dir)
                 .toFile()
                 .ensureDir()
                 .absolutePath
-            Log.d(LDK, "Storage path: $path")
-            return path
+            Log.d(APP, "$dir storage path: $absolutePath")
+            return absolutePath
         }
     }
 
@@ -66,6 +75,7 @@ internal object Env {
             else -> null
         }
 }
+// endregion
 
 data class LnPeer(
     val nodeId: String,

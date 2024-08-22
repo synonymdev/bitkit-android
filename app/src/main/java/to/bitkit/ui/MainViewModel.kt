@@ -30,6 +30,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val bitcoinService: BitcoinService,
+    private val lightningService: LightningService,
     private val keychain: KeychainStore,
     private val appDb: AppDb,
 ) : ViewModel() {
@@ -42,9 +44,6 @@ class MainViewModel @Inject constructor(
     val peers = mutableStateListOf<PeerDetails>()
     val channels = mutableStateListOf<ChannelDetails>()
 
-    val lightningService = LightningService.shared
-    private val bitcoinService = BitcoinService.shared
-
     private val node = lightningService.node
 
     init {
@@ -53,11 +52,12 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun sync() {
+    private suspend fun sync() {
+        bitcoinService.syncWithRevealedSpks()
         ldkNodeId.value = lightningService.nodeId
         ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
-        btcAddress.value = bitcoinService.address
-        btcBalance.value = bitcoinService.balance.total.toString()
+        btcAddress.value = bitcoinService.getAddress()
+        btcBalance.value = bitcoinService.balance?.total?.toSat().toString()
         mnemonic.value = SEED
         peers.syncTo(lightningService.peers)
         channels.syncTo(lightningService.channels)
@@ -106,6 +106,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // region debug
     fun debugDb() {
         viewModelScope.launch {
             appDb.configDao().getAll().collect {
@@ -123,22 +124,27 @@ class MainViewModel @Inject constructor(
             keychain.saveString(key, "testValue")
         }
     }
-}
 
-fun MainViewModel.refresh() {
-    viewModelScope.launch {
-        "Refreshing…".also {
-            ldkNodeId.value = it
-            ldkBalance.value = it
-            btcAddress.value = it
-            btcBalance.value = it
+    fun debugWipeBdk() {
+        bitcoinService.wipeStorage()
+    }
+    // endregion
+
+    fun refresh() {
+        viewModelScope.launch {
+            "Refreshing…".also {
+                ldkNodeId.value = it
+                ldkBalance.value = it
+                btcAddress.value = it
+                btcBalance.value = it
+            }
+            peers.clear()
+            channels.clear()
+
+            delay(50)
+            lightningService.sync()
+            sync()
         }
-        peers.clear()
-        channels.clear()
-
-        delay(50)
-        lightningService.sync()
-        sync()
     }
 }
 

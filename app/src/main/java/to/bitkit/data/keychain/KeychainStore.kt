@@ -4,18 +4,15 @@ package to.bitkit.data.keychain
 
 import android.content.Context
 import android.util.Log
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import to.bitkit.Tag.APP
+import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.fromBase64
@@ -26,21 +23,16 @@ class KeychainStore @Inject constructor(
     private val db: AppDb,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
-) : CoroutineScope {
-
-    private val job = Job()
-    override val coroutineContext = dispatcher + job
-
+) : BaseCoroutineScope(dispatcher) {
     private val alias = "keychain"
     private val keyStore by lazy { AndroidKeyStore(alias) }
 
-    private val Context.keychain: DataStore<Preferences> by preferencesDataStore(alias, scope = this)
-    val snapshot get() = runBlocking(coroutineContext) { context.keychain.data.first() }
+    private val Context.keychain by preferencesDataStore(alias, scope = this)
+    val snapshot get() = runBlocking { context.keychain.data.first() }
 
     fun loadString(key: String): String? = load(key)?.let { keyStore.decrypt(it) }
 
     private fun load(key: String): ByteArray? {
-        // TODO throw/warn if not found
         return snapshot[key.indexed]?.fromBase64()
     }
 
@@ -72,7 +64,7 @@ class KeychainStore @Inject constructor(
 
     private val String.indexed: Preferences.Key<String>
         get() {
-            val walletIndex = runBlocking(coroutineContext) { db.configDao().getAll().first() }.first().walletIndex
+            val walletIndex = runBlocking { db.configDao().getAll().first() }.first().walletIndex
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
 }

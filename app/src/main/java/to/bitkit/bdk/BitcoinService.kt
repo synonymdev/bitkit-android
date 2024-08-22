@@ -1,67 +1,106 @@
 package to.bitkit.bdk
 
 import android.util.Log
-import org.bitcoindevkit.AddressIndex
-import org.bitcoindevkit.Blockchain
-import org.bitcoindevkit.BlockchainConfig
-import org.bitcoindevkit.DatabaseConfig
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
-import org.bitcoindevkit.EsploraConfig
+import org.bitcoindevkit.EsploraClient
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.Mnemonic
-import org.bitcoindevkit.Progress
 import org.bitcoindevkit.Wallet
 import to.bitkit.Env
 import to.bitkit.REST
 import to.bitkit.SEED
 import to.bitkit.Tag.BDK
+import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.di.BgDispatcher
+import to.bitkit.di.ServiceQueue
+import javax.inject.Inject
+import kotlin.io.path.Path
+import kotlin.io.path.pathString
 
-internal class BitcoinService {
+class BitcoinService @Inject constructor(
+    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+) : BaseCoroutineScope(bgDispatcher) {
     companion object {
         val shared by lazy {
-            BitcoinService()
+            BitcoinService(Dispatchers.Default)
         }
     }
 
-    private val wallet by lazy {
+    private val parallelRequests = 5_UL
+    private val stopGap = 20_UL
+    private var hasSynced = false
+
+    private val esploraClient by lazy { EsploraClient(url = REST) }
+    private val dbPath by lazy { Path(Env.Storage.bdk, "db.sqlite") }
+
+    private lateinit var wallet: Wallet
+
+    suspend fun setup() {
         val network = Env.network.bdk
         val mnemonic = Mnemonic.fromString(SEED)
         val key = DescriptorSecretKey(network, mnemonic, null)
 
-        Wallet(
-            descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
-            changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
-            network = network,
-            databaseConfig = DatabaseConfig.Memory,
-        )
-    }
-    private val blockchain by lazy {
-        Blockchain(
-            BlockchainConfig.Esplora(
-                EsploraConfig(
-                    baseUrl = REST,
-                    proxy = null,
-                    concurrency = 5u,
-                    stopGap = 20u,
-                    timeout = null,
-                )
+        Log.d(BDK, "Setting up wallet…")
+
+        ServiceQueue.BDK.background {
+            wallet = Wallet(
+                descriptor = Descriptor.newBip84(key, KeychainKind.INTERNAL, network),
+                changeDescriptor = Descriptor.newBip84(key, KeychainKind.EXTERNAL, network),
+                persistenceBackendPath = dbPath.pathString,
+                network = network,
             )
-        )
+        }
+
+        Log.i(BDK, "Wallet set up")
     }
 
-    fun sync() {
-        wallet.sync(
-            blockchain = blockchain,
-            progress = object : Progress {
-                override fun update(progress: Float, message: String?) {
-                    Log.d(BDK, "Updating wallet: $progress $message")
-                }
-            }
-        )
+    suspend fun syncWithRevealedSpks() {
+        Log.d(BDK, "Wallet syncing…")
+
+        ServiceQueue.BDK.background {
+            val request = wallet.startSyncWithRevealedSpks()
+            val update = esploraClient.sync(request, parallelRequests)
+            wallet.applyUpdate(update)
+        }
+
+        hasSynced = true
+        Log.i(BDK, "Wallet synced")
     }
 
-    // region State
-    val balance get() = wallet.getBalance()
-    val address get() = wallet.getAddress(AddressIndex.LastUnused).address.asString()
+    suspend fun fullScan() {
+        Log.d(BDK, "Wallet full scan…")
+
+        ServiceQueue.BDK.background {
+            val request = wallet.startFullScan()
+            val update = esploraClient.fullScan(request, stopGap, parallelRequests)
+            wallet.applyUpdate(update)
+            // TODO: Persist wallet once BDK is updated to beta release
+        }
+
+        hasSynced = true
+
+        Log.i(BDK, "Wallet fully scanned")
+    }
+
+    fun wipeStorage() {
+        Log.w(BDK, "Wiping wallet storage…")
+
+        dbPath.toFile()?.parentFile?.deleteRecursively()
+
+        Log.i(BDK, "Wallet storage wiped")
+    }
+
+    // region state
+    val balance get() = if (hasSynced) wallet.getBalance() else null
+
+    suspend fun getAddress(): String {
+        return ServiceQueue.BDK.background {
+            val addressInfo = wallet.revealNextAddress(KeychainKind.EXTERNAL).address
+            addressInfo.asString()
+        }
+    }
+    // endregion
 }

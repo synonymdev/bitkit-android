@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.runBlocking
 import to.bitkit.ldk.warmupNode
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.initNotificationChannel
@@ -15,7 +16,8 @@ class LauncherActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         initNotificationChannel()
         logFcmToken()
-        warmupNode()
+        // TODO share mainViewModel in both activities, move warmupNode to it & call it suspending
+        runBlocking { warmupNode() }
         startActivity(Intent(this, MainActivity::class.java))
     }
 }
