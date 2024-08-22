@@ -23,13 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.lightningdevkit.ldknode.PeerDetails
+import to.bitkit.LnPeer
 import to.bitkit.R
 
 @Composable
 internal fun Peers(
-    peers: SnapshotStateList<PeerDetails>,
-    onToggle: (PeerDetails) -> Unit,
+    peers: SnapshotStateList<LnPeer>,
+    onToggle: (LnPeer) -> Unit,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),

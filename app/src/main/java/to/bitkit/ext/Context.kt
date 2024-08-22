@@ -37,7 +37,7 @@ internal fun toast(
     text: String,
     duration: Int = Toast.LENGTH_SHORT,
 ) {
-    with(currentActivity<MainActivity>()) {
+    currentActivity<MainActivity>().run {
         Toast.makeText(this, text, duration).show()
     }
 }

@@ -3,6 +3,7 @@
 package to.bitkit
 
 import android.util.Log
+import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.Tag.APP
 import to.bitkit.env.Network
 import to.bitkit.ext.ensureDir
@@ -13,6 +14,7 @@ import org.lightningdevkit.ldknode.Network as LdkNetwork
 internal object Tag {
     const val FCM = "FCM"
     const val LDK = "LDK"
+    const val LSP = "LSP"
     const val BDK = "BDK"
     const val DEV = "DEV"
     const val APP = "APP"
@@ -81,13 +83,33 @@ data class LnPeer(
     val nodeId: String,
     val host: String,
     val port: String,
+    val isConnected: Boolean = false,
+    val isPersisted: Boolean = false,
 ) {
-    constructor(nodeId: String, address: String) : this(
+    constructor(
+        nodeId: String,
+        address: String,
+        isConnected: Boolean = false,
+        isPersisted: Boolean = false,
+    ) : this(
         nodeId,
         address.substringBefore(":"),
         address.substringAfter(":"),
+        isConnected,
+        isPersisted,
     )
 
     val address get() = "$host:$port"
     override fun toString() = "$nodeId@${address}"
+
+    companion object {
+        fun PeerDetails.toLnPeer(): LnPeer {
+            return LnPeer(
+                nodeId = nodeId,
+                address = address,
+                isConnected = isConnected,
+                isPersisted = isPersisted,
+            )
+        }
+    }
 }

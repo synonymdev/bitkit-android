@@ -77,6 +77,6 @@ class AndroidKeyStore(
         val cipher = Cipher.getInstance(transformation).apply { init(Cipher.DECRYPT_MODE, secretKey, spec) }
 
         val decryptedDataBytes = cipher.doFinal(actualEncryptedData)
-        return decryptedDataBytes.toString(Charsets.UTF_8)
+        return decryptedDataBytes.decodeToString()
     }
 }

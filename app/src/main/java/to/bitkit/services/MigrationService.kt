@@ -1,4 +1,4 @@
-package to.bitkit.ldk
+package to.bitkit.services
 
 import android.content.ContentValues
 import android.content.Context
@@ -90,19 +90,9 @@ class MigrationService @Inject constructor(
         }
     }
 
-    companion object {
-        private const val LDK_NODE_DATA = "ldk_node_data"
-        private const val PRIMARY_NAMESPACE = "primary_namespace"
-        private const val SECONDARY_NAMESPACE = "secondary_namespace"
-        private const val KEY = "key"
-        private const val VALUE = "value"
-        private const val LDK_DB_NAME = "$LDK_NODE_DATA.sqlite"
-    }
-}
-
-private class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHelper(context, name, null, VERSION) {
-    override fun onCreate(db: SQLiteDatabase) {
-        val query = """
+    class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHelper(context, name, null, LDK_DB_VERSION) {
+        override fun onCreate(db: SQLiteDatabase) {
+            val query = """
             |CREATE TABLE ldk_node_data (
             |    primary_namespace TEXT NOT NULL,
             |    secondary_namespace TEXT DEFAULT "" NOT NULL,
@@ -111,12 +101,19 @@ private class LdkNodeDataDbHelper(context: Context, name: String) : SQLiteOpenHe
             |    PRIMARY KEY (primary_namespace, secondary_namespace, `key`)
             |);
             """.trimMargin()
-        db.execSQL(query)
+            db.execSQL(query)
+        }
+
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
-
     companion object {
-        const val VERSION = 2
+        private const val LDK_NODE_DATA = "ldk_node_data"
+        private const val PRIMARY_NAMESPACE = "primary_namespace"
+        private const val SECONDARY_NAMESPACE = "secondary_namespace"
+        private const val KEY = "key"
+        private const val VALUE = "value"
+        private const val LDK_DB_NAME = "$LDK_NODE_DATA.sqlite"
+        private const val LDK_DB_VERSION = 2 // TODO: check on each ldk-node version update
     }
 }
