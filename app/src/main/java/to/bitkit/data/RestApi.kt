@@ -6,6 +6,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import to.bitkit.REST
 import to.bitkit.ext.toHex
 import javax.inject.Inject
@@ -62,3 +64,33 @@ class EsploraApi @Inject constructor(
         return client.get("$REST/tx/${txid}/outspend/${outputIndex}").body()
     }
 }
+
+@Serializable
+data class Tx(
+    val txid: String,
+    val status: TxStatus,
+)
+
+@Serializable
+data class TxStatus(
+    @SerialName("confirmed")
+    val isConfirmed: Boolean,
+    @SerialName("block_height")
+    val blockHeight: Int? = null,
+    @SerialName("block_hash")
+    val blockHash: String? = null,
+)
+
+@Serializable
+data class OutputSpent(
+    val spent: Boolean,
+)
+
+@Serializable
+data class MerkleProof(
+    @SerialName("block_height")
+    val blockHeight: Int,
+    @Suppress("ArrayInDataClass")
+    val merkle: Array<String>,
+    val pos: Int,
+)

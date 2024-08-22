@@ -36,3 +36,5 @@ fun Any.convertToByteArray(): ByteArray {
 fun ByteArray.toBase64(flags: Int = Base64.DEFAULT): String = Base64.encodeToString(this, flags)
 
 fun String.fromBase64(flags: Int = Base64.DEFAULT): ByteArray = Base64.decode(this, flags)
+
+val String.uByteList get() = this.toByteArray(Charsets.UTF_8).map { it.toUByte() }

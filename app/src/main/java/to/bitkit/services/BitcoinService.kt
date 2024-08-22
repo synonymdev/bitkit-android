@@ -1,4 +1,4 @@
-package to.bitkit.bdk
+package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
@@ -15,7 +15,7 @@ import to.bitkit.SEED
 import to.bitkit.Tag.BDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.di.BgDispatcher
-import to.bitkit.di.ServiceQueue
+import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 import kotlin.io.path.Path
 import kotlin.io.path.pathString

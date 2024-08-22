@@ -1,4 +1,4 @@
-package to.bitkit.ldk
+package to.bitkit.services
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider

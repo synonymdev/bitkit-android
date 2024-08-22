@@ -7,8 +7,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.bdk.BitcoinService
-import to.bitkit.ldk.LightningService
+import to.bitkit.services.BitcoinService
+import to.bitkit.services.LightningService
 
 @Module
 @InstallIn(SingletonComponent::class)

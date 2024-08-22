@@ -5,26 +5,28 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
 import to.bitkit.Tag.DEV
-import to.bitkit.bdk.BitcoinService
 import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.syncTo
-import to.bitkit.ldk.LightningService
-import to.bitkit.ldk.closeChannel
-import to.bitkit.ldk.connectPeer
-import to.bitkit.ldk.createInvoice
-import to.bitkit.ldk.openChannel
-import to.bitkit.ldk.payInvoice
+import to.bitkit.services.BitcoinService
+import to.bitkit.services.BlocktankService
+import to.bitkit.services.LightningService
+import to.bitkit.services.closeChannel
+import to.bitkit.services.connectPeer
+import to.bitkit.services.createInvoice
+import to.bitkit.services.openChannel
+import to.bitkit.services.payInvoice
 import javax.inject.Inject
 
 @HiltViewModel
@@ -32,6 +34,7 @@ class MainViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val bitcoinService: BitcoinService,
     private val lightningService: LightningService,
+    private val blocktankService: BlocktankService,
     private val keychain: KeychainStore,
     private val appDb: AppDb,
 ) : ViewModel() {
@@ -41,7 +44,7 @@ class MainViewModel @Inject constructor(
     val btcBalance = mutableStateOf("Loading…")
     val mnemonic = mutableStateOf(SEED)
 
-    val peers = mutableStateListOf<PeerDetails>()
+    val peers = mutableStateListOf<LnPeer>()
     val channels = mutableStateListOf<ChannelDetails>()
 
     private val node = lightningService.node
@@ -94,7 +97,7 @@ class MainViewModel @Inject constructor(
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
-            lightningService.openChannel()
+            lightningService.openChannel(peers.first())
             sync()
         }
     }
@@ -102,6 +105,23 @@ class MainViewModel @Inject constructor(
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
             lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+            sync()
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            "Refreshing…".also {
+                ldkNodeId.value = it
+                ldkBalance.value = it
+                btcAddress.value = it
+                btcBalance.value = it
+            }
+            peers.clear()
+            channels.clear()
+
+            delay(50)
+            lightningService.sync()
             sync()
         }
     }
@@ -128,25 +148,16 @@ class MainViewModel @Inject constructor(
     fun debugWipeBdk() {
         bitcoinService.wipeStorage()
     }
-    // endregion
 
-    fun refresh() {
-        viewModelScope.launch {
-            "Refreshing…".also {
-                ldkNodeId.value = it
-                ldkBalance.value = it
-                btcAddress.value = it
-                btcBalance.value = it
-            }
-            peers.clear()
-            channels.clear()
-
-            delay(50)
-            lightningService.sync()
-            sync()
+    fun debugLspNotifications() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = FirebaseMessaging.getInstance().token.await()
+            blocktankService.testNotification(token)
         }
     }
+
+    // endregion
 }
 
-fun MainViewModel.togglePeerConnection(peer: PeerDetails) =
-    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(LnPeer(peer.nodeId, peer.address))
+fun MainViewModel.togglePeerConnection(peer: LnPeer) =
+    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(peer)
