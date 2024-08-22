@@ -103,13 +103,11 @@ data class LnPeer(
     override fun toString() = "$nodeId@${address}"
 
     companion object {
-        fun PeerDetails.toLnPeer(): LnPeer {
-            return LnPeer(
-                nodeId = nodeId,
-                address = address,
-                isConnected = isConnected,
-                isPersisted = isPersisted,
-            )
-        }
+        fun PeerDetails.toLnPeer() = LnPeer(
+            nodeId = nodeId,
+            address = address,
+            isConnected = isConnected,
+            isPersisted = isPersisted,
+        )
     }
 }

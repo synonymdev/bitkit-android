@@ -9,7 +9,7 @@ import javax.inject.Inject
 
 interface LspApi {
     suspend fun registerDeviceForNotifications(payload: RegisterDeviceRequest)
-    suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest): HttpResponse
+    suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest)
 }
 
 class BlocktankApi @Inject constructor(
@@ -22,8 +22,8 @@ class BlocktankApi @Inject constructor(
         post(notificationsApi, payload)
     }
 
-    override suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest): HttpResponse {
-        return post("$notificationsApi/$deviceToken/test-notification", payload)
+    override suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest) {
+        post("$notificationsApi/$deviceToken/test-notification", payload)
     }
 
     private suspend inline fun <reified T> post(url: String, payload: T) = client.post(url) { setBody(payload) }
