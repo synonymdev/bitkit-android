@@ -9,6 +9,9 @@ import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -43,11 +46,13 @@ class MainViewModel @Inject constructor(
     val btcAddress = mutableStateOf("Loading…")
     val btcBalance = mutableStateOf("Loading…")
     val mnemonic = mutableStateOf(SEED)
-
     val peers = mutableStateListOf<LnPeer>()
     val channels = mutableStateListOf<ChannelDetails>()
 
     private val node = lightningService.node
+
+    val _uiState = MutableStateFlow(MainUiState.Loading)
+    val uiState = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -161,3 +166,21 @@ class MainViewModel @Inject constructor(
 
 fun MainViewModel.togglePeerConnection(peer: LnPeer) =
     if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(peer)
+
+sealed class MainUiState {
+
+    data object Loading: MainUiState()
+    data class Content(
+        val ldkNodeId: String,
+        val ldkBalance: String,
+        val btcAddress: String,
+        val btcBalance: String,
+        val mnemonic: String,
+        val peers: List<LnPeer>,
+        val channels: List<ChannelDetails>,
+    ) : MainUiState()
+    data class Error(
+        val title: String,
+        val message: String,
+    ) : MainUiState()
+}

@@ -28,7 +28,7 @@ internal const val SEED = "universe more push obey later jazz huge buzz magnet t
 internal val PEER_REMOTE = LnPeer(
     nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
     host = HOST,
-    port = "9736",
+    port = "9737",
 )
 
 internal val PEER = LnPeer(
