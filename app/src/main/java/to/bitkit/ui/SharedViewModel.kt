@@ -11,23 +11,24 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import to.bitkit.Tag.DEV
 import to.bitkit.Tag.LSP
+import to.bitkit.data.AppDb
+import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.services.BitcoinService
 import to.bitkit.services.BlocktankService
 import javax.inject.Inject
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val db: AppDb,
+    private val keychain: KeychainStore,
     private val blocktankService: BlocktankService,
+    private val bitcoinService: BitcoinService,
 ) : ViewModel() {
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
-        logInstanceHashCode()
         runBlocking { to.bitkit.services.warmupNode() }
-    }
-
-    fun logInstanceHashCode() {
-        Log.d(DEV, "${this::class.java.simpleName} hashCode: ${hashCode()}")
     }
 
     fun registerForNotifications(fcmToken: String? = null) {
@@ -41,4 +42,37 @@ class SharedViewModel @Inject constructor(
             }
         }
     }
+
+    // region debug
+    fun debugDb() {
+        viewModelScope.launch {
+            db.configDao().getAll().collect {
+                Log.d(DEV, "${it.count()} entities in DB: $it")
+            }
+        }
+    }
+
+    fun debugKeychain() {
+        viewModelScope.launch {
+            val key = "test"
+            if (keychain.exists(key)) {
+                keychain.delete(key)
+            }
+            keychain.saveString(key, "testValue")
+        }
+    }
+
+    fun debugWipeBdk() {
+        bitcoinService.wipeStorage()
+    }
+
+    fun debugLspNotifications() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = FirebaseMessaging.getInstance().token.await()
+            blocktankService.testNotification(token)
+        }
+    }
+
+    // endregion
+
 }

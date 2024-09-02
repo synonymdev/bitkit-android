@@ -27,7 +27,7 @@ import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun WalletScreen(
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
     content: @Composable () -> Unit = {},
 ) {
     Column(
@@ -112,4 +112,3 @@ internal fun CopyToClipboardButton(text: String) {
         )
     }
 }
-

@@ -26,7 +26,7 @@ import to.bitkit.ui.shared.InfoField
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -18,14 +18,14 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.LnPeer
 import to.bitkit.PEER
 import to.bitkit.R
-import to.bitkit.ui.MainViewModel
+import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.togglePeerConnection
 
 @Composable
 fun PeersScreen(
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),

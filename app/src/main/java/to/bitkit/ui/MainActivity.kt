@@ -56,18 +56,17 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val viewModel by viewModels<MainViewModel>()
-    private val sharedViewModel by viewModels<SharedViewModel>()
+    private val viewModel by viewModels<SharedViewModel>()
+    private val walletViewModel by viewModels<WalletViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        sharedViewModel.logInstanceHashCode()
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
-                MainScreen(viewModel) {
-                    WalletScreen(viewModel) {
+                MainScreen(walletViewModel) {
+                    WalletScreen(walletViewModel) {
 
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Text(
@@ -95,13 +94,13 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.SpaceAround,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                TextButton(sharedViewModel::registerForNotifications) { Text("Register Device") }
+                                TextButton(viewModel::registerForNotifications) { Text("Register Device") }
                                 TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
                             }
                         }
 
-                        Peers(viewModel.peers, viewModel::togglePeerConnection)
-                        Channels(viewModel.channels, viewModel::closeChannel)
+                        Peers(walletViewModel.peers, walletViewModel::togglePeerConnection)
+                        Channels(walletViewModel.channels, walletViewModel::closeChannel)
                     }
                 }
             }
@@ -112,7 +111,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: WalletViewModel = hiltViewModel(),
     startContent: @Composable () -> Unit = {},
 ) {
     val navController = rememberNavController()

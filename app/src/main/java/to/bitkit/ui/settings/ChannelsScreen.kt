@@ -8,12 +8,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.MainViewModel
+import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.Channels
 
 @Composable
 fun ChannelsScreen(
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),

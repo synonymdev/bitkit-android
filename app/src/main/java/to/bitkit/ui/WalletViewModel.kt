@@ -10,7 +10,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -33,13 +32,10 @@ import to.bitkit.services.payInvoice
 import javax.inject.Inject
 
 @HiltViewModel
-class MainViewModel @Inject constructor(
+class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val bitcoinService: BitcoinService,
     private val lightningService: LightningService,
-    private val blocktankService: BlocktankService,
-    private val keychain: KeychainStore,
-    private val appDb: AppDb,
 ) : ViewModel() {
     val ldkNodeId = mutableStateOf("Loading…")
     val ldkBalance = mutableStateOf("Loading…")
@@ -131,40 +127,9 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // region debug
-    fun debugDb() {
-        viewModelScope.launch {
-            appDb.configDao().getAll().collect {
-                Log.d(DEV, "${it.count()} entities in DB: $it")
-            }
-        }
-    }
-
-    fun debugKeychain() {
-        viewModelScope.launch {
-            val key = "test"
-            if (keychain.exists(key)) {
-                keychain.delete(key)
-            }
-            keychain.saveString(key, "testValue")
-        }
-    }
-
-    fun debugWipeBdk() {
-        bitcoinService.wipeStorage()
-    }
-
-    fun debugLspNotifications() {
-        viewModelScope.launch(bgDispatcher) {
-            val token = FirebaseMessaging.getInstance().token.await()
-            blocktankService.testNotification(token)
-        }
-    }
-
-    // endregion
 }
 
-fun MainViewModel.togglePeerConnection(peer: LnPeer) =
+fun WalletViewModel.togglePeerConnection(peer: LnPeer) =
     if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(peer)
 
 sealed class MainUiState {
