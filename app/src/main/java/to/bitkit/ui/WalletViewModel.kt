@@ -1,28 +1,18 @@
 package to.bitkit.ui
 
-import android.util.Log
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.LnPeer
 import to.bitkit.SEED
-import to.bitkit.Tag.DEV
-import to.bitkit.data.AppDb
-import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.ext.syncTo
 import to.bitkit.services.BitcoinService
-import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.closeChannel
 import to.bitkit.services.connectPeer
@@ -37,54 +27,56 @@ class WalletViewModel @Inject constructor(
     private val bitcoinService: BitcoinService,
     private val lightningService: LightningService,
 ) : ViewModel() {
-    val ldkNodeId = mutableStateOf("Loading…")
-    val ldkBalance = mutableStateOf("Loading…")
-    val btcAddress = mutableStateOf("Loading…")
-    val btcBalance = mutableStateOf("Loading…")
-    val mnemonic = mutableStateOf(SEED)
-    val peers = mutableStateListOf<LnPeer>()
-    val channels = mutableStateListOf<ChannelDetails>()
-
     private val node = lightningService.node
 
-    val _uiState = MutableStateFlow(MainUiState.Loading)
+    private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
     val uiState = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
+            delay(1000) // TODO replace with actual load time of ldk-node warmUp
             sync()
         }
     }
 
     private suspend fun sync() {
+        lightningService.sync()
         bitcoinService.syncWithRevealedSpks()
-        ldkNodeId.value = lightningService.nodeId
-        ldkBalance.value = lightningService.balances.totalLightningBalanceSats.toString()
-        btcAddress.value = bitcoinService.getAddress()
-        btcBalance.value = bitcoinService.balance?.total?.toSat().toString()
-        mnemonic.value = SEED
-        peers.syncTo(lightningService.peers)
-        channels.syncTo(lightningService.channels)
+        _uiState.value = MainUiState.Content(
+            ldkNodeId = lightningService.nodeId,
+            ldkBalance = lightningService.balances.totalLightningBalanceSats.toString(),
+            btcAddress = bitcoinService.getNextAddress(),
+            btcBalance = bitcoinService.balance?.total?.toSat().toString(),
+            mnemonic = SEED,
+            peers = lightningService.peers,
+            channels = lightningService.channels,
+        )
     }
 
     fun getNewAddress() {
-        btcAddress.value = node.onchainPayment().newAddress()
+        updateContentState { it.copy(btcAddress = node.onchainPayment().newAddress()) }
     }
 
     fun connectPeer(peer: LnPeer) {
         lightningService.connectPeer(peer)
-        peers.replaceAll {
-            it.run { copy(isConnected = it.nodeId == nodeId) }
+
+        updateContentState {
+            val peers = it.peers.toMutableList().apply {
+                replaceAll { p -> p.run { copy(isConnected = p.nodeId == nodeId) } }
+            }
+            it.copy(peers = peers)
         }
-        channels.syncTo(lightningService.channels)
     }
 
-    fun disconnectPeer(nodeId: String) {
+    private fun disconnectPeer(nodeId: String) {
         node.disconnect(nodeId)
-        peers.replaceAll {
-            it.takeIf { it.nodeId == nodeId }?.copy(isConnected = false) ?: it
+
+        updateContentState {
+            val peers = it.peers.toMutableList().apply {
+                replaceAll { p -> p.takeIf { pp -> pp.nodeId == nodeId }?.copy(isConnected = false) ?: p }
+            }
+            it.copy(peers = peers)
         }
-        channels.syncTo(lightningService.channels)
     }
 
     fun payInvoice(invoice: String) {
@@ -97,8 +89,9 @@ class WalletViewModel @Inject constructor(
     fun createInvoice() = lightningService.createInvoice()
 
     fun openChannel() {
+        val contentState = _uiState.value as? MainUiState.Content ?: error("No peer connected to open channel.")
         viewModelScope.launch(bgDispatcher) {
-            lightningService.openChannel(peers.first())
+            lightningService.openChannel(contentState.peers.first())
             sync()
         }
     }
@@ -110,31 +103,32 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun refresh() {
-        viewModelScope.launch {
-            "Refreshing…".also {
-                ldkNodeId.value = it
-                ldkBalance.value = it
-                btcAddress.value = it
-                btcBalance.value = it
-            }
-            peers.clear()
-            channels.clear()
+    private fun updateContentState(update: (MainUiState.Content) -> MainUiState.Content) {
+        val stateValue = this._uiState.value
+        if (stateValue is MainUiState.Content) {
+            this._uiState.value = update(stateValue)
+        }
+    }
 
-            delay(50)
-            lightningService.sync()
+    // region debug
+    fun refresh() {
+        _uiState.value = MainUiState.Loading
+        viewModelScope.launch {
+            delay(500)
             sync()
         }
     }
 
+    fun togglePeerConnection(peer: LnPeer) {
+        if (peer.isConnected) disconnectPeer(peer.nodeId)
+        else connectPeer(peer)
+    }
+    // endregion
 }
 
-fun WalletViewModel.togglePeerConnection(peer: LnPeer) =
-    if (peer.isConnected) disconnectPeer(peer.nodeId) else connectPeer(peer)
-
+// region state
 sealed class MainUiState {
-
-    data object Loading: MainUiState()
+    data object Loading : MainUiState()
     data class Content(
         val ldkNodeId: String,
         val ldkBalance: String,
@@ -144,8 +138,10 @@ sealed class MainUiState {
         val peers: List<LnPeer>,
         val channels: List<ChannelDetails>,
     ) : MainUiState()
+
     data class Error(
-        val title: String,
-        val message: String,
+        val title: String = "Error Title",
+        val message: String = "Error short description.",
     ) : MainUiState()
 }
+// endregion

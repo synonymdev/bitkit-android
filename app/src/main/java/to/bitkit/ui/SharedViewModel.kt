@@ -1,6 +1,7 @@
 package to.bitkit.ui
 
 import android.util.Log
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -9,6 +10,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
+import to.bitkit.SEED
 import to.bitkit.Tag.DEV
 import to.bitkit.Tag.LSP
 import to.bitkit.data.AppDb

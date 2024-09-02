@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -13,8 +15,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -28,14 +28,14 @@ import to.bitkit.ui.shared.moneyString
 @Composable
 fun WalletScreen(
     viewModel: WalletViewModel,
+    uiState: MainUiState.Content,
     content: @Composable () -> Unit = {},
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier,
+        modifier = Modifier.verticalScroll(rememberScrollState()),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val ldkBalance by remember { viewModel.ldkBalance }
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
@@ -45,23 +45,18 @@ fun WalletScreen(
                     text = stringResource(R.string.lightning),
                     style = MaterialTheme.typography.titleLarge,
                 )
-                Row {
-                    Text(
-                        text = moneyString(ldkBalance),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
+                Text(
+                    text = moneyString(uiState.ldkBalance),
+                    style = MaterialTheme.typography.titleSmall,
+                )
             }
-
-            val nodeId by remember { viewModel.ldkNodeId }
             InfoField(
-                value = nodeId,
+                value = uiState.ldkNodeId,
                 label = stringResource(R.string.node_id),
-                trailingIcon = { CopyToClipboardButton(nodeId) },
+                trailingIcon = { CopyToClipboardButton(uiState.ldkNodeId) },
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val btcBalance by remember { viewModel.btcBalance }
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
@@ -71,17 +66,14 @@ fun WalletScreen(
                     text = stringResource(R.string.wallet),
                     style = MaterialTheme.typography.titleLarge,
                 )
-                Row {
-                    Text(
-                        text = moneyString(btcBalance),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
+                Text(
+                    text = moneyString(uiState.btcBalance),
+                    style = MaterialTheme.typography.titleSmall,
+                )
             }
 
-            val address by remember { viewModel.btcAddress }
             InfoField(
-                value = address,
+                value = uiState.btcAddress,
                 label = stringResource(R.string.address),
                 trailingIcon = {
                     Row {
@@ -92,7 +84,7 @@ fun WalletScreen(
                                 modifier = Modifier.size(16.dp),
                             )
                         }
-                        CopyToClipboardButton(address)
+                        CopyToClipboardButton(uiState.btcAddress)
                     }
                 },
             )

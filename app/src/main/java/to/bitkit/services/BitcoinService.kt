@@ -96,7 +96,7 @@ class BitcoinService @Inject constructor(
     // region state
     val balance get() = if (hasSynced) wallet.getBalance() else null
 
-    suspend fun getAddress(): String {
+    suspend fun getNextAddress(): String {
         return ServiceQueue.BDK.background {
             val addressInfo = wallet.revealNextAddress(KeychainKind.EXTERNAL).address
             addressInfo.asString()

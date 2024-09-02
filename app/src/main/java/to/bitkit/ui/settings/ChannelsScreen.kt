@@ -2,12 +2,15 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.Channels
 
@@ -19,17 +22,18 @@ fun ChannelsScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Button(
-                onClick = { viewModel.openChannel() },
-                enabled = viewModel.peers.isNotEmpty()
-            ) {
-                Text("Open Channel")
-            }
+        Card {
+            Text("⚠️ Please return to Home screen to see your updates…", Modifier.padding(12.dp))
         }
-        Channels(viewModel.channels, viewModel::closeChannel)
+        val peers = remember { (viewModel.uiState.value as? MainUiState.Content?)?.peers.orEmpty() }
+        val channels = remember { (viewModel.uiState.value as? MainUiState.Content)?.channels.orEmpty() }
+        Button(
+            onClick = { viewModel.openChannel() },
+            enabled = peers.isNotEmpty()
+        ) {
+            Text("Open Channel")
+        }
+        Channels(channels, viewModel::closeChannel)
         PayInvoice(viewModel::payInvoice)
     }
 }
