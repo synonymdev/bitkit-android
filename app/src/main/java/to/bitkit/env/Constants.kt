@@ -1,11 +1,9 @@
-@file:Suppress("unused")
-
-package to.bitkit
+package to.bitkit.env
 
 import android.util.Log
 import org.lightningdevkit.ldknode.PeerDetails
-import to.bitkit.Tag.APP
-import to.bitkit.env.Network
+import to.bitkit.BuildConfig
+import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork

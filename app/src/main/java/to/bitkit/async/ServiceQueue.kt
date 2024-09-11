@@ -6,7 +6,7 @@ import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
-import to.bitkit.Tag.APP
+import to.bitkit.env.Tag.APP
 import to.bitkit.ext.callerName
 import to.bitkit.shared.measured
 import java.util.concurrent.Executors

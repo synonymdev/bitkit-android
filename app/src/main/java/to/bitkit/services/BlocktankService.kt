@@ -2,7 +2,7 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.Tag.LSP
+import to.bitkit.env.Tag.LSP
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.LspApi

@@ -7,8 +7,8 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.ldk.structs.KeysManager
-import to.bitkit.Env
-import to.bitkit.Tag.LDK
+import to.bitkit.env.Env
+import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.hex
 import java.io.File
 import javax.inject.Inject

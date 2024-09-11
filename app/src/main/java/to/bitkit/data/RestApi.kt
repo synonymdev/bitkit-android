@@ -8,7 +8,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import to.bitkit.REST
+import to.bitkit.env.REST
 import to.bitkit.ext.toHex
 import javax.inject.Inject
 

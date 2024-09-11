@@ -9,10 +9,10 @@ import org.bitcoindevkit.EsploraClient
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.Mnemonic
 import org.bitcoindevkit.Wallet
-import to.bitkit.Env
-import to.bitkit.REST
-import to.bitkit.SEED
-import to.bitkit.Tag.BDK
+import to.bitkit.env.Env
+import to.bitkit.env.REST
+import to.bitkit.env.SEED
+import to.bitkit.env.Tag.BDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.async.ServiceQueue

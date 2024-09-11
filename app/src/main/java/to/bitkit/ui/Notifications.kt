@@ -18,7 +18,7 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.R
-import to.bitkit.Tag.FCM
+import to.bitkit.env.Tag.FCM
 import to.bitkit.currentActivity
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat

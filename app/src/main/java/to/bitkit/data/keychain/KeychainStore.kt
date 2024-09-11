@@ -11,7 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
-import to.bitkit.Tag.APP
+import to.bitkit.env.Tag.APP
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher

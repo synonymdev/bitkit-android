@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
-import to.bitkit.LnPeer
-import to.bitkit.SEED
+import to.bitkit.env.LnPeer
+import to.bitkit.env.SEED
 import to.bitkit.di.BgDispatcher
 import to.bitkit.services.BitcoinService
 import to.bitkit.services.LightningService

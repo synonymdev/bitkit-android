@@ -17,8 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import to.bitkit.LnPeer
-import to.bitkit.PEER
+import to.bitkit.env.LnPeer
+import to.bitkit.env.PEER
 import to.bitkit.R
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel

@@ -8,7 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import to.bitkit.Tag.FCM
+import to.bitkit.env.Tag.FCM
 import to.bitkit.services.LightningService
 import to.bitkit.services.payInvoice
 import to.bitkit.services.warmupNode
