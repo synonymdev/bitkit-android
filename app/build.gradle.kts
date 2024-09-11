@@ -96,12 +96,12 @@ dependencies {
     // Compose
     implementation(platform(libs.compose.bom))
     androidTestImplementation(platform(libs.compose.bom))
-    implementation(libs.material3)
-    implementation(libs.material.icons.extended)
-    implementation(libs.ui.tooling.preview)
-    debugImplementation(libs.ui.tooling)
-    debugImplementation(libs.ui.test.manifest)
-    androidTestImplementation(libs.ui.test.junit4)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+    androidTestImplementation(libs.compose.ui.test.junit4)
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)
