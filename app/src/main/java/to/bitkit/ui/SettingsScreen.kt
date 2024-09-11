@@ -96,6 +96,7 @@ private fun Mnemonic(
     InfoField(
         value = mnemonic,
         label = stringResource(R.string.mnemonic),
+        maxLength = 52,
         trailingIcon = { CopyToClipboardButton(mnemonic) },
     )
 }

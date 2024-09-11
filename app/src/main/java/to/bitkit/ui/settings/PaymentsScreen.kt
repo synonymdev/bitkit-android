@@ -34,6 +34,7 @@ fun PaymentsScreen(
         InfoField(
             value = invoiceToSend,
             label = "Send invoice",
+            maxLength = 44,
             trailingIcon = { CopyToClipboardButton(invoiceToSend) },
         )
     }

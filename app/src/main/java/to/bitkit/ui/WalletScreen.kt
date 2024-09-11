@@ -53,6 +53,7 @@ fun WalletScreen(
             InfoField(
                 value = uiState.ldkNodeId,
                 label = stringResource(R.string.node_id),
+                maxLength = 44,
                 trailingIcon = { CopyToClipboardButton(uiState.ldkNodeId) },
             )
         }
@@ -75,6 +76,7 @@ fun WalletScreen(
             InfoField(
                 value = uiState.btcAddress,
                 label = stringResource(R.string.address),
+                maxLength = 36,
                 trailingIcon = {
                     Row {
                         IconButton(onClick = viewModel::getNewAddress) {

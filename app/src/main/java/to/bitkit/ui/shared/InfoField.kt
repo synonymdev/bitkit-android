@@ -13,6 +13,7 @@ import to.bitkit.ui.shared.util.ellipsisVisualTransformation
 internal fun InfoField(
     value: String,
     label: String,
+    maxLength: Int,
     trailingIcon: @Composable (() -> Unit)? = null,
     onValueChange: (String) -> Unit = {},
 ) {
@@ -32,7 +33,7 @@ internal fun InfoField(
             )
         },
         textStyle = MaterialTheme.typography.labelSmall,
-        visualTransformation = ellipsisVisualTransformation(40),
+        visualTransformation = ellipsisVisualTransformation(maxLength),
         modifier = Modifier.fillMaxWidth(),
     )
 }

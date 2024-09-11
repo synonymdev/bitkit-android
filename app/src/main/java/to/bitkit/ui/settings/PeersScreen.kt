@@ -51,7 +51,7 @@ fun PeersScreen(
                 textStyle = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
-            InfoField(value = host, label = "Host")
+            InfoField(value = host, label = "Host", maxLength = 72)
             OutlinedTextField(
                 label = { Text("Port") },
                 value = port,
