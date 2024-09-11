@@ -1,5 +1,8 @@
+import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -54,10 +57,6 @@ android {
         buildConfig = true
         compose = true
     }
-    composeOptions {
-        // https://developer.android.com/jetpack/androidx/releases/compose-kotlin#pre-release_kotlin_compatibility
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -70,6 +69,13 @@ android {
             // isIncludeAndroidResources = true // robolectric
         }
     }
+}
+composeCompiler {
+    featureFlags = setOf(
+        ComposeFeatureFlag.StrongSkipping.disabled(),
+        ComposeFeatureFlag.OptimizeNonSkippingGroups,
+    )
+    reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
