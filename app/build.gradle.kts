@@ -13,7 +13,6 @@ plugins {
 android {
     namespace = "to.bitkit"
     compileSdk = 34
-    ndkVersion = "26.1.10909125" // probably required by LDK bindings? - safer to keep it for now.
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
