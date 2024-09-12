@@ -48,7 +48,7 @@ class KeychainStore @Inject constructor(
     suspend fun delete(key: String) {
         context.keychain.edit { it.remove(key.indexed) }
 
-        Log.d(APP, "Deleted from keychain: $key ")
+        Log.d(APP, "Deleted from keychain: $key")
     }
 
     fun exists(key: String): Boolean {
