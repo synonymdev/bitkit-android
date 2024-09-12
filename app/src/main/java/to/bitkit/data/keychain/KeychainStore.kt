@@ -11,12 +11,15 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
-import to.bitkit.env.Tag.APP
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
+import to.bitkit.env.Network
+import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
+import to.bitkit.shared.KeychainError
 import javax.inject.Inject
 
 class KeychainStore @Inject constructor(
@@ -28,26 +31,36 @@ class KeychainStore @Inject constructor(
     private val keyStore by lazy { AndroidKeyStore(alias) }
 
     private val Context.keychain by preferencesDataStore(alias, scope = this)
-    val snapshot get() = runBlocking { context.keychain.data.first() }
+    val snapshot get() = runBlocking(this.coroutineContext) { context.keychain.data.first() }
 
-    fun loadString(key: String): String? = load(key)?.let { keyStore.decrypt(it) }
+    fun loadString(key: String): String? = load(key)?.let(keyStore::decrypt)
 
     private fun load(key: String): ByteArray? {
-        return snapshot[key.indexed]?.fromBase64()
+        try {
+            return snapshot[key.indexed]?.fromBase64()
+        } catch (e: Exception) {
+            throw KeychainError.FailedToLoad(key)
+        }
     }
 
-    suspend fun saveString(key: String, value: String) = save(key, value.let { keyStore.encrypt(it) })
+    suspend fun saveString(key: String, value: String) = save(key, value.let(keyStore::encrypt))
 
     private suspend fun save(key: String, encryptedValue: ByteArray) {
-        require(!exists(key)) { "Entry $key exists. Explicitly delete it first to update value." }
-        context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-
+        if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
+        try {
+            context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
+        } catch (e: Exception) {
+            throw KeychainError.FailedToSave(key)
+        }
         Log.i(APP, "Saved to keychain: $key")
     }
 
     suspend fun delete(key: String) {
-        context.keychain.edit { it.remove(key.indexed) }
-
+        try {
+            context.keychain.edit { it.remove(key.indexed) }
+        } catch (e: Exception) {
+            throw KeychainError.FailedToDelete(key)
+        }
         Log.d(APP, "Deleted from keychain: $key")
     }
 
@@ -56,6 +69,8 @@ class KeychainStore @Inject constructor(
     }
 
     suspend fun wipe() {
+        if (!Env.isDebug || Env.network != Network.Regtest) throw KeychainError.KeychainWipeNotAllowed()
+
         val keys = snapshot.asMap().keys
         context.keychain.edit { it.clear() }
 

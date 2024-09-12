@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+// @file:Suppress("unused")
 
 package to.bitkit.shared
 
@@ -24,7 +24,17 @@ import org.bitcoindevkit.WalletCreationException
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
 
-open class AppError(override val message: String) : Exception(message)
+open class AppError(override val message: String) : Exception(message) {
+    companion object {
+        @Suppress("ConstPropertyName")
+        private const val serialVersionUID = 1L
+    }
+
+    fun readResolve(): Any {
+        // Return a new instance of the class, or handle it if needed
+        return this
+    }
+}
 
 sealed class CustomServiceError(message: String) : AppError(message) {
     class NodeNotSetup : CustomServiceError("Node is not setup.")
@@ -39,11 +49,13 @@ sealed class CustomServiceError(message: String) : AppError(message) {
 }
 
 sealed class KeychainError(message: String) : AppError(message) {
-    class FailedToSave : KeychainError("Failed to save.")
-    class FailedToSaveAlreadyExists : KeychainError("Failed to save, item already exists.")
-    class FailedToDelete : KeychainError("Failed to delete.")
-    class FailedToLoad : KeychainError("Failed to load.")
-    class KeychainWipeNotAllowed : KeychainError("Keychain wipe is not allowed.")
+    class FailedToDelete(key: String) : KeychainError("Failed to delete $key from keychain.")
+    class FailedToLoad(key: String) : KeychainError("Failed to load $key from keychain.")
+    class FailedToSave(key: String) : KeychainError("Failed to save to $key keychain.")
+    class FailedToSaveAlreadyExists(key: String) :
+        KeychainError("Key $key already exists in keychain. Explicitly delete key before attempting to update value.")
+
+    class KeychainWipeNotAllowed : KeychainError("Wiping keychain is only allowed in debug mode for regtest")
 }
 
 sealed class BlocktankError(message: String) : AppError(message) {
@@ -53,6 +65,7 @@ sealed class BlocktankError(message: String) : AppError(message) {
     class MissingDeviceToken : BlocktankError("Missing device token.")
 }
 
+// region ldk
 sealed class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))
     constructor(inner: NodeException) : this(LdkException.Node(inner))
@@ -132,7 +145,9 @@ sealed class LdkError(private val inner: LdkException) : AppError("Unknown LDK e
         }
     }
 }
+// endregion
 
+// region bdk
 sealed class BdkError(private val inner: BdkException) : AppError("Unknown BDK error.") {
     constructor(inner: AddressException) : this(BdkException.Address(inner))
     constructor(inner: Bip32Exception) : this(BdkException.Bip32(inner))
@@ -416,3 +431,4 @@ sealed class BdkError(private val inner: BdkException) : AppError("Unknown BDK e
         }
     }
 }
+// endregion
