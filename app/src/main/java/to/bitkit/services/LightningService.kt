@@ -91,7 +91,13 @@ class LightningService @Inject constructor(
         ServiceQueue.LDK.background {
             node.stop()
         }
+        node.close().also { this.node = null }
         Log.i(LDK, "Node stopped.")
+    }
+
+    fun wipeStorage() {
+        if (node != null) throw ServiceError.NodeStillRunning
+        TODO("Not yet implemented")
     }
 
     suspend fun sync() {
@@ -254,7 +260,7 @@ internal suspend fun warmupNode() {
             start()
             sync()
         }
-        BitcoinService.shared.apply {
+        OnChainService.shared.apply {
             setup()
             fullScan()
         }

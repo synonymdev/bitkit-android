@@ -13,7 +13,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.LnPeer
 import to.bitkit.env.SEED
-import to.bitkit.services.BitcoinService
+import to.bitkit.services.OnChainService
 import to.bitkit.services.LightningService
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
@@ -21,7 +21,7 @@ import javax.inject.Inject
 @HiltViewModel
 class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val bitcoinService: BitcoinService,
+    private val onChainService: OnChainService,
     private val lightningService: LightningService,
 ) : ViewModel() {
     private val node by lazy { lightningService.node ?: throw ServiceError.NodeNotSetup }
@@ -38,12 +38,12 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun sync() {
         lightningService.sync()
-        bitcoinService.syncWithRevealedSpks()
+        onChainService.syncWithRevealedSpks()
         _uiState.value = MainUiState.Content(
             ldkNodeId = lightningService.nodeId.orEmpty(),
             ldkBalance = lightningService.balances?.totalLightningBalanceSats.toString(),
-            btcAddress = bitcoinService.getNextAddress(),
-            btcBalance = bitcoinService.balance?.total?.toSat().toString(),
+            btcAddress = onChainService.getAddress(),
+            btcBalance = onChainService.balance?.total?.toSat().toString(),
             mnemonic = SEED,
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),

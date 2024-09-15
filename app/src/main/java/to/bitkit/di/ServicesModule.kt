@@ -7,7 +7,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.services.BitcoinService
+import to.bitkit.services.OnChainService
 import to.bitkit.services.LightningService
 
 @Module
@@ -23,7 +23,7 @@ object ServicesModule {
     @Provides
     fun provideBitcoinService(
         @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    ): BitcoinService {
-        return BitcoinService.shared
+    ): OnChainService {
+        return OnChainService.shared
     }
 }

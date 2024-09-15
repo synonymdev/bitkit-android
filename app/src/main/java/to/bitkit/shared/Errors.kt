@@ -39,12 +39,12 @@ open class AppError(override val message: String) : Exception(message) {
 sealed class ServiceError(message: String) : AppError(message) {
     data object NodeNotSetup : ServiceError("Node is not setup")
     data object NodeNotStarted : ServiceError("Node is not started")
-    class OnchainWalletNotInitialized : ServiceError("Onchain wallet not created")
+    data object OnchainWalletNotInitialized : ServiceError("Onchain wallet not created")
     class LdkNodeSqliteAlreadyExists(path: String) : ServiceError("LDK-node SQLite file already exists at $path")
     data object LdkToLdkNodeMigration : ServiceError("LDK to LDK-node migration issue")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
-    class NodeStillRunning : ServiceError("Node is still running")
-    class OnchainWalletStillRunning : ServiceError("Onchain wallet is still running")
+    data object NodeStillRunning : ServiceError("Node is still running")
+    data object OnchainWalletStillRunning : ServiceError("Onchain wallet is still running")
     data object InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
 }
 

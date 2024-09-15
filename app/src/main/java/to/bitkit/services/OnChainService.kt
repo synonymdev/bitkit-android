@@ -3,29 +3,31 @@ package to.bitkit.services
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import org.bitcoindevkit.Balance
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
 import org.bitcoindevkit.EsploraClient
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.Mnemonic
 import org.bitcoindevkit.Wallet
+import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.async.ServiceQueue
+import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.REST
 import to.bitkit.env.SEED
 import to.bitkit.env.Tag.BDK
-import to.bitkit.async.BaseCoroutineScope
-import to.bitkit.di.BgDispatcher
-import to.bitkit.async.ServiceQueue
+import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 import kotlin.io.path.Path
 import kotlin.io.path.pathString
 
-class BitcoinService @Inject constructor(
+class OnChainService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(bgDispatcher) {
     companion object {
         val shared by lazy {
-            BitcoinService(Dispatchers.Default)
+            OnChainService(Dispatchers.Default)
         }
     }
 
@@ -36,7 +38,7 @@ class BitcoinService @Inject constructor(
     private val esploraClient by lazy { EsploraClient(url = REST) }
     private val dbPath by lazy { Path(Env.Storage.bdk, "db.sqlite") }
 
-    private lateinit var wallet: Wallet
+    private var wallet: Wallet? = null
 
     suspend fun setup() {
         val network = Env.network.bdk
@@ -57,7 +59,23 @@ class BitcoinService @Inject constructor(
         Log.i(BDK, "Wallet set up")
     }
 
+    fun stop() {
+        Log.d(BDK, "Stopping onchain wallet…")
+        wallet?.close().also { wallet = null }
+        Log.i(BDK, "Onchain wallet stopped")
+    }
+
+    fun wipeStorage() {
+        if (wallet != null) throw ServiceError.OnchainWalletStillRunning
+
+        Log.w(BDK, "Wiping onchain wallet storage…")
+        dbPath.toFile()?.parentFile?.deleteRecursively()
+        Log.i(BDK, "Onchain wallet storage wiped")
+    }
+
+    // region scan
     suspend fun syncWithRevealedSpks() {
+        val wallet = this.wallet ?: throw ServiceError.OnchainWalletNotInitialized
         Log.d(BDK, "Wallet syncing…")
 
         ServiceQueue.BDK.background {
@@ -71,6 +89,7 @@ class BitcoinService @Inject constructor(
     }
 
     suspend fun fullScan() {
+        val wallet = this.wallet ?: throw ServiceError.OnchainWalletNotInitialized
         Log.d(BDK, "Wallet full scan…")
 
         ServiceQueue.BDK.background {
@@ -84,22 +103,17 @@ class BitcoinService @Inject constructor(
 
         Log.i(BDK, "Wallet fully scanned")
     }
-
-    fun wipeStorage() {
-        Log.w(BDK, "Wiping wallet storage…")
-
-        dbPath.toFile()?.parentFile?.deleteRecursively()
-
-        Log.i(BDK, "Wallet storage wiped")
-    }
+    // endregion
 
     // region state
-    val balance get() = if (hasSynced) wallet.getBalance() else null
+    val balance: Balance? get() = if (hasSynced) wallet?.getBalance() else null
 
-    suspend fun getNextAddress(): String {
+    suspend fun getAddress(): String {
+        val wallet = this.wallet ?: throw ServiceError.OnchainWalletNotInitialized
+
         return ServiceQueue.BDK.background {
-            val addressInfo = wallet.revealNextAddress(KeychainKind.EXTERNAL).address
-            addressInfo.asString()
+            val addressInfo = wallet.revealNextAddress(KeychainKind.EXTERNAL)
+            addressInfo.address.asString()
         }
     }
     // endregion

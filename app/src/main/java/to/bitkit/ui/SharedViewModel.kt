@@ -15,7 +15,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.KeychainStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.APP
-import to.bitkit.services.BitcoinService
+import to.bitkit.services.OnChainService
 import to.bitkit.services.BlocktankService
 import javax.inject.Inject
 
@@ -25,7 +25,7 @@ class SharedViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: KeychainStore,
     private val blocktankService: BlocktankService,
-    private val bitcoinService: BitcoinService,
+    private val onChainService: OnChainService,
 ) : ViewModel() {
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
@@ -66,7 +66,8 @@ class SharedViewModel @Inject constructor(
     }
 
     fun debugWipeBdk() {
-        bitcoinService.wipeStorage()
+        onChainService.stop()
+        onChainService.wipeStorage()
     }
 
     fun debugLspNotifications() {
