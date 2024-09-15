@@ -26,11 +26,9 @@ fun String.asByteArray(): ByteArray {
 }
 
 fun Any.convertToByteArray(): ByteArray {
-    val bos = ByteArrayOutputStream()
-    val oos = ObjectOutputStream(bos)
-    oos.writeObject(this)
-    oos.flush()
-    return bos.toByteArray()
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    ObjectOutputStream(byteArrayOutputStream).use { it.writeObject(this) }
+    return byteArrayOutputStream.toByteArray()
 }
 
 fun ByteArray.toBase64(flags: Int = Base64.DEFAULT): String = Base64.encodeToString(this, flags)

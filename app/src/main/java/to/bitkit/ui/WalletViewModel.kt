@@ -8,17 +8,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.di.BgDispatcher
 import to.bitkit.env.LnPeer
 import to.bitkit.env.SEED
-import to.bitkit.di.BgDispatcher
 import to.bitkit.services.BitcoinService
 import to.bitkit.services.LightningService
-import to.bitkit.services.closeChannel
-import to.bitkit.services.connectPeer
-import to.bitkit.services.createInvoice
-import to.bitkit.services.openChannel
-import to.bitkit.services.payInvoice
+import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,7 +24,7 @@ class WalletViewModel @Inject constructor(
     private val bitcoinService: BitcoinService,
     private val lightningService: LightningService,
 ) : ViewModel() {
-    private val node = lightningService.node
+    private val node by lazy { lightningService.node ?: throw ServiceError.NodeNotSetup }
 
     private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
     val uiState = _uiState.asStateFlow()
@@ -43,13 +40,13 @@ class WalletViewModel @Inject constructor(
         lightningService.sync()
         bitcoinService.syncWithRevealedSpks()
         _uiState.value = MainUiState.Content(
-            ldkNodeId = lightningService.nodeId,
-            ldkBalance = lightningService.balances.totalLightningBalanceSats.toString(),
+            ldkNodeId = lightningService.nodeId.orEmpty(),
+            ldkBalance = lightningService.balances?.totalLightningBalanceSats.toString(),
             btcAddress = bitcoinService.getNextAddress(),
             btcBalance = bitcoinService.balance?.total?.toSat().toString(),
             mnemonic = SEED,
-            peers = lightningService.peers,
-            channels = lightningService.channels,
+            peers = lightningService.peers.orEmpty(),
+            channels = lightningService.channels.orEmpty(),
         )
     }
 
@@ -58,13 +55,14 @@ class WalletViewModel @Inject constructor(
     }
 
     fun connectPeer(peer: LnPeer) {
-        lightningService.connectPeer(peer)
-
-        updateContentState {
-            val peers = it.peers.toMutableList().apply {
-                replaceAll { p -> p.run { copy(isConnected = p.nodeId == nodeId) } }
+        viewModelScope.launch {
+            lightningService.connectPeer(peer)
+            updateContentState {
+                val peers = it.peers.toMutableList().apply {
+                    replaceAll { p -> p.run { copy(isConnected = p.nodeId == nodeId) } }
+                }
+                it.copy(peers = peers)
             }
-            it.copy(peers = peers)
         }
     }
 
@@ -86,7 +84,9 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun createInvoice() = lightningService.createInvoice()
+    fun createInvoice(): String {
+        return runBlocking { lightningService.createInvoice(112u, "description", 7200u) }
+    }
 
     fun openChannel() {
         val contentState = _uiState.value as? MainUiState.Content ?: error("No peer connected to open channel.")

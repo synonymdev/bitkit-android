@@ -36,16 +36,16 @@ open class AppError(override val message: String) : Exception(message) {
     }
 }
 
-sealed class CustomServiceError(message: String) : AppError(message) {
-    class NodeNotSetup : CustomServiceError("Node is not setup.")
-    class NodeNotStarted : CustomServiceError("Node has not started.")
-    class OnchainWalletNotInitialized : CustomServiceError("Onchain wallet is not initialized.")
-    class LdkNodeSqliteAlreadyExists : CustomServiceError("LDK Node SQLite already exists.")
-    class LdkToLdkNodeMigration : CustomServiceError("Migration from LDK to LDK Node.")
-    class MnemonicNotFound : CustomServiceError("Mnemonic not found.")
-    class NodeStillRunning : CustomServiceError("Node is still running.")
-    class OnchainWalletStillRunning : CustomServiceError("Onchain wallet is still running.")
-    class InvalidNodeSigningMessage : CustomServiceError("Invalid node signing message.")
+sealed class ServiceError(message: String) : AppError(message) {
+    data object NodeNotSetup : ServiceError("Node is not setup")
+    data object NodeNotStarted : ServiceError("Node is not started")
+    class OnchainWalletNotInitialized : ServiceError("Onchain wallet not created")
+    class LdkNodeSqliteAlreadyExists : ServiceError("LDK-node SQLite file already exists")
+    class LdkToLdkNodeMigration : ServiceError("LDK to LDK-node migration issue")
+    class MnemonicNotFound : ServiceError("Mnemonic not found")
+    class NodeStillRunning : ServiceError("Node is still running")
+    class OnchainWalletStillRunning : ServiceError("Onchain wallet is still running")
+    data object InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
 }
 
 sealed class KeychainError(message: String) : AppError(message) {
@@ -66,7 +66,7 @@ sealed class BlocktankError(message: String) : AppError(message) {
 }
 
 // region ldk
-sealed class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
+class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))
     constructor(inner: NodeException) : this(LdkException.Node(inner))
 
@@ -148,7 +148,7 @@ sealed class LdkError(private val inner: LdkException) : AppError("Unknown LDK e
 // endregion
 
 // region bdk
-sealed class BdkError(private val inner: BdkException) : AppError("Unknown BDK error.") {
+class BdkError(private val inner: BdkException) : AppError("Unknown BDK error.") {
     constructor(inner: AddressException) : this(BdkException.Address(inner))
     constructor(inner: Bip32Exception) : this(BdkException.Bip32(inner))
     constructor(inner: Bip39Exception) : this(BdkException.Bip39(inner))

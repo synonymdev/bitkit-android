@@ -2,13 +2,14 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.env.Tag.LSP
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.LspApi
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Tag.LSP
+import to.bitkit.shared.ServiceError
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -21,7 +22,7 @@ class BlocktankService @Inject constructor(
 ) : BaseCoroutineScope(bgDispatcher) {
 
     suspend fun registerDevice(deviceToken: String) {
-        val nodeId = requireNotNull(lightningService.nodeId) { "Node not started" }
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         Log.d(LSP, "Registering device for notifications…")
 
