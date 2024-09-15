@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
@@ -68,7 +69,11 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Setting up node…")
 
-        node = builder.build()
+        node = try {
+            builder.build()
+        } catch (e: BuildException) {
+            throw LdkError(e)
+        }
 
         Log.i(LDK, "Node set up")
     }
@@ -132,15 +137,14 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Connecting peer: $peer")
 
-        val res = runCatching {
+        try {
             ServiceQueue.LDK.background {
                 node.connect(peer.nodeId, peer.address, persist = true)
             }
-        }.onFailure { e ->
-            (e as? NodeException)?.let { throw LdkError(it) }
+            Log.i(LDK, "Connection succeeded with: $peer")
+        } catch(e: NodeException) {
+            Log.w(LDK, "Connection failed with: $peer", LdkError(e))
         }
-
-        Log.i(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
     }
     // endregion
 
