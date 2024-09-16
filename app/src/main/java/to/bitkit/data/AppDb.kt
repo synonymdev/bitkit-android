@@ -15,8 +15,8 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
-import to.bitkit.env.Env
 import to.bitkit.data.entities.ConfigEntity
+import to.bitkit.env.Env
 
 @Database(
     entities = [

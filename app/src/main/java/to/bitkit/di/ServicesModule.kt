@@ -1,4 +1,4 @@
-@file:Suppress("unused", "UNUSED_PARAMETER")
+@file:Suppress("UNUSED_PARAMETER")
 
 package to.bitkit.di
 
@@ -7,8 +7,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.services.OnChainService
 import to.bitkit.services.LightningService
+import to.bitkit.services.OnChainService
 
 @Module
 @InstallIn(SingletonComponent::class)

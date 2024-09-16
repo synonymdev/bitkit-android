@@ -22,12 +22,12 @@ import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 @OptIn(ExperimentalCoroutinesApi::class)
-class KeychainStoreTest : BaseTest() {
+class KeychainTest : BaseTest() {
 
     private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }
     private lateinit var db: AppDb
 
-    private lateinit var sut: KeychainStore
+    private lateinit var sut: Keychain
 
     @Before
     fun setUp() {
@@ -42,7 +42,7 @@ class KeychainStoreTest : BaseTest() {
             }
         }
 
-        sut = KeychainStore(
+        sut = Keychain(
             db,
             appContext,
             testDispatcher,

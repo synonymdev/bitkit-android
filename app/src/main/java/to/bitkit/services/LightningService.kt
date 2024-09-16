@@ -21,7 +21,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.LnPeer
 import to.bitkit.env.LnPeer.Companion.toLnPeer
-import to.bitkit.env.REST
 import to.bitkit.env.SEED
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.uByteList
@@ -58,7 +57,7 @@ class LightningService @Inject constructor(
                     )
                 })
             .apply {
-                setEsploraServer(REST)
+                setEsploraServer(Env.esploraUrl)
                 if (Env.ldkRgsServerUrl != null) {
                     setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
                 } else {

@@ -5,11 +5,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import org.bitcoinj.core.ECKey
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.LspApi
+import to.bitkit.data.BlocktankApi
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
-import to.bitkit.data.keychain.KeychainStore
-import to.bitkit.data.keychain.KeychainStore.Key
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.LSP
 import to.bitkit.shared.ServiceError
@@ -20,9 +20,9 @@ import javax.inject.Inject
 
 class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    private val lspApi: LspApi,
+    private val api: BlocktankApi,
     private val lightningService: LightningService,
-    private val keychainStore: KeychainStore,
+    private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
 
     // region notifications
@@ -41,10 +41,10 @@ class BlocktankService @Inject constructor(
         Log.d(LSP, "Notification encryption public key: $publicKey")
 
         // New keypair for each token registration
-        if (keychainStore.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
-            keychainStore.delete(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)
+        if (keychain.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
+            keychain.delete(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)
         }
-        keychainStore.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privKeyBytes)
+        keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privKeyBytes)
 
         val payload = RegisterDeviceRequest(
             deviceToken = deviceToken,
@@ -56,7 +56,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            lspApi.registerDeviceForNotifications(payload)
+            api.registerDeviceForNotifications(payload)
         }
     }
 
@@ -72,7 +72,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            lspApi.testNotification(deviceToken, payload)
+            api.testNotification(deviceToken, payload)
         }
     }
     // endregion

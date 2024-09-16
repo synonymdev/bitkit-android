@@ -142,8 +142,6 @@ dependencies {
     // testImplementation("org.mockito:mockito-core:5.12.0")
     // testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     // testImplementation("org.robolectric:robolectric:4.13")
-    // Other
-    implementation(libs.guava) // for ByteArray.toHex()+
 }
 ksp {
     // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0

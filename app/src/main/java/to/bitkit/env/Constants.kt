@@ -1,7 +1,6 @@
 package to.bitkit.env
 
 import android.util.Log
-import org.lightningdevkit.ldknode.PeerDetails
 import to.bitkit.BuildConfig
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
@@ -19,26 +18,27 @@ internal object Tag {
     const val PERF = "PERF"
 }
 
-internal const val HOST = "10.0.2.2"
-internal const val REST = "https://electrs-regtest.synonym.to"
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
-
-internal val PEER_REMOTE = LnPeer(
-    nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
-    host = HOST,
-    port = "9737",
-)
-
-internal val PEER = LnPeer(
-    nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
-    host = HOST,
-    port = "9737",
-)
 // endregion
 
 // region env
 internal object Env {
     val isDebug = BuildConfig.DEBUG
+    val network = Network.Regtest
+    val trustedLnPeers = listOf(
+        LnPeers.remote,
+        // Peers.local,
+    )
+    val ldkRgsServerUrl: String?
+        get() = when (network.ldk) {
+            LdkNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+            else -> null
+        }
+    val esploraUrl: String
+        get() = when (network) {
+            Network.Regtest -> "https://electrs-regtest.synonym.to"
+            else -> TODO("Not yet implemented")
+        }
 
     object Storage {
         private var base = ""
@@ -61,51 +61,5 @@ internal object Env {
             return absolutePath
         }
     }
-
-    val network = Network.Regtest
-
-    val trustedLnPeers = listOf(
-        PEER_REMOTE,
-        // PEER,
-    )
-
-    val ldkRgsServerUrl: String?
-        get() = when (network.ldk) {
-            LdkNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
-            else -> null
-        }
 }
 // endregion
-
-data class LnPeer(
-    val nodeId: String,
-    val host: String,
-    val port: String,
-    val isConnected: Boolean = false,
-    val isPersisted: Boolean = false,
-) {
-    constructor(
-        nodeId: String,
-        address: String,
-        isConnected: Boolean = false,
-        isPersisted: Boolean = false,
-    ) : this(
-        nodeId,
-        address.substringBefore(":"),
-        address.substringAfter(":"),
-        isConnected,
-        isPersisted,
-    )
-
-    val address get() = "$host:$port"
-    override fun toString() = "$nodeId@${address}"
-
-    companion object {
-        fun PeerDetails.toLnPeer() = LnPeer(
-            nodeId = nodeId,
-            address = address,
-            isConnected = isConnected,
-            isPersisted = isPersisted,
-        )
-    }
-}

@@ -10,7 +10,6 @@ datastorePrefs = "1.1.1"
 espressoCore = "3.6.1"
 firebaseBom = "33.2.0"
 googleServices = "4.4.2"
-guava = "33.2.1-android"
 hilt = "2.51.1"
 hiltAndroidx = "1.2.0"
 junit = "4.13.2"
@@ -44,7 +43,6 @@ espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref =
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
-guava = { module = "com.google.guava:guava", version.ref = "guava" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
 hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAndroidx" }

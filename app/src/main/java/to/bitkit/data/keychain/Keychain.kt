@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package to.bitkit.data.keychain
 
 import android.content.Context
@@ -21,8 +19,10 @@ import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
 import to.bitkit.shared.KeychainError
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class KeychainStore @Inject constructor(
+@Singleton
+class Keychain @Inject constructor(
     private val db: AppDb,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,

@@ -7,23 +7,20 @@ import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.Serializable
 import to.bitkit.shared.BlocktankError
 import javax.inject.Inject
+import javax.inject.Singleton
 
-interface LspApi {
-    suspend fun registerDeviceForNotifications(payload: RegisterDeviceRequest)
-    suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest)
-}
-
+@Singleton
 class BlocktankApi @Inject constructor(
     private val client: HttpClient,
-) : LspApi {
+) {
     private val baseUrl = "https://api.stag.blocktank.to"
     private val notificationsApi = "$baseUrl/notifications/api/device"
 
-    override suspend fun registerDeviceForNotifications(payload: RegisterDeviceRequest) {
+    suspend fun registerDeviceForNotifications(payload: RegisterDeviceRequest) {
         post(notificationsApi, payload)
     }
 
-    override suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest) {
+    suspend fun testNotification(deviceToken: String, payload: TestNotificationRequest) {
         post("$notificationsApi/$deviceToken/test-notification", payload)
     }
 
