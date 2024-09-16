@@ -3,7 +3,9 @@ package to.bitkit.data
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.Serializable
+import to.bitkit.shared.BlocktankError
 import javax.inject.Inject
 
 interface LspApi {
@@ -25,7 +27,13 @@ class BlocktankApi @Inject constructor(
         post("$notificationsApi/$deviceToken/test-notification", payload)
     }
 
-    private suspend inline fun <reified T> post(url: String, payload: T) = client.post(url) { setBody(payload) }
+    private suspend inline fun <reified T> post(url: String, payload: T): HttpResponse {
+        val response = client.post(url) { setBody(payload) }
+        return when (val statusCode = response.status.value) {
+            !in 200..299 -> throw BlocktankError.InvalidResponse(statusCode)
+            else -> response
+        }
+    }
 }
 
 @Serializable

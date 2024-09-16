@@ -59,10 +59,8 @@ sealed class KeychainError(message: String) : AppError(message) {
 }
 
 sealed class BlocktankError(message: String) : AppError(message) {
-    class MissingResponse : BlocktankError("Missing response.")
-    class InvalidResponse : BlocktankError("Invalid response.")
+    class InvalidResponse(status: Int) : BlocktankError("Invalid response status code $status.")
     class InvalidJson : BlocktankError("Invalid JSON.")
-    class MissingDeviceToken : BlocktankError("Missing device token.")
 }
 
 // region ldk
