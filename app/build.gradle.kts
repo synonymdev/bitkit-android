@@ -64,8 +64,8 @@ android {
     @Suppress("UnstableApiUsage")
     testOptions {
         unitTests {
-            // isReturnDefaultValues = true     // mockito
-            // isIncludeAndroidResources = true // robolectric
+            isReturnDefaultValues = true     // mockito
+            isIncludeAndroidResources = true // robolectric
         }
     }
 }
@@ -133,15 +133,17 @@ dependencies {
     ksp(libs.room.compiler)
     testImplementation(libs.room.testing)
     // Test + Debug
-    androidTestImplementation(libs.espresso.core)
-    androidTestImplementation(libs.junit.ext)
     androidTestImplementation(kotlin("test"))
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.test.core)
+    androidTestImplementation(libs.test.espresso.core)
+    androidTestImplementation(libs.test.junit.ext)
     testImplementation(kotlin("test"))
-    testImplementation(libs.junit.junit)
-    // testImplementation("androidx.test:core:1.6.1")
-    // testImplementation("org.mockito:mockito-core:5.12.0")
-    // testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
-    // testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.test.junit)
+    testImplementation(libs.test.mockito.kotlin)
+    testImplementation(libs.test.robolectric)
+    testImplementation(libs.test.turbine)
 }
 ksp {
     // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0

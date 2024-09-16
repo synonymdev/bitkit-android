@@ -20,9 +20,13 @@ ktor = "2.3.12"
 ldkNode = "0.3.0" # LDK_DB_VERSION in MirationService should match lib's sqlite DB version
 lifecycle = "2.8.5"
 material = "1.12.0"
+mockitoKotlin = "5.4.0"
 navCompose = "2.8.0"
+robolectric = "4.13"
 room = "2.6.1"
 slf4j = "1.7.36"
+testAndroidx = "1.6.1"
+turbine = "1.0.0"
 workRuntimeKtx = "2.9.1"
 
 [libraries]
@@ -39,7 +43,6 @@ compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePrefs" }
-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
@@ -48,9 +51,8 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAndroidx" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltAndroidx" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
-junit-junit = { group = "junit", name = "junit", version.ref = "junit" }
-junit-ext = { module = "androidx.test.ext:junit", version.ref = "junitExt" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -72,6 +74,13 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+test-core = { module = "androidx.test:core", version.ref = "testAndroidx" }
+test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
+test-junit = { group = "junit", name = "junit", version.ref = "junit" }
+test-junit-ext = { module = "androidx.test.ext:junit", version.ref = "junitExt" }
+test-mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
+test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 
 [plugins]
