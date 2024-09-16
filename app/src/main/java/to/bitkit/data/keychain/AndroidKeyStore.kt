@@ -66,7 +66,7 @@ class AndroidKeyStore(
         return iv + encryptedData
     }
 
-    fun decrypt(data: ByteArray): String {
+    fun decrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
 
         // Extract the IV from the beginning of the encrypted data
@@ -77,6 +77,6 @@ class AndroidKeyStore(
         val cipher = Cipher.getInstance(transformation).apply { init(Cipher.DECRYPT_MODE, secretKey, spec) }
 
         val decryptedDataBytes = cipher.doFinal(actualEncryptedData)
-        return decryptedDataBytes.decodeToString()
+        return decryptedDataBytes
     }
 }

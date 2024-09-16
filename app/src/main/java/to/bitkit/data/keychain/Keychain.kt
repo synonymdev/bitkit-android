@@ -33,11 +33,13 @@ class Keychain @Inject constructor(
     private val Context.keychain by preferencesDataStore(alias, scope = this)
     val snapshot get() = runBlocking(this.coroutineContext) { context.keychain.data.first() }
 
-    fun loadString(key: String): String? = load(key)?.let(keyStore::decrypt)
+    fun loadString(key: String): String? = load(key)?.decodeToString()
 
-    private fun load(key: String): ByteArray? {
+    fun load(key: String): ByteArray? {
         try {
-            return snapshot[key.indexed]?.fromBase64()
+            return snapshot[key.indexed]?.fromBase64()?.let {
+                keyStore.decrypt(it)
+            }
         } catch (e: Exception) {
             throw KeychainError.FailedToLoad(key)
         }
@@ -48,8 +50,8 @@ class Keychain @Inject constructor(
     suspend fun save(key: String, value: ByteArray) {
         if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
 
-        val encryptedValue = keyStore.encrypt(value)
         try {
+            val encryptedValue = keyStore.encrypt(value)
             context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
         } catch (e: Exception) {
             throw KeychainError.FailedToSave(key)
