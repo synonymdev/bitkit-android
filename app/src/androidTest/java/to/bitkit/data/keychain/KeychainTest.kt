@@ -13,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.ConfigEntity
+import to.bitkit.shared.KeychainError
 import to.bitkit.test.BaseAndroidTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -68,7 +69,7 @@ class KeychainTest : BaseAndroidTest() {
         val key = "key"
         sut.saveString(key, "value1")
 
-        assertFailsWith<IllegalArgumentException> { sut.saveString(key, "value2") }
+        assertFailsWith<KeychainError.FailedToSaveAlreadyExists> { sut.saveString(key, "value2") }
     }
 
     @Test

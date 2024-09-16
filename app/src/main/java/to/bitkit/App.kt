@@ -12,7 +12,7 @@ import javax.inject.Inject
 import kotlin.reflect.typeOf
 
 @HiltAndroidApp
-internal class App : Application(), Configuration.Provider {
+internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 

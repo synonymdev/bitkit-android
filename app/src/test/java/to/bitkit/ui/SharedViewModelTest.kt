@@ -42,7 +42,7 @@ class SharedViewModelTest : BaseUnitTest() {
 
     @Test
     fun `registerForNotifications should register device with provided FCM token`() = test {
-        val token = "test_fcm_token"
+        val token = "test"
 
         sut.registerForNotifications(token)
 
@@ -50,8 +50,8 @@ class SharedViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `registerForNotifications should register device with default FCM token`() = test { // Arrange
-        val token = "default_fcm_token"
+    fun `registerForNotifications should register device with default FCM token`() = test {
+        val token = "test"
         val task = mock<Task<String>> {
             on(it.isComplete).thenReturn(true)
             on(it.result).thenReturn(token)

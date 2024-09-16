@@ -37,7 +37,6 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `uiState should emit Content state after sync`() = test {
-        // Arrange
         val expectedUiState = MainUiState.Content(
             ldkNodeId = "nodeId",
             ldkBalance = "1000",
@@ -48,7 +47,6 @@ class WalletViewModelTest : BaseUnitTest() {
             channels = emptyList()
         )
 
-        // Act & Assert
         sut.uiState.test {
             val initial = awaitItem()
             assertEquals(MainUiState.Loading, initial)

@@ -1,11 +1,5 @@
 package to.bitkit.test
 
-import android.app.Application
-import com.google.firebase.FirebaseApp
+import to.bitkit.App
 
-class TestApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        // FirebaseApp.initializeApp(this)
-    }
-}
+internal class TestApp : App()
