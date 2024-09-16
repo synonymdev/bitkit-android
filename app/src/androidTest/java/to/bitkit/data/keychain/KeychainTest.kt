@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -14,15 +13,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.ConfigEntity
-import to.bitkit.test.BaseTest
+import to.bitkit.test.BaseAndroidTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
-@OptIn(ExperimentalCoroutinesApi::class)
-class KeychainTest : BaseTest() {
+class KeychainTest : BaseAndroidTest() {
 
     private val appContext by lazy { ApplicationProvider.getApplicationContext<Context>() }
     private lateinit var db: AppDb

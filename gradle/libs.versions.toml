@@ -52,7 +52,6 @@ hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAnd
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltAndroidx" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
-kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -75,12 +74,13 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
 test-core = { module = "androidx.test:core", version.ref = "testAndroidx" }
+test-coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test" }
 test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
 test-junit = { group = "junit", name = "junit", version.ref = "junit" }
 test-junit-ext = { module = "androidx.test.ext:junit", version.ref = "junitExt" }
 test-mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
-test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 
 [plugins]

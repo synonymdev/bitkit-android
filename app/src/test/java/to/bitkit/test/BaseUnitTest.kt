@@ -7,8 +7,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 
-@ExperimentalCoroutinesApi
-abstract class BaseTest(
+@OptIn(ExperimentalCoroutinesApi::class)
+abstract class BaseUnitTest(
     testDispatcher: TestDispatcher = UnconfinedTestDispatcher()
 ) {
     @get:Rule

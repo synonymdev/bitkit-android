@@ -26,6 +26,7 @@ class SharedViewModel @Inject constructor(
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
     private val onChainService: OnChainService,
+    private val firebaseMessaging: FirebaseMessaging,
 ) : ViewModel() {
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
@@ -34,7 +35,7 @@ class SharedViewModel @Inject constructor(
 
     fun registerForNotifications(fcmToken: String? = null) {
         viewModelScope.launch(bgDispatcher) {
-            val token = fcmToken ?: FirebaseMessaging.getInstance().token.await()
+            val token = fcmToken ?: firebaseMessaging.token.await()
 
             runCatching {
                 blocktankService.registerDevice(token)

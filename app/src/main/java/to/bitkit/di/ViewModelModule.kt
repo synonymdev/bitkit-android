@@ -1,5 +1,6 @@
 package to.bitkit.di
 
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,6 +31,7 @@ object ViewModelModule {
             keychain,
             blocktankService,
             onChainService,
+            firebaseMessaging = FirebaseMessaging.getInstance(),
         )
     }
 }

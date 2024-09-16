@@ -1,0 +1,65 @@
+package to.bitkit.ui
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.android.gms.tasks.Task
+import com.google.firebase.messaging.FirebaseMessaging
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import org.robolectric.annotation.Config
+import to.bitkit.data.AppDb
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.services.BlocktankService
+import to.bitkit.services.OnChainService
+import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.TestApp
+
+@RunWith(AndroidJUnit4::class)
+@Config(application = TestApp::class)
+class SharedViewModelTest : BaseUnitTest() {
+    private var db: AppDb = mock()
+    private var keychain: Keychain = mock()
+    private var firebaseMessaging: FirebaseMessaging = mock()
+    private var blocktankService: BlocktankService = mock()
+    private var onChainService: OnChainService = mock()
+
+    private lateinit var sut: SharedViewModel
+
+    @Before
+    fun setUp() {
+        sut = SharedViewModel(
+            bgDispatcher = testDispatcher,
+            db = db,
+            keychain = keychain,
+            blocktankService = blocktankService,
+            onChainService = onChainService,
+            firebaseMessaging = firebaseMessaging,
+        )
+    }
+
+    @Test
+    fun `registerForNotifications should register device with provided FCM token`() = test {
+        val token = "test_fcm_token"
+
+        sut.registerForNotifications(token)
+
+        verify(blocktankService).registerDevice(token)
+    }
+
+    @Test
+    fun `registerForNotifications should register device with default FCM token`() = test { // Arrange
+        val token = "default_fcm_token"
+        val task = mock<Task<String>> {
+            on(it.isComplete).thenReturn(true)
+            on(it.result).thenReturn(token)
+        }
+        whenever(firebaseMessaging.token).thenReturn(task)
+
+        sut.registerForNotifications(null)
+
+        verify(blocktankService).registerDevice(token)
+    }
+}
