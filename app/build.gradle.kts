@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     // BDK + LDK
     implementation(libs.bdk.android)
+    implementation(libs.bitcoinj.core)
     implementation(libs.ldk.node.android)
     // Firebase
     implementation(platform(libs.firebase.bom))

@@ -2,11 +2,14 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
+import org.bitcoinj.core.ECKey
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.LspApi
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
+import to.bitkit.data.keychain.KeychainStore
+import to.bitkit.data.keychain.KeychainStore.Key
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.LSP
 import to.bitkit.shared.ServiceError
@@ -19,8 +22,10 @@ class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
     private val lspApi: LspApi,
     private val lightningService: LightningService,
+    private val keychainStore: KeychainStore,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    // region notifications
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
@@ -31,8 +36,15 @@ class BlocktankService @Inject constructor(
 
         val signature = lightningService.sign(messageToSign)
 
-        // TODO: Use actual public key to enable decryption of the push notification payload
-        val publicKey = "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"
+        val keypair = ECKey()
+        val publicKey = keypair.publicKeyAsHex
+        Log.d(LSP, "Notification encryption public key: $publicKey")
+
+        // New keypair for each token registration
+        if (keychainStore.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
+            keychainStore.delete(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)
+        }
+        keychainStore.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privKeyBytes)
 
         val payload = RegisterDeviceRequest(
             deviceToken = deviceToken,
@@ -63,4 +75,5 @@ class BlocktankService @Inject constructor(
             lspApi.testNotification(deviceToken, payload)
         }
     }
+    // endregion
 }

@@ -43,10 +43,12 @@ class KeychainStore @Inject constructor(
         }
     }
 
-    suspend fun saveString(key: String, value: String) = save(key, value.let(keyStore::encrypt))
+    suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
-    private suspend fun save(key: String, encryptedValue: ByteArray) {
+    suspend fun save(key: String, value: ByteArray) {
         if (exists(key)) throw KeychainError.FailedToSaveAlreadyExists(key)
+
+        val encryptedValue = keyStore.encrypt(value)
         try {
             context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
         } catch (e: Exception) {
@@ -82,4 +84,8 @@ class KeychainStore @Inject constructor(
             val walletIndex = runBlocking { db.configDao().getAll().first() }.first().walletIndex
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
+
+    enum class Key {
+        PUSH_NOTIFICATION_PRIVATE_KEY,
+    }
 }
