@@ -7,21 +7,8 @@ import to.bitkit.ext.ensureDir
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
-// region globals
-internal object Tag {
-    const val FCM = "FCM"
-    const val LDK = "LDK"
-    const val LSP = "LSP"
-    const val BDK = "BDK"
-    const val DEV = "DEV"
-    const val APP = "APP"
-    const val PERF = "PERF"
-}
-
 internal const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
-// endregion
 
-// region env
 internal object Env {
     val isDebug = BuildConfig.DEBUG
     val network = Network.Regtest
@@ -62,4 +49,3 @@ internal object Env {
         }
     }
 }
-// endregion
