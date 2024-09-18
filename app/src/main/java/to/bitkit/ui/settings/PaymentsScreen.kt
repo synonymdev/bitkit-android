@@ -17,12 +17,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.CopyToClipboardButton
-import to.bitkit.ui.MainViewModel
+import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun PaymentsScreen(
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -34,6 +34,7 @@ fun PaymentsScreen(
         InfoField(
             value = invoiceToSend,
             label = "Send invoice",
+            maxLength = 44,
             trailingIcon = { CopyToClipboardButton(invoiceToSend) },
         )
     }

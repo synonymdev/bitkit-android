@@ -1,7 +1,7 @@
 package to.bitkit.shared
 
 import android.util.Log
-import to.bitkit.Tag.PERF
+import to.bitkit.env.Tag.PERF
 import kotlin.system.measureTimeMillis
 
 internal inline fun <T> measured(

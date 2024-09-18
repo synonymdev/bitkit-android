@@ -15,10 +15,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-import to.bitkit.data.BlocktankApi
-import to.bitkit.data.EsploraApi
-import to.bitkit.data.LspApi
-import to.bitkit.data.RestApi
 import javax.inject.Singleton
 
 val json = Json {
@@ -47,21 +43,9 @@ object HttpModule {
             install(ContentNegotiation) {
                 json(json = json)
             }
-            defaultRequest { // Set default request properties
+            defaultRequest {
                 contentType(ContentType.Application.Json)
             }
         }
-    }
-
-    @Provides
-    @Singleton
-    fun provideLspApi(blocktankApi: BlocktankApi): LspApi {
-        return blocktankApi
-    }
-
-    @Provides
-    @Singleton
-    fun provideRestApi(esploraApi: EsploraApi): RestApi {
-        return esploraApi
     }
 }

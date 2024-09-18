@@ -7,11 +7,12 @@ import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import to.bitkit.env.Env
 import javax.inject.Inject
 import kotlin.reflect.typeOf
 
 @HiltAndroidApp
-internal class App : Application(), Configuration.Provider {
+internal open class App : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 

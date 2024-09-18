@@ -24,7 +24,7 @@ import to.bitkit.ui.settings.PeersScreen
 fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: WalletViewModel = hiltViewModel(),
     walletScreen: @Composable () -> Unit = {},
 ) {
     // val screenViewModel = viewModel<ScreenViewModel>()

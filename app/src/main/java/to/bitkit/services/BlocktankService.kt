@@ -2,13 +2,17 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.Tag.LSP
+import org.bitcoinj.core.ECKey
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.LspApi
+import to.bitkit.data.BlocktankClient
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
+import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Tag.LSP
+import to.bitkit.shared.ServiceError
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -16,12 +20,14 @@ import javax.inject.Inject
 
 class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    private val lspApi: LspApi,
+    private val client: BlocktankClient,
     private val lightningService: LightningService,
+    private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    // region notifications
     suspend fun registerDevice(deviceToken: String) {
-        val nodeId = requireNotNull(lightningService.nodeId) { "Node not started" }
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         Log.d(LSP, "Registering device for notifications…")
 
@@ -30,8 +36,15 @@ class BlocktankService @Inject constructor(
 
         val signature = lightningService.sign(messageToSign)
 
-        // TODO: Use actual public key to enable decryption of the push notification payload
-        val publicKey = "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"
+        val keypair = ECKey()
+        val publicKey = keypair.publicKeyAsHex
+        Log.d(LSP, "Notification encryption public key: $publicKey")
+
+        // New keypair for each token registration
+        if (keychain.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
+            keychain.delete(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)
+        }
+        keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privKeyBytes)
 
         val payload = RegisterDeviceRequest(
             deviceToken = deviceToken,
@@ -43,7 +56,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            lspApi.registerDeviceForNotifications(payload)
+            client.registerDeviceForNotifications(payload)
         }
     }
 
@@ -59,7 +72,8 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            lspApi.testNotification(deviceToken, payload)
+            client.testNotification(deviceToken, payload)
         }
     }
+    // endregion
 }

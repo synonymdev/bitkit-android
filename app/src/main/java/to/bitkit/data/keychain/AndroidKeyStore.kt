@@ -54,11 +54,11 @@ class AndroidKeyStore(
         return spec
     }
 
-    fun encrypt(data: String): ByteArray {
+    fun encrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
         val cipher = Cipher.getInstance(transformation).apply { init(Cipher.ENCRYPT_MODE, secretKey) }
 
-        val encryptedData = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
+        val encryptedData = cipher.doFinal(data)
         val iv = cipher.iv
         check(iv.size == ivLength) { "Unexpected IV length: ${iv.size} ≠ $ivLength" }
 
@@ -66,7 +66,7 @@ class AndroidKeyStore(
         return iv + encryptedData
     }
 
-    fun decrypt(data: ByteArray): String {
+    fun decrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
 
         // Extract the IV from the beginning of the encrypted data
@@ -77,6 +77,6 @@ class AndroidKeyStore(
         val cipher = Cipher.getInstance(transformation).apply { init(Cipher.DECRYPT_MODE, secretKey, spec) }
 
         val decryptedDataBytes = cipher.doFinal(actualEncryptedData)
-        return decryptedDataBytes.decodeToString()
+        return decryptedDataBytes
     }
 }

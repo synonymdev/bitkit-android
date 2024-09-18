@@ -9,11 +9,13 @@
     <string name="balance">Balance</string>
     <string name="close">Close</string>
     <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
     <string name="home">Home</string>
     <string name="invoice">Invoice</string>
     <string name="lightning">Lightning</string>
     <string name="mnemonic">Mnemonic</string>
     <string name="node_id">Node Id</string>
+    <string name="notifications">Notifications</string>
     <string name="pay">Pay</string>
     <string name="peers">Peers</string>
     <string name="sat">sat</string>

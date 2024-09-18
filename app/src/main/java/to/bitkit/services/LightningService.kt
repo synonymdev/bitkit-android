@@ -4,21 +4,28 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
+import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.defaultConfig
-import to.bitkit.Env
-import to.bitkit.LnPeer
-import to.bitkit.LnPeer.Companion.toLnPeer
-import to.bitkit.REST
-import to.bitkit.SEED
-import to.bitkit.Tag.LDK
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
+import to.bitkit.env.LnPeer
+import to.bitkit.env.LnPeer.Companion.toLnPeer
+import to.bitkit.env.SEED
+import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.uByteList
+import to.bitkit.shared.LdkError
+import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 
 class LightningService @Inject constructor(
@@ -30,7 +37,7 @@ class LightningService @Inject constructor(
         }
     }
 
-    lateinit var node: Node
+    var node: Node? = null
 
     fun setup(mnemonic: String = SEED) {
         val dir = Env.Storage.ldk
@@ -50,7 +57,7 @@ class LightningService @Inject constructor(
                     )
                 })
             .apply {
-                setEsploraServer(REST)
+                setEsploraServer(Env.esploraUrl)
                 if (Env.ldkRgsServerUrl != null) {
                     setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
                 } else {
@@ -61,167 +68,193 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Setting up node…")
 
-        node = builder.build()
+        node = try {
+            builder.build()
+        } catch (e: BuildException) {
+            throw LdkError(e)
+        }
 
         Log.i(LDK, "Node set up")
     }
 
     suspend fun start() {
-        assertNodeIsInitialised()
+        val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Log.d(LDK, "Starting node…")
-
         ServiceQueue.LDK.background {
             node.start()
         }
-
         Log.i(LDK, "Node started")
         connectToTrustedPeers()
     }
 
     suspend fun stop() {
+        val node = this.node ?: throw ServiceError.NodeNotStarted
+
         Log.d(LDK, "Stopping node…")
         ServiceQueue.LDK.background {
             node.stop()
         }
+        node.close().also { this.node = null }
         Log.i(LDK, "Node stopped.")
     }
 
-    private suspend fun connectToTrustedPeers() {
-        ServiceQueue.LDK.background {
-            for (peer in Env.trustedLnPeers) {
-                connectPeer(peer)
-            }
-        }
+    fun wipeStorage() {
+        if (node != null) throw ServiceError.NodeStillRunning
+        TODO("Not yet implemented")
     }
 
     suspend fun sync() {
-        Log.d(LDK, "Syncing node…")
+        val node = this.node ?: throw ServiceError.NodeNotSetup
 
+        Log.d(LDK, "Syncing node…")
         ServiceQueue.LDK.background {
             node.syncWallets()
             // setMaxDustHtlcExposureForCurrentChannels()
         }
-
         Log.i(LDK, "Node synced")
     }
 
     suspend fun sign(message: String): String {
-        assertNodeIsInitialised()
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+        val msg = runCatching { message.uByteList }.getOrNull() ?: throw ServiceError.InvalidNodeSigningMessage
 
         return ServiceQueue.LDK.background {
-            node.signMessage(message.uByteList)
+            node.signMessage(msg)
         }
     }
 
-    private fun assertNodeIsInitialised() = check(::node.isInitialized) { "LDK node is not initialised" }
+    // region peers
+    private suspend fun connectToTrustedPeers() {
+        for (peer in Env.trustedLnPeers) {
+            connectPeer(peer)
+        }
+    }
+
+    suspend fun connectPeer(peer: LnPeer) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Log.d(LDK, "Connecting peer: $peer")
+
+        try {
+            ServiceQueue.LDK.background {
+                node.connect(peer.nodeId, peer.address, persist = true)
+            }
+            Log.i(LDK, "Connection succeeded with: $peer")
+        } catch(e: NodeException) {
+            Log.w(LDK, "Connection failed with: $peer", LdkError(e))
+        }
+    }
+    // endregion
+
+    // region channels
+    suspend fun openChannel(peer: LnPeer) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        // sendToAddress
+        // mine 6 blocks & wait for esplora to pick up block
+        // wait for esplora to pick up tx
+        sync()
+
+        ServiceQueue.LDK.background {
+            node.connectOpenChannel(
+                nodeId = peer.nodeId,
+                address = peer.address,
+                channelAmountSats = 50000u,
+                pushToCounterpartyMsat = null,
+                channelConfig = null,
+                announceChannel = true,
+            )
+        }
+
+        sync()
+
+        val pendingEvent = node.nextEventAsync()
+        check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
+        node.eventHandled()
+
+        Log.d(LDK, "Channel pending with peer: ${peer.address}")
+        Log.d(LDK, "Channel funding txid: ${pendingEvent.fundingTxo.txid}")
+
+        // wait for counterparty to pickup event: ChannelPending
+        // wait for esplora to pick up tx: fundingTx
+        // mine 6 blocks & wait for esplora to pick up block
+        sync()
+
+        val readyEvent = node.nextEventAsync()
+        check(readyEvent is Event.ChannelReady) { "Expected ChannelReady event, got $readyEvent" }
+        node.eventHandled()
+
+        // wait for counterparty to pickup event: ChannelReady
+
+        Log.i(LDK, "Channel ready: ${readyEvent.userChannelId}")
+    }
+
+    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String) {
+        val node = this.node ?: throw ServiceError.NodeNotStarted
+
+        ServiceQueue.LDK.background {
+            node.closeChannel(userChannelId, counterpartyNodeId)
+        }
+
+        val event = node.nextEventAsync()
+        check(event is Event.ChannelClosed) { "Expected ChannelClosed event, got $event" }
+        node.eventHandled()
+
+        // mine 1 block & wait for esplora to pick up block
+        sync()
+
+        Log.i(LDK, "Channel closed: $userChannelId")
+    }
+    // endregion
+
+    // region payments
+    suspend fun createInvoice(amountSat: ULong, description: String, expirySecs: UInt): String {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            node.bolt11Payment().receive(amountMsat = amountSat * 1000u, description, expirySecs)
+        }
+    }
+
+    suspend fun payInvoice(invoice: String): Boolean {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Log.d(LDK, "Paying invoice: $invoice")
+
+        ServiceQueue.LDK.background {
+            node.bolt11Payment().send(invoice)
+        }
+        node.eventHandled()
+
+        when (val event = node.nextEventAsync()) {
+            is Event.PaymentSuccessful -> {
+                Log.i(LDK, "Payment successful for invoice: $invoice")
+                return true
+            }
+
+            is Event.PaymentFailed -> {
+                Log.e(LDK, "Payment error: ${event.reason}")
+                return false
+            }
+
+            else -> {
+                Log.e(LDK, "Expected PaymentSuccessful/PaymentFailed event, got $event")
+                return false
+            }
+        }
+    }
+    // endregion
 
     // region state
-    val nodeId: String get() = node.nodeId()
-    val balances get() = node.listBalances()
-    val status get() = node.status()
-    val peers get() = node.listPeers().map { it.toLnPeer() }
-    val channels get() = node.listChannels()
-    val payments get() = node.listPayments()
+    val nodeId: String? get() = node?.nodeId()
+    val balances: BalanceDetails? get() = node?.listBalances()
+    val status: NodeStatus? get() = node?.status()
+    val peers: List<LnPeer>? get() = node?.listPeers()?.map { it.toLnPeer() }
+    val channels: List<ChannelDetails>? get() = node?.listChannels()
+    val payments: List<PaymentDetails>? get() = node?.listPayments()
     // endregion
 }
-
-// region peers
-internal fun LightningService.connectPeer(peer: LnPeer) {
-    Log.d(LDK, "Connecting peer: $peer")
-    val res = runCatching {
-        node.connect(peer.nodeId, peer.address, persist = true)
-    }
-    Log.i(LDK, "Connection ${if (res.isSuccess) "succeeded" else "failed"} with: $peer")
-}
-// endregion
-
-// region channels
-internal suspend fun LightningService.openChannel(peer: LnPeer) {
-
-    // sendToAddress
-    // mine 6 blocks & wait for esplora to pick up block
-    // wait for esplora to pick up tx
-    sync()
-
-    ServiceQueue.LDK.background {
-        node.connectOpenChannel(
-            nodeId = peer.nodeId,
-            address = peer.address,
-            channelAmountSats = 50000u,
-            pushToCounterpartyMsat = null,
-            channelConfig = null,
-            announceChannel = true,
-        )
-    }
-
-    sync()
-
-    val pendingEvent = node.nextEventAsync()
-    check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
-    node.eventHandled()
-
-    Log.d(LDK, "Channel pending with peer: ${peer.address}")
-    Log.d(LDK, "Channel funding txid: ${pendingEvent.fundingTxo.txid}")
-
-    // wait for counterparty to pickup event: ChannelPending
-    // wait for esplora to pick up tx: fundingTx
-    // mine 6 blocks & wait for esplora to pick up block
-    sync()
-
-    val readyEvent = node.nextEventAsync()
-    check(readyEvent is Event.ChannelReady) { "Expected ChannelReady event, got $readyEvent" }
-    node.eventHandled()
-
-    // wait for counterparty to pickup event: ChannelReady
-
-    Log.i(LDK, "Channel ready: ${readyEvent.userChannelId}")
-}
-
-internal suspend fun LightningService.closeChannel(userChannelId: String, counterpartyNodeId: String) {
-    node.closeChannel(userChannelId, counterpartyNodeId)
-
-    val event = node.nextEventAsync()
-    check(event is Event.ChannelClosed) { "Expected ChannelClosed event, got $event" }
-    node.eventHandled()
-
-    // mine 1 block & wait for esplora to pick up block
-    sync()
-
-    Log.i(LDK, "Channel closed: $userChannelId")
-}
-// endregion
-
-// region payments
-internal fun LightningService.createInvoice(): String {
-    return node.bolt11Payment().receive(amountMsat = 112u, description = "description", expirySecs = 7200u)
-}
-
-internal suspend fun LightningService.payInvoice(invoice: String): Boolean {
-    Log.d(LDK, "Paying invoice: $invoice")
-
-    node.bolt11Payment().send(invoice)
-    node.eventHandled()
-
-    when (val event = node.nextEventAsync()) {
-        is Event.PaymentSuccessful -> {
-            Log.i(LDK, "Payment successful for invoice: $invoice")
-        }
-
-        is Event.PaymentFailed -> {
-            Log.e(LDK, "Payment error: ${event.reason}")
-            return false
-        }
-
-        else -> {
-            Log.e(LDK, "Expected PaymentSuccessful/PaymentFailed event, got $event")
-            return false
-        }
-    }
-
-    return true
-}
-// endregion
 
 internal suspend fun warmupNode() {
     runCatching {
@@ -230,7 +263,7 @@ internal suspend fun warmupNode() {
             start()
             sync()
         }
-        BitcoinService.shared.apply {
+        OnChainService.shared.apply {
             setup()
             fullScan()
         }

@@ -1,5 +1,8 @@
+import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -10,7 +13,6 @@ plugins {
 android {
     namespace = "to.bitkit"
     compileSdk = 34
-    ndkVersion = "26.1.10909125" // probably required by LDK bindings? - safer to keep it for now.
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
@@ -54,10 +56,6 @@ android {
         buildConfig = true
         compose = true
     }
-    composeOptions {
-        // https://developer.android.com/jetpack/androidx/releases/compose-kotlin#pre-release_kotlin_compatibility
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -66,10 +64,17 @@ android {
     @Suppress("UnstableApiUsage")
     testOptions {
         unitTests {
-            // isReturnDefaultValues = true     // mockito
-            // isIncludeAndroidResources = true // robolectric
+            isReturnDefaultValues = true     // mockito
+            isIncludeAndroidResources = true // robolectric
         }
     }
+}
+composeCompiler {
+    featureFlags = setOf(
+        ComposeFeatureFlag.StrongSkipping.disabled(),
+        ComposeFeatureFlag.OptimizeNonSkippingGroups,
+    )
+    reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
@@ -81,6 +86,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     // BDK + LDK
     implementation(libs.bdk.android)
+    implementation(libs.bitcoinj.core)
     implementation(libs.ldk.node.android)
     // Firebase
     implementation(platform(libs.firebase.bom))
@@ -96,12 +102,12 @@ dependencies {
     // Compose
     implementation(platform(libs.compose.bom))
     androidTestImplementation(platform(libs.compose.bom))
-    implementation(libs.material3)
-    implementation(libs.material.icons.extended)
-    implementation(libs.ui.tooling.preview)
-    debugImplementation(libs.ui.tooling)
-    debugImplementation(libs.ui.test.manifest)
-    androidTestImplementation(libs.ui.test.junit4)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+    androidTestImplementation(libs.compose.ui.test.junit4)
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)
@@ -127,17 +133,19 @@ dependencies {
     ksp(libs.room.compiler)
     testImplementation(libs.room.testing)
     // Test + Debug
-    androidTestImplementation(libs.espresso.core)
-    androidTestImplementation(libs.junit.ext)
     androidTestImplementation(kotlin("test"))
+    androidTestImplementation(libs.test.core)
+    androidTestImplementation(libs.test.coroutines)
+    androidTestImplementation(libs.test.espresso.core)
+    androidTestImplementation(libs.test.junit.ext)
     testImplementation(kotlin("test"))
-    testImplementation(libs.junit.junit)
-    // testImplementation("androidx.test:core:1.6.1")
-    // testImplementation("org.mockito:mockito-core:5.12.0")
-    // testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
-    // testImplementation("org.robolectric:robolectric:4.13")
-    // Other
-    implementation(libs.guava) // for ByteArray.toHex()+
+    testImplementation(libs.test.core)
+    testImplementation(libs.test.coroutines)
+    testImplementation(libs.test.junit)
+    testImplementation(libs.test.junit.ext)
+    testImplementation(libs.test.mockito.kotlin)
+    testImplementation(libs.test.robolectric)
+    testImplementation(libs.test.turbine)
 }
 ksp {
     // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0

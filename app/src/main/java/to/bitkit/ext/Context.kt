@@ -10,8 +10,8 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import to.bitkit.Tag.APP
 import to.bitkit.currentActivity
+import to.bitkit.env.Tag.APP
 import to.bitkit.ui.MainActivity
 import java.io.File
 import java.io.FileOutputStream

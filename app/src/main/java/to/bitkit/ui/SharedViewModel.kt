@@ -9,30 +9,33 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
-import to.bitkit.Tag.DEV
-import to.bitkit.Tag.LSP
+import to.bitkit.data.AppDb
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Tag.APP
+import to.bitkit.env.Tag.DEV
+import to.bitkit.env.Tag.LSP
 import to.bitkit.services.BlocktankService
+import to.bitkit.services.OnChainService
 import javax.inject.Inject
 
 @HiltViewModel
 class SharedViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val db: AppDb,
+    private val keychain: Keychain,
     private val blocktankService: BlocktankService,
+    private val onChainService: OnChainService,
+    private val firebaseMessaging: FirebaseMessaging,
 ) : ViewModel() {
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
-        logInstanceHashCode()
         runBlocking { to.bitkit.services.warmupNode() }
-    }
-
-    fun logInstanceHashCode() {
-        Log.d(DEV, "${this::class.java.simpleName} hashCode: ${hashCode()}")
     }
 
     fun registerForNotifications(fcmToken: String? = null) {
         viewModelScope.launch(bgDispatcher) {
-            val token = fcmToken ?: FirebaseMessaging.getInstance().token.await()
+            val token = fcmToken ?: firebaseMessaging.token.await()
 
             runCatching {
                 blocktankService.registerDevice(token)
@@ -41,4 +44,38 @@ class SharedViewModel @Inject constructor(
             }
         }
     }
+
+    // region debug
+    fun debugDb() {
+        viewModelScope.launch {
+            db.configDao().getAll().collect {
+                Log.d(DEV, "${it.count()} entities in DB: $it")
+            }
+        }
+    }
+
+    fun debugKeychain() {
+        viewModelScope.launch {
+            val key = "test"
+            if (keychain.exists(key)) {
+                val value = keychain.loadString(key)
+                Log.d(APP, "Keychain entry: $key = $value")
+                keychain.delete(key)
+            }
+            keychain.saveString(key, "testValue")
+        }
+    }
+
+    fun debugWipeBdk() {
+        onChainService.stop()
+        onChainService.wipeStorage()
+    }
+
+    fun debugLspNotifications() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = FirebaseMessaging.getInstance().token.await()
+            blocktankService.testNotification(token)
+        }
+    }
+    // endregion
 }

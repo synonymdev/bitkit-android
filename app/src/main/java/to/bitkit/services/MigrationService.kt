@@ -7,9 +7,10 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.ldk.structs.KeysManager
-import to.bitkit.Env
-import to.bitkit.Tag.LDK
+import to.bitkit.env.Env
+import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.hex
+import to.bitkit.shared.ServiceError
 import java.io.File
 import javax.inject.Inject
 import kotlin.io.path.Path
@@ -26,8 +27,7 @@ class MigrationService @Inject constructor(
 
         // Skip if db already exists
         if (file.exists()) {
-            Log.d(LDK, "Migration skipped: ldk-node db exists at: $file")
-            return
+            throw ServiceError.LdkNodeSqliteAlreadyExists(file.path)
         }
 
         val path = file.path
@@ -72,9 +72,9 @@ class MigrationService @Inject constructor(
         for (monitor in monitors) {
             val channelMonitor = read32BytesChannelMonitor(monitor, entropySource, signerProvider).takeIf { it.is_ok }
                 ?.let { it as? ChannelMonitorDecodeResultTuple }?.res?._b
-                ?: throw Error("Could not read channel monitor using read32BytesChannelMonitor")
+                ?: throw ServiceError.LdkToLdkNodeMigration
             val fundingTx = channelMonitor._funding_txo._a._txid?.reversedArray()?.hex
-                ?: throw Error("Could not read txid from funding tx OutPoint of channel monitor")
+                ?: throw ServiceError.LdkToLdkNodeMigration
             val index = channelMonitor._funding_txo._a._index
             val key = "${fundingTx}_$index"
 
@@ -114,6 +114,6 @@ class MigrationService @Inject constructor(
         private const val KEY = "key"
         private const val VALUE = "value"
         private const val LDK_DB_NAME = "$LDK_NODE_DATA.sqlite"
-        private const val LDK_DB_VERSION = 2 // TODO: check on each ldk-node version update
+        private const val LDK_DB_VERSION = 2
     }
 }

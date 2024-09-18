@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -37,7 +36,7 @@ import to.bitkit.R
 
 @Composable
 internal fun Channels(
-    channels: SnapshotStateList<ChannelDetails>,
+    channels: List<ChannelDetails>,
     onChannelClose: (ChannelDetails) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {

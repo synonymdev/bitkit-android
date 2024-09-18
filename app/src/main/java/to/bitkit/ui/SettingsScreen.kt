@@ -21,12 +21,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.env.SEED
 import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    viewModel: MainViewModel,
+    viewModel: WalletViewModel,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -59,7 +60,7 @@ fun SettingsScreen(
             text = "Bitcoin Wallet",
             style = MaterialTheme.typography.titleMedium,
         )
-        Mnemonic(viewModel.mnemonic.value)
+        Mnemonic(SEED) // TODO use value from viewModel.uiState
     }
 }
 
@@ -95,6 +96,7 @@ private fun Mnemonic(
     InfoField(
         value = mnemonic,
         label = stringResource(R.string.mnemonic),
+        maxLength = 52,
         trailingIcon = { CopyToClipboardButton(mnemonic) },
     )
 }

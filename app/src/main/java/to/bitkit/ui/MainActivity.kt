@@ -7,15 +7,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationAdd
@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,11 +40,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -56,52 +60,22 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val viewModel by viewModels<MainViewModel>()
-    private val sharedViewModel by viewModels<SharedViewModel>()
+    val viewModel by viewModels<SharedViewModel>()
+    val walletViewModel by viewModels<WalletViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        sharedViewModel.logInstanceHashCode()
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
-                MainScreen(viewModel) {
-                    WalletScreen(viewModel) {
-
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Debug",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceAround,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                TextButton(viewModel::debugDb) { Text("Debug DB") }
-                                TextButton(viewModel::debugKeychain) { Text("Debug Keychain") }
-                                TextButton(viewModel::debugWipeBdk) { Text("Wipe BDK") }
-                            }
+                MainScreen(walletViewModel) {
+                    val uiState = walletViewModel.uiState.collectAsStateWithLifecycle()
+                    Crossfade(uiState, label = "ContentCrossfade") {
+                        when (val state = it.value) {
+                            is MainUiState.Loading -> LoadingScreen()
+                            is MainUiState.Content -> WalletScreen(walletViewModel, state, debugUi(state))
+                            is MainUiState.Error -> ErrorScreen(state)
                         }
-
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Notifications",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceAround,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                TextButton(sharedViewModel::registerForNotifications) { Text("Register Device") }
-                                TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
-                            }
-                        }
-
-                        Peers(viewModel.peers, viewModel::togglePeerConnection)
-                        Channels(viewModel.channels, viewModel::closeChannel)
                     }
                 }
             }
@@ -109,10 +83,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// region scaffold
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: WalletViewModel = hiltViewModel(),
     startContent: @Composable () -> Unit = {},
 ) {
     val navController = rememberNavController()
@@ -148,8 +123,7 @@ private fun MainScreen(
                             modifier = Modifier,
                         )
                     }
-                }
-            )
+                })
         },
         bottomBar = {
             NavigationBar(tonalElevation = 5.dp) {
@@ -179,9 +153,8 @@ private fun MainScreen(
     ) { padding ->
         Box(
             modifier = Modifier
-                .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .padding(padding)
         ) {
             AppNavHost(
                 navController = navController,
@@ -192,7 +165,38 @@ private fun MainScreen(
         }
     }
 }
+// endregion
 
+@Composable
+fun LoadingScreen() {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+fun ErrorScreen(uiState: MainUiState.Error) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Text(
+            text = uiState.title,
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            text = uiState.message,
+            style = MaterialTheme.typography.titleSmall,
+        )
+    }
+}
+
+// region helpers
 @Composable
 private fun NotificationButton() {
     val context = LocalContext.current
@@ -214,9 +218,7 @@ private fun NotificationButton() {
             pushNotification(
                 title = "Bitkit Notification",
                 text = "Short custom notification description",
-                bigText = "Much longer text that cannot fit one line " +
-                    "because the lightning channel has been updated " +
-                    "via a push notification bro…",
+                bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
             )
         }
         Unit
@@ -232,3 +234,40 @@ private fun NotificationButton() {
         )
     }
 }
+// endregion
+
+// region debug
+fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Debug",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.SpaceAround,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            TextButton(viewModel::debugDb) { Text("Debug DB") }
+            TextButton(viewModel::debugKeychain) { Text("Debug Keychain") }
+            TextButton(viewModel::debugWipeBdk) { Text("Wipe BDK") }
+        }
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.notifications),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.SpaceAround,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            TextButton(viewModel::registerForNotifications) { Text("Register Device") }
+            TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
+        }
+    }
+    Peers(uiState.peers, walletViewModel::disconnectPeer)
+    Channels(uiState.channels, walletViewModel::closeChannel)
+}
+// endregion
