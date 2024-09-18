@@ -84,9 +84,9 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.material)
     implementation(libs.datastore.preferences)
-    // BDK + LDK
+    // Crypto
     implementation(libs.bdk.android)
-    implementation(libs.bitcoinj.core)
+    implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android)
     // Firebase
     implementation(platform(libs.firebase.bom))

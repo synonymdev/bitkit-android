@@ -2,7 +2,6 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import org.bitcoinj.core.ECKey
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.BlocktankClient
@@ -12,6 +11,8 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.LSP
+import to.bitkit.ext.hex
+import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -23,6 +24,7 @@ class BlocktankService @Inject constructor(
     private val client: BlocktankClient,
     private val lightningService: LightningService,
     private val keychain: Keychain,
+    private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
 
     // region notifications
@@ -36,15 +38,15 @@ class BlocktankService @Inject constructor(
 
         val signature = lightningService.sign(messageToSign)
 
-        val keypair = ECKey()
-        val publicKey = keypair.publicKeyAsHex
+        val keypair = crypto.generateKeyPair()
+        val publicKey = keypair.publicKey.hex
         Log.d(LSP, "Notification encryption public key: $publicKey")
 
         // New keypair for each token registration
         if (keychain.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
             keychain.delete(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)
         }
-        keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privKeyBytes)
+        keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
         val payload = RegisterDeviceRequest(
             deviceToken = deviceToken,

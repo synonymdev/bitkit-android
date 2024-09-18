@@ -11,7 +11,7 @@ val ByteArray.hex: String get() = joinToString("") { "%02x".format(it) }
 
 val String.hex: ByteArray
     get() {
-        require(length % 2 == 0) { "Cannot convert string of uneven length to hex ByteArray: $this" }
+        require(length % 2 == 0) { "Cannot convert hex string of uneven length to ByteArray: $this" }
         return chunked(2)
             .map { it.toInt(16).toByte() }
             .toByteArray()

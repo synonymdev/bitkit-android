@@ -3,7 +3,7 @@ activityCompose = "1.9.2"
 agp = "8.6.0"
 appcompat = "1.7.0"
 bdk = "1.0.0-alpha.11"
-bitcoinj = "0.16.3"
+bouncyCastle = "1.78.1"
 composeBom = "2024.09.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
 coreKtx = "1.13.1"
 datastorePrefs = "1.1.1"
@@ -33,7 +33,7 @@ workRuntimeKtx = "2.9.1"
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 bdk-android = { module = "org.bitcoindevkit:bdk-android", version.ref = "bdk" }
-bitcoinj-core = { module = "org.bitcoinj:bitcoinj-core", version.ref = "bitcoinj" } # replace with secp-ffi if published
+bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" } # replace with secp-ffi if published
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
