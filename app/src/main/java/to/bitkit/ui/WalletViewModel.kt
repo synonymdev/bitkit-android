@@ -58,22 +58,16 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             lightningService.connectPeer(peer)
             updateContentState {
-                val peers = it.peers.toMutableList().apply {
-                    replaceAll { p -> p.run { copy(isConnected = p.nodeId == nodeId) } }
-                }
-                it.copy(peers = peers)
+                it.copy(peers = lightningService.peers.orEmpty())
             }
         }
     }
 
-    private fun disconnectPeer(nodeId: String) {
-        node.disconnect(nodeId)
+    fun disconnectPeer(peer: LnPeer) {
+        node.disconnect(peer.nodeId)
 
         updateContentState {
-            val peers = it.peers.toMutableList().apply {
-                replaceAll { p -> p.takeIf { pp -> pp.nodeId == nodeId }?.copy(isConnected = false) ?: p }
-            }
-            it.copy(peers = peers)
+            it.copy(peers = lightningService.peers.orEmpty())
         }
     }
 
@@ -118,11 +112,6 @@ class WalletViewModel @Inject constructor(
             sync()
         }
     }
-
-    fun togglePeerConnection(peer: LnPeer) {
-        if (peer.isConnected) disconnectPeer(peer.nodeId)
-        else connectPeer(peer)
-    }
     // endregion
 }
 
@@ -143,5 +132,7 @@ sealed class MainUiState {
         val title: String = "Error Title",
         val message: String = "Error short description.",
     ) : MainUiState()
+
+    fun asContent() = this as? Content
 }
 // endregion

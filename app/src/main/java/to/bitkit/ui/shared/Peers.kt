@@ -1,15 +1,24 @@
 package to.bitkit.ui.shared
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,11 +33,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.env.LnPeer
+import to.bitkit.ext.toast
 
 @Composable
 internal fun Peers(
     peers: List<LnPeer>,
-    onToggle: (LnPeer) -> Unit,
+    onDisconnect: (LnPeer) -> Unit,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -40,11 +50,11 @@ internal fun Peers(
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = peers.filter { it.isConnected }.size.toString(),
+                text = peers.size.toString(),
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        peers.sortedByDescending { it.isConnected }.forEachIndexed { i, it ->
+        peers.forEachIndexed { i, it ->
             if (i > 0 && peers.size > 1) {
                 HorizontalDivider()
             }
@@ -52,38 +62,32 @@ internal fun Peers(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TogglePeerIcon(it.isConnected) { onToggle(it) }
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(color = colorScheme.primary, shape = CircleShape)
+                )
                 Text(
                     text = it.nodeId,
                     style = MaterialTheme.typography.labelSmall,
                     overflow = TextOverflow.Ellipsis,
                     maxLines = 1,
+                    modifier = Modifier.weight(1f)
                 )
+                IconButton(
+                    onClick = {
+                        onDisconnect(it)
+                        toast("Peer disconnected.")
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudOff,
+                        contentDescription = stringResource(R.string.disconnect),
+                        tint = colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun TogglePeerIcon(
-    isActive: Boolean,
-    onClick: () -> Unit,
-) {
-    val (icon, color) = Pair(
-        if (isActive) Icons.Default.Cloud else Icons.Default.CloudOff,
-        if (isActive) colorScheme.primary else colorScheme.error,
-    )
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .border(BorderStroke(1.2.dp, colorScheme.onBackground.copy(alpha = .2f)), MaterialTheme.shapes.medium)
-            .size(28.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = stringResource(R.string.status),
-            tint = color,
-            modifier = Modifier.size(16.dp),
-        )
     }
 }

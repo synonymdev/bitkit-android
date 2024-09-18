@@ -6,20 +6,14 @@ data class LnPeer(
     val nodeId: String,
     val host: String,
     val port: String,
-    val isConnected: Boolean = false,
-    val isPersisted: Boolean = false,
 ) {
     constructor(
         nodeId: String,
         address: String,
-        isConnected: Boolean = false,
-        isPersisted: Boolean = false,
     ) : this(
         nodeId,
         address.substringBefore(":"),
         address.substringAfter(":"),
-        isConnected,
-        isPersisted,
     )
 
     val address get() = "$host:$port"
@@ -29,8 +23,6 @@ data class LnPeer(
         fun PeerDetails.toLnPeer() = LnPeer(
             nodeId = nodeId,
             address = address,
-            isConnected = isConnected,
-            isPersisted = isPersisted,
         )
     }
 }

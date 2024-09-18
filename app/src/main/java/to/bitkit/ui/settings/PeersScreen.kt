@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.env.LnPeer
 import to.bitkit.env.LnPeers
+import to.bitkit.ext.toast
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.InfoField
@@ -59,11 +60,14 @@ fun PeersScreen(
                 textStyle = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(onClick = { viewModel.connectPeer(LnPeer(pubKey, host, port)) }) {
+            Button(onClick = {
+                viewModel.connectPeer(LnPeer(pubKey, host, port))
+                toast("Peer connected.")
+            }) {
                 Text(stringResource(R.string.connect))
             }
         }
-        val peers = remember { (viewModel.uiState.value as? MainUiState.Content?)?.peers.orEmpty() }
-        Peers(peers, viewModel::togglePeerConnection)
+        val peers = remember { viewModel.uiState.value.asContent()?.peers.orEmpty() }
+        Peers(peers, viewModel::disconnectPeer)
     }
 }

@@ -255,7 +255,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Notifications",
+            text = stringResource(R.string.notifications),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
         )
@@ -267,7 +267,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
             TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
         }
     }
-    Peers(uiState.peers.toMutableStateList(), walletViewModel::togglePeerConnection)
-    Channels(uiState.channels.toMutableStateList(), walletViewModel::closeChannel)
+    Peers(uiState.peers, walletViewModel::disconnectPeer)
+    Channels(uiState.channels, walletViewModel::closeChannel)
 }
 // endregion
