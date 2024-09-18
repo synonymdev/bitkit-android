@@ -10,7 +10,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BlocktankApi @Inject constructor(
+class BlocktankClient @Inject constructor(
     private val client: HttpClient,
 ) {
     private val baseUrl = "https://api.stag.blocktank.to"

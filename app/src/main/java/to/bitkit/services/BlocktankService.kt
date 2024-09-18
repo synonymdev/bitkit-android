@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import org.bitcoinj.core.ECKey
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.BlocktankApi
+import to.bitkit.data.BlocktankClient
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
 import to.bitkit.data.keychain.Keychain
@@ -20,7 +20,7 @@ import javax.inject.Inject
 
 class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    private val api: BlocktankApi,
+    private val client: BlocktankClient,
     private val lightningService: LightningService,
     private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
@@ -56,7 +56,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            api.registerDeviceForNotifications(payload)
+            client.registerDeviceForNotifications(payload)
         }
     }
 
@@ -72,7 +72,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            api.testNotification(deviceToken, payload)
+            client.testNotification(deviceToken, payload)
         }
     }
     // endregion
