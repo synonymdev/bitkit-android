@@ -2,11 +2,18 @@
 
 package to.bitkit.ext
 
-import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.ObjectOutputStream
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 // region hex
+@OptIn(ExperimentalStdlibApi::class)
+fun ByteArray.toHex(): String = this.toHexString()
+
+@OptIn(ExperimentalStdlibApi::class)
+fun String.fromHex(): ByteArray = this.hexToByteArray()
+
 val ByteArray.hex: String get() = joinToString("") { "%02x".format(it) }
 
 val String.hex: ByteArray
@@ -19,9 +26,11 @@ val String.hex: ByteArray
 // endregion
 
 // region base64
-fun ByteArray.toBase64(flags: Int = Base64.DEFAULT): String = Base64.encodeToString(this, flags)
+@OptIn(ExperimentalEncodingApi::class)
+fun ByteArray.toBase64(): String = Base64.encode(this)
 
-fun String.fromBase64(flags: Int = Base64.DEFAULT): ByteArray = Base64.decode(this, flags)
+@OptIn(ExperimentalEncodingApi::class)
+fun String.fromBase64(): ByteArray = Base64.decode(this)
 // endregion
 
 fun Any.convertToByteArray(): ByteArray {
@@ -30,4 +39,4 @@ fun Any.convertToByteArray(): ByteArray {
     return byteArrayOutputStream.toByteArray()
 }
 
-val String.uByteList get() = this.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+val String.uByteList get() = this.toByteArray().map { it.toUByte() }

@@ -15,6 +15,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LSP
+import to.bitkit.ext.hex
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.OnChainService
 import javax.inject.Inject
@@ -56,10 +57,15 @@ class SharedViewModel @Inject constructor(
 
     fun debugKeychain() {
         viewModelScope.launch {
+            val pKey = Keychain.Key.PUSH_NOTIFICATION_PRIVATE_KEY.name
+            val pVal = keychain.load(pKey)?.hex
+
+            Log.d(DEV, "Keychain: $pKey = $pVal")
+
             val key = "test"
             if (keychain.exists(key)) {
                 val value = keychain.loadString(key)
-                Log.d(APP, "Keychain entry: $key = $value")
+                Log.d(DEV, "Keychain entry: $key = $value")
                 keychain.delete(key)
             }
             keychain.saveString(key, "testValue")

@@ -56,20 +56,21 @@ class AndroidKeyStore(
 
     fun encrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
-        val cipher = Cipher.getInstance(transformation).apply { init(Cipher.ENCRYPT_MODE, secretKey) }
 
-        val encryptedData = cipher.doFinal(data)
+        val cipher = Cipher.getInstance(transformation).apply { init(Cipher.ENCRYPT_MODE, secretKey) }
+        val ciphertext = cipher.doFinal(data)
+
         val iv = cipher.iv
         check(iv.size == ivLength) { "Unexpected IV length: ${iv.size} ≠ $ivLength" }
 
         // Combine the IV and encrypted data into a single byte array
-        return iv + encryptedData
+        return iv + ciphertext
     }
 
     fun decrypt(data: ByteArray): ByteArray {
         val secretKey = keyStore.getKey(alias, password) as SecretKey
 
-        // Extract the IV from the beginning of the encrypted data
+        // Extract the IV from the beginning of the blob
         val iv = data.sliceArray(0 until ivLength)
         val actualEncryptedData = data.sliceArray(ivLength until data.size)
 
