@@ -24,7 +24,7 @@ import org.bitcoindevkit.WalletCreationException
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
 
-open class AppError(override val message: String) : Exception(message) {
+open class AppError(override val message: String? = null) : Exception(message) {
     companion object {
         @Suppress("ConstPropertyName")
         private const val serialVersionUID = 1L

@@ -20,7 +20,7 @@ import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.FCM
 import to.bitkit.ext.containsKeys
 import to.bitkit.ext.fromBase64
-import to.bitkit.ext.hex
+import to.bitkit.ext.fromHex
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import to.bitkit.shared.Crypto
 import to.bitkit.ui.pushNotification
@@ -103,7 +103,7 @@ internal class NotificationService : FirebaseMessagingService() {
             }
 
         val decrypted = crypto.decrypt(
-            encryptedPayload = Crypto.EncryptedPayload(ciphertext, response.iv.hex, response.tag.hex),
+            encryptedPayload = Crypto.EncryptedPayload(ciphertext, response.iv.fromHex(), response.tag.fromHex()),
             secretKey = password,
         )
 

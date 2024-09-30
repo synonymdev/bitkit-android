@@ -4,12 +4,12 @@ import org.junit.Before
 import org.junit.Test
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.ext.fromBase64
-import to.bitkit.ext.hex
+import to.bitkit.ext.fromHex
+import to.bitkit.ext.toHex
 import to.bitkit.ext.toBase64
 import to.bitkit.fcm.EncryptedNotification
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-
 
 class CryptoTest {
     private lateinit var sut: Crypto
@@ -22,13 +22,13 @@ class CryptoTest {
     @Test
     fun `it should generate valid shared secret from keypair`() {
         val (privateKey, publicKey) = sut.generateKeyPair()
-
-        val sharedSecret = sut.generateSharedSecret(privateKey, publicKey.hex)
         assertEquals(32, privateKey.size)
         assertEquals(33, publicKey.size)
+
+        val sharedSecret = sut.generateSharedSecret(privateKey, publicKey.toHex())
         assertEquals(33, sharedSecret.size)
 
-        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.hex, DERIVATION_NAME)
+        val sharedSecretHash = sut.generateSharedSecret(privateKey, publicKey.toHex(), DERIVATION_NAME)
         assertEquals(32, sharedSecretHash.size)
     }
 
@@ -47,43 +47,27 @@ class CryptoTest {
         val serverPrivateKey = serverKeys.privateKey
 
         // Step 3: Server generates shared secret using its private key and client public key
-        val serverSecret = sut.generateSharedSecret(serverPrivateKey, clientPublicKey.hex, derivationName)
+        val serverSecret = sut.generateSharedSecret(serverPrivateKey, clientPublicKey.toHex(), derivationName)
 
         // Step 4: Server encrypts data using the shared secret
         val dataToEncrypt = "Hello from the server!"
         val encrypted = sut.encrypt(dataToEncrypt.toByteArray(), serverSecret)
         val response = EncryptedNotification(
             cipher = encrypted.cipher.toBase64(),
-            iv = encrypted.iv.hex,
-            tag = encrypted.tag.hex,
-            publicKey = serverPublicKey.hex,
+            iv = encrypted.iv.toHex(),
+            tag = encrypted.tag.toHex(),
+            publicKey = serverPublicKey.toHex(),
         )
 
         // Step 5: Client generates its shared secret using its private key and server public key
         val clientSecret = sut.generateSharedSecret(clientPrivateKey, response.publicKey, derivationName)
 
-        // TODO: delete me
-        println("secret eq: " + (clientSecret contentEquals serverSecret))
-        val server = object {
-            val cipher = encrypted.cipher
-            val iv = encrypted.iv
-            val tag = encrypted.tag
-        }
-        val client = object {
-            val cipher = response.cipher.fromBase64()
-            val iv = response.iv.hex
-            val tag = response.tag.hex
-        }
-        println("cipher eq: " + (server.cipher contentEquals client.cipher))
-        println("iv eq: " + (server.iv contentEquals client.iv))
-        println("tag eq: " + (server.tag contentEquals client.tag))
-
         // Step 6: Client decrypts the payload using the shared secret
         val decrypted = sut.decrypt(
             encryptedPayload = Crypto.EncryptedPayload(
                 cipher = response.cipher.fromBase64(),
-                iv = response.iv.hex,
-                tag = response.tag.hex,
+                iv = response.iv.fromHex(),
+                tag = response.tag.fromHex(),
             ),
             secretKey = clientSecret,
         )
@@ -93,7 +77,6 @@ class CryptoTest {
         assertEquals(dataToEncrypt, decoded)
     }
 
-    @OptIn(ExperimentalUnsignedTypes::class, ExperimentalStdlibApi::class)
     @Test
     @Suppress("SpellCheckingInspection")
     fun testBlocktankEncryptedPayload() {
@@ -107,19 +90,18 @@ class CryptoTest {
         val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""
 
         // Without derivationName
-        val sharedSecret = sut.generateSharedSecret(clientPrivateKey.hex, serverPublicKey)
-        val sharedSecretOnServer = "028ce542975d6d7b2307c92e527d507b03ffb3d897eb2e0830d29f40d5efd80ee3".hex
-        assertEquals(sharedSecretOnServer.hex, sharedSecret.hex)
-        // assertEquals(expected1.sliceArray(1 until expected1.size).hex, sharedSecret.hex)
+        val sharedSecret = sut.generateSharedSecret(clientPrivateKey.fromHex(), serverPublicKey)
+        val sharedSecretOnServer = "028ce542975d6d7b2307c92e527d507b03ffb3d897eb2e0830d29f40d5efd80ee3".fromHex()
+        assertEquals(sharedSecretOnServer.toHex(), sharedSecret.toHex())
 
-        val sharedHash = sut.generateSharedSecret(clientPrivateKey.hex, serverPublicKey, derivationName)
-        val sharedHashOnServer = "3a9d552cb16dfae40feae644254c4ca46cab82e570de5662aacc4018e33b609b".hex
-        assertEquals(sharedHashOnServer.hex, sharedHash.hex)
+        val sharedHash = sut.generateSharedSecret(clientPrivateKey.fromHex(), serverPublicKey, derivationName)
+        val sharedHashOnServer = "3a9d552cb16dfae40feae644254c4ca46cab82e570de5662aacc4018e33b609b".fromHex()
+        assertEquals(sharedHashOnServer.toHex(), sharedHash.toHex())
 
-        val encryptedPayload = Crypto.EncryptedPayload(cipher = ciphertext, iv = iv.hex, tag = tag.hex)
+        val encryptedPayload = Crypto.EncryptedPayload(ciphertext, iv.fromHex(), tag.fromHex())
 
-        val value = sut.decrypt(encryptedPayload, secretKey = sharedHash)
+        val value = sut.decrypt(encryptedPayload, sharedHash)
 
-        assertEquals(decryptedPayload, String(value))
+        assertEquals(decryptedPayload, value.decodeToString())
     }
 }

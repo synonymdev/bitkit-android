@@ -8,7 +8,7 @@ import org.bouncycastle.jce.interfaces.ECPublicKey
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.jce.spec.ECPrivateKeySpec
 import org.bouncycastle.jce.spec.ECPublicKeySpec
-import to.bitkit.ext.hex
+import to.bitkit.ext.fromHex
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -55,7 +55,9 @@ class Crypto @Inject constructor() {
         val keyPairGenerator = KeyPairGenerator.getInstance("EC", "BC")
         keyPairGenerator.initialize(params)
         val keyPair = keyPairGenerator.generateKeyPair()
-        val privateKey = (keyPair.private as BCECPrivateKey).as32ByteArray()
+        val privateKey = (keyPair.private as BCECPrivateKey).d.toByteArray().let {
+            if (it.size == 33 && it[0].toInt() == 0) it.copyOfRange(1, it.size) else it
+        }
         val publicKey = (keyPair.public as BCECPublicKey).q.getEncoded(true)
 
         return KeyPair(
@@ -72,7 +74,7 @@ class Crypto @Inject constructor() {
         val keyFactory = KeyFactory.getInstance("EC", "BC")
         val privateKey = keyFactory.generatePrivate(ECPrivateKeySpec(BigInteger(1, privateKeyBytes), params))
 
-        val publicKeyPoint = params.curve.decodePoint(nodePubkey.hex)
+        val publicKeyPoint = params.curve.decodePoint(nodePubkey.fromHex())
         val publicKey = keyFactory.generatePublic(ECPublicKeySpec(publicKeyPoint, params))
 
         val baseSecret = KeyAgreement.getInstance("ECDH", "BC").run {
@@ -116,11 +118,5 @@ class Crypto @Inject constructor() {
 
     private fun sha256d(input: ByteArray): ByteArray {
         return MessageDigest.getInstance("SHA-256").run { digest(digest(input)) }
-    }
-
-    private fun BCECPrivateKey.as32ByteArray(): ByteArray {
-        return this.d.toByteArray().let {
-            if (it.size == 33 && it[0].toInt() == 0) it.copyOfRange(1, it.size) else it
-        }
     }
 }

@@ -15,7 +15,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
-import to.bitkit.ext.hex
+import to.bitkit.ext.toHex
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
 import java.time.Instant
@@ -42,7 +42,7 @@ class BlocktankService @Inject constructor(
         val signature = lightningService.sign(messageToSign)
 
         val keypair = crypto.generateKeyPair()
-        val publicKey = keypair.publicKey.hex
+        val publicKey = keypair.publicKey.toHex()
         Log.d(LSP, "Notification encryption public key: $publicKey")
 
         // New keypair for each token registration
