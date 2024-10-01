@@ -24,6 +24,7 @@ import org.bitcoindevkit.WalletCreationException
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
 
+// TODO add cause as inner exception
 open class AppError(override val message: String? = null) : Exception(message) {
     companion object {
         @Suppress("ConstPropertyName")
