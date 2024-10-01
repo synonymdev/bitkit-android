@@ -40,7 +40,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -201,7 +200,7 @@ fun ErrorScreen(uiState: MainUiState.Error) {
 private fun NotificationButton() {
     val context = LocalContext.current
     var canPush by remember {
-        mutableStateOf(!context.requiresPermission(notificationPermission))
+        mutableStateOf(!context.requiresPermission(postNotificationsPermission))
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -212,8 +211,8 @@ private fun NotificationButton() {
     }
 
     val onClick = {
-        if (context.requiresPermission(notificationPermission)) {
-            permissionLauncher.launch(notificationPermission)
+        if (context.requiresPermission(postNotificationsPermission)) {
+            permissionLauncher.launch(postNotificationsPermission)
         } else {
             pushNotification(
                 title = "Bitkit Notification",

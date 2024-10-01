@@ -46,6 +46,7 @@ internal fun Context.notificationBuilder(
         extra?.let { putExtras(it) }
     }
     val flags = FLAG_IMMUTABLE or FLAG_ONE_SHOT
+    // TODO: review if needed:
     val pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
 
     return NotificationCompat.Builder(this, channelId)
@@ -63,8 +64,9 @@ internal fun pushNotification(
     extras: Bundle? = null,
     bigText: String? = null,
     id: Int = Random.nextInt(),
+    context: Context = currentActivity(),
 ): Int {
-    currentActivity<MainActivity>().withPermission(notificationPermission) {
+    context.withPermission(postNotificationsPermission) {
         val builder = notificationBuilder(extras)
             .setContentTitle(title)
             .setContentText(text)
@@ -83,7 +85,7 @@ inline fun <T> Context.withPermission(permission: String, block: Context.() -> T
     block()
 }
 
-val notificationPermission
+val postNotificationsPermission
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.POST_NOTIFICATIONS
     } else {

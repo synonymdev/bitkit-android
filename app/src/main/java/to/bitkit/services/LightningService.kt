@@ -28,6 +28,8 @@ import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 
+typealias NodeEventHandler = suspend (Event) -> Unit
+
 class LightningService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(bgDispatcher) {
@@ -77,7 +79,7 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node set up")
     }
 
-    suspend fun start() {
+    suspend fun start(onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Log.d(LDK, "Starting node…")
@@ -85,7 +87,9 @@ class LightningService @Inject constructor(
             node.start()
         }
         Log.i(LDK, "Node started")
+
         connectToTrustedPeers()
+        listen(onEvent)
     }
 
     suspend fun stop() {
@@ -141,7 +145,7 @@ class LightningService @Inject constructor(
                 node.connect(peer.nodeId, peer.address, persist = true)
             }
             Log.i(LDK, "Connection succeeded with: $peer")
-        } catch(e: NodeException) {
+        } catch (e: NodeException) {
             Log.w(LDK, "Connection failed with: $peer", LdkError(e))
         }
     }
@@ -246,6 +250,92 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    // region events
+    private suspend fun listen(onEvent: NodeEventHandler? = null) {
+        while (true) {
+            val node = this.node ?: let {
+                Log.e(LDK, ServiceError.NodeNotStarted.message.orEmpty())
+                return
+            }
+            val event = node.nextEventAsync()
+            onEvent?.invoke(event)?.let { node.eventHandled() }
+
+            // TODO: actual event handler
+            when (event) {
+                is Event.PaymentSuccessful -> {
+                    val paymentId = event.paymentId ?: "?"
+                    val paymentHash = event.paymentHash
+                    val feePaidMsat = event.feePaidMsat ?: 0
+                    Log.i(
+                        LDK,
+                        "✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat"
+                    )
+                }
+
+                is Event.PaymentFailed -> {
+                    val paymentId = event.paymentId ?: "?"
+                    val paymentHash = event.paymentHash
+                    val reason = event.reason
+                    Log.i(LDK, "❌ Payment failed: paymentId: $paymentId paymentHash: $paymentHash reason: $reason")
+                }
+
+                is Event.PaymentReceived -> {
+                    val paymentId = event.paymentId ?: "?"
+                    val paymentHash = event.paymentHash
+                    val amountMsat = event.amountMsat
+                    Log.i(
+                        LDK,
+                        "🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat"
+                    )
+                }
+
+                is Event.PaymentClaimable -> {
+                    val paymentId = event.paymentId
+                    val paymentHash = event.paymentHash
+                    val claimableAmountMsat = event.claimableAmountMsat
+                    Log.i(
+                        LDK,
+                        "🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
+                    )
+                }
+
+                is Event.ChannelPending -> {
+                    val channelId = event.channelId
+                    val userChannelId = event.userChannelId
+                    val formerTemporaryChannelId = event.formerTemporaryChannelId
+                    val counterpartyNodeId = event.counterpartyNodeId
+                    val fundingTxo = event.fundingTxo
+                    Log.i(
+                        LDK,
+                        "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
+                    )
+                }
+
+                is Event.ChannelReady -> {
+                    val channelId = event.channelId
+                    val userChannelId = event.userChannelId
+                    val counterpartyNodeId = event.counterpartyNodeId ?: "?"
+                    Log.i(
+                        LDK,
+                        "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"
+                    )
+                }
+
+                is Event.ChannelClosed -> {
+                    val channelId = event.channelId
+                    val userChannelId = event.userChannelId
+                    val counterpartyNodeId = event.counterpartyNodeId ?: "?"
+                    val reason = event.reason
+                    Log.i(
+                        LDK,
+                        "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"
+                    )
+                }
+            }
+        }
+    }
+    // endregion
+
     // region state
     val nodeId: String? get() = node?.nodeId()
     val balances: BalanceDetails? get() = node?.listBalances()
@@ -254,20 +344,4 @@ class LightningService @Inject constructor(
     val channels: List<ChannelDetails>? get() = node?.listChannels()
     val payments: List<PaymentDetails>? get() = node?.listPayments()
     // endregion
-}
-
-internal suspend fun warmupNode() {
-    runCatching {
-        LightningService.shared.apply {
-            setup()
-            start()
-            sync()
-        }
-        OnChainService.shared.apply {
-            setup()
-            fullScan()
-        }
-    }.onFailure {
-        Log.e(LDK, "Node warmup error", it)
-    }
 }

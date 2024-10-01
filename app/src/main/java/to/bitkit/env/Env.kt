@@ -28,8 +28,11 @@ internal object Env {
             else -> TODO("Not yet implemented")
         }
     val pushNotificationFeatures = listOf(
-        // TODO: Add all others
         BlocktankNotificationType.incomingHtlc,
+        BlocktankNotificationType.mutualClose,
+        BlocktankNotificationType.orderPaymentConfirmed,
+        BlocktankNotificationType.cjitPaymentArrived,
+        BlocktankNotificationType.wakeToTimeout,
     )
     const val DERIVATION_NAME = "bitkit-notifications"
 

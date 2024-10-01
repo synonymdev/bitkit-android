@@ -2,7 +2,7 @@ package to.bitkit.models.blocktank
 
 import kotlinx.serialization.Serializable
 
-@Suppress("EnumEntryName", "unused")
+@Suppress("EnumEntryName")
 @Serializable
 enum class BlocktankNotificationType {
     incomingHtlc,

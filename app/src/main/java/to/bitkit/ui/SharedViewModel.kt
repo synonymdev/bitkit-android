@@ -13,9 +13,10 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Tag.DEV
+import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
-import to.bitkit.ext.toHex
 import to.bitkit.services.BlocktankService
+import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
 import javax.inject.Inject
 
@@ -30,7 +31,21 @@ class SharedViewModel @Inject constructor(
 ) : ViewModel() {
     fun warmupNode() {
         // TODO make it concurrent, and wait for all to finish before trying to access `lightningService.node`, etc…
-        runBlocking { to.bitkit.services.warmupNode() }
+        runBlocking {
+            runCatching {
+                LightningService.shared.apply {
+                    setup()
+                    start()
+                    sync()
+                }
+                OnChainService.shared.apply {
+                    setup()
+                    fullScan()
+                }
+            }.onFailure {
+                Log.e(LDK, "Node warmup error", it)
+            }
+        }
     }
 
     fun registerForNotifications(fcmToken: String? = null) {
@@ -56,11 +71,6 @@ class SharedViewModel @Inject constructor(
 
     fun debugKeychain() {
         viewModelScope.launch {
-            val pKey = Keychain.Key.PUSH_NOTIFICATION_PRIVATE_KEY.name
-            val pVal = keychain.load(pKey)?.toHex()
-
-            Log.d(DEV, "Keychain: $pKey = $pVal")
-
             val key = "test"
             if (keychain.exists(key)) {
                 val value = keychain.loadString(key)
