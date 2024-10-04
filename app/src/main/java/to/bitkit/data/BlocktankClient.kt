@@ -6,6 +6,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import to.bitkit.env.Env
 import to.bitkit.shared.BlocktankError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,8 +15,8 @@ import javax.inject.Singleton
 class BlocktankClient @Inject constructor(
     private val client: HttpClient,
 ) {
-    private val baseUrl = "https://api.stag.blocktank.to"
-    private val notificationsApi = "$baseUrl/notifications/api/device"
+    private val baseUrl get() = Env.blocktankBaseUrl
+    private val notificationsApi get() = "${baseUrl}/notifications/api/device"
 
     suspend fun registerDeviceForNotifications(payload: RegisterDeviceRequest) {
         post(notificationsApi, payload)

@@ -6,7 +6,7 @@ import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
-import to.bitkit.env.SEED
+import to.bitkit.env.Env.SEED
 import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
 import to.bitkit.test.BaseUnitTest

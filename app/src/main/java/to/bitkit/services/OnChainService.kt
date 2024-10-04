@@ -14,7 +14,7 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.SEED
+import to.bitkit.env.Env.SEED
 import to.bitkit.env.Tag.BDK
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
