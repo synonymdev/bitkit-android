@@ -15,6 +15,7 @@ hiltAndroidx = "1.2.0"
 junit = "4.13.2"
 junitExt = "1.2.1"
 kotlin = "2.0.20"
+kotlinxDatetime = "0.6.1"
 ksp = "2.0.20-1.0.25"
 ktor = "2.3.12"
 ldkNode = "0.3.0" # LDK_DB_VERSION in MirationService should match lib's sqlite DB version
@@ -52,6 +53,7 @@ hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAnd
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltAndroidx" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
