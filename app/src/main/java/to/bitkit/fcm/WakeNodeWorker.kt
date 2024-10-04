@@ -1,0 +1,163 @@
+package to.bitkit.fcm
+
+import android.content.Context
+import android.util.Log
+import androidx.hilt.work.HiltWorker
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import org.lightningdevkit.ldknode.Event
+import to.bitkit.di.json
+import to.bitkit.env.Tag.LDK
+import to.bitkit.models.blocktank.BlocktankNotificationType
+import to.bitkit.models.blocktank.BlocktankNotificationType.cjitPaymentArrived
+import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
+import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
+import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
+import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
+import to.bitkit.services.LightningService
+import to.bitkit.shared.withPerformanceLogging
+import to.bitkit.ui.pushNotification
+
+@HiltWorker
+class WakeNodeWorker @AssistedInject constructor(
+    @Assisted private val appContext: Context,
+    @Assisted private val workerParams: WorkerParameters,
+) : CoroutineWorker(appContext, workerParams) {
+    class VisibleNotification(
+        var title: String = "",
+        var body: String = "",
+    )
+
+    private var bestAttemptContent: VisibleNotification? = VisibleNotification()
+
+    private var notificationType: BlocktankNotificationType? = null
+    private var notificationPayload: JsonObject? = null
+
+    private val self = this
+
+    override suspend fun doWork(): Result {
+        Log.d(LDK, "Node wakeup from notification…")
+
+        notificationType = workerParams.inputData.getString("type")?.let { BlocktankNotificationType.valueOf(it) }
+        notificationPayload = workerParams.inputData.getString("payload")?.let {
+            runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
+        }
+
+        Log.d(LDK, "Worker notification type: $notificationType")
+        Log.d(LDK, "Worker notification payload: $notificationPayload")
+
+        try {
+            withPerformanceLogging {
+                LightningService.shared.apply {
+                    setup()
+                    start { handleEvent(it) }
+                    // sync() // TODO why (not) ?
+                    // stop() is done by deliver() via handleEvent()
+                }
+
+                if (self.notificationType == orderPaymentConfirmed) {
+                    val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
+
+                    if (orderId == null) {
+                        Log.e(LDK, "Missing orderId")
+                    } else {
+                        try {
+                            // TODO: #2122 Background task for opening closing channels
+                            // BlocktankService.shared.openChannel(orderId)
+                            Log.i(LDK, "Open channel request for order $orderId")
+                        } catch (e: Exception) {
+                            Log.e(LDK, "failed to open channel", e)
+                        }
+                    }
+                }
+            }
+            return Result.success()
+        } catch (e: Exception) {
+            val reason = e.message ?: "Unknown error"
+
+            self.bestAttemptContent?.title = "Lightning error"
+            self.bestAttemptContent?.body = reason
+            Log.e(LDK, "Lightning error", e)
+            self.deliver()
+
+            return Result.failure(workDataOf("Reason" to reason))
+        }
+    }
+
+    /**
+     * Listens for LDK events and delivers the notification if the event matches the notification type.
+     * @param event The LDK event to check.
+     */
+    private suspend fun handleEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived -> {
+                bestAttemptContent?.title = "Payment Received"
+                bestAttemptContent?.body = "⚡ ${event.amountMsat / 1000u}"
+                if (self.notificationType == incomingHtlc) {
+                    self.deliver()
+                }
+            }
+
+            is Event.ChannelPending -> {
+                self.bestAttemptContent?.title = "Channel Opened"
+                self.bestAttemptContent?.body = "Pending"
+                // Don't deliver, give a chance for channelReady event to update the content if it's a turbo channel
+            }
+
+            is Event.ChannelReady -> {
+                if (self.notificationType == cjitPaymentArrived) {
+                    self.bestAttemptContent?.title = "Payment received"
+                    self.bestAttemptContent?.body = "Via new channel"
+
+                    LightningService.shared.channels?.first { it.channelId == event.channelId }?.let { channel ->
+                        self.bestAttemptContent?.title = "Received ⚡ ${channel.outboundCapacityMsat / 1000u} sats"
+                    }
+                } else if (self.notificationType == orderPaymentConfirmed) {
+                    self.bestAttemptContent?.title = "Channel opened"
+                    self.bestAttemptContent?.body = "Ready to send"
+                }
+                self.deliver()
+            }
+
+            is Event.ChannelClosed -> {
+                if (self.notificationType == mutualClose) {
+                    self.bestAttemptContent?.title = "Channel closed"
+                    self.bestAttemptContent?.body = "Balance moved from spending to savings"
+                } else if (self.notificationType == orderPaymentConfirmed) {
+                    self.bestAttemptContent?.title = "Channel failed to open in the background"
+                    self.bestAttemptContent?.body = "Please try again"
+                }
+                self.deliver()
+            }
+
+            is Event.PaymentSuccessful -> Unit
+            is Event.PaymentClaimable -> Unit
+
+            is Event.PaymentFailed -> {
+                self.bestAttemptContent?.title = "Payment failed"
+                self.bestAttemptContent?.body = "⚡ ${event.reason}"
+                self.deliver()
+
+                if (self.notificationType == wakeToTimeout) {
+                    self.deliver()
+                }
+            }
+        }
+    }
+
+    private suspend fun deliver() {
+        LightningService.shared.stop()
+
+        bestAttemptContent?.run {
+            pushNotification(title, body, context = appContext)
+            Log.i(LDK, "Delivered notification")
+        }
+    }
+}

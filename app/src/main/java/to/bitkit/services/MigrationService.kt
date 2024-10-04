@@ -9,7 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import org.ldk.structs.KeysManager
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.LDK
-import to.bitkit.ext.hex
+import to.bitkit.ext.toHex
 import to.bitkit.shared.ServiceError
 import java.io.File
 import javax.inject.Inject
@@ -73,7 +73,7 @@ class MigrationService @Inject constructor(
             val channelMonitor = read32BytesChannelMonitor(monitor, entropySource, signerProvider).takeIf { it.is_ok }
                 ?.let { it as? ChannelMonitorDecodeResultTuple }?.res?._b
                 ?: throw ServiceError.LdkToLdkNodeMigration
-            val fundingTx = channelMonitor._funding_txo._a._txid?.reversedArray()?.hex
+            val fundingTx = channelMonitor._funding_txo._a._txid?.reversedArray()?.toHex()
                 ?: throw ServiceError.LdkToLdkNodeMigration
             val index = channelMonitor._funding_txo._a._index
             val key = "${fundingTx}_$index"

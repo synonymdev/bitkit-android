@@ -5,6 +5,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import to.bitkit.shared.BlocktankError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -51,11 +52,6 @@ data class TestNotificationRequest(
     data class Data(
         val source: String,
         val type: String,
-        val payload: Payload,
-    ) {
-        @Serializable
-        data class Payload(
-            val secretMessage: String,
-        )
-    }
+        val payload: JsonObject,
+    )
 }

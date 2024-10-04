@@ -2,6 +2,7 @@ package to.bitkit.shared
 
 import android.util.Log
 import to.bitkit.env.Tag.PERF
+import java.time.Instant
 import kotlin.system.measureTimeMillis
 
 internal inline fun <T> measured(
@@ -16,6 +17,21 @@ internal inline fun <T> measured(
 
     val threadName = Thread.currentThread().name
     Log.v(PERF, "$functionName took $elapsed seconds on $threadName")
+
+    return result
+}
+
+internal inline fun <T> withPerformanceLogging(block: () -> T): T {
+    val startTime = System.currentTimeMillis()
+    val startTimeFormatted = Instant.ofEpochMilli(startTime).toString()
+    Log.v(PERF, "Start Time: $startTimeFormatted")
+
+    val result: T = block()
+
+    val endTime = System.currentTimeMillis()
+    val endTimeFormatted = Instant.ofEpochMilli(endTime).toString()
+    val duration = (endTime - startTime) / 1000.0
+    Log.v(PERF, "End Time: $endTimeFormatted, Duration: $duration seconds")
 
     return result
 }

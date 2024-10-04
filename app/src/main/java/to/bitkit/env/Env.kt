@@ -4,6 +4,7 @@ import android.util.Log
 import to.bitkit.BuildConfig
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
+import to.bitkit.models.blocktank.BlocktankNotificationType
 import kotlin.io.path.Path
 import org.lightningdevkit.ldknode.Network as LdkNetwork
 
@@ -26,6 +27,14 @@ internal object Env {
             Network.Regtest -> "https://electrs-regtest.synonym.to"
             else -> TODO("Not yet implemented")
         }
+    val pushNotificationFeatures = listOf(
+        BlocktankNotificationType.incomingHtlc,
+        BlocktankNotificationType.mutualClose,
+        BlocktankNotificationType.orderPaymentConfirmed,
+        BlocktankNotificationType.cjitPaymentArrived,
+        BlocktankNotificationType.wakeToTimeout,
+    )
+    const val DERIVATION_NAME = "bitkit-notifications"
 
     object Storage {
         private var base = ""
