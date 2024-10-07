@@ -251,6 +251,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
             TextButton(viewModel::debugKeychain) { Text("Debug Keychain") }
             TextButton(viewModel::debugWipeBdk) { Text("Wipe BDK") }
         }
+        TextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(

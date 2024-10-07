@@ -30,6 +30,8 @@ class BlocktankService @Inject constructor(
     private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    suspend fun getInfo() = ServiceQueue.LSP.background { client.getInfo() }
+
     // region notifications
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
@@ -61,7 +63,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            client.registerDeviceForNotifications(payload)
+            client.registerDevice(payload)
         }
     }
 

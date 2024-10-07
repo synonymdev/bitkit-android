@@ -38,6 +38,8 @@ internal object Env {
             WalletNetwork.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")
         }
+    val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
+    val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
     val pushNotificationFeatures = listOf(
         BlocktankNotificationType.incomingHtlc,
         BlocktankNotificationType.mutualClose,

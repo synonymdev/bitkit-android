@@ -2,6 +2,41 @@ package to.bitkit.models.blocktank
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import to.bitkit.models.blocktank.CreateOrderOptions.WakeToOpen
+
+@Serializable
+data class CreateOrderRequest(
+    val lspBalanceSat: Int,
+    val channelExpiryWeeks: Int,
+    // region options
+    val clientBalanceSat: Int = 0,
+    val lspNodeId: String? = null,
+    val couponCode: String = "",
+    val source: String? = null,
+    val discountCode: String? = null,
+    val zeroConf: Boolean = false,
+    val zeroConfPayment: Boolean? = null,
+    val zeroReserve: Boolean = false,
+    val wakeToOpen: WakeToOpen? = null,
+    val nodeId: String? = null,
+    val refundOnchainAddress: String? = null,
+    // endregion
+) {
+    fun withOptions(options: CreateOrderOptions): CreateOrderRequest {
+        return this.copy(
+            lspNodeId = options.lspNodeId,
+            couponCode = options.couponCode,
+            source = options.source,
+            discountCode = options.discountCode,
+            zeroConf = options.zeroConf,
+            zeroConfPayment = options.zeroConfPayment,
+            zeroReserve = options.zeroReserve,
+            wakeToOpen = options.wakeToOpen,
+            nodeId = options.nodeId,
+            refundOnchainAddress = options.refundOnchainAddress,
+        )
+    }
+}
 
 @Serializable
 data class CreateOrderOptions(
@@ -9,7 +44,7 @@ data class CreateOrderOptions(
      * Initial number of satoshi the client wants to provide on their channel side. The client pays this balance
      * to the LSP. The LSP will push the balance to the LSP on channel creation. Defaults to 0.
      */
-    val clientBalanceSat: Int,
+    val clientBalanceSat: Int = 0,
 
     /**
      * Node id the client wants to receive the channel from. The id must come from the node list provided by `getInfo`.
@@ -20,7 +55,7 @@ data class CreateOrderOptions(
     /**
      * deprecated: Use `source` field instead.
      */
-    val couponCode: String,
+    val couponCode: String = "",
 
     /**
      * What created this order. Example: 'bitkit', 'widget'.
@@ -35,7 +70,7 @@ data class CreateOrderOptions(
     /**
      * If the channel opened should be a zeroConf channel, aka. turboChannel
      */
-    val zeroConf: Boolean,
+    val zeroConf: Boolean = false,
 
     /**
      * If the onchain payment should be accepted without any block confirmations.
@@ -45,7 +80,7 @@ data class CreateOrderOptions(
     /**
      * Allow the peer to have zero channel reserve (dust limit).
      */
-    val zeroReserve: Boolean,
+    val zeroReserve: Boolean = false,
 
     /**
      * Node that should be waken up via a push notification as soon as
@@ -65,6 +100,7 @@ data class CreateOrderOptions(
      * User entered refund onchain address.
      */
     val refundOnchainAddress: String? = null,
+    // endregion
 ) {
     @Serializable
     data class WakeToOpen(
@@ -77,16 +113,4 @@ data class CreateOrderOptions(
         /** Signature `channelOpen-${ISO-timestamp}` created by the private key of the node. */
         val signature: String,
     )
-
-    companion object {
-        fun initWithDefaultsinitWithDefaults() = CreateOrderOptions(
-            clientBalanceSat = 0,
-            lspNodeId = null,
-            couponCode = "",
-            zeroConf = false,
-            zeroReserve = false,
-            zeroConfPayment = null,
-            wakeToOpen = null
-        )
-    }
 }
