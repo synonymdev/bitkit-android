@@ -26,7 +26,7 @@ import to.bitkit.shared.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private typealias IgnoreResponse = Unit
+private typealias IgnoreResponse = String
 
 @Singleton
 class BlocktankClient @Inject constructor(

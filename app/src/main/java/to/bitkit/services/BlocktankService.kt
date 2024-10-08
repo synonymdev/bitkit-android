@@ -15,11 +15,10 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 class BlocktankService @Inject constructor(
@@ -38,7 +37,7 @@ class BlocktankService @Inject constructor(
 
         Log.d(LSP, "Registering device for notifications…")
 
-        val isoTimestamp = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+        val isoTimestamp = nowTimestamp()
         val messageToSign = "$DERIVATION_NAME$deviceToken$isoTimestamp"
 
         val signature = lightningService.sign(messageToSign)
@@ -58,7 +57,7 @@ class BlocktankService @Inject constructor(
             publicKey = publicKey,
             features = Env.pushNotificationFeatures.map { it.toString() },
             nodeId = nodeId,
-            isoTimestamp = isoTimestamp,
+            isoTimestamp = "$isoTimestamp",
             signature = signature,
         )
 
