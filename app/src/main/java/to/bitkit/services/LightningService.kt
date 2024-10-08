@@ -3,6 +3,7 @@ package to.bitkit.services
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BuildException
@@ -19,14 +20,15 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.LnPeer
-import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.env.Env.SEED
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.uByteList
+import to.bitkit.models.LnPeer
+import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
@@ -79,7 +81,7 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node set up")
     }
 
-    suspend fun start(onEvent: NodeEventHandler? = null) {
+    suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Log.d(LDK, "Starting node…")
@@ -89,7 +91,14 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node started")
 
         connectToTrustedPeers()
-        onEvent?.let { listen(it) }
+
+        onEvent?.let {
+            if (timeout != null) {
+                withTimeout(timeout) { listen(it) }
+            } else {
+                listen(it)
+            }
+        }
     }
 
     suspend fun stop() {
@@ -261,76 +270,80 @@ class LightningService @Inject constructor(
             onEvent?.invoke(event)?.let { node.eventHandled() }
 
             // TODO: actual event handler
-            when (event) {
-                is Event.PaymentSuccessful -> {
-                    val paymentId = event.paymentId ?: "?"
-                    val paymentHash = event.paymentHash
-                    val feePaidMsat = event.feePaidMsat ?: 0
-                    Log.i(
-                        LDK,
-                        "✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat"
-                    )
-                }
+            logEvent(event)
+        }
+    }
 
-                is Event.PaymentFailed -> {
-                    val paymentId = event.paymentId ?: "?"
-                    val paymentHash = event.paymentHash
-                    val reason = event.reason
-                    Log.i(LDK, "❌ Payment failed: paymentId: $paymentId paymentHash: $paymentHash reason: $reason")
-                }
+    private fun logEvent(event: Event) {
+        when (event) {
+            is Event.PaymentSuccessful -> {
+                val paymentId = event.paymentId ?: "?"
+                val paymentHash = event.paymentHash
+                val feePaidMsat = event.feePaidMsat ?: 0
+                Log.i(
+                    LDK,
+                    "✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat"
+                )
+            }
 
-                is Event.PaymentReceived -> {
-                    val paymentId = event.paymentId ?: "?"
-                    val paymentHash = event.paymentHash
-                    val amountMsat = event.amountMsat
-                    Log.i(
-                        LDK,
-                        "🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat"
-                    )
-                }
+            is Event.PaymentFailed -> {
+                val paymentId = event.paymentId ?: "?"
+                val paymentHash = event.paymentHash
+                val reason = event.reason
+                Log.i(LDK, "❌ Payment failed: paymentId: $paymentId paymentHash: $paymentHash reason: $reason")
+            }
 
-                is Event.PaymentClaimable -> {
-                    val paymentId = event.paymentId
-                    val paymentHash = event.paymentHash
-                    val claimableAmountMsat = event.claimableAmountMsat
-                    Log.i(
-                        LDK,
-                        "🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
-                    )
-                }
+            is Event.PaymentReceived -> {
+                val paymentId = event.paymentId ?: "?"
+                val paymentHash = event.paymentHash
+                val amountMsat = event.amountMsat
+                Log.i(
+                    LDK,
+                    "🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat"
+                )
+            }
 
-                is Event.ChannelPending -> {
-                    val channelId = event.channelId
-                    val userChannelId = event.userChannelId
-                    val formerTemporaryChannelId = event.formerTemporaryChannelId
-                    val counterpartyNodeId = event.counterpartyNodeId
-                    val fundingTxo = event.fundingTxo
-                    Log.i(
-                        LDK,
-                        "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
-                    )
-                }
+            is Event.PaymentClaimable -> {
+                val paymentId = event.paymentId
+                val paymentHash = event.paymentHash
+                val claimableAmountMsat = event.claimableAmountMsat
+                Log.i(
+                    LDK,
+                    "🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
+                )
+            }
 
-                is Event.ChannelReady -> {
-                    val channelId = event.channelId
-                    val userChannelId = event.userChannelId
-                    val counterpartyNodeId = event.counterpartyNodeId ?: "?"
-                    Log.i(
-                        LDK,
-                        "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"
-                    )
-                }
+            is Event.ChannelPending -> {
+                val channelId = event.channelId
+                val userChannelId = event.userChannelId
+                val formerTemporaryChannelId = event.formerTemporaryChannelId
+                val counterpartyNodeId = event.counterpartyNodeId
+                val fundingTxo = event.fundingTxo
+                Log.i(
+                    LDK,
+                    "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
+                )
+            }
 
-                is Event.ChannelClosed -> {
-                    val channelId = event.channelId
-                    val userChannelId = event.userChannelId
-                    val counterpartyNodeId = event.counterpartyNodeId ?: "?"
-                    val reason = event.reason
-                    Log.i(
-                        LDK,
-                        "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"
-                    )
-                }
+            is Event.ChannelReady -> {
+                val channelId = event.channelId
+                val userChannelId = event.userChannelId
+                val counterpartyNodeId = event.counterpartyNodeId ?: "?"
+                Log.i(
+                    LDK,
+                    "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"
+                )
+            }
+
+            is Event.ChannelClosed -> {
+                val channelId = event.channelId
+                val userChannelId = event.userChannelId
+                val counterpartyNodeId = event.counterpartyNodeId ?: "?"
+                val reason = event.reason
+                Log.i(
+                    LDK,
+                    "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"
+                )
             }
         }
     }

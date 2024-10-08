@@ -24,6 +24,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.LightningService
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
+import kotlin.time.Duration.Companion.hours
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
@@ -57,7 +58,7 @@ class WakeNodeWorker @AssistedInject constructor(
             withPerformanceLogging {
                 LightningService.shared.apply {
                     setup()
-                    start { handleEvent(it) }
+                    start(timeout = 2.hours) { handleEvent(it) }
                     // sync() // TODO why (not) ?
                     // stop() is done by deliver() via handleEvent()
                 }
