@@ -24,6 +24,7 @@ data class CreateOrderRequest(
 ) {
     fun withOptions(options: CreateOrderOptions): CreateOrderRequest {
         return this.copy(
+            clientBalanceSat = options.clientBalanceSat,
             lspNodeId = options.lspNodeId,
             couponCode = options.couponCode,
             source = options.source,

@@ -17,7 +17,7 @@ internal object Env {
         get() = when (network) {
             WalletNetwork.REGTEST -> listOf(
                 Peers.btStaging,
-                // Peers.remote,
+                // Peers.polarToRegtest,
                 // Peers.local,
             )
 
@@ -76,15 +76,13 @@ internal object Env {
             nodeId = "03b9a456fb45d5ac98c02040d39aec77fa3eeb41fd22cf40b862b393bcfc43473a",
             address = "35.233.47.252:9400",
         )
-        val remote = LnPeer(
-            nodeId = "033f4d3032ce7f54224f4bd9747b50b7cd72074a859758e40e1ca46ffa79a34324",
-            host = "10.0.2.2",
-            port = "9737",
+        val polarToRegtest = LnPeer(
+            nodeId = "023f6e310ff049d68c64a0eb97440b998aa15fd99162317d6743d7023519862e23",
+            address = "10.0.2.2:9735",
         )
         val local = LnPeer(
             nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
-            host = "10.0.2.2",
-            port = "9738",
+            address = "10.0.2.2:9738",
         )
     }
 }
