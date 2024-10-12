@@ -109,7 +109,7 @@ data class CreateOrderOptions(
         val nodeId: String,
 
         /** Timestamp that has been used to sign the open proof. */
-        val timestamp: Instant,
+        val timestamp: String,
 
         /** Signature `channelOpen-${ISO-timestamp}` created by the private key of the node. */
         val signature: String,

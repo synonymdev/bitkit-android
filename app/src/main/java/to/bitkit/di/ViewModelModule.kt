@@ -7,6 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import to.bitkit.data.AppDb
+import to.bitkit.data.BlocktankClient
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
@@ -25,6 +26,7 @@ object ViewModelModule {
         appDb: AppDb,
         keychain: Keychain,
         blocktankService: BlocktankService,
+        blocktankClient: BlocktankClient,
         onChainService: OnChainService,
         lightningService: LightningService,
     ): WalletViewModel {
@@ -34,6 +36,7 @@ object ViewModelModule {
             appDb,
             keychain,
             blocktankService,
+            blocktankClient,
             onChainService,
             lightningService,
             firebaseMessaging = FirebaseMessaging.getInstance(),

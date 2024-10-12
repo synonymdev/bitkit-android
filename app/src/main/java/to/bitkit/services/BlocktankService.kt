@@ -17,6 +17,8 @@ import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
+import to.bitkit.models.blocktank.BtOrder
+import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
@@ -30,6 +32,34 @@ class BlocktankService @Inject constructor(
 ) : BaseCoroutineScope(bgDispatcher) {
 
     suspend fun getInfo() = ServiceQueue.LSP.background { client.getInfo() }
+
+    // region channels
+    suspend fun createOrder(spendingBalanceSats: Int, channelExpiryWeeks: Int = 6): BtOrder {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val receivingBalanceSats = spendingBalanceSats * 2 // TODO: confirm
+        val timestamp = nowTimestamp()
+        val signature = lightningService.sign("channelOpen-$timestamp")
+        val options = CreateOrderOptions().copy(
+            wakeToOpen = CreateOrderOptions.WakeToOpen(
+                nodeId = nodeId,
+                timestamp = "$timestamp",
+                signature = signature,
+            ),
+            clientBalanceSat = spendingBalanceSats,
+            nodeId = nodeId,
+            zeroConf = true,
+            zeroReserve = true,
+            zeroConfPayment = false,
+        )
+
+        val order = ServiceQueue.LSP.background {
+            client.createOrder(receivingBalanceSats, channelExpiryWeeks, options)
+        }
+
+        return order
+    }
+
+    // endregion
 
     // region channels
     suspend fun openChannel(orderId: String) {
@@ -48,8 +78,8 @@ class BlocktankService @Inject constructor(
 
         Log.d(LSP, "Registering device for notifications…")
 
-        val isoTimestamp = nowTimestamp()
-        val messageToSign = "$DERIVATION_NAME$deviceToken$isoTimestamp"
+        val timestamp = nowTimestamp()
+        val messageToSign = "$DERIVATION_NAME$deviceToken$timestamp"
 
         val signature = lightningService.sign(messageToSign)
 
@@ -68,7 +98,7 @@ class BlocktankService @Inject constructor(
             publicKey = publicKey,
             features = Env.pushNotificationFeatures.map { it.toString() },
             nodeId = nodeId,
-            isoTimestamp = "$isoTimestamp",
+            isoTimestamp = "$timestamp",
             signature = signature,
         )
 

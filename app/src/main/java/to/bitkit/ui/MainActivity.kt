@@ -52,6 +52,7 @@ import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.shared.Orders
 import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
@@ -118,7 +119,7 @@ private fun MainScreen(
                     Text(stringResource(R.string.app_name))
                 },
                 actions = {
-                    IconButton(viewModel::refresh) {
+                    IconButton(viewModel::debugSync) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
@@ -215,9 +216,19 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
         HorizontalDivider()
         NotificationButton()
-        FullWidthTextButton(viewModel::registerForNotifications) { Text("Register Device for Notifications") }
-        FullWidthTextButton(viewModel::debugLspNotifications) { Text("Test Remote Notification") }
+        FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
+        FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
     }
+
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Blocktank",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(12.dp)
+        )
+        FullWidthTextButton(viewModel::debugCreateOrder) { Text("1. Create Order") }
+    }
+    Orders(uiState.orders)
 }
 
 @Composable

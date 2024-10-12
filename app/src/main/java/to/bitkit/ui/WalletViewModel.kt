@@ -15,6 +15,7 @@ import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.data.AppDb
+import to.bitkit.data.BlocktankClient
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.UiDispatcher
@@ -24,9 +25,10 @@ import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.call
-import to.bitkit.ext.toast
 import to.bitkit.ext.first
+import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
+import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
@@ -40,6 +42,7 @@ class WalletViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
+    private val blocktankClient: BlocktankClient,
     private val onChainService: OnChainService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
@@ -85,6 +88,7 @@ class WalletViewModel @Inject constructor(
             mnemonic = SEED,
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),
+            orders = uiState.value.asContent()?.orders.orEmpty(),
         )
     }
 
@@ -94,15 +98,19 @@ class WalletViewModel @Inject constructor(
                 is Event.PaymentReceived -> {
                     toast("Received ${event.amountMsat / 1000u} sats")
                 }
+
                 is Event.ChannelPending -> {
                     toast("Channel Pending")
                 }
+
                 is Event.ChannelReady -> {
                     toast("Channel Opened")
                 }
+
                 is Event.ChannelClosed -> {
                     toast("Channel Closed")
                 }
+
                 is Event.PaymentSuccessful -> Unit
                 is Event.PaymentClaimable -> Unit
                 is Event.PaymentFailed -> Unit
@@ -225,11 +233,23 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) { blocktankService.getInfo() }
     }
 
-    fun refresh() {
+    fun debugSync() {
         _uiState.value = MainUiState.Loading
         viewModelScope.launch {
             delay(500)
             syncState()
+        }
+    }
+
+    fun debugCreateOrder() {
+        viewModelScope.launch {
+            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = 100000) }
+            uiThread.call { toast(if (result.isSuccess) "Order created" else "Failed to create order") }
+            result.getOrNull()?.let { order ->
+                updateContentState {
+                    it.copy(orders = it.orders + order)
+                }
+            }
         }
     }
     // endregion
@@ -246,6 +266,7 @@ sealed class MainUiState {
         val mnemonic: String,
         val peers: List<LnPeer>,
         val channels: List<ChannelDetails>,
+        val orders: List<BtOrder>,
     ) : MainUiState()
 
     data class Error(
