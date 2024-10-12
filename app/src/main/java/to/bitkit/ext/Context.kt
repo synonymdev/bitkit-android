@@ -37,6 +37,7 @@ internal fun toast(
     text: String,
     duration: Int = Toast.LENGTH_SHORT,
 ) {
+    Log.d(APP, "Toast shown: $text")
     currentActivity<MainActivity>().run {
         Toast.makeText(this, text, duration).show()
     }

@@ -13,6 +13,7 @@ import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.BlocktankService
+import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
@@ -25,17 +26,20 @@ class SharedViewModelTest : BaseUnitTest() {
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var blocktankService: BlocktankService = mock()
     private var onChainService: OnChainService = mock()
+    private var lightningService: LightningService = mock()
 
-    private lateinit var sut: SharedViewModel
+    private lateinit var sut: WalletViewModel
 
     @Before
     fun setUp() {
-        sut = SharedViewModel(
+        sut = WalletViewModel(
+            uiThread = testDispatcher,
             bgDispatcher = testDispatcher,
             db = db,
             keychain = keychain,
             blocktankService = blocktankService,
             onChainService = onChainService,
+            lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
         )
     }
