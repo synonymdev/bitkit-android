@@ -21,6 +21,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
 import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
@@ -30,11 +31,9 @@ import kotlin.time.Duration.Companion.hours
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
+    private val blocktankService: BlocktankService,
 ) : CoroutineWorker(appContext, workerParams) {
-    class VisibleNotification(
-        var title: String = "",
-        var body: String = "",
-    )
+    class VisibleNotification(var title: String = "", var body: String = "")
 
     private var bestAttemptContent: VisibleNotification? = VisibleNotification()
 
@@ -51,18 +50,18 @@ class WakeNodeWorker @AssistedInject constructor(
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Log.d(LDK, "Worker notification type: $notificationType")
-        Log.d(LDK, "Worker notification payload: $notificationPayload")
+        Log.d(LDK, "${this::class.simpleName} notification type: $notificationType")
+        Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
             withPerformanceLogging {
                 LightningService.shared.apply {
                     setup()
-                    start(timeout = 2.hours) { handleEvent(it) }
+                    start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
                     // sync() // TODO why (not) ?
-                    // stop() is done by deliver() via handleEvent()
                 }
 
+                // Once node is started, handle the manual channel opening if needed
                 if (self.notificationType == orderPaymentConfirmed) {
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
@@ -70,8 +69,7 @@ class WakeNodeWorker @AssistedInject constructor(
                         Log.e(LDK, "Missing orderId")
                     } else {
                         try {
-                            // TODO: #2122 Background task for opening closing channels
-                            // BlocktankService.shared.openChannel(orderId)
+                            blocktankService.openChannel(orderId)
                             Log.i(LDK, "Open channel request for order $orderId")
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)

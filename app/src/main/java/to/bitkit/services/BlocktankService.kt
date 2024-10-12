@@ -31,6 +31,17 @@ class BlocktankService @Inject constructor(
 
     suspend fun getInfo() = ServiceQueue.LSP.background { client.getInfo() }
 
+    // region channels
+    suspend fun openChannel(orderId: String) {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
+        ServiceQueue.LSP.background {
+            client.openChannel(orderId, nodeId)
+            Log.i(LSP, "Opened channel for order $orderId")
+        }
+    }
+    // endregion
+
     // region notifications
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
