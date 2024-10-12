@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -40,32 +38,28 @@ internal fun Channels(
     onChannelClose: (ChannelDetails) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Row {
             Text(
-                text = "Channels",
+                text = stringResource(R.string.channels),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "${channels.size}",
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-
         channels.forEach {
             OutlinedCard(
                 elevation = CardDefaults.cardElevation(.5.dp),
                 colors = CardDefaults.outlinedCardColors(colorScheme.background),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val outbound by remember(it) {
-                        mutableStateOf(it.outboundCapacityMsat / 1000u)
-                    }
-                    val inbound by remember(it) {
-                        mutableStateOf(it.inboundCapacityMsat / 1000u)
-                    }
+                    val outbound by remember(it) { mutableStateOf(it.outboundCapacityMsat / 1000u) }
+                    val inbound by remember(it) { mutableStateOf(it.inboundCapacityMsat / 1000u) }
 
                     ChannelItem(
-                        isActive = it.isUsable,
+                        isReady = it.isUsable,
                         channelId = it.channelId,
                         outbound = outbound.toInt(),
                         inbound = inbound.toInt(),
@@ -79,7 +73,7 @@ internal fun Channels(
 
 @Composable
 private fun ChannelItem(
-    isActive: Boolean,
+    isReady: Boolean,
     channelId: String,
     outbound: Int,
     inbound: Int,
@@ -96,7 +90,7 @@ private fun ChannelItem(
         )
         Card {
             LinearProgressIndicator(
-                color = if (isActive) colorScheme.primary else colorScheme.error,
+                color = if (isReady) colorScheme.primary else colorScheme.error,
                 trackColor = colorScheme.surfaceVariant,
                 progress = (inbound.toDouble() / (outbound + inbound))::toFloat,
                 modifier = Modifier
@@ -112,16 +106,7 @@ private fun ChannelItem(
             Text(moneyString("$inbound"), style = MaterialTheme.typography.labelSmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val (icon, color) = Pair(
-                if (isActive) Icons.Default.Cloud else Icons.Default.CloudOff,
-                if (isActive) colorScheme.primary else colorScheme.error,
-            )
-            Icon(
-                imageVector = icon,
-                contentDescription = stringResource(R.string.status),
-                tint = color,
-                modifier = Modifier.size(16.dp),
-            )
+            Text(text = if (isReady) "🟢 Ready" else "⏳ Pending", style = MaterialTheme.typography.labelLarge)
             Spacer(modifier = Modifier.weight(1f))
             TextButton(
                 onClick = onClose,
