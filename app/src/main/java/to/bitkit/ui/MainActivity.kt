@@ -52,6 +52,7 @@ import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -203,7 +204,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         Text(
             text = "Debug",
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(12.dp)
         )
         FullWidthTextButton(viewModel::debugDb) { Text("Database") }
         FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
@@ -215,7 +216,8 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         FullWidthTextButton(viewModel::debugLspNotifications) { Text("Test Remote Notification") }
     }
     Peers(uiState.peers, viewModel::disconnectPeer)
-    Channels(uiState.channels, viewModel::closeChannel)
+    Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+    Payments(viewModel)
 }
 
 @Composable

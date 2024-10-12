@@ -11,6 +11,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 val Gray100 = Color(0xFFF4F4F4)
+val Gray200 = Color(0xFFE0E0E0)
+val Gray300 = Color(0xFFBDBDBD)
 val Gray400 = Color(0xFFABABAB)
 val Brand50 = Color(0xFFFFF1EE)
 val Brand500 = Color(0xFFEC5428)
@@ -24,11 +26,12 @@ private object ColorPalette {
         primaryContainer = Brand50,
         secondary = Teal200,
         background = Color.White,
+        surface = Color.White,
         surfaceVariant = Gray100,
-        outline = Gray400,
+        outline = Gray200,
+        outlineVariant = Gray200,
         // Other default colors to override
         /*
-        surface = Color.White,
         onPrimary = Color.White,
         onSecondary = Color.Black,
         onBackground = Color.Black,

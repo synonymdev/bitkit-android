@@ -15,12 +15,14 @@ import androidx.compose.ui.graphics.RectangleShape
 fun FullWidthTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.textButtonColors(),
     content: @Composable (RowScope.() -> Unit),
 ) {
     TextButton(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
+        enabled = enabled,
         colors = colors,
         shape = RectangleShape,
     ) {

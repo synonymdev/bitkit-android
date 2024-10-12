@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.ext.toast
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.FullWidthTextButton
 
 @Composable
 fun ChannelsScreen(
@@ -25,14 +26,6 @@ fun ChannelsScreen(
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val peers = uiState.asContent()?.peers.orEmpty()
         val channels = uiState.asContent()?.channels.orEmpty()
-        Channels(channels, viewModel::closeChannel)
-        Button(
-            onClick = { viewModel.openChannel() },
-            enabled = peers.isNotEmpty(),
-        ) {
-            Text("Open channel to trusted peer")
-        }
-        HorizontalDivider()
-        PayInvoice(viewModel::payInvoice)
+        Channels(channels, peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
     }
 }

@@ -168,46 +168,19 @@ class LightningService @Inject constructor(
     // endregion
 
     // region channels
-    suspend fun openChannel(peer: LnPeer) {
-        val node = this.node ?: throw ServiceError.NodeNotSetup
-
-        // sendToAddress
-        // mine 6 blocks & wait for esplora to pick up block
-        // wait for esplora to pick up tx
-        sync()
+    suspend fun openChannel(peer: LnPeer, channelAmountSats: ULong, pushToCounterpartySats: ULong? = null) {
+        val node = this@LightningService.node ?: throw ServiceError.NodeNotSetup
 
         ServiceQueue.LDK.background {
             node.connectOpenChannel(
                 nodeId = peer.nodeId,
                 address = peer.address,
-                channelAmountSats = 50000u,
-                pushToCounterpartyMsat = null,
+                channelAmountSats = channelAmountSats,
+                pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
                 channelConfig = null,
-                announceChannel = true,
+                announceChannel = false,
             )
         }
-
-        sync()
-
-        val pendingEvent = node.nextEventAsync()
-        check(pendingEvent is Event.ChannelPending) { "Expected ChannelPending event, got $pendingEvent" }
-        node.eventHandled()
-
-        Log.d(LDK, "Channel pending with peer: ${peer.address}")
-        Log.d(LDK, "Channel funding txid: ${pendingEvent.fundingTxo.txid}")
-
-        // wait for counterparty to pickup event: ChannelPending
-        // wait for esplora to pick up tx: fundingTx
-        // mine 6 blocks & wait for esplora to pick up block
-        sync()
-
-        val readyEvent = node.nextEventAsync()
-        check(readyEvent is Event.ChannelReady) { "Expected ChannelReady event, got $readyEvent" }
-        node.eventHandled()
-
-        // wait for counterparty to pickup event: ChannelReady
-
-        Log.i(LDK, "Channel ready: ${readyEvent.userChannelId}")
     }
 
     suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String) {
