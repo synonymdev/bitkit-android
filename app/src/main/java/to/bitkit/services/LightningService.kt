@@ -3,6 +3,7 @@ package to.bitkit.services
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -93,10 +94,16 @@ class LightningService @Inject constructor(
         connectToTrustedPeers()
 
         onEvent?.let {
-            if (timeout != null) {
-                withTimeout(timeout) { listen(it) }
-            } else {
-                listen(it)
+            launch(coroutineContext) {
+                try {
+                    if (timeout != null) {
+                        withTimeout(timeout) { listen(it) }
+                    } else {
+                        listen(it)
+                    }
+                } catch (e: Exception) {
+                    Log.e(LDK, "Error in event listener", e)
+                }
             }
         }
     }
