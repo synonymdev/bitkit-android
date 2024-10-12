@@ -200,6 +200,9 @@ fun ErrorScreen(uiState: MainUiState.Error) {
 
 // region debug
 fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
+    Peers(uiState.peers, viewModel::disconnectPeer)
+    Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+    Payments(viewModel)
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Debug",
@@ -215,9 +218,6 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         FullWidthTextButton(viewModel::registerForNotifications) { Text("Register Device for Notifications") }
         FullWidthTextButton(viewModel::debugLspNotifications) { Text("Test Remote Notification") }
     }
-    Peers(uiState.peers, viewModel::disconnectPeer)
-    Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-    Payments(viewModel)
 }
 
 @Composable

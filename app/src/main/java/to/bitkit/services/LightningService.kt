@@ -171,33 +171,31 @@ class LightningService @Inject constructor(
     suspend fun openChannel(peer: LnPeer, channelAmountSats: ULong, pushToCounterpartySats: ULong? = null) {
         val node = this@LightningService.node ?: throw ServiceError.NodeNotSetup
 
-        ServiceQueue.LDK.background {
-            node.connectOpenChannel(
-                nodeId = peer.nodeId,
-                address = peer.address,
-                channelAmountSats = channelAmountSats,
-                pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
-                channelConfig = null,
-                announceChannel = false,
-            )
+        try {
+            ServiceQueue.LDK.background {
+                node.connectOpenChannel(
+                    nodeId = peer.nodeId,
+                    address = peer.address,
+                    channelAmountSats = channelAmountSats,
+                    pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
+                    channelConfig = null,
+                    announceChannel = false,
+                )
+            }
+        } catch (e: NodeException) {
+            throw LdkError(e)
         }
     }
 
     suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String) {
         val node = this.node ?: throw ServiceError.NodeNotStarted
-
-        ServiceQueue.LDK.background {
-            node.closeChannel(userChannelId, counterpartyNodeId)
+        try {
+            ServiceQueue.LDK.background {
+                node.closeChannel(userChannelId, counterpartyNodeId)
+            }
+        } catch (e: NodeException) {
+            throw LdkError(e)
         }
-
-        val event = node.nextEventAsync()
-        check(event is Event.ChannelClosed) { "Expected ChannelClosed event, got $event" }
-        node.eventHandled()
-
-        // mine 1 block & wait for esplora to pick up block
-        sync()
-
-        Log.i(LDK, "Channel closed: $userChannelId")
     }
     // endregion
 

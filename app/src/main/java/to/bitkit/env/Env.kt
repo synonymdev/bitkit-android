@@ -20,7 +20,6 @@ internal object Env {
                 // Peers.polarToRegtest,
                 // Peers.local,
             )
-
             else -> TODO("Not yet implemented")
         }
     val ldkRgsServerUrl
@@ -33,7 +32,7 @@ internal object Env {
             WalletNetwork.REGTEST -> "https://electrs-regtest.synonym.to"
             else -> TODO("Not yet implemented")
         }
-    val blocktankBaseUrl
+    private val blocktankBaseUrl
         get() = when (network) {
             WalletNetwork.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")

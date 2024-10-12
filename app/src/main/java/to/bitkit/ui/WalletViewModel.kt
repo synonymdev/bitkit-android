@@ -173,9 +173,11 @@ class WalletViewModel @Inject constructor(
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+            val result = runCatching {
+                lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+            }
             syncState()
-            uiThread.call { toast("Channel Closed.") }
+            uiThread.call { toast(if (result.isSuccess) "Channel Closed." else "Unable to Close Channel.") }
         }
     }
 

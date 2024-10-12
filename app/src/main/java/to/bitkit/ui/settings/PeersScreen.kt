@@ -18,7 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.env.Env.Peers
+import to.bitkit.env.Env
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.InfoField
@@ -32,7 +32,7 @@ fun PeersScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier,
     ) {
-        val peer = Peers.btStaging
+        val peer = Env.trustedLnPeers.first()
         var pubKey by remember { mutableStateOf(peer.nodeId) }
         val host by remember { mutableStateOf(peer.host) }
         var port by remember { mutableStateOf(peer.port) }
