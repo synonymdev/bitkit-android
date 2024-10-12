@@ -5,8 +5,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -16,6 +18,8 @@ import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
@@ -23,6 +27,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.SEED
 import to.bitkit.env.Tag.LDK
+import to.bitkit.ext.millis
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
@@ -177,7 +182,7 @@ class LightningService @Inject constructor(
                     nodeId = peer.nodeId,
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
-                    pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
+                    pushToCounterpartyMsat = pushToCounterpartySats?.millis,
                     channelConfig = null,
                     announceChannel = false,
                 )
@@ -200,38 +205,35 @@ class LightningService @Inject constructor(
     // endregion
 
     // region payments
-    suspend fun createInvoice(amountSat: ULong, description: String, expirySecs: UInt): String {
+    suspend fun receive(sat: ULong, description: String, expirySecs: UInt = 3600u): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
-            node.bolt11Payment().receive(amountMsat = amountSat * 1000u, description, expirySecs)
+            node.bolt11Payment().receive(sat.millis, description, expirySecs)
         }
     }
 
-    suspend fun payInvoice(invoice: String): Boolean {
+    suspend fun send(address: Address, sats: ULong): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Log.d(LDK, "Paying invoice: $invoice")
+        Log.i(LDK, "Sending $sats sats to $address")
 
-        ServiceQueue.LDK.background {
-            node.bolt11Payment().send(invoice)
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().sendToAddress(address, sats)
         }
-        node.eventHandled()
+    }
 
-        when (val event = node.nextEventAsync()) {
-            is Event.PaymentSuccessful -> {
-                Log.i(LDK, "Payment successful for invoice: $invoice")
-                return true
-            }
+    suspend fun send(bolt11: Bolt11Invoice, sats: ULong? = null): PaymentId {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
 
-            is Event.PaymentFailed -> {
-                Log.e(LDK, "Payment error: ${event.reason}")
-                return false
-            }
+        Log.d(LDK, "Paying bolt11: $bolt11")
 
-            else -> {
-                Log.e(LDK, "Expected PaymentSuccessful/PaymentFailed event, got $event")
-                return false
+        return ServiceQueue.LDK.background {
+            node.bolt11Payment().run {
+                when(sats != null) {
+                    true -> sendUsingAmount(bolt11, sats.millis)
+                    else -> send(bolt11)
+                }
             }
         }
     }

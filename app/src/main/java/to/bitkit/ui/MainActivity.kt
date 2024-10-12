@@ -226,9 +226,9 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(12.dp)
         )
-        FullWidthTextButton(viewModel::debugCreateOrder) { Text("1. Create Order") }
+        FullWidthTextButton(viewModel::debugBtCreateOrder) { Text("1. Create Order of 100_000 sats") }
     }
-    Orders(uiState.orders)
+    Orders(uiState.orders, viewModel::debugBtPayOrder, viewModel::debugBtManualOpenChannel)
 }
 
 @Composable
