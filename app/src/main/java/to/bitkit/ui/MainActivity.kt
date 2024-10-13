@@ -123,7 +123,6 @@ private fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
-                            modifier = Modifier,
                         )
                     }
                 })
@@ -219,16 +218,13 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
         FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
     }
-
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Blocktank",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(12.dp)
-        )
-        FullWidthTextButton(viewModel::debugBtCreateOrder) { Text("1. Create Order of 100_000 sats") }
-    }
-    Orders(uiState.orders, viewModel::debugBtPayOrder, viewModel::debugBtManualOpenChannel)
+    Orders(
+        orders = uiState.orders,
+        onSyncTap = viewModel::debugBtOrdersSync,
+        onCreateTap = viewModel::debugBtCreateOrder,
+        onPayTap = viewModel::debugBtPayOrder,
+        onManualOpenTap = viewModel::debugBtManualOpenChannel,
+    )
 }
 
 @Composable
@@ -262,5 +258,4 @@ private fun NotificationButton() {
     }
     FullWidthTextButton(onClick = onClick) { Text(text = text) }
 }
-
 // endregion

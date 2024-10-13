@@ -15,6 +15,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
+import to.bitkit.ext.first
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.models.blocktank.BtOrder
@@ -59,6 +60,17 @@ class BlocktankService @Inject constructor(
         return order
     }
 
+    suspend fun getOrders(orderIds: List<String>): List<BtOrder> {
+        return ServiceQueue.LSP.background {
+            if (orderIds.size == 1) {
+                listOfNotNull(
+                    orderIds.first?.let { client.getOrder(it) }
+                )
+            } else {
+                client.getOrders(orderIds)
+            }
+        }
+    }
     // endregion
 
     // region channels

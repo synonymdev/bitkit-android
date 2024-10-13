@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
 import android.util.Log
-import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -31,7 +30,6 @@ import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.models.blocktank.BtOrderState2
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
@@ -163,8 +161,8 @@ class WalletViewModel @Inject constructor(
     }
 
     fun openChannel() {
+        val peer = _contentState.peers.first ?: error("No peer connected to open channel.")
         viewModelScope.launch(bgDispatcher) {
-            val peer = _contentState.peers.first ?: error("No peer connected to open channel.")
             runOnUiThread { toast("Channel Pending.") }
             lightningService.openChannel(peer, 50000u, 10000u)
         }
@@ -234,9 +232,23 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun debugBtCreateOrder() {
+    fun debugBtOrdersSync() {
+        val orderIds = _contentState.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
         viewModelScope.launch {
-            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = 100_000) }
+            runCatching { blocktankService.getOrders(orderIds) }
+                .onFailure { runOnUiThread { toast("Failed to fetch orders from Blocktank.") } }
+                .onSuccess { orders ->
+                    runOnUiThread { toast("Orders synced") }
+                    updateContentState {
+                        it.copy(orders = orders)
+                    }
+                }
+        }
+    }
+
+    fun debugBtCreateOrder(sats: Int) {
+        viewModelScope.launch {
+            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 1) }
                 .onSuccess { order ->
                     updateContentState {
                         it.copy(orders = it.orders + order)
@@ -248,17 +260,15 @@ class WalletViewModel @Inject constructor(
 
     fun debugBtPayOrder(order: BtOrder) {
         viewModelScope.launch {
-            // TODO: watch this order for payment / state updates
             runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
                 .onFailure { runOnUiThread { toast("Failed to pay for order ${it.message}") } }
                 .onSuccess { txId ->
                     runOnUiThread { toast("Payment sent $txId") }
-                    // TODO: Remove fake order status update to paid (whole let block)
-                    let {
-                        val updatedOrder = order.copy(state2 = BtOrderState2.paid)
-                        updateContentState { state ->
-                            state.copy(orders = state.orders.map { if (it.id == order.id) updatedOrder else it })
-                        }
+                    // TODO: watch this order for updates
+                    launch {
+                        Log.d(DEV, "Syncing orders")
+                        delay(1500)
+                        debugBtOrdersSync()
                     }
                 }
         }
@@ -267,8 +277,8 @@ class WalletViewModel @Inject constructor(
     fun debugBtManualOpenChannel(order: BtOrder) {
         viewModelScope.launch {
             runCatching { blocktankService.openChannel(order.id) }
-                .onFailure { runOnUiThread { toast("Manual Manual open error:  ${it.message}") } }
-                .onSuccess { runOnUiThread { toast("Manual channel open success") } }
+                .onFailure { runOnUiThread { toast("Manual open error:  ${it.message}") } }
+                .onSuccess { runOnUiThread { toast("Manual open success") } }
         }
     }
     // endregion
