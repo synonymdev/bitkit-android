@@ -68,9 +68,9 @@ internal open class App : Application(), Configuration.Provider {
  *
  * **ALWAYS** retrieve the current activity functionally, processing on the result of this function.
  * */
-internal inline fun <reified T> currentActivity(): T {
-    when (val activity = App.currentActivity?.value) {
-        is T -> return activity
-        else -> throw IllegalArgumentException("Current Activity is not '${typeOf<T>()}'")
+internal inline fun <reified T> currentActivity(): T? {
+    return when (val activity = App.currentActivity?.value) {
+        is T -> activity
+        else -> null
     }
 }

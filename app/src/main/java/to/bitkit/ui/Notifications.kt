@@ -64,9 +64,9 @@ internal fun pushNotification(
     extras: Bundle? = null,
     bigText: String? = null,
     id: Int = Random.nextInt(),
-    context: Context = currentActivity(),
+    context: Context? = currentActivity(),
 ): Int {
-    context.withPermission(postNotificationsPermission) {
+    context?.withPermission(postNotificationsPermission) {
         val builder = notificationBuilder(extras)
             .setContentTitle(title)
             .setContentText(text)
