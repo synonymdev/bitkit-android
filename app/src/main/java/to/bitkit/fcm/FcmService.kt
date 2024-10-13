@@ -73,10 +73,12 @@ internal class FcmService : FirebaseMessagingService() {
 
     private fun handleAsync() {
         val work = OneTimeWorkRequestBuilder<WakeNodeWorker>()
-            .setInputData(workDataOf(
-                "type" to notificationType?.name,
-                "payload" to notificationPayload?.toString(),
-            ))
+            .setInputData(
+                workDataOf(
+                    "type" to notificationType?.name,
+                    "payload" to notificationPayload?.toString(),
+                )
+            )
             .build()
         WorkManager.getInstance(this)
             .beginWith(work)

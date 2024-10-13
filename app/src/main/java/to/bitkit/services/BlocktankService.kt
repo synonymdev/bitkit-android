@@ -34,9 +34,10 @@ class BlocktankService @Inject constructor(
 
     suspend fun getInfo() = ServiceQueue.LSP.background { client.getInfo() }
 
-    // region channels
+    // region orders
     suspend fun createOrder(spendingBalanceSats: Int, channelExpiryWeeks: Int = 6): BtOrder {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
         val receivingBalanceSats = spendingBalanceSats * 2 // TODO: confirm
         val timestamp = nowTimestamp()
         val signature = lightningService.sign("channelOpen-$timestamp")
@@ -47,7 +48,6 @@ class BlocktankService @Inject constructor(
                 signature = signature,
             ),
             clientBalanceSat = spendingBalanceSats,
-            nodeId = nodeId,
             zeroConf = true,
             zeroReserve = true,
             zeroConfPayment = false,

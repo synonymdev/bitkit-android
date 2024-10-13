@@ -230,7 +230,7 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             node.bolt11Payment().run {
-                when(sats != null) {
+                when (sats != null) {
                     true -> sendUsingAmount(bolt11, sats.millis)
                     else -> send(bolt11)
                 }

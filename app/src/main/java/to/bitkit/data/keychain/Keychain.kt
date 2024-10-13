@@ -13,10 +13,10 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.WalletNetwork
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
+import to.bitkit.models.WalletNetwork
 import to.bitkit.shared.KeychainError
 import javax.inject.Inject
 import javax.inject.Singleton
