@@ -86,7 +86,6 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
     // Crypto
-    implementation(libs.bdk.android)
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android)
     // Firebase

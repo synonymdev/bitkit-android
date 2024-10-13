@@ -10,15 +10,12 @@ import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
-import to.bitkit.data.BlocktankClient
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env.SEED
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.services.OnChainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import kotlin.test.assertEquals
@@ -30,7 +27,6 @@ class WalletViewModelTest : BaseUnitTest() {
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var blocktankService: BlocktankService = mock()
-    private var onChainService: OnChainService = mock()
     private var lightningService: LightningService = mock()
 
     private lateinit var sut: WalletViewModel
@@ -40,10 +36,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningService.nodeId).thenReturn("nodeId")
         whenever(lightningService.balances).thenReturn(mock())
         whenever(lightningService.balances?.totalLightningBalanceSats).thenReturn(1000u)
-        wheneverBlocking { onChainService.getAddress() }.thenReturn("btcAddress")
-        whenever(onChainService.balance).thenReturn(mock())
-        whenever(onChainService.balance?.total).thenReturn(mock())
-        whenever(onChainService.balance?.total?.toSat()).thenReturn(500u)
+        whenever(lightningService.balances?.totalOnchainBalanceSats).thenReturn(10_000u)
 
         sut = WalletViewModel(
             uiThread = testDispatcher,
@@ -51,7 +44,6 @@ class WalletViewModelTest : BaseUnitTest() {
             db = db,
             keychain = keychain,
             blocktankService = blocktankService,
-            onChainService = onChainService,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
         )

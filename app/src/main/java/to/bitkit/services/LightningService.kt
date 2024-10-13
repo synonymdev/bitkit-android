@@ -57,7 +57,7 @@ class LightningService @Inject constructor(
                 defaultConfig().apply {
                     storageDirPath = dir
                     logDirPath = dir
-                    network = Env.network.ldk
+                    network = Env.network
                     logLevel = LogLevel.TRACE
 
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }

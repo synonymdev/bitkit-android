@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -93,7 +91,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // region scaffold
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
     viewModel: WalletViewModel = hiltViewModel(),
@@ -217,7 +215,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         )
         FullWidthTextButton(viewModel::debugDb) { Text("Database") }
         FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
-        FullWidthTextButton(viewModel::debugWipeBdk) { Text("Wipe Storage") }
+        FullWidthTextButton(viewModel::debugWipeStorage) { Text("Wipe Storage") }
         FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
         HorizontalDivider()
         NotificationButton()

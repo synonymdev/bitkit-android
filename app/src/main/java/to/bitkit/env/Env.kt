@@ -1,11 +1,11 @@
 package to.bitkit.env
 
 import android.util.Log
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
 import to.bitkit.models.LnPeer
-import to.bitkit.models.WalletNetwork
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import kotlin.io.path.Path
 
@@ -13,10 +13,10 @@ internal object Env {
     const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
-    val network: WalletNetwork = WalletNetwork.REGTEST
+    val network = Network.REGTEST
     val trustedLnPeers
         get() = when (network) {
-            WalletNetwork.REGTEST -> listOf(
+            Network.REGTEST -> listOf(
                 Peers.btStaging,
                 // Peers.polarToRegtest,
                 // Peers.local,
@@ -26,17 +26,17 @@ internal object Env {
         }
     val ldkRgsServerUrl
         get() = when (network) {
-            WalletNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+            Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             else -> null
         }
     val esploraUrl
         get() = when (network) {
-            WalletNetwork.REGTEST -> "https://electrs-regtest.synonym.to"
+            Network.REGTEST -> "https://electrs-regtest.synonym.to"
             else -> TODO("Not yet implemented")
         }
     private val blocktankBaseUrl
         get() = when (network) {
-            WalletNetwork.REGTEST -> "https://api.stag.blocktank.to"
+            Network.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")
         }
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
@@ -58,8 +58,8 @@ internal object Env {
             Log.i(APP, "Storage path: $basePath")
         }
 
-        val ldk get() = storagePathOf(0, network.id, "ldk")
-        val bdk get() = storagePathOf(0, network.id, "bdk")
+        val ldk get() = storagePathOf(0, network.name.lowercase(), "ldk")
+        val bdk get() = storagePathOf(0, network.name.lowercase(), "bdk")
 
         private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
             require(base.isNotEmpty()) { "Base storage path cannot be empty" }

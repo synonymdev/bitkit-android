@@ -3,12 +3,10 @@ package to.bitkit.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +33,6 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.services.OnChainService
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 
@@ -46,7 +43,6 @@ class WalletViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
-    private val onChainService: OnChainService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
 ) : ViewModel() {
@@ -74,10 +70,6 @@ class WalletViewModel @Inject constructor(
                         syncState()
                         runOnUiThread { onLdkEvent(event) }
                     }
-                }
-                onChainService.let {
-                    it.setup()
-                    it.fullScan()
                 }
             }.onFailure { Log.e(APP, "Init error", it) }
             syncState()
@@ -230,9 +222,8 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun debugWipeBdk() {
-        onChainService.stop()
-        onChainService.wipeStorage()
+    fun debugWipeStorage() {
+        lightningService.wipeStorage()
     }
 
     fun debugLspNotifications() {
