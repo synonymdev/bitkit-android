@@ -29,14 +29,12 @@ import to.bitkit.R
 import to.bitkit.ext.first
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.BtOrderState2
+import to.bitkit.ui.WalletViewModel
 
 @Composable
 internal fun Orders(
     orders: List<BtOrder>,
-    onSyncTap: () -> Unit,
-    onCreateTap: (sats: Int) -> Unit,
-    onPayTap: (order: BtOrder) -> Unit,
-    onManualOpenTap: (order: BtOrder) -> Unit,
+    viewModel: WalletViewModel,
 ) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -50,7 +48,7 @@ internal fun Orders(
             Spacer(modifier = Modifier.weight(1f))
             if (orders.isNotEmpty()) {
                 BoxButton(
-                    onClick = { onSyncTap() },
+                    onClick = viewModel::debugBtOrdersSync,
                     modifier = Modifier.clip(CircleShape)
                 ) {
                     Icon(
@@ -97,7 +95,7 @@ internal fun Orders(
                 )
             }
             when (val tx = it.payment.onchain.transactions.first) {
-                null -> FullWidthTextButton(onClick = { onPayTap(it).let { } }) { Text(" Pay") }
+                null -> FullWidthTextButton(onClick = { viewModel.debugBtPayOrder(it) }) { Text(" Pay") }
                 else -> {
                     Card(shape = RectangleShape) {
                         Column(
@@ -120,11 +118,13 @@ internal fun Orders(
 
             val isPaid = it.state2 == BtOrderState2.paid
             FullWidthTextButton(
-                onClick = { onManualOpenTap(it) },
+                onClick = { viewModel.debugBtManualOpenChannel(it) },
                 enabled = isPaid,
             ) { Text(text = "Try manual open${if (!isPaid) " (requires state=paid)" else ""}") }
         }
         HorizontalDivider()
-        FullWidthTextButton(onClick = { onCreateTap(100_000) }) { Text("Create Order of 100_000 sats") }
+        FullWidthTextButton(
+            onClick = { viewModel.debugBtCreateOrder(100_000) }
+        ) { Text("Create Order of 100_000 sats") }
     }
 }

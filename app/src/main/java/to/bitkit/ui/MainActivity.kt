@@ -162,7 +162,7 @@ private fun MainScreen(
                 navController = navController,
                 viewModel = viewModel,
                 walletScreen = startContent,
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
     }
@@ -218,13 +218,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
         FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
     }
-    Orders(
-        orders = uiState.orders,
-        onSyncTap = viewModel::debugBtOrdersSync,
-        onCreateTap = viewModel::debugBtCreateOrder,
-        onPayTap = viewModel::debugBtPayOrder,
-        onManualOpenTap = viewModel::debugBtManualOpenChannel,
-    )
+    Orders(uiState.orders, viewModel)
 }
 
 @Composable
