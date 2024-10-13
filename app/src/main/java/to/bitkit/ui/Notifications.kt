@@ -19,6 +19,7 @@ import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.R
 import to.bitkit.currentActivity
+import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.FCM
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
@@ -66,6 +67,7 @@ internal fun pushNotification(
     id: Int = Random.nextInt(),
     context: Context? = currentActivity(),
 ): Int {
+    Log.d(APP, "Push notification: $title, $text")
     context?.withPermission(postNotificationsPermission) {
         val builder = notificationBuilder(extras)
             .setContentTitle(title)

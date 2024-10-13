@@ -55,6 +55,7 @@ internal class FcmService : FirebaseMessagingService() {
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
+                    sendNotification(it.title, it.message)
                     decryptPayload(it)
                 }
                 isEncryptedNotification
@@ -131,7 +132,7 @@ internal class FcmService : FirebaseMessagingService() {
         notificationPayload = payload
     }
 
-    private fun sendNotification(title: String?, body: String?, extras: Bundle) {
+    private fun sendNotification(title: String?, body: String?, extras: Bundle? = null) {
         pushNotification(title, body, extras, context = applicationContext)
     }
 
