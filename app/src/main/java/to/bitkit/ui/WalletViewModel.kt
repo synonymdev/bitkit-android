@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.data.AppDb
-import to.bitkit.data.BlocktankClient
+import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.UiDispatcher
@@ -43,7 +43,6 @@ class WalletViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
-    private val blocktankClient: BlocktankClient,
     private val onChainService: OnChainService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
@@ -71,8 +70,18 @@ class WalletViewModel @Inject constructor(
             }.onFailure { Log.e(APP, "Init error", it) }
             syncState()
 
+            launch { db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") } }
+            launch {
+                db.ordersDao().getAll().collect { dbOrders ->
+                    Log.d(APP, "Database orders sync: $dbOrders")
+                    runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+                        .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
+                        .onSuccess { btOrders ->
+                            updateContentState { it.copy(orders = btOrders) }
+                        }
+                }
+            }
             launch(coroutineContext) { sync() }
-            db.configDao().getAll().collect { Log.d(APP, "Database config sync: $it") }
         }
     }
 
@@ -250,8 +259,9 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             val result = runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 1) }
                 .onSuccess { order ->
-                    updateContentState {
-                        it.copy(orders = it.orders + order)
+                    launch {
+                        db.ordersDao().upsert(OrderEntity(order.id))
+                        Log.d(APP, "Order ID saved to DB: ${order.id}")
                     }
                 }
             runOnUiThread { toast(if (result.isSuccess) "Order created" else "Failed to create order") }
@@ -277,7 +287,7 @@ class WalletViewModel @Inject constructor(
     fun debugBtManualOpenChannel(order: BtOrder) {
         viewModelScope.launch {
             runCatching { blocktankService.openChannel(order.id) }
-                .onFailure { runOnUiThread { toast("Manual open error:  ${it.message}") } }
+                .onFailure { runOnUiThread { toast("Manual open error: ${it.message}") } }
                 .onSuccess { runOnUiThread { toast("Manual open success") } }
         }
     }

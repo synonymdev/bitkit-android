@@ -30,7 +30,6 @@ class WalletViewModelTest : BaseUnitTest() {
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var blocktankService: BlocktankService = mock()
-    private var blocktankClient: BlocktankClient = mock()
     private var onChainService: OnChainService = mock()
     private var lightningService: LightningService = mock()
 
@@ -52,7 +51,6 @@ class WalletViewModelTest : BaseUnitTest() {
             db = db,
             keychain = keychain,
             blocktankService = blocktankService,
-            blocktankClient = blocktankClient,
             onChainService = onChainService,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,

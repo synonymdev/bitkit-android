@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.first
 import to.bitkit.models.blocktank.BtOrder
+import to.bitkit.models.blocktank.BtOrderState2
 
 @Composable
 internal fun Orders(
@@ -66,14 +66,14 @@ internal fun Orders(
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        orders.forEach {
+        orders.forEachIndexed { i, it ->
             HorizontalDivider()
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(12.dp)
             ) {
                 Text(
-                    text = it.id,
+                    text = "$i. ${it.id}",
                     style = MaterialTheme.typography.titleSmall,
                     overflow = TextOverflow.Ellipsis,
                     maxLines = 1,
@@ -117,9 +117,14 @@ internal fun Orders(
                     }
                 }
             }
-            FullWidthTextButton(onClick = { onManualOpenTap(it) }) { Text("Try manual open") }
+
+            val isPaid = it.state2 == BtOrderState2.paid
+            FullWidthTextButton(
+                onClick = { onManualOpenTap(it) },
+                enabled = isPaid,
+            ) { Text(text = "Try manual open${if (!isPaid) " (requires state=paid)" else ""}") }
         }
         HorizontalDivider()
-        FullWidthTextButton({ onCreateTap(100_000) }) { Text("Create Order of 100_000 sats") }
+        FullWidthTextButton(onClick = { onCreateTap(100_000) }) { Text("Create Order of 100_000 sats") }
     }
 }
