@@ -83,11 +83,13 @@ class Keychain @Inject constructor(
 
     private val String.indexed: Preferences.Key<String>
         get() {
-            val walletIndex = runBlocking { db.configDao().getAll().first() }.first().walletIndex
+            val walletIndex = runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
 
     enum class Key {
         PUSH_NOTIFICATION_PRIVATE_KEY,
+        BIP39_MNEMONIC,
+        BIP39_PASSPHRASE,
     }
 }

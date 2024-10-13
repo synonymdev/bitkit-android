@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Tag.LDK
 import to.bitkit.models.blocktank.BlocktankNotificationType
@@ -23,6 +24,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirme
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
+import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
@@ -32,6 +34,7 @@ class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
     private val blocktankService: BlocktankService,
+    private val keychain: Keychain,
 ) : CoroutineWorker(appContext, workerParams) {
     class VisibleNotification(var title: String = "", var body: String = "")
 
@@ -54,9 +57,10 @@ class WakeNodeWorker @AssistedInject constructor(
         Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             withPerformanceLogging {
                 LightningService.shared.apply {
-                    setup()
+                    setup(mnemonic)
                     start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
                     // sync() // TODO why (not) ?
                 }

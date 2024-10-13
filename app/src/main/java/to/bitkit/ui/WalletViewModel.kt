@@ -3,10 +3,12 @@ package to.bitkit.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,12 +19,12 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.UiDispatcher
-import to.bitkit.env.Env.SEED
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LDK
@@ -54,11 +56,20 @@ class WalletViewModel @Inject constructor(
 
     private val node by lazy { lightningService.node ?: throw ServiceError.NodeNotSetup }
 
+    private val walletExists: Boolean get() {
+        return keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+    }
+
     fun start() {
+        if (!walletExists) {
+            _uiState.value = MainUiState.NoWallet
+            return
+        }
         viewModelScope.launch {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             runCatching {
                 lightningService.let {
-                    it.setup()
+                    it.setup(mnemonic)
                     it.start { event ->
                         syncState()
                         runOnUiThread { onLdkEvent(event) }
@@ -92,13 +103,13 @@ class WalletViewModel @Inject constructor(
         syncState()
     }
 
-    private suspend fun syncState() {
+    private fun syncState() {
         _uiState.value = MainUiState.Content(
             ldkNodeId = lightningService.nodeId.orEmpty(),
             ldkBalance = lightningService.balances?.totalLightningBalanceSats.toString(),
-            btcAddress = onChainService.getAddress(),
-            btcBalance = onChainService.balance?.total?.toSat().toString(),
-            mnemonic = SEED,
+            btcAddress = lightningService.newAddress().orEmpty(),
+            btcBalance = lightningService.balances?.totalOnchainBalanceSats.toString(),
+            mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty(),
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),
             orders = uiState.value.asContent()?.orders.orEmpty(),
@@ -137,7 +148,7 @@ class WalletViewModel @Inject constructor(
     }
 
     fun getNewAddress() {
-        updateContentState { it.copy(btcAddress = node.onchainPayment().newAddress()) }
+        updateContentState { it.copy(btcAddress = lightningService.newAddress().orEmpty()) }
     }
 
     fun connectPeer(peer: LnPeer) {
@@ -294,11 +305,37 @@ class WalletViewModel @Inject constructor(
         }
     }
     // endregion
+
+    fun createWallet(bip39Passphrase: String) {
+        _uiState.value = MainUiState.Loading
+
+        viewModelScope.launch {
+            val mnemonic = generateEntropyMnemonic()
+            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+            if (bip39Passphrase.isNotBlank()) {
+                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+            }
+            start()
+        }
+    }
+
+    fun restoreWallet(bip39Passphrase: String, bip39Mnemonic: String) {
+        _uiState.value = MainUiState.Loading
+
+        viewModelScope.launch {
+            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, bip39Mnemonic)
+            if (bip39Passphrase.isNotBlank()) {
+                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+            }
+            start()
+        }
+    }
 }
 
 // region state
 sealed class MainUiState {
     data object Loading : MainUiState()
+    data object NoWallet : MainUiState()
     data class Content(
         val ldkNodeId: String,
         val ldkBalance: String,

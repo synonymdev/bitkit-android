@@ -16,6 +16,7 @@ fun FullWidthTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
     colors: ButtonColors = ButtonDefaults.textButtonColors(),
     content: @Composable (RowScope.() -> Unit),
 ) {
@@ -28,7 +29,7 @@ fun FullWidthTextButton(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
+            horizontalArrangement = horizontalArrangement,
             content = content,
         )
     }

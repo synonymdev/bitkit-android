@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,7 +36,9 @@ fun WalletScreen(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier.verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(

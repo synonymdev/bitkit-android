@@ -49,7 +49,7 @@ class LightningService @Inject constructor(
 
     var node: Node? = null
 
-    fun setup(mnemonic: String = SEED) {
+    fun setup(mnemonic: String) {
         val dir = Env.Storage.ldk
 
         val builder = Builder
@@ -147,6 +147,10 @@ class LightningService @Inject constructor(
         return ServiceQueue.LDK.background {
             node.signMessage(msg)
         }
+    }
+
+    fun newAddress(): String? {
+        return node?.onchainPayment()?.newAddress()
     }
 
     // region peers

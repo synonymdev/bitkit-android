@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material3.Button
@@ -19,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.Env.SEED
@@ -29,9 +32,12 @@ fun SettingsScreen(
     navController: NavController,
     viewModel: WalletViewModel,
 ) {
+    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier,
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Text(
             text = "Settings",
@@ -57,10 +63,12 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.size(16.dp))
         Text(
-            text = "Bitcoin Wallet",
+            text = "Wallet",
             style = MaterialTheme.typography.titleMedium,
         )
-        Mnemonic(SEED) // TODO use value from viewModel.uiState
+        uiState.value.asContent()?.let {
+            Mnemonic(it.mnemonic)
+        }
     }
 }
 

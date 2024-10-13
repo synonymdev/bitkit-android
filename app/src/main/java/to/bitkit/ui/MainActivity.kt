@@ -11,8 +11,11 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imeNestedScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -40,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,6 +81,7 @@ class MainActivity : ComponentActivity() {
                     Crossfade(uiState, label = "ContentCrossfade") {
                         when (val state = it.value) {
                             is MainUiState.Loading -> LoadingScreen()
+                            is MainUiState.NoWallet -> WelcomeScreen(viewModel)
                             is MainUiState.Content -> WalletScreen(viewModel, state, debugUi(state))
                             is MainUiState.Error -> ErrorScreen(state)
                         }
@@ -88,7 +93,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // region scaffold
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MainScreen(
     viewModel: WalletViewModel = hiltViewModel(),
@@ -152,6 +157,8 @@ private fun MainScreen(
                 }
             }
         },
+        modifier = Modifier
+            .imePadding()
     ) { padding ->
         Box(
             modifier = Modifier
@@ -162,7 +169,6 @@ private fun MainScreen(
                 navController = navController,
                 viewModel = viewModel,
                 walletScreen = startContent,
-                modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
     }
