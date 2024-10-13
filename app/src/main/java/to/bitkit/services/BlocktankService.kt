@@ -41,7 +41,7 @@ class BlocktankService @Inject constructor(
         val receivingBalanceSats = spendingBalanceSats * 2 // TODO: confirm
         val timestamp = nowTimestamp()
         val signature = lightningService.sign("channelOpen-$timestamp")
-        val options = CreateOrderOptions().copy(
+        val options = CreateOrderOptions.initWithDefaults().copy(
             wakeToOpen = CreateOrderOptions.WakeToOpen(
                 nodeId = nodeId,
                 timestamp = "$timestamp",

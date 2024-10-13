@@ -10,7 +10,7 @@ data class CreateOrderRequest(
     // region options
     val clientBalanceSat: Int = 0,
     val lspNodeId: String? = null,
-    val couponCode: String = "",
+    val couponCode: String? = null,
     val source: String? = null,
     val discountCode: String? = null,
     val zeroConf: Boolean = false,
@@ -55,12 +55,12 @@ data class CreateOrderOptions(
     /**
      * deprecated: Use `source` field instead.
      */
-    val couponCode: String = "",
+    val couponCode: String,
 
     /**
      * What created this order. Example: 'bitkit', 'widget'.
      */
-    val source: String? = null,
+    val source: String?,
 
     /**
      * User entered discount code.
@@ -70,24 +70,24 @@ data class CreateOrderOptions(
     /**
      * If the channel opened should be a zeroConf channel, aka. turboChannel
      */
-    val zeroConf: Boolean = false,
+    val zeroConf: Boolean,
 
     /**
      * If the onchain payment should be accepted without any block confirmations.
      */
-    val zeroConfPayment: Boolean? = null,
+    val zeroConfPayment: Boolean?,
 
     /**
      * Allow the peer to have zero channel reserve (dust limit).
      */
-    val zeroReserve: Boolean = false,
+    val zeroReserve: Boolean,
 
     /**
      * Node that should be waken up via a push notification as soon as
      * the payment is confirmed.
      * Ownership of the node must be proven with a signature.
      */
-    val wakeToOpen: WakeToOpen? = null,
+    val wakeToOpen: WakeToOpen?,
 
     /**
      * Optional id of the node that the channel should be opened to. If supplied
@@ -113,4 +113,17 @@ data class CreateOrderOptions(
         /** Signature `channelOpen-${ISO-timestamp}` created by the private key of the node. */
         val signature: String,
     )
+
+    companion object {
+        fun initWithDefaults() = CreateOrderOptions(
+            clientBalanceSat = 0,
+            lspNodeId = null,
+            couponCode = "",
+            source = "bitkit-android",
+            zeroConf = false,
+            zeroConfPayment = null,
+            zeroReserve = false,
+            wakeToOpen = null,
+        )
+    }
 }

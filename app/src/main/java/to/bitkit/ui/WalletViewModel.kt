@@ -259,7 +259,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugBtCreateOrder(sats: Int) {
         viewModelScope.launch {
-            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 1) }
+            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
                 .onSuccess { order ->
                     launch {
                         db.ordersDao().upsert(OrderEntity(order.id))
