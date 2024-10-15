@@ -25,6 +25,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.shared.ServiceError
+import to.bitkit.shared.nameof
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
@@ -53,8 +54,8 @@ class WakeNodeWorker @AssistedInject constructor(
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Log.d(LDK, "${this::class.simpleName} notification type: $notificationType")
-        Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
+        Log.d(LDK, "${nameof(this)} notification type: $notificationType")
+        Log.d(LDK, "${nameof(this)} notification payload: $notificationPayload")
 
         try {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
