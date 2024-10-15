@@ -17,12 +17,14 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.UiDispatcher
+import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LDK
@@ -50,11 +52,10 @@ class WalletViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
-    private val node by lazy { lightningService.node ?: throw ServiceError.NodeNotSetup }
+    private val node get() = lightningService.node ?: throw ServiceError.NodeNotSetup
 
-    private val walletExists: Boolean get() {
-        return keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-    }
+    // TODO subscribe to value?
+    private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
     fun start() {
         if (!walletExists) {
@@ -222,8 +223,22 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun debugWipeStorage() {
-        lightningService.wipeStorage()
+    fun debugWipe() {
+        if (Env.network != Network.REGTEST) {
+            toast("Can only nuke on regtest.")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                lightningService.stop()
+                lightningService.wipeStorage(0)
+                keychain.wipe()
+            }.onSuccess {
+                start() // restart UI
+            }.onFailure {
+                runOnUiThread { toast("Failed to wipe: $it") }
+            }
+        }
     }
 
     fun debugLspNotifications() {

@@ -11,7 +11,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -215,7 +214,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         )
         FullWidthTextButton(viewModel::debugDb) { Text("Database") }
         FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
-        FullWidthTextButton(viewModel::debugWipeStorage) { Text("Wipe Storage") }
+        FullWidthTextButton(viewModel::debugWipe) { Text("Wipe Wallet") }
         FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
         HorizontalDivider()
         NotificationButton()

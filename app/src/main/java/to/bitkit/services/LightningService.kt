@@ -25,7 +25,7 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Env.SEED
+import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.millis
 import to.bitkit.ext.uByteList
@@ -34,6 +34,8 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import kotlin.io.path.Path
+import kotlin.io.path.deleteRecursively
 import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -50,7 +52,7 @@ class LightningService @Inject constructor(
     var node: Node? = null
 
     fun setup(mnemonic: String) {
-        val dir = Env.Storage.ldk
+        val dir = Env.ldkStorage(0)
 
         val builder = Builder
             .fromConfig(
@@ -124,9 +126,11 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node stopped.")
     }
 
-    fun wipeStorage() {
+    fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
-        TODO("Not yet implemented")
+        Log.w(APP, "Wiping lightning storage…")
+        Path(Env.ldkStorage(walletIndex)).toFile().deleteRecursively()
+        Log.i(APP, "Lightning wallet wiped")
     }
 
     suspend fun sync() {
