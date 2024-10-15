@@ -23,15 +23,15 @@ internal inline fun <T> measured(
 
 internal inline fun <T> withPerformanceLogging(block: () -> T): T {
     val startTime = System.currentTimeMillis()
-    val startTimeFormatted = Instant.ofEpochMilli(startTime).toString()
-    Log.v(PERF, "Start Time: $startTimeFormatted")
+    val startTimestamp = Instant.ofEpochMilli(startTime)
+    Log.v(PERF, "Start Time: $startTimestamp")
 
     val result: T = block()
 
     val endTime = System.currentTimeMillis()
-    val endTimeFormatted = Instant.ofEpochMilli(endTime).toString()
+    val endTimestamp = Instant.ofEpochMilli(endTime)
     val duration = (endTime - startTime) / 1000.0
-    Log.v(PERF, "End Time: $endTimeFormatted, Duration: $duration seconds")
+    Log.v(PERF, "End Time: $endTimestamp, Duration: $duration seconds")
 
     return result
 }

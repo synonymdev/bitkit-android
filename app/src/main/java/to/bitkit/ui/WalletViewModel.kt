@@ -11,8 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.LnPeer
-import to.bitkit.env.SEED
+import to.bitkit.models.LnPeer
+import to.bitkit.env.Env.SEED
 import to.bitkit.services.LightningService
 import to.bitkit.services.OnChainService
 import to.bitkit.shared.ServiceError

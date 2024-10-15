@@ -18,10 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.env.LnPeer
-import to.bitkit.env.LnPeers
+import to.bitkit.models.LnPeer
+import to.bitkit.env.Env.Peers
 import to.bitkit.ext.toast
-import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Peers
@@ -37,9 +36,9 @@ fun PeersScreen(
         Card {
             Text("⚠️ Please return to Home screen to see your updates…", Modifier.padding(12.dp))
         }
-        var pubKey by remember { mutableStateOf(LnPeers.local.nodeId) }
-        val host by remember { mutableStateOf(LnPeers.local.host) }
-        var port by remember { mutableStateOf(LnPeers.local.port) }
+        var pubKey by remember { mutableStateOf(Peers.local.nodeId) }
+        val host by remember { mutableStateOf(Peers.local.host) }
+        var port by remember { mutableStateOf(Peers.local.port) }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Connect to a Peer",

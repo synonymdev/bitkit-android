@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.material)
     implementation(libs.datastore.preferences)
+    implementation(libs.kotlinx.datetime)
     // Crypto
     implementation(libs.bdk.android)
     implementation(libs.bouncycastle.provider.jdk)

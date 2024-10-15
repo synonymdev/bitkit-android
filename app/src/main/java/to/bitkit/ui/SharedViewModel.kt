@@ -92,5 +92,9 @@ class SharedViewModel @Inject constructor(
             blocktankService.testNotification(token)
         }
     }
+
+    fun debugBlocktankInfo() {
+        viewModelScope.launch(bgDispatcher) { blocktankService.getInfo() }
+    }
     // endregion
 }

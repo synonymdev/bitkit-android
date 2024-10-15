@@ -13,7 +13,7 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Network
+import to.bitkit.models.WalletNetwork
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
@@ -73,7 +73,7 @@ class Keychain @Inject constructor(
     }
 
     suspend fun wipe() {
-        if (!Env.isDebug || Env.network != Network.Regtest) throw KeychainError.KeychainWipeNotAllowed()
+        if (!Env.isDebug || Env.network != WalletNetwork.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
 
         val keys = snapshot.asMap().keys
         context.keychain.edit { it.clear() }

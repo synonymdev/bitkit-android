@@ -59,11 +59,6 @@ sealed class KeychainError(message: String) : AppError(message) {
     class KeychainWipeNotAllowed : KeychainError("Wiping keychain is only allowed in debug mode for regtest")
 }
 
-sealed class BlocktankError(message: String) : AppError(message) {
-    class InvalidResponse(status: Int) : BlocktankError("Invalid response status code $status.")
-    class InvalidJson : BlocktankError("Invalid JSON.")
-}
-
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))

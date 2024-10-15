@@ -19,9 +19,9 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.LnPeer
-import to.bitkit.env.LnPeer.Companion.toLnPeer
-import to.bitkit.env.SEED
+import to.bitkit.models.LnPeer
+import to.bitkit.models.LnPeer.Companion.toLnPeer
+import to.bitkit.env.Env.SEED
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.uByteList
 import to.bitkit.shared.LdkError
@@ -89,7 +89,7 @@ class LightningService @Inject constructor(
         Log.i(LDK, "Node started")
 
         connectToTrustedPeers()
-        listen(onEvent)
+        onEvent?.let { listen(it) }
     }
 
     suspend fun stop() {
