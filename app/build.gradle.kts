@@ -155,3 +155,9 @@ ksp {
 room {
     schemaDirectory("$projectDir/schemas")
 }
+tasks.withType<Test> {
+    testLogging {
+        events("passed", "skipped", "failed")
+        // showStandardStreams = true
+    }
+}
