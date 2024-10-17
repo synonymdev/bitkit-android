@@ -60,8 +60,8 @@ internal fun Channels(
                 ChannelItem(
                     isReady = it.isUsable,
                     channelId = it.channelId,
-                    outbound = outbound.toInt(),
-                    inbound = inbound.toInt(),
+                    outbound = outbound.toLong(),
+                    inbound = inbound.toLong(),
                     onClose = { onChannelCloseTap(it) },
                 )
             }
@@ -78,8 +78,8 @@ internal fun Channels(
 private fun ChannelItem(
     isReady: Boolean,
     channelId: String,
-    outbound: Int,
-    inbound: Int,
+    outbound: Long,
+    inbound: Long,
     onClose: () -> Unit,
 ) {
     Column(
@@ -105,8 +105,8 @@ private fun ChannelItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(moneyString("$outbound"), style = MaterialTheme.typography.labelSmall)
-            Text(moneyString("$inbound"), style = MaterialTheme.typography.labelSmall)
+            Text(moneyString(outbound), style = MaterialTheme.typography.labelSmall)
+            Text(moneyString(inbound), style = MaterialTheme.typography.labelSmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(text = if (isReady) "✅ Ready" else "⏳ Pending", style = MaterialTheme.typography.labelMedium)

@@ -100,9 +100,9 @@ class WalletViewModel @Inject constructor(
     private fun syncState() {
         _uiState.value = MainUiState.Content(
             ldkNodeId = lightningService.nodeId.orEmpty(),
-            ldkBalance = lightningService.balances?.totalLightningBalanceSats.toString(),
+            ldkBalance = lightningService.balances?.totalLightningBalanceSats,
             btcAddress = lightningService.newAddress().orEmpty(),
-            btcBalance = lightningService.balances?.totalOnchainBalanceSats.toString(),
+            btcBalance = lightningService.balances?.totalOnchainBalanceSats,
             mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty(),
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),

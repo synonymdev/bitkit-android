@@ -73,7 +73,7 @@ fun WalletScreen(
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    text = moneyString(uiState.btcBalance),
+                    text = moneyString(uiState.btcBalance?.toLong()),
                     style = MaterialTheme.typography.titleSmall,
                 )
             }

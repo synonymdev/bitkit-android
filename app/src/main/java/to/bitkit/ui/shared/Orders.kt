@@ -97,15 +97,15 @@ internal fun Orders(
                     )
                 }
                 Text(
-                    text = "Fees: " + moneyString("${order.feeSat}"),
+                    text = "Fees: " + moneyString(order.feeSat.toLong()),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "Spending: " + moneyString("${order.clientBalanceSat}"),
+                    text = "Spending: " + moneyString(order.clientBalanceSat),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "Receiving: " + moneyString("${order.lspBalanceSat}"),
+                    text = "Receiving: " + moneyString(order.lspBalanceSat),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
