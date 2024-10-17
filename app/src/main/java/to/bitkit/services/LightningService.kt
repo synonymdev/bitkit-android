@@ -282,10 +282,11 @@ class LightningService @Inject constructor(
                 return
             }
             val event = node.nextEventAsync()
-            onEvent?.invoke(event)?.let { node.eventHandled() }
+            onEvent?.invoke(event)
 
             // TODO: actual event handler
             logEvent(event)
+            this.node?.eventHandled()
         }
     }
 
