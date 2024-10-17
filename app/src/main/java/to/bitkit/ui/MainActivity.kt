@@ -68,8 +68,6 @@ class MainActivity : ComponentActivity() {
         initNotificationChannel()
         logFcmToken()
 
-        viewModel.start()
-
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
@@ -86,6 +84,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.start()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.stop()
     }
 }
 

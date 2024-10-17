@@ -336,6 +336,12 @@ class WalletViewModel @Inject constructor(
             start()
         }
     }
+
+    fun stop() {
+        viewModelScope.launch {
+            lightningService.stop()
+        }
+    }
 }
 
 // region state
