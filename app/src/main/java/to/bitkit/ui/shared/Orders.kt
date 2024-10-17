@@ -45,6 +45,7 @@ internal fun Orders(
     orders: List<BtOrder>,
     viewModel: WalletViewModel,
 ) {
+    val activeOrders = orders.filter { it.state2 == BtOrderState2.created || it.state2 == BtOrderState2.paid }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -55,7 +56,7 @@ internal fun Orders(
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(modifier = Modifier.weight(1f))
-            if (orders.isNotEmpty()) {
+            if (activeOrders.isNotEmpty()) {
                 BoxButton(
                     onClick = viewModel::debugBtOrdersSync,
                     modifier = Modifier.clip(CircleShape)
@@ -69,11 +70,11 @@ internal fun Orders(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "${orders.size}",
+                text = "${activeOrders.size}",
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        orders.forEachIndexed { index, order ->
+        activeOrders.forEachIndexed { index, order ->
             HorizontalDivider()
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),

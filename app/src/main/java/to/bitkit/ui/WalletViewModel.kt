@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
@@ -269,6 +270,13 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             delay(500)
             syncState()
+            db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
+                runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+                    .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
+                    .onSuccess { btOrders ->
+                        updateContentState { it.copy(orders = btOrders) }
+                    }
+            }
         }
     }
 

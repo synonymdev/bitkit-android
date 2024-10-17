@@ -11,6 +11,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -20,14 +22,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -35,7 +36,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -138,42 +138,16 @@ private fun MainScreen(
                             contentDescription = "Node State",
                         )
                     }
-                    IconButton(viewModel::debugSync) {
+                    IconButton({ navController.navigate(Routes.Settings.destination) }) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.sync),
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = stringResource(R.string.settings),
                         )
                     }
                 }
             )
         },
-        bottomBar = {
-            NavigationBar(tonalElevation = 5.dp) {
-                var selected by remember { mutableIntStateOf(0) }
-                navItems.forEachIndexed { i, it ->
-                    NavigationBarItem(
-                        icon = {
-                            val icon = if (selected != i) it.icon.first else it.icon.second
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = stringResource(it.title),
-                            )
-                        },
-                        label = { Text(stringResource(it.title)) },
-                        selected = selected == i,
-                        onClick = {
-                            selected = i
-                            navController.navigate(it.route.destination) {
-                                navController.graph.startDestinationRoute?.let { popUpTo(it) }
-                                launchSingleTop = true
-                            }
-                        },
-                    )
-                }
-            }
-        },
-        modifier = Modifier
-            .imePadding()
+        modifier = Modifier.imePadding()
     ) { padding ->
         Box(
             modifier = Modifier
@@ -221,11 +195,20 @@ fun ErrorScreen(uiState: MainUiState.Error) {
 
 // region debug
 fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
-    Text(
-        text = "Debug",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.ExtraBold,
-    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "Debug",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        IconButton(viewModel::debugSync) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = stringResource(R.string.sync),
+            )
+        }
+    }
     NodeDetails(uiState)
     WalletDetails(uiState, viewModel::getNewAddress)
     Peers(uiState.peers, viewModel::disconnectPeer)

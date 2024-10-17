@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -41,8 +42,9 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Settings",
+            text = stringResource(R.string.settings),
             style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
         )
         SettingButton(
             label = "Lightning",
