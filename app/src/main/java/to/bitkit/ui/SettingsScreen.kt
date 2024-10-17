@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
 
 @Composable
@@ -32,6 +33,7 @@ fun SettingsScreen(
     viewModel: WalletViewModel,
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
+
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -42,10 +44,9 @@ fun SettingsScreen(
             text = "Settings",
             style = MaterialTheme.typography.titleLarge,
         )
-        Spacer(modifier = Modifier.size(16.dp))
-        Text(
-            text = "Lightning Node",
-            style = MaterialTheme.typography.titleMedium,
+        SettingButton(
+            label = "Lightning",
+            onClick = { navController.navigate(Routes.Lightning.destination) }
         )
         SettingButton(
             label = "Peers",
@@ -61,10 +62,6 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.size(16.dp))
-        Text(
-            text = "Wallet",
-            style = MaterialTheme.typography.titleMedium,
-        )
         uiState.value.asContent()?.let {
             Mnemonic(it.mnemonic)
         }

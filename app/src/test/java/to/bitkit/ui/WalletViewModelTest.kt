@@ -52,7 +52,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `uiState should emit Content state after sync`() = test {
         val expectedUiState = MainUiState.Content(
-            ldkNodeId = "nodeId",
+            nodeId = "nodeId",
             ldkBalance = "1000",
             btcAddress = "btcAddress",
             btcBalance = "500",

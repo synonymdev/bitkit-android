@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +31,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -42,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +53,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
+import to.bitkit.ui.settings.NodeDetails
+import to.bitkit.ui.settings.WalletDetails
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.Orders
@@ -108,12 +112,12 @@ private fun MainScreen(
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val isBackButtonVisible by remember(currentBackStackEntry) {
         derivedStateOf {
-            navController.previousBackStackEntry?.destination?.route == Routes.Settings.destination
+            navController.currentDestination?.route != Routes.Wallet.destination
         }
     }
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 navigationIcon = {
                     if (isBackButtonVisible) {
                         IconButton(onClick = navController::popBackStack) {
@@ -129,13 +133,20 @@ private fun MainScreen(
                     Text(stringResource(R.string.app_name))
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate(Routes.NodeState.destination) }) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = "Node State",
+                        )
+                    }
                     IconButton(viewModel::debugSync) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
                         )
                     }
-                })
+                }
+            )
         },
         bottomBar = {
             NavigationBar(tonalElevation = 5.dp) {
@@ -211,9 +222,15 @@ fun ErrorScreen(uiState: MainUiState.Error) {
 
 // region debug
 fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
+    Text(
+        text = "Debug",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.ExtraBold,
+    )
+    NodeDetails(uiState)
+    WalletDetails(uiState, viewModel::getNewAddress)
     Peers(uiState.peers, viewModel::disconnectPeer)
     Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-    Payments(viewModel)
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Debug",

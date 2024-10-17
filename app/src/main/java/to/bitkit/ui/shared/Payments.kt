@@ -32,7 +32,7 @@ fun Payments(
 ) {
     OutlinedCard {
         Text(
-            text = "Payments",
+            text = "Invoices",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(12.dp)
         )
@@ -61,7 +61,7 @@ fun Payments(
         val clipboard = LocalClipboardManager.current
         FullWidthTextButton(
             onClick = { clipboard.setText(AnnotatedString((viewModel.createInvoice()))) }) {
-            Text("Copy new invoice to clipboard")
+            Text("Create bolt11")
         }
     }
 }

@@ -15,9 +15,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
@@ -52,7 +54,7 @@ class WalletViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
-    private val node get() = lightningService.node ?: throw ServiceError.NodeNotSetup
+    private var _nodeLifecycleState = NodeLifecycleState.Stopped
 
     // TODO subscribe to value?
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -65,16 +67,23 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             // TODO move to lightningService.setup
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+
+            _nodeLifecycleState = NodeLifecycleState.Starting
+            syncState()
             runCatching {
                 lightningService.let {
                     it.setup(walletIndex = 0, mnemonic)
                     it.start { event ->
                         syncState()
-                        runOnUiThread { onLdkEvent(event) }
+                        onLdkEvent(event)
                     }
                 }
             }.onFailure { Log.e(APP, "Init error", it) }
+
+            _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
+
+            launch(coroutineContext) { sync() }
 
             launch { db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") } }
             launch {
@@ -88,7 +97,6 @@ class WalletViewModel @Inject constructor(
                         }
                 }
             }
-            launch(coroutineContext) { sync() }
         }
     }
 
@@ -99,18 +107,21 @@ class WalletViewModel @Inject constructor(
 
     private fun syncState() {
         _uiState.value = MainUiState.Content(
-            ldkNodeId = lightningService.nodeId.orEmpty(),
+            nodeId = lightningService.nodeId.orEmpty(),
             ldkBalance = lightningService.balances?.totalLightningBalanceSats,
             btcAddress = lightningService.newAddress().orEmpty(),
             btcBalance = lightningService.balances?.totalOnchainBalanceSats,
             mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty(),
+            nodeStatus = lightningService.status,
+            nodeLifecycleState = _nodeLifecycleState,
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),
+            balanceDetails = lightningService.balances,
             orders = uiState.value.asContent()?.orders.orEmpty(),
         )
     }
 
-    private fun onLdkEvent(event: Event) {
+    private suspend fun onLdkEvent(event: Event) = runOnUiThread {
         try {
             when (event) {
                 is Event.PaymentReceived -> toast("Received ${event.amountMsat / 1000u} sats")
@@ -340,7 +351,10 @@ class WalletViewModel @Inject constructor(
 
     fun stop() {
         viewModelScope.launch {
+            _nodeLifecycleState = NodeLifecycleState.Stopping
             lightningService.stop()
+            _nodeLifecycleState = NodeLifecycleState.Stopped
+            syncState()
         }
     }
 }
@@ -350,11 +364,14 @@ sealed class MainUiState {
     data object Loading : MainUiState()
     data object NoWallet : MainUiState()
     data class Content(
-        val ldkNodeId: String,
-        val ldkBalance: String,
+        val nodeId: String,
+        val balanceDetails: BalanceDetails?,
+        val ldkBalance: ULong?,
         val btcAddress: String,
-        val btcBalance: String,
+        val btcBalance: ULong?,
         val mnemonic: String,
+        val nodeStatus: NodeStatus?,
+        val nodeLifecycleState: NodeLifecycleState,
         val peers: List<LnPeer>,
         val channels: List<ChannelDetails>,
         val orders: List<BtOrder>,
@@ -366,5 +383,12 @@ sealed class MainUiState {
     ) : MainUiState()
 
     fun asContent() = this as? Content
+}
+
+enum class NodeLifecycleState {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
 }
 // endregion

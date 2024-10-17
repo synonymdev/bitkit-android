@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import to.bitkit.R
 import to.bitkit.ui.settings.ChannelsScreen
+import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.PaymentsScreen
 import to.bitkit.ui.settings.PeersScreen
 
@@ -36,6 +37,8 @@ fun AppNavHost(
         ) {
             composable(Wallet.destination) { walletScreen() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
+            composable(Lightning.destination) { LightningSettingsScreen(viewModel) }
+            composable(NodeState.destination) { NodeStateScreen(viewModel) }
             composable(Peers.destination) { PeersScreen(viewModel) }
             composable(Channels.destination) { ChannelsScreen(viewModel) }
             composable(Payments.destination) { PaymentsScreen(viewModel) }
@@ -52,6 +55,8 @@ value class Route(val destination: String)
 object Routes {
     val Wallet = Route("wallet")
     val Settings = Route("settings")
+    val Lightning = Route("Lightning")
+    val NodeState = Route("NodeState")
     val Peers = Route("peers")
     val Channels = Route("channels")
     val Payments = Route("payments")
