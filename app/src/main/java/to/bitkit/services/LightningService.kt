@@ -51,8 +51,8 @@ class LightningService @Inject constructor(
 
     var node: Node? = null
 
-    fun setup(mnemonic: String) {
-        val dir = Env.ldkStorage(0)
+    fun setup(walletIndex: Int, mnemonic: String) {
+        val dir = Env.ldkStorage(walletIndex)
 
         val builder = Builder
             .fromConfig(
@@ -78,7 +78,7 @@ class LightningService @Inject constructor(
                 setEntropyBip39Mnemonic(mnemonic, passphrase = null)
             }
 
-        Log.d(LDK, "Setting up node…")
+        Log.d(LDK, "Building node…")
 
         node = try {
             builder.build()
@@ -86,19 +86,11 @@ class LightningService @Inject constructor(
             throw LdkError(e)
         }
 
-        Log.i(LDK, "Node set up")
+        Log.i(LDK, "LDK node setup")
     }
 
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
-
-        Log.d(LDK, "Starting node…")
-        ServiceQueue.LDK.background {
-            node.start()
-        }
-        Log.i(LDK, "Node started")
-
-        connectToTrustedPeers()
 
         onEvent?.let {
             launch(coroutineContext) {
@@ -113,6 +105,14 @@ class LightningService @Inject constructor(
                 }
             }
         }
+
+        Log.d(LDK, "Starting node…")
+        ServiceQueue.LDK.background {
+            node.start()
+        }
+        Log.i(LDK, "Node started")
+
+        connectToTrustedPeers()
     }
 
     suspend fun stop() {
@@ -123,7 +123,7 @@ class LightningService @Inject constructor(
             node.stop()
         }
         node.close().also { this.node = null }
-        Log.i(LDK, "Node stopped.")
+        Log.i(LDK, "Node stopped")
     }
 
     fun wipeStorage(walletIndex: Int) {
@@ -136,12 +136,12 @@ class LightningService @Inject constructor(
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Log.d(LDK, "Syncing node…")
+        Log.d(LDK, "Syncing LDK…")
         ServiceQueue.LDK.background {
             node.syncWallets()
             setMaxDustHtlcExposureForCurrentChannels()
         }
-        Log.i(LDK, "Node synced")
+        Log.i(LDK, "LDK synced")
     }
 
     private fun setMaxDustHtlcExposureForCurrentChannels() {

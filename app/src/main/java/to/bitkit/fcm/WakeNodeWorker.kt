@@ -60,7 +60,7 @@ class WakeNodeWorker @AssistedInject constructor(
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             withPerformanceLogging {
                 LightningService.shared.apply {
-                    setup(mnemonic)
+                    setup(walletIndex = 0, mnemonic)
                     start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
                     // sync() // TODO why (not) ?
                 }

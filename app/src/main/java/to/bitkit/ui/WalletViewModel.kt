@@ -63,10 +63,11 @@ class WalletViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            // TODO move to lightningService.setup
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             runCatching {
                 lightningService.let {
-                    it.setup(mnemonic)
+                    it.setup(walletIndex = 0, mnemonic)
                     it.start { event ->
                         syncState()
                         runOnUiThread { onLdkEvent(event) }
