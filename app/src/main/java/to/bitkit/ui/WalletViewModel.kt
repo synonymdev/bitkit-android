@@ -156,7 +156,7 @@ class WalletViewModel @Inject constructor(
 
     fun disconnectPeer(peer: LnPeer) {
         viewModelScope.launch {
-            node.disconnect(peer.nodeId)
+            lightningService.disconnectPeer(peer)
             runOnUiThread { toast("Peer disconnected.") }
             updateContentState {
                 it.copy(peers = lightningService.peers.orEmpty())

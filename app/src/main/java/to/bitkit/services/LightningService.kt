@@ -187,9 +187,22 @@ class LightningService @Inject constructor(
             ServiceQueue.LDK.background {
                 node.connect(peer.nodeId, peer.address, persist = true)
             }
-            Log.i(LDK, "Connection succeeded with: $peer")
+            Log.i(LDK, "Peer connected: $peer")
         } catch (e: NodeException) {
-            Log.w(LDK, "Connection failed with: $peer", LdkError(e))
+            Log.w(LDK, "Peer connect error: $peer", LdkError(e))
+        }
+    }
+
+    suspend fun disconnectPeer(peer: LnPeer) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+        Log.d(LDK, "Disconnecting peer: $peer")
+        try {
+            ServiceQueue.LDK.background {
+                node.disconnect(peer.nodeId)
+            }
+            Log.i(LDK, "Peer disconnected: $peer")
+        } catch (e: NodeException) {
+            Log.w(LDK, "Peer disconnect error: $peer", LdkError(e))
         }
     }
     // endregion
