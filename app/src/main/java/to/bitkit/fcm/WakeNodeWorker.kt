@@ -8,6 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -28,6 +29,8 @@ import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
@@ -156,6 +159,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
+        delay(30.seconds)
         LightningService.shared.stop()
 
         bestAttemptContent?.run {
