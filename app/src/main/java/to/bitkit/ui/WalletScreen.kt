@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.moneyString
 
@@ -98,17 +99,5 @@ fun WalletScreen(
         }
         content()
         Spacer(modifier = Modifier.height(1.dp))
-    }
-}
-
-@Composable
-internal fun CopyToClipboardButton(text: String) {
-    val clipboardManager = LocalClipboardManager.current
-    IconButton(onClick = { clipboardManager.setText(AnnotatedString((text))) }) {
-        Icon(
-            imageVector = Icons.Default.ContentCopy,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-        )
     }
 }
