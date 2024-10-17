@@ -58,7 +58,6 @@ import to.bitkit.ui.settings.WalletDetails
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.Orders
-import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
 
