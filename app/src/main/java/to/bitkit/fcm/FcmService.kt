@@ -55,6 +55,7 @@ internal class FcmService : FirebaseMessagingService() {
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
+                    sendNotification(it.title, it.message)
                     decryptPayload(it)
                 }
                 isEncryptedNotification
@@ -73,10 +74,12 @@ internal class FcmService : FirebaseMessagingService() {
 
     private fun handleAsync() {
         val work = OneTimeWorkRequestBuilder<WakeNodeWorker>()
-            .setInputData(workDataOf(
-                "type" to notificationType?.name,
-                "payload" to notificationPayload?.toString(),
-            ))
+            .setInputData(
+                workDataOf(
+                    "type" to notificationType?.name,
+                    "payload" to notificationPayload?.toString(),
+                )
+            )
             .build()
         WorkManager.getInstance(this)
             .beginWith(work)
@@ -129,7 +132,7 @@ internal class FcmService : FirebaseMessagingService() {
         notificationPayload = payload
     }
 
-    private fun sendNotification(title: String?, body: String?, extras: Bundle) {
+    private fun sendNotification(title: String?, body: String?, extras: Bundle? = null) {
         pushNotification(title, body, extras, context = applicationContext)
     }
 

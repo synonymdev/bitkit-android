@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Tag.LDK
 import to.bitkit.models.blocktank.BlocktankNotificationType
@@ -21,19 +22,22 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
 import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
+import to.bitkit.shared.ServiceError
+import to.bitkit.shared.nameof
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
+import kotlin.time.Duration.Companion.hours
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
+    private val blocktankService: BlocktankService,
+    private val keychain: Keychain,
 ) : CoroutineWorker(appContext, workerParams) {
-    class VisibleNotification(
-        var title: String = "",
-        var body: String = "",
-    )
+    class VisibleNotification(var title: String = "", var body: String = "")
 
     private var bestAttemptContent: VisibleNotification? = VisibleNotification()
 
@@ -50,18 +54,19 @@ class WakeNodeWorker @AssistedInject constructor(
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Log.d(LDK, "Worker notification type: $notificationType")
-        Log.d(LDK, "Worker notification payload: $notificationPayload")
+        Log.d(LDK, "${nameof(this)} notification type: $notificationType")
+        Log.d(LDK, "${nameof(this)} notification payload: $notificationPayload")
 
         try {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             withPerformanceLogging {
                 LightningService.shared.apply {
-                    setup()
-                    start { handleEvent(it) }
+                    setup(mnemonic)
+                    start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
                     // sync() // TODO why (not) ?
-                    // stop() is done by deliver() via handleEvent()
                 }
 
+                // Once node is started, handle the manual channel opening if needed
                 if (self.notificationType == orderPaymentConfirmed) {
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
@@ -69,8 +74,7 @@ class WakeNodeWorker @AssistedInject constructor(
                         Log.e(LDK, "Missing orderId")
                     } else {
                         try {
-                            // TODO: #2122 Background task for opening closing channels
-                            // BlocktankService.shared.openChannel(orderId)
+                            blocktankService.openChannel(orderId)
                             Log.i(LDK, "Open channel request for order $orderId")
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)

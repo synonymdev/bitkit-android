@@ -20,7 +20,7 @@ data class BtOrder(
     /**
      * Fees in satoshi to pay before the channel open is possible.
      */
-    val feeSat: Long,
+    val feeSat: ULong,
 
     /**
      * Requested funds on the LSP side.

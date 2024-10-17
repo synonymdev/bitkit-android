@@ -11,28 +11,28 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imeNestedScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.NotificationAdd
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,25 +55,34 @@ import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
 import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.shared.Orders
+import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    val viewModel by viewModels<SharedViewModel>()
-    val walletViewModel by viewModels<WalletViewModel>()
+    val viewModel by viewModels<WalletViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        initNotificationChannel()
+        logFcmToken()
+
+        viewModel.start()
+
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
-                MainScreen(walletViewModel) {
-                    val uiState = walletViewModel.uiState.collectAsStateWithLifecycle()
+                MainScreen(viewModel) {
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
                     Crossfade(uiState, label = "ContentCrossfade") {
                         when (val state = it.value) {
                             is MainUiState.Loading -> LoadingScreen()
-                            is MainUiState.Content -> WalletScreen(walletViewModel, state, debugUi(state))
+                            is MainUiState.NoWallet -> WelcomeScreen(viewModel)
+                            is MainUiState.Content -> WalletScreen(viewModel, state, debugUi(state))
                             is MainUiState.Error -> ErrorScreen(state)
                         }
                     }
@@ -83,7 +93,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // region scaffold
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MainScreen(
     viewModel: WalletViewModel = hiltViewModel(),
@@ -114,12 +124,10 @@ private fun MainScreen(
                     Text(stringResource(R.string.app_name))
                 },
                 actions = {
-                    NotificationButton()
-                    IconButton(viewModel::refresh) {
+                    IconButton(viewModel::debugSync) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
-                            modifier = Modifier,
                         )
                     }
                 })
@@ -149,6 +157,8 @@ private fun MainScreen(
                 }
             }
         },
+        modifier = Modifier
+            .imePadding()
     ) { padding ->
         Box(
             modifier = Modifier
@@ -159,7 +169,6 @@ private fun MainScreen(
                 navController = navController,
                 viewModel = viewModel,
                 walletScreen = startContent,
-                modifier = Modifier.padding(24.dp),
             )
         }
     }
@@ -195,7 +204,29 @@ fun ErrorScreen(uiState: MainUiState.Error) {
     }
 }
 
-// region helpers
+// region debug
+fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
+    Peers(uiState.peers, viewModel::disconnectPeer)
+    Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+    Payments(viewModel)
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Debug",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(12.dp)
+        )
+        FullWidthTextButton(viewModel::debugDb) { Text("Database") }
+        FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
+        FullWidthTextButton(viewModel::debugWipeBdk) { Text("Wipe Storage") }
+        FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
+        HorizontalDivider()
+        NotificationButton()
+        FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
+        FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+    }
+    Orders(uiState.orders, viewModel)
+}
+
 @Composable
 private fun NotificationButton() {
     val context = LocalContext.current
@@ -222,52 +253,9 @@ private fun NotificationButton() {
         }
         Unit
     }
-    val icon by remember {
-        derivedStateOf { if (canPush) Icons.Default.NotificationAdd else Icons.Default.NotificationsNone }
+    val text by remember {
+        derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
     }
-    IconButton(onClick = onClick) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier,
-        )
-    }
-}
-// endregion
-
-// region debug
-fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Debug",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
-        )
-        Row(
-            horizontalArrangement = Arrangement.SpaceAround,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            TextButton(viewModel::debugDb) { Text("Debug DB") }
-            TextButton(viewModel::debugKeychain) { Text("Debug Keychain") }
-            TextButton(viewModel::debugWipeBdk) { Text("Wipe BDK") }
-        }
-        TextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
-    }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.notifications),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp),
-        )
-        Row(
-            horizontalArrangement = Arrangement.SpaceAround,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            TextButton(viewModel::registerForNotifications) { Text("Register Device") }
-            TextButton(viewModel::debugLspNotifications) { Text("LSP Notification") }
-        }
-    }
-    Peers(uiState.peers, walletViewModel::disconnectPeer)
-    Channels(uiState.channels, walletViewModel::closeChannel)
+    FullWidthTextButton(onClick = onClick) { Text(text = text) }
 }
 // endregion

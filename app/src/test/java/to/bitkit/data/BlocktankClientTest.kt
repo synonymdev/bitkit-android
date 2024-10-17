@@ -23,7 +23,7 @@ class BlocktankClientTest {
         val order1 = sut.createOrder(
             lspBalanceSat = 100000,
             channelExpiryWeeks = 2,
-            options = CreateOrderOptions(clientBalanceSat = 1000)
+            options = CreateOrderOptions.initWithDefaults().copy(clientBalanceSat = 1000)
         )
         val orderCheck = sut.getOrder(order1.id)
         assertEquals(order1, orderCheck)
@@ -31,7 +31,7 @@ class BlocktankClientTest {
         val order2 = sut.createOrder(
             lspBalanceSat = 123400,
             channelExpiryWeeks = 3,
-            options = CreateOrderOptions(clientBalanceSat = 1234)
+            options = CreateOrderOptions.initWithDefaults().copy(clientBalanceSat = 1234)
         )
         val orders = sut.getOrders(listOf(order1.id, order2.id))
         assertContains(orders, order1)

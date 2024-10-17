@@ -43,7 +43,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     data object OnchainWalletNotInitialized : ServiceError("Onchain wallet not created")
     class LdkNodeSqliteAlreadyExists(path: String) : ServiceError("LDK-node SQLite file already exists at $path")
     data object LdkToLdkNodeMigration : ServiceError("LDK to LDK-node migration issue")
-    class MnemonicNotFound : ServiceError("Mnemonic not found")
+    data object MnemonicNotFound : ServiceError("Mnemonic not found")
     data object NodeStillRunning : ServiceError("Node is still running")
     data object OnchainWalletStillRunning : ServiceError("Onchain wallet is still running")
     data object InvalidNodeSigningMessage : ServiceError("Invalid node signing message")

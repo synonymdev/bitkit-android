@@ -12,6 +12,7 @@ import kotlin.io.path.Path
 internal object Env {
     const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
     val isDebug = BuildConfig.DEBUG
+    val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network: WalletNetwork = WalletNetwork.REGTEST
     val trustedLnPeers
         get() = when (network) {
@@ -33,7 +34,7 @@ internal object Env {
             WalletNetwork.REGTEST -> "https://electrs-regtest.synonym.to"
             else -> TODO("Not yet implemented")
         }
-    val blocktankBaseUrl
+    private val blocktankBaseUrl
         get() = when (network) {
             WalletNetwork.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")

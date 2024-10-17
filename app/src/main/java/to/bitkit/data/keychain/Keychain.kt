@@ -13,10 +13,10 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.WalletNetwork
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
+import to.bitkit.models.WalletNetwork
 import to.bitkit.shared.KeychainError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -83,11 +83,13 @@ class Keychain @Inject constructor(
 
     private val String.indexed: Preferences.Key<String>
         get() {
-            val walletIndex = runBlocking { db.configDao().getAll().first() }.first().walletIndex
+            val walletIndex = runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
 
     enum class Key {
         PUSH_NOTIFICATION_PRIVATE_KEY,
+        BIP39_MNEMONIC,
+        BIP39_PASSPHRASE,
     }
 }

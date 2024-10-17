@@ -57,9 +57,9 @@ class BlocktankClient @Inject constructor(
     // region channels
     suspend fun openChannel(orderId: String, nodeId: String) {
         post<IgnoreResponse>(
-            "${Env.blocktankClientServer}/channels/$orderId/open", mapOf(
-                "connectionStringOrPubkey" to nodeId,
-                "announceChannel" to false,
+            "${Env.blocktankClientServer}/channels/$orderId/open", OpenChannelRequest(
+                connectionStringOrPubkey = nodeId,
+                announceChannel = false,
             )
         )
     }
@@ -171,3 +171,9 @@ data class TestNotificationRequest(
         val payload: JsonObject,
     )
 }
+
+@Serializable
+data class OpenChannelRequest(
+    val connectionStringOrPubkey: String,
+    val announceChannel: Boolean,
+)
