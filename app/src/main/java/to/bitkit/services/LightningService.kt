@@ -14,6 +14,7 @@ import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -35,7 +36,6 @@ import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 import kotlin.io.path.Path
-import kotlin.io.path.deleteRecursively
 import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -139,9 +139,23 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Syncing node…")
         ServiceQueue.LDK.background {
             node.syncWallets()
-            // setMaxDustHtlcExposureForCurrentChannels()
+            setMaxDustHtlcExposureForCurrentChannels()
         }
         Log.i(LDK, "Node synced")
+    }
+
+    private fun setMaxDustHtlcExposureForCurrentChannels() {
+        if (Env.network != Network.REGTEST) {
+            Log.d(LDK, "Not updating channel config for non-regtest network")
+            return
+        }
+        val node = this.node ?: throw ServiceError.NodeNotStarted
+        for (channel in node.listChannels()) {
+            val config = channel.config
+            config.setMaxDustHtlcExposureFromFixedLimit(limitMsat= 999999_UL.millis)
+            node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+            Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+        }
     }
 
     suspend fun sign(message: String): String {
