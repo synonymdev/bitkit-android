@@ -1,7 +1,6 @@
 package to.bitkit.ui.shared
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +30,7 @@ fun TabBar(
 ) {
     val buttonColors = ButtonDefaults.buttonColors(
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-        contentColor = MaterialTheme.colorScheme.onSurface
+        contentColor = MaterialTheme.colorScheme.onSurface,
     )
     Box(
         contentAlignment = Alignment.Center,
@@ -66,7 +64,7 @@ fun TabBar(
                 contentDescription = "Scan",
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
-                    .padding(4.dp)
+                    .padding(8.dp)
                     .size(36.dp)
             )
         }
