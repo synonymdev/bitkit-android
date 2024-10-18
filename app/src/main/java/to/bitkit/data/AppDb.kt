@@ -31,7 +31,7 @@ abstract class AppDb : RoomDatabase() {
     abstract fun ordersDao(): OrdersDao
 
     companion object {
-        private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.id}.sqlite"
+        private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.name.lowercase()}.sqlite"
 
         @Volatile
         private var instance: AppDb? = null

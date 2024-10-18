@@ -14,6 +14,7 @@ import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -25,7 +26,7 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Env.SEED
+import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.millis
 import to.bitkit.ext.uByteList
@@ -34,6 +35,7 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import kotlin.io.path.Path
 import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -49,15 +51,15 @@ class LightningService @Inject constructor(
 
     var node: Node? = null
 
-    fun setup(mnemonic: String) {
-        val dir = Env.Storage.ldk
+    fun setup(walletIndex: Int, mnemonic: String) {
+        val dir = Env.ldkStorage(walletIndex)
 
         val builder = Builder
             .fromConfig(
                 defaultConfig().apply {
                     storageDirPath = dir
                     logDirPath = dir
-                    network = Env.network.ldk
+                    network = Env.network
                     logLevel = LogLevel.TRACE
 
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
@@ -76,7 +78,7 @@ class LightningService @Inject constructor(
                 setEntropyBip39Mnemonic(mnemonic, passphrase = null)
             }
 
-        Log.d(LDK, "Setting up node…")
+        Log.d(LDK, "Building node…")
 
         node = try {
             builder.build()
@@ -84,19 +86,11 @@ class LightningService @Inject constructor(
             throw LdkError(e)
         }
 
-        Log.i(LDK, "Node set up")
+        Log.i(LDK, "LDK node setup")
     }
 
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
-
-        Log.d(LDK, "Starting node…")
-        ServiceQueue.LDK.background {
-            node.start()
-        }
-        Log.i(LDK, "Node started")
-
-        connectToTrustedPeers()
 
         onEvent?.let {
             launch(coroutineContext) {
@@ -111,6 +105,14 @@ class LightningService @Inject constructor(
                 }
             }
         }
+
+        Log.d(LDK, "Starting node…")
+        ServiceQueue.LDK.background {
+            node.start()
+        }
+        Log.i(LDK, "Node started")
+
+        connectToTrustedPeers()
     }
 
     suspend fun stop() {
@@ -121,23 +123,39 @@ class LightningService @Inject constructor(
             node.stop()
         }
         node.close().also { this.node = null }
-        Log.i(LDK, "Node stopped.")
+        Log.i(LDK, "Node stopped")
     }
 
-    fun wipeStorage() {
+    fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
-        TODO("Not yet implemented")
+        Log.w(APP, "Wiping lightning storage…")
+        Path(Env.ldkStorage(walletIndex)).toFile().deleteRecursively()
+        Log.i(APP, "Lightning wallet wiped")
     }
 
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Log.d(LDK, "Syncing node…")
+        Log.d(LDK, "Syncing LDK…")
         ServiceQueue.LDK.background {
             node.syncWallets()
-            // setMaxDustHtlcExposureForCurrentChannels()
+            setMaxDustHtlcExposureForCurrentChannels()
         }
-        Log.i(LDK, "Node synced")
+        Log.i(LDK, "LDK synced")
+    }
+
+    private fun setMaxDustHtlcExposureForCurrentChannels() {
+        if (Env.network != Network.REGTEST) {
+            Log.d(LDK, "Not updating channel config for non-regtest network")
+            return
+        }
+        val node = this.node ?: throw ServiceError.NodeNotStarted
+        for (channel in node.listChannels()) {
+            val config = channel.config
+            config.setMaxDustHtlcExposureFromFixedLimit(limitMsat= 999999_UL.millis)
+            node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+            Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+        }
     }
 
     suspend fun sign(message: String): String {
@@ -169,9 +187,22 @@ class LightningService @Inject constructor(
             ServiceQueue.LDK.background {
                 node.connect(peer.nodeId, peer.address, persist = true)
             }
-            Log.i(LDK, "Connection succeeded with: $peer")
+            Log.i(LDK, "Peer connected: $peer")
         } catch (e: NodeException) {
-            Log.w(LDK, "Connection failed with: $peer", LdkError(e))
+            Log.w(LDK, "Peer connect error: $peer", LdkError(e))
+        }
+    }
+
+    suspend fun disconnectPeer(peer: LnPeer) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+        Log.d(LDK, "Disconnecting peer: $peer")
+        try {
+            ServiceQueue.LDK.background {
+                node.disconnect(peer.nodeId)
+            }
+            Log.i(LDK, "Peer disconnected: $peer")
+        } catch (e: NodeException) {
+            Log.w(LDK, "Peer disconnect error: $peer", LdkError(e))
         }
     }
     // endregion

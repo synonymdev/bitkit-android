@@ -10,7 +10,6 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.services.OnChainService
 import to.bitkit.ui.WalletViewModel
 import javax.inject.Singleton
 
@@ -25,7 +24,6 @@ object ViewModelModule {
         appDb: AppDb,
         keychain: Keychain,
         blocktankService: BlocktankService,
-        onChainService: OnChainService,
         lightningService: LightningService,
     ): WalletViewModel {
         return WalletViewModel(
@@ -34,7 +32,6 @@ object ViewModelModule {
             appDb,
             keychain,
             blocktankService,
-            onChainService,
             lightningService,
             firebaseMessaging = FirebaseMessaging.getInstance(),
         )

@@ -3,12 +3,10 @@ package to.bitkit.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,12 +17,14 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.UiDispatcher
+import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LDK
@@ -35,7 +35,6 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.services.OnChainService
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
 
@@ -46,7 +45,6 @@ class WalletViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
-    private val onChainService: OnChainService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
 ) : ViewModel() {
@@ -54,11 +52,10 @@ class WalletViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
-    private val node by lazy { lightningService.node ?: throw ServiceError.NodeNotSetup }
+    private val node get() = lightningService.node ?: throw ServiceError.NodeNotSetup
 
-    private val walletExists: Boolean get() {
-        return keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-    }
+    // TODO subscribe to value?
+    private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
     fun start() {
         if (!walletExists) {
@@ -66,18 +63,15 @@ class WalletViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            // TODO move to lightningService.setup
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             runCatching {
                 lightningService.let {
-                    it.setup(mnemonic)
+                    it.setup(walletIndex = 0, mnemonic)
                     it.start { event ->
                         syncState()
                         runOnUiThread { onLdkEvent(event) }
                     }
-                }
-                onChainService.let {
-                    it.setup()
-                    it.fullScan()
                 }
             }.onFailure { Log.e(APP, "Init error", it) }
             syncState()
@@ -163,7 +157,7 @@ class WalletViewModel @Inject constructor(
 
     fun disconnectPeer(peer: LnPeer) {
         viewModelScope.launch {
-            node.disconnect(peer.nodeId)
+            lightningService.disconnectPeer(peer)
             runOnUiThread { toast("Peer disconnected.") }
             updateContentState {
                 it.copy(peers = lightningService.peers.orEmpty())
@@ -230,9 +224,22 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun debugWipeBdk() {
-        onChainService.stop()
-        onChainService.wipeStorage()
+    fun debugWipe() {
+        if (Env.network != Network.REGTEST) {
+            toast("Can only nuke on regtest.")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                lightningService.stop()
+                lightningService.wipeStorage(0)
+                keychain.wipe()
+            }.onSuccess {
+                start() // restart UI
+            }.onFailure {
+                runOnUiThread { toast("Failed to wipe: $it") }
+            }
+        }
     }
 
     fun debugLspNotifications() {
@@ -328,6 +335,12 @@ class WalletViewModel @Inject constructor(
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
             start()
+        }
+    }
+
+    fun stop() {
+        viewModelScope.launch {
+            lightningService.stop()
         }
     }
 }

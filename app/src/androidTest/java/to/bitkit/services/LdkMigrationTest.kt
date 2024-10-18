@@ -26,7 +26,7 @@ class LdkMigrationTest {
         MigrationService(appContext).migrate(seed, manager, listOf(monitor))
 
         with(LightningService.shared) {
-            setup(mnemonic)
+            setup(walletIndex = 0, mnemonic)
             runBlocking { start() }
 
             assertTrue { nodeId == "02cd08b7b375e4263849121f9f0ffb2732a0b88d0fb74487575ac539b374f45a55" }

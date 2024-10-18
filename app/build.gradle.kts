@@ -86,7 +86,6 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
     // Crypto
-    implementation(libs.bdk.android)
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android)
     // Firebase
@@ -155,4 +154,10 @@ ksp {
 // https://developer.android.com/jetpack/androidx/releases/room#gradle-plugin
 room {
     schemaDirectory("$projectDir/schemas")
+}
+tasks.withType<Test> {
+    testLogging {
+        events("passed", "skipped", "failed")
+        // showStandardStreams = true
+    }
 }

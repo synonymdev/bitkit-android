@@ -1,11 +1,11 @@
 package to.bitkit.env
 
 import android.util.Log
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
 import to.bitkit.models.LnPeer
-import to.bitkit.models.WalletNetwork
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import kotlin.io.path.Path
 
@@ -13,10 +13,10 @@ internal object Env {
     const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
-    val network: WalletNetwork = WalletNetwork.REGTEST
+    val network = Network.REGTEST
     val trustedLnPeers
         get() = when (network) {
-            WalletNetwork.REGTEST -> listOf(
+            Network.REGTEST -> listOf(
                 Peers.btStaging,
                 // Peers.polarToRegtest,
                 // Peers.local,
@@ -26,17 +26,17 @@ internal object Env {
         }
     val ldkRgsServerUrl
         get() = when (network) {
-            WalletNetwork.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+            Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             else -> null
         }
     val esploraUrl
         get() = when (network) {
-            WalletNetwork.REGTEST -> "https://electrs-regtest.synonym.to"
+            Network.REGTEST -> "https://electrs-regtest.synonym.to"
             else -> TODO("Not yet implemented")
         }
     private val blocktankBaseUrl
         get() = when (network) {
-            WalletNetwork.REGTEST -> "https://api.stag.blocktank.to"
+            Network.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")
         }
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
@@ -50,26 +50,24 @@ internal object Env {
     )
     const val DERIVATION_NAME = "bitkit-notifications"
 
-    object Storage {
-        private var base = ""
-        fun init(basePath: String) {
-            require(basePath.isNotEmpty()) { "Base storage path cannot be empty" }
-            base = basePath
-            Log.i(APP, "Storage path: $basePath")
-        }
+    private lateinit var appStoragePath: String
 
-        val ldk get() = storagePathOf(0, network.id, "ldk")
-        val bdk get() = storagePathOf(0, network.id, "bdk")
+    fun initAppStoragePath(path: String) {
+        require(path.isNotBlank()) { "App storage path cannot be empty." }
+        Log.i("APP", "App storage path: $path")
+        appStoragePath = path
+    }
 
-        private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
-            require(base.isNotEmpty()) { "Base storage path cannot be empty" }
-            val absolutePath = Path(base, network, "wallet$walletIndex", dir)
-                .toFile()
-                .ensureDir()
-                .absolutePath
-            Log.d(APP, "$dir storage path: $absolutePath")
-            return absolutePath
-        }
+    fun ldkStorage(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
+        require(::appStoragePath.isInitialized) { "App storage path should be init as context.filesDir.absolutePath." }
+        val absolutePath = Path(appStoragePath, network, "wallet$walletIndex", dir)
+            .toFile()
+            .ensureDir()
+            .absolutePath
+        Log.d(APP, "$dir storage path: $absolutePath")
+        return absolutePath
     }
 
     object Peers {

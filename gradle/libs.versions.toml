@@ -2,7 +2,6 @@
 activityCompose = "1.9.2"
 agp = "8.7.0"
 appcompat = "1.7.0"
-bdk = "1.0.0-alpha.11"
 bouncyCastle = "1.78.1"
 composeBom = "2024.09.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
 coreKtx = "1.13.1"
@@ -33,8 +32,7 @@ workRuntimeKtx = "2.9.1"
 [libraries]
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
-bdk-android = { module = "org.bitcoindevkit:bdk-android", version.ref = "bdk" }
-bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" } # replace with secp-ffi if published
+bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-material3 = { module = "androidx.compose.material3:material3" }

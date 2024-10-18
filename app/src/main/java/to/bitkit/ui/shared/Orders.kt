@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
@@ -16,20 +17,28 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.first
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.BtOrderState2
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.shared.util.onLongPress
 
 @Composable
 internal fun Orders(
@@ -64,38 +73,48 @@ internal fun Orders(
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        orders.forEachIndexed { i, it ->
+        orders.forEachIndexed { index, order ->
             HorizontalDivider()
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(12.dp)
             ) {
-                Text(
-                    text = "$i. ${it.id}",
-                    style = MaterialTheme.typography.titleSmall,
-                    overflow = TextOverflow.Ellipsis,
-                    maxLines = 1,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp),
-                )
+                ) {
+                    val clipboardManager = LocalClipboardManager.current
+                    Text(
+                        text = order.id,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier
+                            .onLongPress { clipboardManager.setText(AnnotatedString(order.id)) }
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 Text(
-                    text = "Fees: " + moneyString("${it.feeSat}"),
+                    text = "Fees: " + moneyString("${order.feeSat}"),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "Spending: " + moneyString("${it.clientBalanceSat}"),
+                    text = "Spending: " + moneyString("${order.clientBalanceSat}"),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "Receiving: " + moneyString("${it.lspBalanceSat}"),
+                    text = "Receiving: " + moneyString("${order.lspBalanceSat}"),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "State: ${it.state2}",
+                    text = "State: ${order.state2}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            when (val tx = it.payment.onchain.transactions.first) {
-                null -> FullWidthTextButton(onClick = { viewModel.debugBtPayOrder(it) }) { Text(" Pay") }
+            when (val tx = order.payment.onchain.transactions.first) {
+                null -> FullWidthTextButton(onClick = { viewModel.debugBtPayOrder(order) }) { Text(" Pay") }
                 else -> {
                     Card(shape = RectangleShape) {
                         Column(
@@ -116,15 +135,23 @@ internal fun Orders(
                 }
             }
 
-            val isPaid = it.state2 == BtOrderState2.paid
+            val isPaid = order.state2 == BtOrderState2.paid
             FullWidthTextButton(
-                onClick = { viewModel.debugBtManualOpenChannel(it) },
+                onClick = { viewModel.debugBtManualOpenChannel(order) },
                 enabled = isPaid,
             ) { Text(text = "Try manual open${if (!isPaid) " (requires state=paid)" else ""}") }
         }
-        HorizontalDivider()
+        var sats by remember { mutableIntStateOf(50_000) }
+        OutlinedTextField(
+            label = { Text("Sats") },
+            value = "$sats",
+            onValueChange = { sats = it.toIntOrNull() ?: 0 },
+            textStyle = MaterialTheme.typography.labelSmall,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
         FullWidthTextButton(
-            onClick = { viewModel.debugBtCreateOrder(100_000) }
-        ) { Text("Create Order of 100_000 sats") }
+            onClick = { viewModel.debugBtCreateOrder(sats) }
+        ) { Text("Create Order") }
     }
 }

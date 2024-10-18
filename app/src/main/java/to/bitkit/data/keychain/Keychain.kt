@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
@@ -16,7 +17,6 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
-import to.bitkit.models.WalletNetwork
 import to.bitkit.shared.KeychainError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -73,7 +73,7 @@ class Keychain @Inject constructor(
     }
 
     suspend fun wipe() {
-        if (!Env.isDebug || Env.network != WalletNetwork.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
+        if (!Env.isDebug || Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
 
         val keys = snapshot.asMap().keys
         context.keychain.edit { it.clear() }
