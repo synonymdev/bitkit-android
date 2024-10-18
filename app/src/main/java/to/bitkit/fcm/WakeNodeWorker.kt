@@ -29,7 +29,6 @@ import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @HiltWorker

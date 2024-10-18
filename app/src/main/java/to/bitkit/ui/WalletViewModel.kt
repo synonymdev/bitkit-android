@@ -109,9 +109,12 @@ class WalletViewModel @Inject constructor(
     private fun syncState() {
         _uiState.value = MainUiState.Content(
             nodeId = lightningService.nodeId.orEmpty(),
-            ldkBalance = lightningService.balances?.totalLightningBalanceSats,
             btcAddress = lightningService.newAddress().orEmpty(),
+            ldkBalance = lightningService.balances?.totalLightningBalanceSats,
             btcBalance = lightningService.balances?.totalOnchainBalanceSats,
+            totalBalanceSats = lightningService.balances?.let {
+                it.totalLightningBalanceSats + it.totalOnchainBalanceSats
+            },
             mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty(),
             nodeStatus = lightningService.status,
             nodeLifecycleState = _nodeLifecycleState,
@@ -378,6 +381,7 @@ sealed class MainUiState {
         val btcAddress: String,
         val btcBalance: ULong?,
         val mnemonic: String,
+        val totalBalanceSats: ULong?,
         val nodeStatus: NodeStatus?,
         val nodeLifecycleState: NodeLifecycleState,
         val peers: List<LnPeer>,

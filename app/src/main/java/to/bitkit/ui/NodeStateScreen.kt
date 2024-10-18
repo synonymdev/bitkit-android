@@ -93,13 +93,13 @@ fun NodeStateScreen(viewModel: WalletViewModel) {
             viewModel::closeChannel,
         )
         contentState.balanceDetails?.let {
-            Balances(it)
+            BalanceDetails(it)
         }
     }
 }
 
 @Composable
-private fun Balances(
+private fun BalanceDetails(
     balanceDetails: BalanceDetails,
 ) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
