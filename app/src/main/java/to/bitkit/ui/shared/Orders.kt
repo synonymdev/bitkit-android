@@ -28,9 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -38,7 +36,6 @@ import to.bitkit.ext.first
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.BtOrderState2
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.shared.util.onLongPress
 
 @Composable
 internal fun Orders(
@@ -74,46 +71,9 @@ internal fun Orders(
                 style = MaterialTheme.typography.titleMedium,
             )
         }
-        activeOrders.forEachIndexed { index, order ->
+        activeOrders.forEach { order ->
             HorizontalDivider()
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(12.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                ) {
-                    val clipboardManager = LocalClipboardManager.current
-                    Text(
-                        text = order.id,
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier
-                            .onLongPress { clipboardManager.setText(AnnotatedString(order.id)) }
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Text(
-                    text = "Fees: " + moneyString(order.feeSat.toLong()),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = "Spending: " + moneyString(order.clientBalanceSat),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = "Receiving: " + moneyString(order.lspBalanceSat),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = "State: ${order.state2}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            OrderSummary(order)
             when (val tx = order.payment.onchain.transactions.first) {
                 null -> FullWidthTextButton(onClick = { viewModel.debugBtPayOrder(order) }) { Text(" Pay") }
                 else -> {

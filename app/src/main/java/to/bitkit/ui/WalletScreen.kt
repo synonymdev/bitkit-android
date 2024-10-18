@@ -10,12 +10,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import to.bitkit.ui.shared.BalanceSummary
 
 @Composable
 fun WalletScreen(
     viewModel: WalletViewModel,
     uiState: MainUiState.Content,
+    navController: NavHostController,
     content: @Composable () -> Unit = {},
 ) {
     Column(
@@ -24,7 +27,7 @@ fun WalletScreen(
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        BalanceSummary(uiState)
+        BalanceSummary(uiState, navController)
 
         // TODO: Debug UI (Hide)
         content()

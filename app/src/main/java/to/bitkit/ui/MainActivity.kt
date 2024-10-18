@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -74,13 +75,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
-                MainScreen(viewModel) {
+                val navController = rememberNavController()
+                MainScreen(viewModel, navController) {
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
                     Crossfade(uiState, label = "ContentCrossfade") {
                         when (val state = it.value) {
                             is MainUiState.Loading -> LoadingScreen()
                             is MainUiState.NoWallet -> WelcomeScreen(viewModel)
-                            is MainUiState.Content -> WalletScreen(viewModel, state, debugUi(state))
+                            is MainUiState.Content -> WalletScreen(viewModel, state, navController, debugUi(state))
                             is MainUiState.Error -> ErrorScreen(state)
                         }
                     }
@@ -105,9 +107,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MainScreen(
     viewModel: WalletViewModel = hiltViewModel(),
+    navController: NavHostController,
     startContent: @Composable () -> Unit = {},
 ) {
-    val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val isBackButtonVisible by remember(currentBackStackEntry) {
         derivedStateOf {
