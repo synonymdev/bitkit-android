@@ -39,7 +39,7 @@ fun QrCodeImage(
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
 ) {
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.TopCenter,
         modifier = modifier
             .fillMaxWidth()
             .background(Color.White)
@@ -62,6 +62,8 @@ fun QrCodeImage(
 
 @Composable
 private fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
+    if (content.isEmpty()) return null
+
     val density = LocalDensity.current
     val sizePx = with(density) { size.roundToPx() }
 

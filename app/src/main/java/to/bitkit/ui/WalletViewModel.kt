@@ -58,6 +58,7 @@ class WalletViewModel @Inject constructor(
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
     private var _onchainAddress: String = ""
+    private var _bolt11: String = ""
 
     // TODO subscribe to value?
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -114,7 +115,8 @@ class WalletViewModel @Inject constructor(
 
         _uiState.value = MainUiState.Content(
             nodeId = lightningService.nodeId.orEmpty(),
-            btcAddress = _onchainAddress,
+            onchainAddress = _onchainAddress,
+            bolt11 = _bolt11,
             nodeStatus = lightningService.status,
             nodeLifecycleState = _nodeLifecycleState,
             peers = lightningService.peers.orEmpty(),
@@ -174,9 +176,25 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    private val incomingLightningCapacitySats: ULong? get() {
+        return _uiState.value.asContent()?.let {
+            var capacity: ULong = 0u
+            it.channels.forEach { channel ->
+                capacity += channel.inboundCapacityMsat / 1000u
+            }
+            capacity
+        }
+    }
+
     private suspend fun refreshBip21() {
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress().orEmpty()
+        }
+
+        val hasChannels = _uiState.value.asContent()?.channels?.isNotEmpty() == true
+        val hasIncomingLightingCapacity = incomingLightningCapacitySats?.let { it > 0u } == true
+        if (hasChannels && hasIncomingLightingCapacity) {
+            _bolt11 = lightningService.receive(description = "Bitkit")
         }
     }
 
@@ -400,7 +418,8 @@ sealed class MainUiState {
         val totalLightningSats: ULong? = null,
         val totalBalanceSats: ULong? = null,
         val balanceDetails: BalanceDetails? = null,
-        val btcAddress: String,
+        val onchainAddress: String,
+        val bolt11: String,
         val nodeStatus: NodeStatus?,
         val nodeLifecycleState: NodeLifecycleState,
         val peers: List<LnPeer>,

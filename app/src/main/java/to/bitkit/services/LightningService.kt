@@ -240,11 +240,17 @@ class LightningService @Inject constructor(
     // endregion
 
     // region payments
-    suspend fun receive(sat: ULong, description: String, expirySecs: UInt = 3600u): String {
+    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): Bolt11Invoice {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
-            node.bolt11Payment().receive(sat.millis, description, expirySecs)
+            node.bolt11Payment().run {
+                if (sat != null) {
+                    receive(sat.millis, description, expirySecs)
+                } else {
+                    receiveVariableAmount(description, expirySecs)
+                }
+            }
         }
     }
 

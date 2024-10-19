@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.send
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,8 +19,7 @@ fun SendOptionsView(
 ) {
     Column(
         modifier = modifier
-            .height(LocalConfiguration.current.screenHeightDp.dp - 100.dp)
-            .fillMaxWidth()
+            .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

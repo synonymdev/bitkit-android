@@ -19,6 +19,8 @@ import to.bitkit.ext.first
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.models.blocktank.BtOrder
+import to.bitkit.models.blocktank.CJitEntry
+import to.bitkit.models.blocktank.CreateCjitOptions
 import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
@@ -70,6 +72,25 @@ class BlocktankService @Inject constructor(
                 client.getOrders(orderIds)
             }
         }
+    }
+    // endregion
+
+    // region cjit
+    suspend fun createCjit(amountSats: Int, description: String): CJitEntry {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
+        val entry = ServiceQueue.LSP.background {
+            client.createCJitEntry(
+                channelSizeSat = amountSats * 2, // TODO: confirm default from RN app
+                invoiceSat = amountSats,
+                invoiceDescription = description,
+                nodeId = nodeId,
+                channelExpiryWeeks = 2, // TODO: check default value in RN app
+                options = CreateCjitOptions(),
+            )
+        }
+
+        return entry
     }
     // endregion
 

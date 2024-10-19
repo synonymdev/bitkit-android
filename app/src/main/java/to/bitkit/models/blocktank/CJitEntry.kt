@@ -58,7 +58,7 @@ data class CJitEntry(
     /**
      * deprecated: Use `source` instead.
      */
-    val couponCode: String,
+    val couponCode: String? = null,
 
     /**
      * Source that created this CJit. Example: 'bitkit', 'widget'.

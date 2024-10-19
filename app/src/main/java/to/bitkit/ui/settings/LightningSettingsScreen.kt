@@ -97,9 +97,9 @@ fun WalletDetails(
     contentState: MainUiState.Content,
 ) {
     InfoField(
-        value = contentState.btcAddress,
+        value = contentState.onchainAddress,
         label = stringResource(R.string.address),
         maxLength = 44,
-        trailingIcon = { CopyToClipboardButton(contentState.btcAddress) },
+        trailingIcon = { CopyToClipboardButton(contentState.onchainAddress) },
     )
 }
