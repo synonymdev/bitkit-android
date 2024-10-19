@@ -25,10 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import to.bitkit.ui.screens.receive.ReceiveQRView
+import to.bitkit.ui.screens.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.send.SendOptionsView
 import to.bitkit.ui.shared.BalanceSummary
 import to.bitkit.ui.shared.TabBar
@@ -86,8 +85,7 @@ fun WalletScreen(
                 shape = AppShapes.sheet,
                 containerColor = MaterialTheme.colorScheme.surface,
             ) {
-                val sheetHeight = LocalConfiguration.current.screenHeightDp.dp - 100.dp
-                SendOptionsView(modifier = Modifier.height(sheetHeight))
+                SendOptionsView()
             }
         }
         // Receive Sheet
@@ -98,8 +96,7 @@ fun WalletScreen(
                 shape = AppShapes.sheet,
                 containerColor = MaterialTheme.colorScheme.surface,
             ) {
-                val sheetHeight = LocalConfiguration.current.screenHeightDp.dp - 100.dp
-                ReceiveQRView(modifier = Modifier.height(sheetHeight))
+                ReceiveQRScreen()
             }
         }
     }

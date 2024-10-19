@@ -75,7 +75,7 @@ fun TabBar(
 
 @Preview(showBackground = true)
 @Composable
-fun TabBarPreview() {
+private fun TabBarPreview() {
     AppThemeSurface {
         TabBar(
             onSendClicked = {},

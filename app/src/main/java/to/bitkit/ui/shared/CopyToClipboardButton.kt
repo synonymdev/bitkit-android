@@ -13,8 +13,8 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun CopyToClipboardButton(text: String) {
-    val clipboardManager = LocalClipboardManager.current
-    IconButton(onClick = { clipboardManager.setText(AnnotatedString((text))) }) {
+    val clipboard = LocalClipboardManager.current
+    IconButton(onClick = { clipboard.setText(AnnotatedString((text))) }) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
             contentDescription = null,
