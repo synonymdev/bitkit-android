@@ -7,14 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -33,7 +28,6 @@ import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
-import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun LightningSettingsScreen(viewModel: WalletViewModel) {
@@ -47,7 +41,7 @@ fun LightningSettingsScreen(viewModel: WalletViewModel) {
             .verticalScroll(rememberScrollState())
     ) {
         NodeDetails(contentState)
-        WalletDetails(contentState, viewModel::getNewAddress)
+        WalletDetails(contentState)
         Peers(contentState.peers, viewModel::disconnectPeer)
         Payments(viewModel)
         Channels(
@@ -75,7 +69,9 @@ fun NodeDetails(contentState: MainUiState.Content) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.Bottom,
-            modifier = Modifier.padding(16.dp).padding(bottom = 0.dp)
+            modifier = Modifier
+                .padding(16.dp)
+                .padding(bottom = 0.dp)
         ) {
             Text(
                 text = "Node",
@@ -99,39 +95,11 @@ fun NodeDetails(contentState: MainUiState.Content) {
 @Composable
 fun WalletDetails(
     contentState: MainUiState.Content,
-    onNewAddressTap: () -> Unit,
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            modifier = Modifier.padding(16.dp).padding(bottom = 0.dp)
-        ) {
-            Text(
-                text = "Wallet",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = moneyString(contentState.btcBalance?.toLong()),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        InfoField(
-            value = contentState.btcAddress,
-            label = stringResource(R.string.address),
-            maxLength = 36,
-            trailingIcon = {
-                Row {
-                    IconButton(onClick = onNewAddressTap) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.add),
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    CopyToClipboardButton(contentState.btcAddress)
-                }
-            },
-        )
-    }
+    InfoField(
+        value = contentState.btcAddress,
+        label = stringResource(R.string.address),
+        maxLength = 44,
+        trailingIcon = { CopyToClipboardButton(contentState.btcAddress) },
+    )
 }

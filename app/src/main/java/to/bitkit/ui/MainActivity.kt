@@ -131,7 +131,11 @@ private fun MainScreen(
                     }
                 },
                 title = {
-                    Text(stringResource(R.string.app_name))
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate(Routes.NodeState.destination) }) {
@@ -212,7 +216,7 @@ fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
         }
     }
     NodeDetails(uiState)
-    WalletDetails(uiState, viewModel::getNewAddress)
+    WalletDetails(uiState)
     Peers(uiState.peers, viewModel::disconnectPeer)
     Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {

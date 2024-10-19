@@ -32,6 +32,7 @@ import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
+import to.bitkit.env.Tag.PERF
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
@@ -56,6 +57,7 @@ class WalletViewModel @Inject constructor(
     private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
+    private var _onchainAddress: String = ""
 
     // TODO subscribe to value?
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -84,7 +86,8 @@ class WalletViewModel @Inject constructor(
             _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
 
-            launch(coroutineContext) { sync() }
+            launch { refreshBip21() }
+            launch(bgDispatcher) { sync() }
 
             launch { db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") } }
             launch {
@@ -107,22 +110,37 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun syncState() {
+        val startTime = System.currentTimeMillis()
+
         _uiState.value = MainUiState.Content(
             nodeId = lightningService.nodeId.orEmpty(),
-            btcAddress = lightningService.newAddress().orEmpty(),
-            ldkBalance = lightningService.balances?.totalLightningBalanceSats,
-            btcBalance = lightningService.balances?.totalOnchainBalanceSats,
-            totalBalanceSats = lightningService.balances?.let {
-                it.totalLightningBalanceSats + it.totalOnchainBalanceSats
-            },
-            mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name).orEmpty(),
+            btcAddress = _onchainAddress,
             nodeStatus = lightningService.status,
             nodeLifecycleState = _nodeLifecycleState,
             peers = lightningService.peers.orEmpty(),
             channels = lightningService.channels.orEmpty(),
-            balanceDetails = lightningService.balances,
-            orders = uiState.value.asContent()?.orders.orEmpty(),
+            orders = _uiState.value.asContent()?.orders.orEmpty(),
         )
+
+        // Load balances async
+        viewModelScope.launch {
+            launch(coroutineContext) {
+                lightningService.balances?.let { b ->
+                    updateContentState {
+                        it.copy(
+                            totalOnchainSats = b.totalOnchainBalanceSats,
+                            totalLightningSats = b.totalLightningBalanceSats,
+                            totalBalanceSats = b.totalLightningBalanceSats + b.totalOnchainBalanceSats,
+                            balanceDetails = b,
+                        )
+                    }
+                }
+            }
+        }
+
+        val endTime = System.currentTimeMillis()
+        val duration = (endTime - startTime) / 1000.0
+        Log.v(PERF, "UI state updated in $duration sec")
     }
 
     private suspend fun onLdkEvent(event: Event) = runOnUiThread {
@@ -156,8 +174,10 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun getNewAddress() {
-        updateContentState { it.copy(btcAddress = lightningService.newAddress().orEmpty()) }
+    private suspend fun refreshBip21() {
+        if (_onchainAddress.isEmpty()) {
+            _onchainAddress = lightningService.newAddress().orEmpty()
+        }
     }
 
     fun connectPeer(peer: LnPeer) {
@@ -376,12 +396,11 @@ sealed class MainUiState {
     data object NoWallet : MainUiState()
     data class Content(
         val nodeId: String,
-        val balanceDetails: BalanceDetails?,
-        val ldkBalance: ULong?,
+        val totalOnchainSats: ULong? = null,
+        val totalLightningSats: ULong? = null,
+        val totalBalanceSats: ULong? = null,
+        val balanceDetails: BalanceDetails? = null,
         val btcAddress: String,
-        val btcBalance: ULong?,
-        val mnemonic: String,
-        val totalBalanceSats: ULong?,
         val nodeStatus: NodeStatus?,
         val nodeLifecycleState: NodeLifecycleState,
         val peers: List<LnPeer>,

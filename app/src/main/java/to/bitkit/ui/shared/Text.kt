@@ -6,7 +6,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.withStyle
 import to.bitkit.R
 import java.text.NumberFormat
@@ -14,14 +13,19 @@ import java.text.NumberFormat
 @Composable
 internal fun moneyString(
     value: Long?,
-    currency: String = stringResource(R.string.sat),
+    currency: String? = stringResource(R.string.sat),
 ): AnnotatedString {
     if (value == null) return AnnotatedString("")
+    val locale = java.util.Locale.GERMANY // hack to use periods, replace with:
+    // val locale = Locale.current.platformLocale
     return buildAnnotatedString {
-        append(NumberFormat.getNumberInstance(Locale.current.platformLocale).format(value))
+        append(NumberFormat.getNumberInstance(locale).format(value))
         append(" ")
-        withStyle(SpanStyle(color = colorScheme.onBackground.copy(0.5f))) {
-            append(currency)
+        currency?.let {
+            append(" ")
+            withStyle(SpanStyle(color = colorScheme.onBackground.copy(0.5f))) {
+                append(currency)
+            }
         }
     }
 }

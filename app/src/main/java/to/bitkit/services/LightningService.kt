@@ -139,7 +139,7 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Syncing LDK…")
         ServiceQueue.LDK.background {
             node.syncWallets()
-            setMaxDustHtlcExposureForCurrentChannels()
+            launch { setMaxDustHtlcExposureForCurrentChannels() }
         }
         Log.i(LDK, "LDK synced")
     }

@@ -22,19 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.shared.CopyToClipboardButton
-import to.bitkit.ui.shared.InfoField
 
 @Composable
 fun SettingsScreen(
     navController: NavController,
     viewModel: WalletViewModel,
 ) {
-    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
-
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -62,11 +57,6 @@ fun SettingsScreen(
             label = "Payments",
             onClick = { navController.navigate(Routes.Payments.destination) }
         )
-
-        Spacer(modifier = Modifier.size(16.dp))
-        uiState.value.asContent()?.let {
-            Mnemonic(it.mnemonic)
-        }
     }
 }
 
@@ -93,16 +83,4 @@ private fun SettingButton(label: String, onClick: () -> Unit) {
             modifier = Modifier.size(12.dp),
         )
     }
-}
-
-@Composable
-private fun Mnemonic(
-    mnemonic: String,
-) {
-    InfoField(
-        value = mnemonic,
-        label = stringResource(R.string.mnemonic),
-        maxLength = 52,
-        trailingIcon = { CopyToClipboardButton(mnemonic) },
-    )
 }

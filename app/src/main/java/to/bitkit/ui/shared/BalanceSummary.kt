@@ -1,25 +1,22 @@
 package to.bitkit.ui.shared
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.ui.MainUiState
-import to.bitkit.ui.Routes
 
 @Composable
 fun BalanceSummary(
@@ -29,54 +26,55 @@ fun BalanceSummary(
     Column {
         Text(
             text = "Total balance",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Normal,
         )
-        val balanceSat = uiState.totalBalanceSats?.let { moneyString(it.toLong()) } ?: "Loading…"
+        val balanceSat = uiState.totalBalanceSats
+            ?.let { moneyString(it.toLong(), null) }
+            ?: "Loading…"
         Text(
             text = "$balanceSat",
             style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
         )
     }
-    Spacer(modifier = Modifier.height(16.dp))
-    Box(
-        modifier = Modifier.fillMaxWidth()
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(
-            onClick = {
-                navController.navigate(Routes.Transfer.destination)
-            },
-            modifier = Modifier.align(Alignment.Center)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.SwapVert,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
+            Text(
+                text = "SAVINGS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+            )
+            Text(
+                text = moneyString(uiState.totalOnchainSats?.toLong(), null),
+                style = MaterialTheme.typography.titleSmall,
             )
         }
-        Column {
-            Row {
-                Text(
-                    text = "Savings",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = moneyString(uiState.balanceDetails?.totalOnchainBalanceSats?.toLong()),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row {
-                Text(
-                    text = "Spending",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = moneyString(uiState.balanceDetails?.totalLightningBalanceSats?.toLong()),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
+        VerticalDivider()
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+        ) {
+            Text(
+                text = "SPENDING",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Normal,
+            )
+            Text(
+                text = moneyString(uiState.totalLightningSats?.toLong(), null),
+                style = MaterialTheme.typography.titleSmall,
+            )
         }
     }
 }
