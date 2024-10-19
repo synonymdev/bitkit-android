@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,12 +22,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.shared.PagerWithIndicator
+import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
@@ -107,8 +108,9 @@ private fun ReceiveQrSlide(
             ) {
                 Text("Copy")
             }
+            val context = LocalContext.current
             TextButton(
-                onClick = { /*TODO*/ },
+                onClick = { shareText(context, uri) },
                 colors = buttonColors,
             ) {
                 Text("Share")
@@ -160,8 +162,9 @@ private fun CopyAddressCard(
                     ) {
                         Text("Copy")
                     }
+                    val context = LocalContext.current
                     TextButton(
-                        onClick = { /*TODO*/ },
+                        onClick = { shareText(context, address) },
                         colors = buttonColors,
                     ) {
                         Text("Share")
