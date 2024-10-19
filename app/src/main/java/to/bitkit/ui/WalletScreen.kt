@@ -75,6 +75,7 @@ fun WalletScreen(
         TabBar(
             onSendClicked = { showSendNavigation = true },
             onReceiveClicked = { showReceiveNavigation = true },
+            onScanClicked = { navController.navigate(Routes.Scanner.destination) },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
         // Send Sheet

@@ -20,12 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import to.bitkit.ui.Routes
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun TabBar(
     onSendClicked: () -> Unit,
     onReceiveClicked: () -> Unit,
+    onScanClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val buttonColors = ButtonDefaults.buttonColors(
@@ -57,7 +59,7 @@ fun TabBar(
             }
         }
         IconButton(
-            onClick = { /* Navigate to Scanner screen */ },
+            onClick = onScanClicked,
         ) {
             Icon(
                 imageVector = Icons.Default.CenterFocusWeak,
@@ -77,7 +79,8 @@ fun TabBarPreview() {
     AppThemeSurface {
         TabBar(
             onSendClicked = {},
-            onReceiveClicked = {}
+            onReceiveClicked = {},
+            onScanClicked = {},
         )
     }
 }
