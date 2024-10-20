@@ -234,7 +234,12 @@ class WalletViewModel @Inject constructor(
     fun onPasteFromClipboard(data: String) {
         if (data.isBlank()) return toast("No data in clipboard.")
         _scannedData = data
-        toast("Uri: $data")
+        toast("Clipboard: $data. Coming soon.")
+    }
+
+    fun onSendManually(data: String) {
+        _scannedData = data
+        toast("Input: $data. Coming soon.")
     }
 
     fun openChannel() {

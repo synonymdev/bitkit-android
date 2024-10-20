@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -17,7 +18,9 @@ fun FullWidthTextButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    colors: ButtonColors = ButtonDefaults.textButtonColors(),
+    colors: ButtonColors = ButtonDefaults.textButtonColors(
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ),
     content: @Composable (RowScope.() -> Unit),
 ) {
     TextButton(
