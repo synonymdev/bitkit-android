@@ -25,12 +25,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import to.bitkit.ui.MainUiState
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.components.BalanceSummary
 import to.bitkit.ui.screens.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.send.SendOptionsView
-import to.bitkit.ui.components.BalanceSummary
 import to.bitkit.ui.shared.TabBar
+import to.bitkit.ui.shared.util.qrCodeScanner
 import to.bitkit.ui.theme.AppShapes
 
 object WalletRoutes {
@@ -46,8 +46,7 @@ fun HomeScreen(
     uiState: MainUiState.Content,
     navController: NavHostController,
 ) {
-    var showReceiveNavigation by remember { mutableStateOf(false) }
-    var showSendNavigation by remember { mutableStateOf(false) }
+    var showReceiveSheet by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -68,16 +67,23 @@ fun HomeScreen(
                 SpendingWalletScreen()
             }
         }
+        val scanner = qrCodeScanner()
         TabBar(
-            onSendClicked = { showSendNavigation = true },
-            onReceiveClicked = { showReceiveNavigation = true },
-            onScanClicked = { navController.navigate(Routes.Scanner.destination) },
+            onSendClicked = { viewModel.showSendSheet = true },
+            onReceiveClicked = { showReceiveSheet = true },
+            onScanClicked = {
+                scanner.startScan().addOnCompleteListener { task ->
+                    task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
+                        viewModel.onScanSuccess(data)
+                    }
+                }
+            },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
         // Send Sheet
-        if (showSendNavigation) {
+        if (viewModel.showSendSheet) {
             ModalBottomSheet(
-                onDismissRequest = { showSendNavigation = false },
+                onDismissRequest = { viewModel.showSendSheet = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 shape = AppShapes.sheet,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -89,9 +95,9 @@ fun HomeScreen(
             }
         }
         // Receive Sheet
-        if (showReceiveNavigation) {
+        if (showReceiveSheet) {
             ModalBottomSheet(
-                onDismissRequest = { showReceiveNavigation = false },
+                onDismissRequest = { showReceiveSheet = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 shape = AppShapes.sheet,
                 containerColor = MaterialTheme.colorScheme.surface,

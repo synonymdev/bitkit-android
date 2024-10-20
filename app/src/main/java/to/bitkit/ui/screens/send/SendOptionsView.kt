@@ -21,12 +21,11 @@ import androidx.navigation.compose.rememberNavController
 import to.bitkit.ext.toast
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
-import to.bitkit.ui.screens.ScannerScreen
+import to.bitkit.ui.shared.util.qrCodeScanner
 
 private object Routes {
     const val SEND_OPTIONS = "SEND_OPTIONS"
     const val SEND_MANUALLY = "SEND_MANUALLY"
-    const val SEND_QR = "SEND_QR"
 }
 
 @Composable
@@ -65,14 +64,18 @@ fun SendOptionsView(
                         viewModel.onPasteFromClipboard(uri)
                     }
                     NavButton("Enter Manually") { navController.navigate(Routes.SEND_MANUALLY) }
-                    NavButton("Scan QR Code") { navController.navigate(Routes.SEND_QR) }
+                    val scanner = qrCodeScanner()
+                    NavButton("Scan QR Code") {
+                        scanner.startScan().addOnCompleteListener { task ->
+                            task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
+                                viewModel.onScanSuccess(data)
+                            }
+                        }
+                    }
                 }
             }
             composable(Routes.SEND_MANUALLY) {
                 SendEnterManuallyScreen()
-            }
-            composable(Routes.SEND_QR) {
-                ScannerScreen()
             }
         }
     }

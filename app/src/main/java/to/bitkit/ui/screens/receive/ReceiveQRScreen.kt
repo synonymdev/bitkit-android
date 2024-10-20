@@ -101,7 +101,7 @@ private fun ContentView(
 ) {
     Column {
         val onchainAddress = walletState.onchainAddress
-        val uri = cjitInvoice.value ?: onchainAddress
+        val uri = cjitInvoice.value ?: walletState.bip21
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.weight(1f)
