@@ -1,8 +1,11 @@
 package to.bitkit.ui.shared
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +37,7 @@ fun TabBar(
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
         contentColor = MaterialTheme.colorScheme.onSurface,
     )
+    val contentPadding = PaddingValues(0.dp, 12.dp)
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -45,6 +49,7 @@ fun TabBar(
                 onClick = onSendClicked,
                 shape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50),
                 colors = buttonColors,
+                contentPadding = contentPadding,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Send")
@@ -53,6 +58,7 @@ fun TabBar(
                 onClick = onReceiveClicked,
                 shape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50),
                 colors = buttonColors,
+                contentPadding = contentPadding,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Receive")
@@ -60,14 +66,17 @@ fun TabBar(
         }
         IconButton(
             onClick = onScanClicked,
+            modifier = Modifier
+                .size(60.dp)
+                .border(1.dp, buttonColors.containerColor, MaterialTheme.shapes.large)
         ) {
             Icon(
                 imageVector = Icons.Default.CenterFocusWeak,
                 contentDescription = "Scan",
                 modifier = Modifier
+                    .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
-                    .padding(8.dp)
-                    .size(36.dp)
+                    .padding(16.dp)
             )
         }
     }

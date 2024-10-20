@@ -1,6 +1,6 @@
-package to.bitkit.ui.shared
+package to.bitkit.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -17,38 +17,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.ui.MainUiState
+import to.bitkit.ui.screens.wallet.WalletRoutes
+import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun BalanceSummary(
     uiState: MainUiState.Content,
-    navController: NavHostController,
+    walletNavController: NavHostController,
 ) {
-    Column {
-        Text(
-            text = "Total balance",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Normal,
-        )
-        val balanceSat = uiState.totalBalanceSats
-            ?.let { moneyString(it.toLong(), null) }
-            ?: "Loading…"
-        Text(
-            text = "$balanceSat",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
-        )
-    }
+    BalanceView(
+        label = "TOTAL BALANCE",
+        value = uiState.totalBalanceSats,
+    )
     Spacer(modifier = Modifier.height(4.dp))
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 4.dp)
+                .clickable {
+                    walletNavController.navigate(WalletRoutes.SAVINGS)
+                }
+                .padding(4.dp)
         ) {
             Text(
                 text = "SAVINGS",
@@ -64,7 +57,10 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 4.dp)
+                .clickable {
+                    walletNavController.navigate(WalletRoutes.SPENDING)
+                }
+                .padding(4.dp)
         ) {
             Text(
                 text = "SPENDING",
@@ -76,5 +72,27 @@ fun BalanceSummary(
                 style = MaterialTheme.typography.titleSmall,
             )
         }
+    }
+}
+
+@Composable
+fun BalanceView(
+    label: String,
+    value: ULong?,
+) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Normal,
+        )
+        val valueText = value
+            ?.let { moneyString(it.toLong(), null) }
+            ?: "Loading…"
+        Text(
+            text = "$valueText",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+        )
     }
 }

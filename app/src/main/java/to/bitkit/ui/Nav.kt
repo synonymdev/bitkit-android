@@ -21,16 +21,16 @@ fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     viewModel: WalletViewModel = hiltViewModel(),
-    walletScreen: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
 ) {
     // val screenViewModel = viewModel<ScreenViewModel>()
     with(Routes) {
         NavHost(
             navController = navController,
-            startDestination = Wallet.destination,
+            startDestination = Main.destination,
             modifier = modifier,
         ) {
-            composable(Wallet.destination) { walletScreen() }
+            composable(Main.destination) { content() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
             composable(Lightning.destination) { LightningSettingsScreen(viewModel) }
             composable(DevSettings.destination) { DevSettingsScreen(viewModel) }
@@ -51,14 +51,14 @@ value class Route(val destination: String)
 
 @Stable
 object Routes {
-    val Wallet = Route("wallet")
-    val Settings = Route("settings")
+    val Main = Route("Main")
+    val Settings = Route("Settings")
     val Lightning = Route("Lightning")
     val NodeState = Route("NodeState")
     val Transfer = Route("Transfer")
     val Scanner = Route("Scanner")
-    val Peers = Route("peers")
-    val Channels = Route("channels")
-    val Payments = Route("payments")
+    val Peers = Route("Peers")
+    val Channels = Route("Channels")
+    val Payments = Route("Payments")
     val DevSettings = Route("DevSettings")
 }

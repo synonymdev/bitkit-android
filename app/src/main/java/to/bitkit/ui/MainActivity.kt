@@ -2,46 +2,35 @@ package to.bitkit.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,14 +41,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.R
-import to.bitkit.ext.requiresPermission
-import to.bitkit.ext.toast
-import to.bitkit.ui.settings.NodeDetails
-import to.bitkit.ui.settings.WalletDetails
-import to.bitkit.ui.shared.Channels
-import to.bitkit.ui.shared.FullWidthTextButton
-import to.bitkit.ui.shared.Orders
-import to.bitkit.ui.shared.Peers
+import to.bitkit.ui.screens.wallet.HomeScreen
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
@@ -82,7 +64,7 @@ class MainActivity : ComponentActivity() {
                         when (val state = it.value) {
                             is MainUiState.Loading -> LoadingScreen()
                             is MainUiState.NoWallet -> WelcomeScreen(viewModel)
-                            is MainUiState.Content -> WalletScreen(viewModel, state, navController)
+                            is MainUiState.Content -> HomeScreen(viewModel, state, navController)
                             is MainUiState.Error -> ErrorScreen(state)
                         }
                     }
@@ -108,12 +90,12 @@ class MainActivity : ComponentActivity() {
 private fun MainScreen(
     viewModel: WalletViewModel = hiltViewModel(),
     navController: NavHostController,
-    startContent: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val isBackButtonVisible by remember(currentBackStackEntry) {
         derivedStateOf {
-            navController.currentDestination?.route != Routes.Wallet.destination
+            navController.currentDestination?.route != Routes.Main.destination
         }
     }
     Scaffold(
@@ -163,7 +145,7 @@ private fun MainScreen(
             AppNavHost(
                 navController = navController,
                 viewModel = viewModel,
-                walletScreen = startContent,
+                content = content,
             )
         }
     }
