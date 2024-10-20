@@ -40,6 +40,7 @@ import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
 import to.bitkit.models.ScannedData
+import to.bitkit.models.ScannedOptions
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
@@ -241,10 +242,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun payInvoice(invoice: String) {
+    fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {
-            lightningService.send(invoice)
-            syncState()
+            runCatching { lightningService.send(bolt11) }
+                .onSuccess { syncState() }
+                .onFailure { runOnUiThread { toast("Error sending: $it") } }
         }
     }
 
@@ -253,23 +255,55 @@ class WalletViewModel @Inject constructor(
     }
 
     fun onPasteFromClipboard(data: String) {
-        // TODO: handle
-        if (data.isBlank()) return toast("No data in clipboard.")
-        _scannedData = runCatching { ScannedData(data) }.getOrNull()
-        toast("Clipboard: $data. Coming soon.")
+        if (data.isBlank()) {
+            Log.e(APP, "No data in clipboard")
+            return
+        }
+        _scannedData = runCatching { ScannedData(data) }
+            .onFailure {
+                Log.e(APP, "Failed to read data from clipboard", it)
+                toast("${it.message}")
+            }
+            .getOrNull()
+
+        Log.d(APP, "Pasted data: $_scannedData")
+
+        // TODO: nav to next view instead
+        _scannedData?.options?.first?.let {
+            when (it) {
+                is ScannedOptions.Onchain -> {
+                    toast("Onchain address: ${it.address}")
+                }
+
+                is ScannedOptions.Bolt11 -> {
+                    send(it.invoice)
+                }
+            }
+        }
     }
 
     fun onSendManually(data: String) {
-        // TODO: handle
         _scannedData = runCatching { ScannedData(data) }.getOrNull()
+        _scannedData = runCatching { ScannedData(data) }
+            .onFailure {
+                Log.e(APP, "Failed to read data from text field", it)
+                toast("${it.message}")
+            }
+            .getOrNull()
+        // TODO: nav to next view
         toast("Input: $data. Coming soon.")
     }
 
     fun onScanSuccess(data: String) {
-        // TODO: handle
-        _scannedData = runCatching { ScannedData(data) }.getOrNull()
-        Log.d(APP, "Scanned: $data")
+        _scannedData = runCatching { ScannedData(data) }
+            .onFailure {
+                Log.e(APP, "Failed to read data from scanner", it)
+                toast("${it.message}")
+            }
+            .getOrNull()
+        Log.d(APP, "Scanned data: $data")
         showSendSheet = true
+        // TODO: handle
     }
 
     fun openChannel() {
