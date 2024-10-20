@@ -7,13 +7,14 @@ import com.google.firebase.messaging.FirebaseMessaging
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.env.Env.SEED
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
@@ -31,12 +32,19 @@ class WalletViewModelTest : BaseUnitTest() {
 
     private lateinit var sut: WalletViewModel
 
+    private val balanceDetails = mock<BalanceDetails>()
+
     @Before
     fun setUp() {
         whenever(lightningService.nodeId).thenReturn("nodeId")
-        whenever(lightningService.balances).thenReturn(mock())
+        whenever(lightningService.balances).thenReturn(balanceDetails)
         whenever(lightningService.balances?.totalLightningBalanceSats).thenReturn(1000u)
         whenever(lightningService.balances?.totalOnchainBalanceSats).thenReturn(10_000u)
+        wheneverBlocking { lightningService.newAddress() }.thenReturn("onchainAddress")
+        whenever(db.configDao()).thenReturn(mock())
+        whenever(db.configDao().getAll()).thenReturn(mock())
+        whenever(db.ordersDao()).thenReturn(mock())
+        whenever(db.ordersDao().getAll()).thenReturn(mock())
 
         sut = WalletViewModel(
             uiThread = testDispatcher,
@@ -51,21 +59,27 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `uiState should emit Content state after sync`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
         val expectedUiState = MainUiState.Content(
             nodeId = "nodeId",
-            ldkBalance = "1000",
-            onchainAddress = "btcAddress",
-            btcBalance = "500",
-            mnemonic = SEED,
+            onchainAddress = "onchainAddress",
             peers = emptyList(),
             channels = emptyList(),
             orders = emptyList(),
+            balanceDetails = balanceDetails,
+            totalBalanceSats = 11_000u,
+            totalOnchainSats = 10_000u,
+            totalLightningSats = 1000u,
+            bolt11 = "",
+            bip21 = "bitcoin:onchainAddress",
+            nodeLifecycleState = NodeLifecycleState.Running,
+            nodeStatus = null,
         )
 
-        sut.uiState.test {
-            val initial = awaitItem()
-            assertEquals(MainUiState.Loading, initial)
+        sut.start()
 
+        sut.uiState.test {
             val content = awaitItem()
             assertEquals(expectedUiState, content)
             cancelAndIgnoreRemainingEvents()
