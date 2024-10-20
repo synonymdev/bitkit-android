@@ -39,6 +39,7 @@ import to.bitkit.env.Tag.PERF
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
+import to.bitkit.models.ScannedData
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
@@ -63,7 +64,7 @@ class WalletViewModel @Inject constructor(
     private var _onchainAddress: String = ""
     private var _bolt11: String = ""
     private var _bip21: String = ""
-    private var _scannedData: String = ""
+    private var _scannedData: ScannedData? = null
 
     var showSendSheet by mutableStateOf(false)
 
@@ -254,19 +255,19 @@ class WalletViewModel @Inject constructor(
     fun onPasteFromClipboard(data: String) {
         // TODO: handle
         if (data.isBlank()) return toast("No data in clipboard.")
-        _scannedData = data
+        _scannedData = runCatching { ScannedData(data) }.getOrNull()
         toast("Clipboard: $data. Coming soon.")
     }
 
     fun onSendManually(data: String) {
         // TODO: handle
-        _scannedData = data
+        _scannedData = runCatching { ScannedData(data) }.getOrNull()
         toast("Input: $data. Coming soon.")
     }
 
     fun onScanSuccess(data: String) {
         // TODO: handle
-        _scannedData = data
+        _scannedData = runCatching { ScannedData(data) }.getOrNull()
         Log.d(APP, "Scanned: $data")
         showSendSheet = true
     }
