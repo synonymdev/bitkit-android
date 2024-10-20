@@ -26,11 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.takeEnds
+import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 internal fun Channels(
@@ -55,10 +58,19 @@ internal fun Channels(
         channels.forEach {
             Column(modifier = Modifier.padding(16.dp)) {
                 val outbound by remember(it) { mutableStateOf(it.outboundCapacityMsat / 1000u) }
+                val inboundHtlcMax by remember(it) { mutableStateOf(it.inboundHtlcMaximumMsat?.div(1000u) ?: 0u) }
+                val inboundHtlcMin by remember(it) { mutableStateOf(it.inboundHtlcMinimumMsat / 1000u) }
+                val nextOutboundHtlcLimit by remember(it) { mutableStateOf(it.nextOutboundHtlcLimitMsat / 1000u) }
+                val nextOutboundHtlcMin by remember(it) { mutableStateOf(it.nextOutboundHtlcMinimumMsat / 1000u) }
                 val inbound by remember(it) { mutableStateOf(it.inboundCapacityMsat / 1000u) }
 
                 ChannelItem(
-                    isReady = it.isUsable,
+                    isReady = it.isChannelReady,
+                    public = it.isPublic,
+                    inboundHtlcMax = inboundHtlcMax.toLong(),
+                    inboundHtlcMin = inboundHtlcMin.toLong(),
+                    nextOutboundHtlcLimit = nextOutboundHtlcLimit.toLong(),
+                    nextOutboundHtlcMin = nextOutboundHtlcMin.toLong(),
                     channelId = it.channelId,
                     outbound = outbound.toLong(),
                     inbound = inbound.toLong(),
@@ -77,6 +89,11 @@ internal fun Channels(
 @Composable
 private fun ChannelItem(
     isReady: Boolean,
+    public: Boolean,
+    inboundHtlcMax: Long,
+    inboundHtlcMin: Long,
+    nextOutboundHtlcLimit: Long,
+    nextOutboundHtlcMin: Long,
     channelId: String,
     outbound: Long,
     inbound: Long,
@@ -130,5 +147,32 @@ private fun ChannelItem(
                 )
             }
         }
+        Column {
+            val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal)
+            Text("Public: $public", style = style)
+            Text("Inbound htlc max: " + moneyString(inboundHtlcMax), style = style)
+            Text("Inbound htlc min: " + moneyString(inboundHtlcMin), style = style)
+            Text("Next outbound htlc limit: " + moneyString(nextOutboundHtlcLimit), style = style)
+            Text("Next outbound htlc min: " + moneyString(nextOutboundHtlcMin), style = style)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ChannelItemPreview() {
+    AppThemeSurface {
+        ChannelItem(
+            isReady = true,
+            channelId = "0000000000",
+            outbound = 1000,
+            inbound = 1000,
+            onClose = {},
+            public = false,
+            inboundHtlcMax = 123L,
+            inboundHtlcMin = 246L,
+            nextOutboundHtlcLimit = 531L,
+            nextOutboundHtlcMin = 762L,
+        )
     }
 }
