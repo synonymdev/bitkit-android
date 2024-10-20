@@ -59,6 +59,7 @@ class WalletViewModel @Inject constructor(
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
     private var _onchainAddress: String = ""
     private var _bolt11: String = ""
+    private var _scannedData: String = ""
 
     // TODO subscribe to value?
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -176,15 +177,16 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private val incomingLightningCapacitySats: ULong? get() {
-        return _uiState.value.asContent()?.let {
-            var capacity: ULong = 0u
-            it.channels.forEach { channel ->
-                capacity += channel.inboundCapacityMsat / 1000u
+    private val incomingLightningCapacitySats: ULong?
+        get() {
+            return _uiState.value.asContent()?.let {
+                var capacity: ULong = 0u
+                it.channels.forEach { channel ->
+                    capacity += channel.inboundCapacityMsat / 1000u
+                }
+                capacity
             }
-            capacity
         }
-    }
 
     private suspend fun refreshBip21() {
         if (_onchainAddress.isEmpty()) {
@@ -227,6 +229,12 @@ class WalletViewModel @Inject constructor(
 
     fun createInvoice(): String {
         return runBlocking { lightningService.receive(112u, "description", 7200u) }
+    }
+
+    fun onPasteFromClipboard(data: String) {
+        if (data.isBlank()) return toast("No data in clipboard.")
+        _scannedData = data
+        toast("Uri: $data")
     }
 
     fun openChannel() {

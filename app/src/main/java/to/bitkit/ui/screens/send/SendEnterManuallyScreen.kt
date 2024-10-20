@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens
+package to.bitkit.ui.screens.send
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +14,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.ui.WalletViewModel
 
 @Composable
-fun ScannerScreen(
+fun SendEnterManuallyScreen(
     viewModel: WalletViewModel = hiltViewModel(),
 ) {
     Column(
@@ -24,7 +24,7 @@ fun ScannerScreen(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Scanner",
+            text = "Enter Invoice or Address Manually",
             style = MaterialTheme.typography.headlineLarge,
         )
     }
