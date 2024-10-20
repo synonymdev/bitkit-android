@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                         when (val state = it.value) {
                             is MainUiState.Loading -> LoadingScreen()
                             is MainUiState.NoWallet -> WelcomeScreen(viewModel)
-                            is MainUiState.Content -> WalletScreen(viewModel, state, navController, debugUi(state))
+                            is MainUiState.Content -> WalletScreen(viewModel, state, navController)
                             is MainUiState.Error -> ErrorScreen(state)
                         }
                     }
@@ -198,74 +198,3 @@ fun ErrorScreen(uiState: MainUiState.Error) {
         )
     }
 }
-
-// region debug
-fun MainActivity.debugUi(uiState: MainUiState.Content) = @Composable {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "Debug",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        IconButton(viewModel::debugSync) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = stringResource(R.string.sync),
-            )
-        }
-    }
-    NodeDetails(uiState)
-    WalletDetails(uiState)
-    Peers(uiState.peers, viewModel::disconnectPeer)
-    Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Debug",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(12.dp)
-        )
-        FullWidthTextButton(viewModel::debugDb) { Text("Database") }
-        FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
-        FullWidthTextButton(viewModel::debugWipe) { Text("Wipe Wallet") }
-        FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
-        HorizontalDivider()
-        NotificationButton()
-        FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
-        FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
-    }
-    Orders(uiState.orders, viewModel)
-}
-
-@Composable
-private fun NotificationButton() {
-    val context = LocalContext.current
-    var canPush by remember {
-        mutableStateOf(!context.requiresPermission(postNotificationsPermission))
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        canPush = it
-        toast("Permission ${if (it) "Granted" else "Denied"}")
-    }
-
-    val onClick = {
-        if (context.requiresPermission(postNotificationsPermission)) {
-            permissionLauncher.launch(postNotificationsPermission)
-        } else {
-            pushNotification(
-                title = "Bitkit Notification",
-                text = "Short custom notification description",
-                bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
-            )
-        }
-        Unit
-    }
-    val text by remember {
-        derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
-    }
-    FullWidthTextButton(onClick = onClick) { Text(text = text) }
-}
-// endregion

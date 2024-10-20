@@ -8,6 +8,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.ScannerScreen
 import to.bitkit.ui.screens.TransferScreen
 import to.bitkit.ui.settings.ChannelsScreen
@@ -32,6 +33,7 @@ fun AppNavHost(
             composable(Wallet.destination) { walletScreen() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
             composable(Lightning.destination) { LightningSettingsScreen(viewModel) }
+            composable(DevSettings.destination) { DevSettingsScreen(viewModel) }
             composable(NodeState.destination) { NodeStateScreen(viewModel) }
             composable(Peers.destination) { PeersScreen(viewModel) }
             composable(Channels.destination) { ChannelsScreen(viewModel) }
@@ -58,4 +60,5 @@ object Routes {
     val Peers = Route("peers")
     val Channels = Route("channels")
     val Payments = Route("payments")
+    val DevSettings = Route("DevSettings")
 }

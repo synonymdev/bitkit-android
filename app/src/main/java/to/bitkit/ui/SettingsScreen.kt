@@ -57,6 +57,10 @@ fun SettingsScreen(
             label = "Payments",
             onClick = { navController.navigate(Routes.Payments.destination) }
         )
+        SettingButton(
+            label = "Developer",
+            onClick = { navController.navigate(Routes.DevSettings.destination) }
+        )
     }
 }
 

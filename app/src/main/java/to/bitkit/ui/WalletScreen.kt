@@ -68,7 +68,6 @@ fun WalletScreen(
                 )
             }
 
-            // TODO: Debug UI (Hide)
             content()
             Spacer(modifier = Modifier.height(1.dp))
         }
