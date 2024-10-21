@@ -14,6 +14,10 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
+    val defaultWalletWordCount = 12
+    val onchainWalletStopGap = 20_UL
+    val walletSyncIntervalSecs = 60_UL
+    val esploraParallelRequests = 6
     val trustedLnPeers
         get() = when (network) {
             Network.REGTEST -> listOf(

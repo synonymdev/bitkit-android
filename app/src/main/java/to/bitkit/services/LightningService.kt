@@ -61,11 +61,12 @@ class LightningService @Inject constructor(
                     logDirPath = dir
                     network = Env.network
                     logLevel = LogLevel.TRACE
+                    walletSyncIntervalSecs = Env.walletSyncIntervalSecs
 
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
                     anchorChannelsConfig = AnchorChannelsConfig(
                         trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 2000u, // TODO set correctly
+                        perChannelReserveSats = 1000u,
                     )
                 })
             .apply {
