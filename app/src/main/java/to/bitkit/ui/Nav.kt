@@ -8,8 +8,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.toRoute
+import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.TransferScreen
+import to.bitkit.ui.screens.wallet.SavingsWalletScreen
+import to.bitkit.ui.screens.wallet.SpendingWalletScreen
+import to.bitkit.ui.screens.wallet.activity.ActivityItemScreen
+import to.bitkit.ui.screens.wallet.activity.AllActivityScreen
 import to.bitkit.ui.settings.ChannelsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.PaymentsScreen
@@ -38,6 +44,13 @@ fun AppNavHost(
             composable(Channels.destination) { ChannelsScreen(viewModel) }
             composable(Payments.destination) { PaymentsScreen(viewModel) }
             composable(Transfer.destination) { TransferScreen() }
+            composable(AllActivity.destination) { AllActivityScreen(viewModel, navController) }
+            composable(Savings.destination) { SavingsWalletScreen(navController) }
+            composable(Spending.destination) { SpendingWalletScreen(navController) }
+            composable<ActivityItemRoute> { backStackEntry ->
+                val activityItem: ActivityItemRoute = backStackEntry.toRoute()
+                ActivityItemScreen(activityItem)
+            }
         }
     }
 }
@@ -54,8 +67,14 @@ object Routes {
     val Lightning = Route("Lightning")
     val NodeState = Route("NodeState")
     val Transfer = Route("Transfer")
+    val AllActivity = Route("AllActivity")
     val Peers = Route("Peers")
     val Channels = Route("Channels")
     val Payments = Route("Payments")
     val DevSettings = Route("DevSettings")
+    val Savings = Route("Savings")
+    val Spending = Route("Spending")
 }
+
+@Serializable
+data class ActivityItemRoute(val id: String)

@@ -15,11 +15,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
+import to.bitkit.ui.screens.wallet.activity.ActivityLatest
+import to.bitkit.ui.screens.wallet.activity.ActivityType
 
 @Composable
 fun SpendingWalletScreen(
+    navController: NavHostController,
     viewModel: WalletViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle()
@@ -29,7 +33,6 @@ fun SpendingWalletScreen(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .verticalScroll(rememberScrollState())
     ) {
         Text(
             text = "Spending",
@@ -41,5 +44,7 @@ fun SpendingWalletScreen(
             label = "SPENDING BALANCE",
             value = uiState.totalLightningSats,
         )
+        Spacer(modifier = Modifier.height(24.dp))
+        ActivityLatest(ActivityType.LIGHTNING, navController)
     }
 }

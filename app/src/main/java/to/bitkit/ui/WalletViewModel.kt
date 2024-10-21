@@ -24,6 +24,10 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
@@ -45,6 +49,7 @@ import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.shared.ServiceError
+import to.bitkit.ui.screens.wallet.activity.testActivityItems
 import javax.inject.Inject
 
 @HiltViewModel
@@ -69,7 +74,15 @@ class WalletViewModel @Inject constructor(
 
     var showSendSheet by mutableStateOf(false)
 
-    // TODO subscribe to value?
+    var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
+        private set
+    var latestActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
+        private set
+    var latestLightningActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
+        private set
+    var latestOnchainActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
+        private set
+
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
     fun start() {
@@ -114,8 +127,29 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    private var isSyncingWallet = false
     private suspend fun sync() {
-        lightningService.sync()
+        syncState()
+
+        if (isSyncingWallet) {
+            Log.w(APP, "Sync already in progress, waiting for existing sync.")
+            while (isSyncingWallet) {
+                delay(500) // Suspend and wait for 500ms
+            }
+            return
+        }
+
+        isSyncingWallet = true
+        syncState()
+
+        try {
+            lightningService.sync()
+        } catch (e: Exception) {
+            isSyncingWallet = false
+            throw e
+        }
+
+        isSyncingWallet = false
         syncState()
     }
 
@@ -136,7 +170,7 @@ class WalletViewModel @Inject constructor(
 
         // Load balances async
         viewModelScope.launch {
-            launch(coroutineContext) {
+            launch {
                 lightningService.balances?.let { b ->
                     updateContentState {
                         it.copy(
@@ -146,6 +180,56 @@ class WalletViewModel @Inject constructor(
                             balanceDetails = b,
                         )
                     }
+                }
+            }
+        }
+
+        // Load activity items async
+        viewModelScope.launch {
+            launch {
+                lightningService.payments?.let { payments ->
+                    val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
+
+                    // TODO: eventually load other activity types from storage
+                    val allActivity = mutableListOf<PaymentDetails>()
+                    val latestLightningActivity = mutableListOf<PaymentDetails>()
+                    val latestOnchainActivity = mutableListOf<PaymentDetails>()
+
+                    sorted.forEach { details ->
+                        when (details.kind) {
+                            is PaymentKind.Onchain -> {
+                                allActivity.add(details)
+                                latestOnchainActivity.add(details)
+                            }
+
+                            is PaymentKind.Bolt11 -> {
+                                if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
+                                    allActivity.add(details)
+                                    latestLightningActivity.add(details)
+                                }
+                            }
+
+                            is PaymentKind.Spontaneous -> {
+                                allActivity.add(details)
+                                latestLightningActivity.add(details)
+                            }
+
+                            is PaymentKind.Bolt11Jit -> Unit
+                            is PaymentKind.Bolt12Offer -> Unit
+                            is PaymentKind.Bolt12Refund -> Unit
+                        }
+                    }
+
+                    // TODO: append activity items from lightning balances
+
+                    val limitLatest = 3
+                    activityItems.value = allActivity
+                    latestActivityItems.value = allActivity.take(limitLatest)
+                    latestLightningActivityItems.value = latestLightningActivity.take(limitLatest)
+                    latestOnchainActivityItems.value = latestOnchainActivity.take(limitLatest)
+
+                    // TODO update
+                    // activityItems.value = it
                 }
             }
         }
@@ -435,6 +519,7 @@ class WalletViewModel @Inject constructor(
                     launch {
                         Log.d(DEV, "Syncing orders")
                         delay(1500)
+                        syncState()
                         debugBtOrdersSync()
                     }
                 }
@@ -447,6 +532,15 @@ class WalletViewModel @Inject constructor(
                 .onFailure { runOnUiThread { toast("Manual open error: ${it.message}") } }
                 .onSuccess { runOnUiThread { toast("Manual open success") } }
         }
+    }
+
+    fun debugActivityItems() {
+        val testItems = testActivityItems.toList()
+        activityItems.value = testItems
+        latestActivityItems.value = testItems.take(3)
+        latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
+        latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
+        toast("Test activity items added")
     }
     // endregion
 
