@@ -49,6 +49,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut = WalletViewModel(
             uiThread = testDispatcher,
             bgDispatcher = testDispatcher,
+            appContext = mock(),
             db = db,
             keychain = keychain,
             blocktankService = blocktankService,

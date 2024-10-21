@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -37,12 +39,14 @@ import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
-import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
 import to.bitkit.env.Tag.PERF
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.ScannedData
 import to.bitkit.models.ScannedOptions
 import to.bitkit.models.blocktank.BtOrder
@@ -56,6 +60,7 @@ import javax.inject.Inject
 class WalletViewModel @Inject constructor(
     @UiDispatcher private val uiThread: CoroutineDispatcher,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @ApplicationContext private val appContext: Context,
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
@@ -85,7 +90,13 @@ class WalletViewModel @Inject constructor(
 
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
-    fun start() {
+    private var _onEvent: ((Event) -> Unit)? = null
+
+    fun setOnEvent(onEvent: (Event) -> Unit) {
+        _onEvent = onEvent
+    }
+
+    fun start(walletIndex: Int = 0) {
         if (!walletExists) {
             _uiState.value = MainUiState.NoWallet
             return
@@ -96,12 +107,13 @@ class WalletViewModel @Inject constructor(
 
             _nodeLifecycleState = NodeLifecycleState.Starting
             syncState()
+
             runCatching {
                 lightningService.let {
-                    it.setup(walletIndex = 0, mnemonic)
+                    it.setup(walletIndex, mnemonic)
                     it.start { event ->
                         syncState()
-                        onLdkEvent(event)
+                        _onEvent?.invoke(event)
                     }
                 }
             }.onFailure { Log.e(APP, "Init error", it) }
@@ -237,22 +249,6 @@ class WalletViewModel @Inject constructor(
         val endTime = System.currentTimeMillis()
         val duration = (endTime - startTime) / 1000.0
         Log.v(PERF, "UI state updated in $duration sec")
-    }
-
-    private suspend fun onLdkEvent(event: Event) = runOnUiThread {
-        try {
-            when (event) {
-                is Event.PaymentReceived -> toast("Received ${event.amountMsat / 1000u} sats")
-                is Event.ChannelPending -> toast("Channel Pending")
-                is Event.ChannelReady -> toast("Channel Opened")
-                is Event.ChannelClosed -> toast("Channel Closed")
-                is Event.PaymentSuccessful -> Unit
-                is Event.PaymentClaimable -> Unit
-                is Event.PaymentFailed -> Unit
-            }
-        } catch (e: Exception) {
-            Log.e(LDK, "Ldk event handler error", e)
-        }
     }
 
     fun registerForNotifications(fcmToken: String? = null) {
@@ -541,6 +537,18 @@ class WalletViewModel @Inject constructor(
         latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
         latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
         toast("Test activity items added")
+    }
+
+    fun debugTransactionSheet() {
+        NewTransactionSheetDetails.save(
+            appContext,
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                sats = 123456789,
+            )
+        )
+        toast("Transaction cached. Restart app to see sheet.")
     }
     // endregion
 
