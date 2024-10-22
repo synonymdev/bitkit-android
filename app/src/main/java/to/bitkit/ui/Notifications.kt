@@ -15,12 +15,9 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.R
 import to.bitkit.currentActivity
 import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.FCM
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
 import to.bitkit.ext.requiresPermission
@@ -93,15 +90,3 @@ val postNotificationsPermission
     } else {
         TODO("Cant request 'POST_NOTIFICATIONS' permissions on SDK < 33")
     }
-
-fun logFcmToken() {
-    FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-        if (!task.isSuccessful) {
-            Log.w(FCM, "FCM registration token error:", task.exception)
-            return@OnCompleteListener
-        }
-        val token = task.result
-        // TODO call sharedViewModel.registerForNotifications(token) and move the listener body to there
-        Log.d(FCM, "FCM registration token: $token")
-    })
-}

@@ -258,9 +258,9 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun registerForNotifications(fcmToken: String? = null) {
+    fun registerForNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            val token = fcmToken ?: firebaseMessaging.token.await()
+            val token = firebaseMessaging.token.await()
 
             val result = runCatching { blocktankService.registerDevice(token) }
                 .onFailure { Log.e(LSP, "Failed to register device with LSP", it) }
@@ -444,6 +444,13 @@ class WalletViewModel @Inject constructor(
             db.configDao().getAll().collect {
                 Log.d(DEV, "${it.count()} entities in DB: $it")
             }
+        }
+    }
+
+    fun debugFcmToken() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = firebaseMessaging.token.await()
+            Log.d(DEV, "FCM registration token: $token")
         }
     }
 

@@ -14,6 +14,7 @@ import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
+import to.bitkit.data.AppStorage
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
@@ -29,6 +30,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var blocktankService: BlocktankService = mock()
     private var lightningService: LightningService = mock()
+    private var appStorage: AppStorage = mock()
 
     private lateinit var sut: WalletViewModel
 
@@ -50,6 +52,7 @@ class WalletViewModelTest : BaseUnitTest() {
             uiThread = testDispatcher,
             bgDispatcher = testDispatcher,
             appContext = mock(),
+            appStorage = appStorage,
             db = db,
             keychain = keychain,
             blocktankService = blocktankService,
@@ -88,16 +91,7 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `registerForNotifications should register device with provided FCM token`() = test {
-        val token = "test"
-
-        sut.registerForNotifications(token)
-
-        verify(blocktankService).registerDevice(token)
-    }
-
-    @Test
-    fun `registerForNotifications should register device with default FCM token`() = test {
+    fun `registerForNotifications should register device with FCM token`() = test {
         val token = "test"
         val task = mock<Task<String>> {
             on(it.isComplete).thenReturn(true)
@@ -105,7 +99,7 @@ class WalletViewModelTest : BaseUnitTest() {
         }
         whenever(firebaseMessaging.token).thenReturn(task)
 
-        sut.registerForNotifications(null)
+        sut.registerForNotifications()
 
         verify(blocktankService).registerDevice(token)
     }

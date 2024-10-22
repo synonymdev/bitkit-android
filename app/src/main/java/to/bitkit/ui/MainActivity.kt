@@ -64,7 +64,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
-        logFcmToken()
 
         viewModel.setOnEvent(::onLdkEvent)
         viewModel.start()
