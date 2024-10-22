@@ -18,6 +18,7 @@ import androidx.navigation.NavHostController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
+import to.bitkit.ui.screens.NotificationButton
 import to.bitkit.ui.shared.FullWidthTextButton
 
 @Composable
@@ -46,6 +47,7 @@ fun LightningSettingsScreen(
                 modifier = Modifier.padding(12.dp)
             )
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                NotificationButton()
                 FullWidthTextButton(viewModel::registerForNotifications) { Text("Register for notifications") }
                 FullWidthTextButton(viewModel::debugLspNotifications) { Text("Self test notification") }
                 FullWidthTextButton(viewModel::openChannel) { Text("Open channel to trusted peer") }

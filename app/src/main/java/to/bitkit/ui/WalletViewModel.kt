@@ -293,13 +293,17 @@ class WalletViewModel @Inject constructor(
 
         _bip21 = "bitcoin:$_onchainAddress"
 
+        val hasChannels = _uiState.value.asContent()?.channels?.isNotEmpty() == true
+        if (!hasChannels) {
+            _bolt11 = ""
+        }
+
         if (_bolt11.isNotEmpty()) {
             _bip21 += "?lightning=$_bolt11"
         }
 
         // TODO: check current bolt11 for expiry and/or if it's been used
 
-        val hasChannels = _uiState.value.asContent()?.channels?.isNotEmpty() == true
         val hasIncomingLightingCapacity = incomingLightningCapacitySats?.let { it > 0u } == true
         if (hasChannels && hasIncomingLightingCapacity) {
             // Append lightning invoice if we have incoming capacity

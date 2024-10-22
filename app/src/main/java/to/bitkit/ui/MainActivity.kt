@@ -66,7 +66,6 @@ class MainActivity : ComponentActivity() {
         initNotificationChannel()
 
         viewModel.setOnEvent(::onLdkEvent)
-        viewModel.start()
 
         setContent {
             enableEdgeToEdge()
@@ -150,18 +149,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
 
+        viewModel.start()
+
         val pendingTransaction = NewTransactionSheetDetails.load(this)
         if (pendingTransaction != null) {
             app.showNewTransactionSheet(pendingTransaction)
             NewTransactionSheetDetails.clear(this)
         }
-        // viewModel.start()
     }
 
-    // override fun onStop() {
-    //     super.onStop()
-    //     viewModel.stop()
-    // }
+    override fun onStop() {
+        super.onStop()
+        viewModel.stop()
+    }
 }
 
 // region scaffold

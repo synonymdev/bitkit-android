@@ -29,7 +29,7 @@ fun Context.initNotificationChannel(
     id: String = CHANNEL_MAIN,
     name: String = getString(R.string.app_notifications_channel_name),
     desc: String = getString(R.string.app_notifications_channel_desc),
-    importance: Int = NotificationManager.IMPORTANCE_DEFAULT,
+    importance: Int = NotificationManager.IMPORTANCE_HIGH,
 ) {
     val channel = NotificationChannel(id, name, importance).apply { description = desc }
     notificationManager.createNotificationChannel(channel)
@@ -49,7 +49,7 @@ internal fun Context.notificationBuilder(
 
     return NotificationCompat.Builder(this, channelId)
         .setSmallIcon(R.drawable.ic_notification)
-        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
         .setContentIntent(pendingIntent) // fired on tap
         .setAutoCancel(true) // remove on tap

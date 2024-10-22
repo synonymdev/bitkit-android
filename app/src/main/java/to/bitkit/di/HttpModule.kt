@@ -5,6 +5,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.ANDROID
@@ -36,6 +37,11 @@ object HttpModule {
     @Singleton
     fun provideHttpClient(json: Json): HttpClient {
         return HttpClient {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60_000 // 30 seconds
+                connectTimeoutMillis = 30_000 // 10 seconds
+                socketTimeoutMillis = 30_000  // 10 seconds
+            }
             install(Logging) {
                 logger = Logger.ANDROID
                 level = LogLevel.BODY

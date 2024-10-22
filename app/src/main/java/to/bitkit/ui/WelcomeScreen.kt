@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import to.bitkit.env.Env.SEED
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppShapes
 
@@ -79,7 +78,7 @@ private fun RestoreView(
     val sheetHeight = LocalConfiguration.current.screenHeightDp.dp - 200.dp
 
     Column(modifier = modifier.height(sheetHeight)) {
-        var bip39Mnemonic by remember { mutableStateOf(SEED) }
+        var bip39Mnemonic by remember { mutableStateOf("") }
         var bip39Passphrase by remember { mutableStateOf("") }
 
         Column(modifier = Modifier.padding(24.dp)) {
