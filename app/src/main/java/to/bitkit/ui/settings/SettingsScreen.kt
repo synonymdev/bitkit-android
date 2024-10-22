@@ -1,4 +1,4 @@
-package to.bitkit.ui
+package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.ui.Routes
+import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
 
 @Composable
@@ -33,13 +35,7 @@ fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
         )
         NavButton("Lightning") { navController.navigate(Routes.Lightning.destination) }
-        Text(
-            text = "Dev & Debug",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(top = 16.dp)
-        )
-        NavButton("Peers") { navController.navigate(Routes.Peers.destination) }
-        NavButton("Channels") { navController.navigate(Routes.Channels.destination) }
         NavButton("Developer") { navController.navigate(Routes.DevSettings.destination) }
+        NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
     }
 }

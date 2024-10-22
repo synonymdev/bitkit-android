@@ -399,6 +399,24 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun wipeStorage() {
+        if (Env.network != Network.REGTEST) {
+            toast("Can only nuke on regtest.")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                lightningService.stop()
+                lightningService.wipeStorage(0)
+                keychain.wipe()
+            }.onSuccess {
+                start() // restart UI
+            }.onFailure {
+                runOnUiThread { toast("Failed to wipe: $it") }
+            }
+        }
+    }
+
     private fun updateContentState(update: (MainUiState.Content) -> MainUiState.Content) {
         val stateValue = this._uiState.value
         if (stateValue is MainUiState.Content) {
@@ -433,24 +451,6 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
             Log.d(DEV, "Mnemonic: \n$mnemonic")
-        }
-    }
-
-    fun debugWipe() {
-        if (Env.network != Network.REGTEST) {
-            toast("Can only nuke on regtest.")
-            return
-        }
-        viewModelScope.launch {
-            runCatching {
-                lightningService.stop()
-                lightningService.wipeStorage(0)
-                keychain.wipe()
-            }.onSuccess {
-                start() // restart UI
-            }.onFailure {
-                runOnUiThread { toast("Failed to wipe: $it") }
-            }
         }
     }
 

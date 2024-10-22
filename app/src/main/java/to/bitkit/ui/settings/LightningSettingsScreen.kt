@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -18,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.shared.FullWidthTextButton
 
 @Composable
@@ -31,25 +31,26 @@ fun LightningSettingsScreen(
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column {
             Text(
                 text = "LDK",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(12.dp)
             )
-            FullWidthTextButton({ navController.navigate(Routes.NodeState.destination) }) { Text("Node State") }
+            NavButton("Node State") { navController.navigate(Routes.NodeState.destination) }
         }
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column {
             Text(
                 text = "Blocktank",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(12.dp)
             )
-            HorizontalDivider()
-            FullWidthTextButton(viewModel::registerForNotifications) { Text("Register for notifications") }
-            FullWidthTextButton(viewModel::debugLspNotifications) { Text("Self test notification") }
-            FullWidthTextButton(viewModel::openChannel) { Text("Open channel to trusted peer") }
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                FullWidthTextButton(viewModel::registerForNotifications) { Text("Register for notifications") }
+                FullWidthTextButton(viewModel::debugLspNotifications) { Text("Self test notification") }
+                FullWidthTextButton(viewModel::openChannel) { Text("Open channel to trusted peer") }
 
+            }
         }
         Spacer(modifier = Modifier.height(1.dp))
     }

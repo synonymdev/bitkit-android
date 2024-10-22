@@ -86,7 +86,7 @@ fun DevSettingsScreen(
             FullWidthTextButton(viewModel::debugDb) { Text("Database") }
             FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
             FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
-            FullWidthTextButton(viewModel::debugWipe) { Text("Wipe Wallet") }
+            FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
             FullWidthTextButton(viewModel::debugActivityItems) { Text("Activity Items") }
             FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
             FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
