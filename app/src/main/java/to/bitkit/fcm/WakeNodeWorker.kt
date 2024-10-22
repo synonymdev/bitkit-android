@@ -8,7 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -32,7 +32,7 @@ import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
@@ -50,6 +50,8 @@ class WakeNodeWorker @AssistedInject constructor(
 
     private val self = this
 
+    private val deliverSignal = CompletableDeferred<Unit>()
+
     override suspend fun doWork(): Result {
         Log.d(LDK, "Node wakeup from notification…")
 
@@ -66,7 +68,7 @@ class WakeNodeWorker @AssistedInject constructor(
             withPerformanceLogging {
                 LightningService.shared.apply {
                     setup(walletIndex = 0, mnemonic)
-                    start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
+                    start(timeout = 2.hours) { handleLdkEvent(it) } // stop() is done by deliver() via handleEvent()
                 }
 
                 // Once node is started, handle the manual channel opening if needed
@@ -88,6 +90,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     }
                 }
             }
+            deliverSignal.await()
             return Result.success()
         } catch (e: Exception) {
             val reason = e.message ?: "Unknown error"
@@ -105,7 +108,9 @@ class WakeNodeWorker @AssistedInject constructor(
      * Listens for LDK events and delivers the notification if the event matches the notification type.
      * @param event The LDK event to check.
      */
-    private suspend fun handleEvent(event: Event) {
+    private suspend fun handleLdkEvent(event: Event) {
+        Log.d(LDK, "WakeNodeWorker LDK event: $event")
+
         when (event) {
             is Event.PaymentReceived -> {
                 bestAttemptContent?.title = "Payment Received"
@@ -183,12 +188,13 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
-        delay(30.seconds)
         LightningService.shared.stop()
 
         bestAttemptContent?.run {
             pushNotification(title, body, context = appContext)
             Log.i(LDK, "Delivered notification")
         }
+
+        deliverSignal.complete(Unit)
     }
 }

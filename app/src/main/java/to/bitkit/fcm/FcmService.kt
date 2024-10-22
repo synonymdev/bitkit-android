@@ -55,7 +55,6 @@ internal class FcmService : FirebaseMessagingService() {
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
-                    sendNotification(it.title, it.message)
                     decryptPayload(it)
                 }
                 isEncryptedNotification

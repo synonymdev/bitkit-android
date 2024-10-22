@@ -97,9 +97,9 @@ class LightningService @Inject constructor(
             launch(coroutineContext) {
                 try {
                     if (timeout != null) {
-                        withTimeout(timeout) { listen(it) }
+                        withTimeout(timeout) { listenForEvents(it) }
                     } else {
-                        listen(it)
+                        listenForEvents(it)
                     }
                 } catch (e: Exception) {
                     Log.e(LDK, "Error in event listener", e)
@@ -151,11 +151,15 @@ class LightningService @Inject constructor(
             return
         }
         val node = this.node ?: throw ServiceError.NodeNotStarted
-        for (channel in node.listChannels()) {
-            val config = channel.config
-            config.setMaxDustHtlcExposureFromFixedLimit(limitMsat= 999999_UL.millis)
-            node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
-            Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+        runCatching {
+            for (channel in node.listChannels()) {
+                val config = channel.config
+                config.setMaxDustHtlcExposureFromFixedLimit(limitMsat = 999_999_UL.millis)
+                node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+                Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+            }
+        }.onFailure {
+            Log.e(LDK, "Failed to update channel config", it)
         }
     }
 
@@ -286,7 +290,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region events
-    private suspend fun listen(onEvent: NodeEventHandler? = null) {
+    private suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
         while (true) {
             val node = this.node ?: let {
                 Log.e(LDK, ServiceError.NodeNotStarted.message.orEmpty())

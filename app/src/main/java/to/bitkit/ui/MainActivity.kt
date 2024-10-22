@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun onLdkEvent(event: Event) {
+    private fun onLdkEvent(event: Event) = runOnUiThread {
         try {
             when (event) {
                 is Event.PaymentReceived -> {
