@@ -32,6 +32,7 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
+import to.bitkit.data.AppStorage
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -60,6 +61,7 @@ class WalletViewModel @Inject constructor(
     @UiDispatcher private val uiThread: CoroutineDispatcher,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @ApplicationContext private val appContext: Context,
+    private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
     private val blocktankService: BlocktankService,
@@ -71,9 +73,19 @@ class WalletViewModel @Inject constructor(
     private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
-    private var _onchainAddress: String = ""
-    private var _bolt11: String = ""
-    private var _bip21: String = ""
+
+    private var _onchainAddress: String
+        get() = appStorage.onchainAddress
+        set(value) = let { appStorage.onchainAddress = value }
+
+    private var _bolt11: String
+        get() = appStorage.bolt11
+        set(value) = let { appStorage.bolt11 = value }
+
+    private var _bip21: String
+        get() = appStorage.bip21
+        set(value) = let { appStorage.bip21 = value }
+
     private var _scannedData: ScannedData? = null
 
     var showSendSheet by mutableStateOf(false)
