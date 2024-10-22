@@ -18,7 +18,6 @@ import to.bitkit.ui.screens.wallet.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallet.activity.AllActivityScreen
 import to.bitkit.ui.settings.ChannelsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
-import to.bitkit.ui.settings.PaymentsScreen
 import to.bitkit.ui.settings.PeersScreen
 
 @Composable
@@ -37,12 +36,11 @@ fun AppNavHost(
         ) {
             composable(Main.destination) { content() }
             composable(Settings.destination) { SettingsScreen(navController, viewModel) }
-            composable(Lightning.destination) { LightningSettingsScreen(viewModel) }
+            composable(Lightning.destination) { LightningSettingsScreen(viewModel, navController) }
             composable(DevSettings.destination) { DevSettingsScreen(viewModel) }
             composable(NodeState.destination) { NodeStateScreen(viewModel) }
             composable(Peers.destination) { PeersScreen(viewModel) }
             composable(Channels.destination) { ChannelsScreen(viewModel) }
-            composable(Payments.destination) { PaymentsScreen(viewModel) }
             composable(Transfer.destination) { TransferScreen() }
             composable(AllActivity.destination) { AllActivityScreen(viewModel, navController) }
             composable(Savings.destination) { SavingsWalletScreen(navController) }
@@ -70,7 +68,6 @@ object Routes {
     val AllActivity = Route("AllActivity")
     val Peers = Route("Peers")
     val Channels = Route("Channels")
-    val Payments = Route("Payments")
     val DevSettings = Route("DevSettings")
     val Savings = Route("Savings")
     val Spending = Route("Spending")

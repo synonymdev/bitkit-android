@@ -33,9 +33,13 @@ fun SettingsScreen(
             fontWeight = FontWeight.ExtraBold,
         )
         NavButton("Lightning") { navController.navigate(Routes.Lightning.destination) }
+        Text(
+            text = "Dev & Debug",
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 16.dp)
+        )
         NavButton("Peers") { navController.navigate(Routes.Peers.destination) }
         NavButton("Channels") { navController.navigate(Routes.Channels.destination) }
-        NavButton("Payments") { navController.navigate(Routes.Payments.destination) }
         NavButton("Developer") { navController.navigate(Routes.DevSettings.destination) }
     }
 }

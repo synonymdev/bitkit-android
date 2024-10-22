@@ -325,8 +325,8 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun createInvoice(): String {
-        return runBlocking { lightningService.receive(112u, "description", 7200u) }
+    fun createInvoice(amountSats: ULong, description: String = "Bitkit", expirySeconds: UInt = 7200u): String {
+        return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
     fun onPasteFromClipboard(data: String) {

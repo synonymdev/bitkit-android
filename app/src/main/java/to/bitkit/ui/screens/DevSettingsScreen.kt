@@ -34,17 +34,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.pushNotification
-import to.bitkit.ui.settings.NodeDetails
-import to.bitkit.ui.settings.WalletDetails
 import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Orders
+import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 
 @Composable
@@ -77,6 +76,7 @@ fun DevSettingsScreen(
         WalletDetails(uiState)
         Peers(uiState.peers, viewModel::disconnectPeer)
         Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+        Payments(viewModel)
         OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = "Debug",
@@ -129,4 +129,44 @@ fun NotificationButton() {
         derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
     }
     FullWidthTextButton(onClick = onClick) { Text(text = text) }
+}
+
+@Composable
+fun NodeDetails(contentState: MainUiState.Content) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier
+                .padding(16.dp)
+                .padding(bottom = 0.dp)
+        ) {
+            Text(
+                text = "Node",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = contentState.nodeLifecycleState.name,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        InfoField(
+            value = contentState.nodeId,
+            label = stringResource(R.string.node_id),
+            maxLength = 44,
+            trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
+        )
+    }
+}
+
+@Composable
+fun WalletDetails(
+    contentState: MainUiState.Content,
+) {
+    InfoField(
+        value = contentState.onchainAddress,
+        label = stringResource(R.string.address),
+        maxLength = 44,
+        trailingIcon = { CopyToClipboardButton(contentState.onchainAddress) },
+    )
 }
