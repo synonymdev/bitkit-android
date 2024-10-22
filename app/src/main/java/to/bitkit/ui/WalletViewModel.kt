@@ -12,7 +12,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -145,8 +144,7 @@ class WalletViewModel @Inject constructor(
 
     private fun sync() {
         viewModelScope.launch {
-            @Suppress("DeferredResultUnused")
-            async(bgDispatcher) bg@{
+            launch (bgDispatcher) bg@{
                 syncState()
 
                 if (isSyncingWallet) {

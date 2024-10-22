@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,12 +15,17 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.LightningBalance
+import to.bitkit.R
 import to.bitkit.ext.formatted
 import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.CopyToClipboardButton
+import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.shared.moneyString
 import java.time.Instant
@@ -64,7 +70,7 @@ fun NodeStateScreen(viewModel: WalletViewModel) {
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = if (it.isRunning) "Yes" else "No",
+                            text = if (it.isRunning) "✅" else "⏳",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -82,9 +88,26 @@ fun NodeStateScreen(viewModel: WalletViewModel) {
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+                    Row {
+                        Text(
+                            text = "Block height:",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${it.currentBestBlock.height}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         }
+        InfoField(
+            value = contentState.nodeId,
+            label = stringResource(R.string.node_id),
+            maxLength = 44,
+            trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
+        )
         Peers(contentState.peers, viewModel::disconnectPeer)
         Channels(
             contentState.channels,
@@ -95,6 +118,7 @@ fun NodeStateScreen(viewModel: WalletViewModel) {
         contentState.balanceDetails?.let {
             Balances(it)
         }
+        Spacer(modifier = Modifier.height(1.dp))
     }
 }
 
@@ -157,7 +181,78 @@ private fun Balances(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            // TODO: balanceDetails.lightningBalances
         }
+    }
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Lightning Balances",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(12.dp),
+        )
+        HorizontalDivider()
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            balanceDetails.lightningBalances.forEach {
+                LightningBalanceRow(it)
+            }
+        }
+    }
+}
+
+@Composable
+fun LightningBalanceRow(balance: LightningBalance) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = balance.balanceTypeString(),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = balance.channelIdString(),
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
+        )
+        Text(
+            text = moneyString(balance.amountLong()),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+fun LightningBalance.balanceTypeString(): String {
+    return when (this) {
+        is LightningBalance.ClaimableOnChannelClose -> "Claimable on Channel Close"
+        is LightningBalance.ClaimableAwaitingConfirmations -> "Claimable Awaiting Confirmations (Height: $confirmationHeight)"
+        is LightningBalance.ContentiousClaimable -> "Contentious Claimable"
+        is LightningBalance.MaybeTimeoutClaimableHtlc -> "Maybe Timeout Claimable HTLC"
+        is LightningBalance.MaybePreimageClaimableHtlc -> "Maybe Preimage Claimable HTLC"
+        is LightningBalance.CounterpartyRevokedOutputClaimable -> "Counterparty Revoked Output Claimable"
+    }
+}
+
+fun LightningBalance.amountLong(): Long {
+    return when (this) {
+        is LightningBalance.ClaimableOnChannelClose -> this.amountSatoshis.toLong()
+        is LightningBalance.ClaimableAwaitingConfirmations -> this.amountSatoshis.toLong()
+        is LightningBalance.ContentiousClaimable -> this.amountSatoshis.toLong()
+        is LightningBalance.MaybeTimeoutClaimableHtlc -> this.amountSatoshis.toLong()
+        is LightningBalance.MaybePreimageClaimableHtlc -> this.amountSatoshis.toLong()
+        is LightningBalance.CounterpartyRevokedOutputClaimable -> this.amountSatoshis.toLong()
+    }
+}
+
+fun LightningBalance.channelIdString(): String {
+    return when (this) {
+        is LightningBalance.ClaimableOnChannelClose -> this.channelId
+        is LightningBalance.ClaimableAwaitingConfirmations -> this.channelId
+        is LightningBalance.ContentiousClaimable -> this.channelId
+        is LightningBalance.MaybeTimeoutClaimableHtlc -> this.channelId
+        is LightningBalance.MaybePreimageClaimableHtlc -> this.channelId
+        is LightningBalance.CounterpartyRevokedOutputClaimable -> this.channelId
     }
 }
