@@ -434,6 +434,13 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun debugMnemonic() {
+        viewModelScope.launch {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+            Log.d(DEV, "Mnemonic: \n$mnemonic")
+        }
+    }
+
     fun debugWipe() {
         if (Env.network != Network.REGTEST) {
             toast("Can only nuke on regtest.")
