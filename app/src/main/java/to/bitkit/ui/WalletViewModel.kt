@@ -41,7 +41,6 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LSP
-import to.bitkit.env.Tag.PERF
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
 import to.bitkit.models.LnPeer
@@ -144,7 +143,7 @@ class WalletViewModel @Inject constructor(
 
     private var isSyncingWallet = false
 
-    fun sync() {
+    private fun sync() {
         viewModelScope.launch {
             @Suppress("DeferredResultUnused")
             async(bgDispatcher) bg@{
@@ -175,8 +174,6 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun syncState() {
-        val startTime = System.currentTimeMillis()
-
         _uiState.value = MainUiState.Content(
             nodeId = lightningService.nodeId.orEmpty(),
             onchainAddress = _onchainAddress,
@@ -248,10 +245,6 @@ class WalletViewModel @Inject constructor(
 
                 }
             }
-            // TODO: remove perf timer:
-            val endTime = System.currentTimeMillis()
-            val duration = (endTime - startTime) / 1000.0
-            Log.v(PERF, "UI state updated in $duration sec")
         }
     }
 
