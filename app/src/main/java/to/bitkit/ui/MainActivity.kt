@@ -82,9 +82,9 @@ class MainActivity : ComponentActivity() {
                             is MainUiState.Error -> ErrorScreen(state)
                         }
                     }
-                    if (app.showNewTransaction) {
-                        NewTransactionSheet(app)
-                    }
+                }
+                if (app.showNewTransaction) {
+                    NewTransactionSheet(app)
                 }
             }
         }
@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.RECEIVED,
-                            sats = event.amountMsat.millis.toLong(),
+                            sats = (event.amountMsat / 1000u).toLong(),
                         )
                     )
                 }
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
                                 direction = NewTransactionSheetDirection.SENT,
-                                sats = channel.inboundCapacityMsat.millis.toLong(),
+                                sats = (channel.inboundCapacityMsat / 1000u).toLong(),
                             )
                         )
                     } else {
@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
-                            sats = event.feePaidMsat?.millis?.toLong() ?: 0,
+                            sats = event.feePaidMsat?.millis?.let { it / 1000u }?.toLong() ?: 0,
                         )
                     )
                 }
