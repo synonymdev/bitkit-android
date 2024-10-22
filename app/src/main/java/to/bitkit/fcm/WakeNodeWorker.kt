@@ -67,7 +67,6 @@ class WakeNodeWorker @AssistedInject constructor(
                 LightningService.shared.apply {
                     setup(walletIndex = 0, mnemonic)
                     start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
-                    // sync() // TODO why (not) ?
                 }
 
                 // Once node is started, handle the manual channel opening if needed

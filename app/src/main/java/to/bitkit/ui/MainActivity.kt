@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -200,6 +201,12 @@ private fun MainScreen(
                     )
                 },
                 actions = {
+                    IconButton(viewModel::debugSync) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.sync),
+                        )
+                    }
                     IconButton(onClick = { navController.navigate(Routes.NodeState.destination) }) {
                         Icon(
                             imageVector = Icons.Default.Bolt,

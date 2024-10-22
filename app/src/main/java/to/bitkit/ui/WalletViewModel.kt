@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -122,7 +123,9 @@ class WalletViewModel @Inject constructor(
             syncState()
 
             launch { refreshBip21() }
-            launch(bgDispatcher) { sync() }
+
+            // Always sync on start but don't need to wait for this
+            sync()
 
             launch { db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") } }
             launch {
@@ -140,29 +143,35 @@ class WalletViewModel @Inject constructor(
     }
 
     private var isSyncingWallet = false
-    private suspend fun sync() {
-        syncState()
 
-        if (isSyncingWallet) {
-            Log.w(APP, "Sync already in progress, waiting for existing sync.")
-            while (isSyncingWallet) {
-                delay(500) // Suspend and wait for 500ms
+    fun sync() {
+        viewModelScope.launch {
+            @Suppress("DeferredResultUnused")
+            async(bgDispatcher) bg@{
+                syncState()
+
+                if (isSyncingWallet) {
+                    Log.w(APP, "Sync already in progress, waiting for existing sync.")
+                    while (isSyncingWallet) {
+                        delay(500)
+                    }
+                    return@bg
+                }
+
+                isSyncingWallet = true
+                syncState()
+
+                try {
+                    lightningService.sync()
+                } catch (e: Exception) {
+                    isSyncingWallet = false
+                    throw e
+                }
+
+                isSyncingWallet = false
+                syncState()
             }
-            return
         }
-
-        isSyncingWallet = true
-        syncState()
-
-        try {
-            lightningService.sync()
-        } catch (e: Exception) {
-            isSyncingWallet = false
-            throw e
-        }
-
-        isSyncingWallet = false
-        syncState()
     }
 
     private fun syncState() {
@@ -180,8 +189,8 @@ class WalletViewModel @Inject constructor(
             orders = _uiState.value.asContent()?.orders.orEmpty(),
         )
 
-        // Load balances async
         viewModelScope.launch {
+            // Load balances async
             launch {
                 lightningService.balances?.let { b ->
                     updateContentState {
@@ -194,10 +203,7 @@ class WalletViewModel @Inject constructor(
                     }
                 }
             }
-        }
-
-        // Load activity items async
-        viewModelScope.launch {
+            // Load activity items async
             launch {
                 lightningService.payments?.let { payments ->
                     val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
@@ -240,15 +246,13 @@ class WalletViewModel @Inject constructor(
                     latestLightningActivityItems.value = latestLightningActivity.take(limitLatest)
                     latestOnchainActivityItems.value = latestOnchainActivity.take(limitLatest)
 
-                    // TODO update
-                    // activityItems.value = it
                 }
             }
+            // TODO: remove perf timer:
+            val endTime = System.currentTimeMillis()
+            val duration = (endTime - startTime) / 1000.0
+            Log.v(PERF, "UI state updated in $duration sec")
         }
-
-        val endTime = System.currentTimeMillis()
-        val duration = (endTime - startTime) / 1000.0
-        Log.v(PERF, "UI state updated in $duration sec")
     }
 
     fun registerForNotifications(fcmToken: String? = null) {
@@ -473,8 +477,7 @@ class WalletViewModel @Inject constructor(
     fun debugSync() {
         _uiState.value = MainUiState.Loading
         viewModelScope.launch {
-            delay(500)
-            syncState()
+            sync()
             db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
                 runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
                     .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
