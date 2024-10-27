@@ -274,15 +274,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private val incomingLightningCapacitySats: ULong?
-        get() {
-            return _uiState.value.asContent()?.let {
-                var capacity: ULong = 0u
-                it.channels.forEach { channel ->
-                    capacity += channel.inboundCapacityMsat / 1000u
-                }
-                capacity
-            }
-        }
+        get() = lightningService.channels?.sumOf { it.inboundCapacityMsat / 1000u }
 
     private suspend fun refreshBip21() {
         if (_onchainAddress.isEmpty()) {
@@ -304,7 +296,7 @@ class WalletViewModel @Inject constructor(
 
         // TODO: check current bolt11 for expiry and/or if it's been used
 
-        val hasIncomingLightingCapacity = incomingLightningCapacitySats?.let { it > 0u } == true
+        val hasIncomingLightingCapacity = (incomingLightningCapacitySats ?: 0u) > 0u
         if (hasChannels && hasIncomingLightingCapacity) {
             // Append lightning invoice if we have incoming capacity
             _bolt11 = lightningService.receive(description = "Bitkit")
