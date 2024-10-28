@@ -162,12 +162,19 @@ class WakeNodeWorker @AssistedInject constructor(
             }
 
             is Event.ChannelClosed -> {
-                if (self.notificationType == mutualClose) {
-                    self.bestAttemptContent?.title = "Channel closed"
-                    self.bestAttemptContent?.body = "Balance moved from spending to savings"
-                } else if (self.notificationType == orderPaymentConfirmed) {
-                    self.bestAttemptContent?.title = "Channel failed to open in the background"
-                    self.bestAttemptContent?.body = "Please try again"
+                when (self.notificationType) {
+                    mutualClose -> {
+                        self.bestAttemptContent?.title = "Channel closed"
+                        self.bestAttemptContent?.body = "Balance moved from spending to savings"
+                    }
+                    orderPaymentConfirmed -> {
+                        self.bestAttemptContent?.title = "Channel failed to open in the background"
+                        self.bestAttemptContent?.body = "Please try again"
+                    }
+                    else -> {
+                        self.bestAttemptContent?.title = "Channel closed"
+                        self.bestAttemptContent?.body = "Reason: ${event.reason}"
+                    }
                 }
                 self.deliver()
             }
