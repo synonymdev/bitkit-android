@@ -26,13 +26,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.OrderSummary
 
 @Composable
 fun TransferScreen(
+    walletViewModel: WalletViewModel,
+    navController: NavController,
     viewModel: TransferViewModel = hiltViewModel(),
-) {
+) = AppScaffold(navController, walletViewModel, "Transfer Funds") {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
@@ -49,12 +54,6 @@ fun TransferScreen(
 
 @Composable
 private fun CreateView(viewModel: TransferViewModel) {
-    Text(
-        text = "Transfer Funds",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.ExtraBold,
-    )
-    Spacer(modifier = Modifier.height(24.dp))
     var isCreating by remember { mutableStateOf(false) }
     var spendingBalanceSats by remember { mutableIntStateOf(50_000) }
     OutlinedTextField(
@@ -84,7 +83,7 @@ private fun ConfirmView(
     Text(
         text = "Confirm Order",
         style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
     )
     Spacer(modifier = Modifier.height(24.dp))
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {

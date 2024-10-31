@@ -35,9 +35,10 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.ext.amountSats
-import to.bitkit.ui.ActivityItemRoute
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.navigateToActivityItem
+import to.bitkit.ui.navigateToAllActivity
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -51,7 +52,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { navController?.navigate(ActivityItemRoute(item.id)) })
+            .clickable(onClick = { navController?.navigateToActivityItem(item.id) })
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         PaymentStatusIcon(item)
@@ -141,7 +142,7 @@ fun ActivityList(
                     Text("No activity", Modifier.padding(16.dp))
                 } else {
                     TextButton(
-                        onClick = { navController?.navigate(Routes.AllActivity.destination) },
+                        onClick = { navController?.navigateToAllActivity() },
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text("Show All Activity")
@@ -161,10 +162,10 @@ fun ActivityList(
 
 @Composable
 fun AllActivityScreen(
-    walletViewModel: WalletViewModel = hiltViewModel(),
+    viewModel: WalletViewModel,
     navController: NavController,
-) {
-    val items = walletViewModel.activityItems.value
+) = AppScaffold(navController, viewModel, "All Activity") {
+    val items = viewModel.activityItems.value
     AllActivityView(items, navController)
 }
 

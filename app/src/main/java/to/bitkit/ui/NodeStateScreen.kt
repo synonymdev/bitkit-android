@@ -19,10 +19,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.R
 import to.bitkit.ext.formatted
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
@@ -31,21 +33,18 @@ import to.bitkit.ui.shared.moneyString
 import java.time.Instant
 
 @Composable
-fun NodeStateScreen(viewModel: WalletViewModel) {
+fun NodeStateScreen(
+    viewModel: WalletViewModel,
+    navController: NavController,
+) = AppScaffold(navController, viewModel, "Node State") {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
-    val contentState = uiState.value.asContent() ?: return
-
+    val contentState = uiState.value.asContent() ?: return@AppScaffold
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text = "Node State",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-        )
         OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),

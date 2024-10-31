@@ -23,15 +23,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.formatted
-import to.bitkit.ui.ActivityItemRoute
+import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
@@ -40,10 +41,11 @@ import java.time.Instant
 
 @Composable
 fun ActivityItemScreen(
-    activityItem: ActivityItemRoute,
-    viewModel: WalletViewModel = hiltViewModel(),
-) {
-    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return
+    viewModel: WalletViewModel,
+    navController: NavController,
+    activityItem: Routes.ActivityItem,
+) = AppScaffold(navController, viewModel, "Activity Detail") {
+    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return@AppScaffold
     ActivityItemView(item)
 }
 

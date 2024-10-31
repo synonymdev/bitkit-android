@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.ButtonDefaults
@@ -17,43 +15,36 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
+import to.bitkit.ui.navigateToTransfer
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallet.activity.ActivityLatest
 import to.bitkit.ui.screens.wallet.activity.ActivityType
 
 @Composable
 fun SavingsWalletScreen(
+    viewModel: WalletViewModel,
     navController: NavHostController,
-    viewModel: WalletViewModel = hiltViewModel(),
-) {
+) = AppScaffold(navController, viewModel, "Savings") {
     val state = viewModel.uiState.collectAsStateWithLifecycle()
-    val uiState = state.value.asContent() ?: return
+    val uiState = state.value.asContent() ?: return@AppScaffold
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = "Savings",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
         BalanceView(
             label = "SAVINGS BALANCE",
             value = uiState.totalOnchainSats,
         )
         Spacer(modifier = Modifier.height(24.dp))
         OutlinedButton(
-            onClick = { navController.navigate(Routes.Transfer.destination) },
+            onClick = { navController.navigateToTransfer() },
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.onSurface,
             ),

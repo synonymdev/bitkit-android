@@ -15,9 +15,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
+import to.bitkit.ui.navigateToNodeState
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.NotificationButton
 import to.bitkit.ui.shared.FullWidthTextButton
 
@@ -25,7 +26,7 @@ import to.bitkit.ui.shared.FullWidthTextButton
 fun LightningSettingsScreen(
     viewModel: WalletViewModel,
     navController: NavHostController,
-) {
+) = AppScaffold(navController, viewModel, "Lightning") {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
@@ -38,7 +39,7 @@ fun LightningSettingsScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(12.dp)
             )
-            NavButton("Node State") { navController.navigate(Routes.NodeState.destination) }
+            NavButton("Node State") { navController.navigateToNodeState() }
         }
         Column {
             Text(

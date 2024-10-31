@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppShapes
@@ -36,17 +38,26 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             shape = AppShapes.sheet,
             containerColor = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(top = 100.dp)
         ) {
             RestoreView(viewModel)
         }
     }
 
-    Column(modifier = Modifier.fillMaxHeight()) {
+    Column(
+        modifier = Modifier
+            .imePadding()
+            .systemBarsPadding()
+            .fillMaxHeight()
+    ) {
         var bip39Passphrase by remember { mutableStateOf("") }
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
                 text = "Welcome",
                 style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
             )
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedTextField(
@@ -71,13 +82,8 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
 }
 
 @Composable
-private fun RestoreView(
-    viewModel: WalletViewModel,
-    modifier: Modifier = Modifier,
-) {
-    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp - 200.dp
-
-    Column(modifier = modifier.height(sheetHeight)) {
+private fun RestoreView(viewModel: WalletViewModel) {
+    Column {
         var bip39Mnemonic by remember { mutableStateOf("") }
         var bip39Passphrase by remember { mutableStateOf("") }
 

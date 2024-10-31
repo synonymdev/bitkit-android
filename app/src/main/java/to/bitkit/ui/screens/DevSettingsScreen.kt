@@ -24,9 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
@@ -34,6 +34,7 @@ import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.pushNotification
+import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.FullWidthTextButton
@@ -45,20 +46,16 @@ import to.bitkit.ui.shared.Peers
 @Composable
 fun DevSettingsScreen(
     viewModel: WalletViewModel,
-) {
+    navController: NavController,
+) = AppScaffold(navController, viewModel, "Dev Settings") {
     val state = viewModel.uiState.collectAsStateWithLifecycle()
-    val uiState = state.value.asContent() ?: return
+    val uiState = state.value.asContent() ?: return@AppScaffold
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text = "Debug",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-        )
         NodeDetails(uiState)
         WalletDetails(uiState)
         Peers(uiState.peers, viewModel::disconnectPeer)
