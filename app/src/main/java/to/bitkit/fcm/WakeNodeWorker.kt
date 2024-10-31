@@ -32,7 +32,6 @@ import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
@@ -109,8 +108,6 @@ class WakeNodeWorker @AssistedInject constructor(
      * @param event The LDK event to check.
      */
     private suspend fun handleLdkEvent(event: Event) {
-        Log.d(LDK, "WakeNodeWorker LDK event: $event")
-
         when (event) {
             is Event.PaymentReceived -> {
                 bestAttemptContent?.title = "Payment Received"
@@ -162,20 +159,16 @@ class WakeNodeWorker @AssistedInject constructor(
             }
 
             is Event.ChannelClosed -> {
-                when (self.notificationType) {
-                    mutualClose -> {
-                        self.bestAttemptContent?.title = "Channel closed"
-                        self.bestAttemptContent?.body = "Balance moved from spending to savings"
-                    }
-                    orderPaymentConfirmed -> {
-                        self.bestAttemptContent?.title = "Channel failed to open in the background"
-                        self.bestAttemptContent?.body = "Please try again"
-                    }
-                    else -> {
-                        self.bestAttemptContent?.title = "Channel closed"
-                        self.bestAttemptContent?.body = "Reason: ${event.reason}"
-                    }
+                self.bestAttemptContent?.title = "Channel closed"
+                self.bestAttemptContent?.body = "Reason: ${event.reason}"
+
+                if (self.notificationType == mutualClose) {
+                    self.bestAttemptContent?.body = "Balance moved from spending to savings"
+                } else if (self.notificationType == orderPaymentConfirmed) {
+                    self.bestAttemptContent?.title = "Channel failed to open in the background"
+                    self.bestAttemptContent?.body = "Please try again"
                 }
+
                 self.deliver()
             }
 
@@ -185,7 +178,6 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentFailed -> {
                 self.bestAttemptContent?.title = "Payment failed"
                 self.bestAttemptContent?.body = "⚡ ${event.reason}"
-                self.deliver()
 
                 if (self.notificationType == wakeToTimeout) {
                     self.deliver()
