@@ -38,6 +38,7 @@ internal open class App : Application(), Configuration.Provider {
         internal var currentActivity: CurrentActivity? = null
     }
 
+    // region currentActivity
     inner class CurrentActivity : ActivityLifecycleCallbacks {
         var value: Activity? = null
             private set
@@ -59,6 +60,7 @@ internal open class App : Application(), Configuration.Provider {
         override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) = Unit
     }
+    // endregion
 }
 
 /**

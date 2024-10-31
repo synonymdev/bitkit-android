@@ -40,6 +40,7 @@ import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
+import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
@@ -404,11 +405,12 @@ class WalletViewModel @Inject constructor(
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            val result = runCatching {
+            runCatching {
                 lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+            }.onFailure {
+                Log.e(LDK, "Failed to close channel", it)
             }
             syncState()
-            runOnUiThread { toast(if (result.isSuccess) "Channel Closed." else "Unable to Close Channel.") }
         }
     }
 

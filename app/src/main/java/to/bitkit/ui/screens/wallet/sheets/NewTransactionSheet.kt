@@ -143,7 +143,7 @@ private fun NewTransactionSheetView(
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
-fun PreviewNewTransactionSheetView() {
+private fun PreviewNewTransactionSheetView() {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(Unit) {
         sheetState.show()

@@ -66,7 +66,7 @@ internal fun AppThemeSurface(
 }
 
 @Composable
-internal fun AppTheme(
+private fun AppTheme(
     inDarkTheme: Boolean = isSystemInDarkTheme(),
     colorScheme: ColorScheme = if (inDarkTheme) ColorPalette.Dark else ColorPalette.Light,
     content: @Composable () -> Unit,

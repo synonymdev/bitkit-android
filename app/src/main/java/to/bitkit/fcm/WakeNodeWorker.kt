@@ -78,8 +78,8 @@ class WakeNodeWorker @AssistedInject constructor(
                         Log.e(LDK, "Missing orderId")
                     } else {
                         try {
-                            blocktankService.openChannel(orderId)
                             Log.i(LDK, "Open channel request for order $orderId")
+                            blocktankService.openChannel(orderId)
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)
                             self.bestAttemptContent?.title = "Channel open failed"

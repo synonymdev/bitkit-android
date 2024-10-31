@@ -45,7 +45,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.R
 import to.bitkit.env.Tag.LDK
-import to.bitkit.ext.millis
 import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection

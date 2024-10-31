@@ -93,16 +93,17 @@ class LightningService @Inject constructor(
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        onEvent?.let {
-            launch(coroutineContext) {
+        onEvent?.let { eventHandler ->
+            shouldListenForEvents = true
+            launch {
                 try {
                     if (timeout != null) {
-                        withTimeout(timeout) { listenForEvents(it) }
+                        withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
-                        listenForEvents(it)
+                        listenForEvents(eventHandler)
                     }
                 } catch (e: Exception) {
-                    Log.e(LDK, "Error in event listener", e)
+                    Log.e(LDK, "LDK event listener error", e)
                 }
             }
         }
@@ -117,13 +118,14 @@ class LightningService @Inject constructor(
     }
 
     suspend fun stop() {
+        shouldListenForEvents = false
         val node = this.node ?: throw ServiceError.NodeNotStarted
 
         Log.d(LDK, "Stopping node…")
         ServiceQueue.LDK.background {
             node.stop()
+            this@LightningService.node = null
         }
-        node.close().also { this.node = null }
         Log.i(LDK, "Node stopped")
     }
 
@@ -290,18 +292,21 @@ class LightningService @Inject constructor(
     // endregion
 
     // region events
+    private var shouldListenForEvents = true
+
     private suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
-        while (true) {
+        while (shouldListenForEvents) {
             val node = this.node ?: let {
                 Log.e(LDK, ServiceError.NodeNotStarted.message.orEmpty())
                 return
             }
             val event = node.nextEventAsync()
-            onEvent?.invoke(event)
 
-            // TODO: actual event handler
+            Log.d(LDK, "LDK eventHandled: $event")
+            node.eventHandled()
+
             logEvent(event)
-            this.node?.eventHandled()
+            onEvent?.invoke(event)
         }
     }
 
