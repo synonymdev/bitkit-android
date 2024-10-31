@@ -50,6 +50,7 @@ fun TabBar(
                 shape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50),
                 colors = buttonColors,
                 contentPadding = contentPadding,
+                elevation = null,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Send")
@@ -59,6 +60,7 @@ fun TabBar(
                 shape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50),
                 colors = buttonColors,
                 contentPadding = contentPadding,
+                elevation = null,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Receive")
