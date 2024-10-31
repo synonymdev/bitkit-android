@@ -167,8 +167,12 @@ class LightningService @Inject constructor(
         }
     }
 
-    fun newAddress(): String? {
-        return node?.onchainPayment()?.newAddress()
+    suspend fun newAddress(): String {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().newAddress()
+        }
     }
 
     // region peers

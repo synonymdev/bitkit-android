@@ -47,7 +47,7 @@ fun Payments(
                 modifier = Modifier.fillMaxWidth(),
             )
             IconButton(
-                onClick = { viewModel.payInvoice(invoiceToPay).also { invoiceToPay = "" } },
+                onClick = { viewModel.send(invoiceToPay).also { invoiceToPay = "" } },
                 enabled = invoiceToPay.isNotBlank(),
                 modifier = Modifier.align(Alignment.BottomEnd)
             ) {
