@@ -1,0 +1,126 @@
+package to.bitkit.ui.screens
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import to.bitkit.R
+import to.bitkit.ext.requiresPermission
+import to.bitkit.ext.toast
+import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.postNotificationsPermission
+import to.bitkit.ui.pushNotification
+import to.bitkit.ui.settings.NodeDetails
+import to.bitkit.ui.settings.WalletDetails
+import to.bitkit.ui.shared.Channels
+import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.shared.Orders
+import to.bitkit.ui.shared.Peers
+
+@Composable
+fun DevSettingsScreen(
+    viewModel: WalletViewModel,
+) {
+    val state = viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = state.value.asContent() ?: return
+    Column(
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Debug",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(viewModel::debugSync) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.sync),
+                )
+            }
+        }
+        NodeDetails(uiState)
+        WalletDetails(uiState)
+        Peers(uiState.peers, viewModel::disconnectPeer)
+        Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Debug",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(12.dp)
+            )
+            FullWidthTextButton(viewModel::debugDb) { Text("Database") }
+            FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
+            FullWidthTextButton(viewModel::debugWipe) { Text("Wipe Wallet") }
+            FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
+            HorizontalDivider()
+            NotificationButton()
+            FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
+            FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+        }
+        Orders(uiState.orders, viewModel)
+    }
+}
+
+@Composable
+fun NotificationButton() {
+    val context = LocalContext.current
+    var canPush by remember {
+        mutableStateOf(!context.requiresPermission(postNotificationsPermission))
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        canPush = it
+        toast("Permission ${if (it) "Granted" else "Denied"}")
+    }
+
+    val onClick = {
+        if (context.requiresPermission(postNotificationsPermission)) {
+            permissionLauncher.launch(postNotificationsPermission)
+        } else {
+            pushNotification(
+                title = "Bitkit Notification",
+                text = "Short custom notification description",
+                bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
+            )
+        }
+        Unit
+    }
+    val text by remember {
+        derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
+    }
+    FullWidthTextButton(onClick = onClick) { Text(text = text) }
+}

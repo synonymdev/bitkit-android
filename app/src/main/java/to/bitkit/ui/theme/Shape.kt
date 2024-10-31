@@ -10,3 +10,7 @@ val Shapes = Shapes(
     large = RoundedCornerShape(32.dp),
     extraLarge = RoundedCornerShape(64.dp),
 )
+
+object AppShapes {
+    val sheet = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+}

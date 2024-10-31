@@ -60,7 +60,7 @@ internal fun Peers(
                         .background(color = green500)
                 )
                 Text(
-                    text = "${it.nodeId.takeEnds(14)}@${it.address}",
+                    text = "${it.nodeId.takeEnds(12)}@${it.address}",
                     style = MaterialTheme.typography.labelSmall,
                     overflow = TextOverflow.Ellipsis,
                     maxLines = 1,

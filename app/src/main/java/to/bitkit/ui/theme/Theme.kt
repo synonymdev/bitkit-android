@@ -14,6 +14,7 @@ val Gray100 = Color(0xFFF4F4F4)
 val Gray200 = Color(0xFFE0E0E0)
 val Gray300 = Color(0xFFBDBDBD)
 val Gray400 = Color(0xFFABABAB)
+val gray900 = Color(0xFF212121)
 val Brand50 = Color(0xFFFFF1EE)
 val Brand500 = Color(0xFFEC5428)
 val Teal200 = Color(0xFF03DAC5)
@@ -28,8 +29,8 @@ private object ColorPalette {
         background = Color.White,
         surface = Color.White,
         surfaceVariant = Gray100,
-        outline = Gray200,
-        outlineVariant = Gray200,
+        outline = Gray300,
+        outlineVariant = Gray400,
         // Other default colors to override
         /*
         onPrimary = Color.White,
@@ -43,6 +44,13 @@ private object ColorPalette {
     val Dark = darkColorScheme(
         primary = Brand500,
         secondary = Teal200,
+        background = Color.Black,
+        surface = Color.Black,
+        surfaceVariant = gray900,
+        onPrimary = Color.White,
+        onSecondary = Color.White,
+        onBackground = Color.White,
+        onSurface = Color.White,
     )
 }
 

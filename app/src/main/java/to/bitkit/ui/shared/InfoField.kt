@@ -22,18 +22,19 @@ internal fun InfoField(
         value = value,
         onValueChange = onValueChange,
         trailingIcon = trailingIcon,
+        enabled = false,
         readOnly = true,
         singleLine = true,
-        colors = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f).let {
+        colors = MaterialTheme.colorScheme.onBackground.let {
             OutlinedTextFieldDefaults.colors(
-                unfocusedTextColor = it,
-                focusedTextColor = it,
-                focusedBorderColor = it,
-                focusedLabelColor = it.copy(alpha = 1f),
+                disabledTextColor = it,
+                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                disabledLabelColor = it,
+                disabledTrailingIconColor = it,
             )
         },
         textStyle = MaterialTheme.typography.labelSmall,
         visualTransformation = ellipsisVisualTransformation(maxLength),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     )
 }
