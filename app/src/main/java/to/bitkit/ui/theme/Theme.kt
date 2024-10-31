@@ -18,7 +18,9 @@ val gray900 = Color(0xFF212121)
 val Brand50 = Color(0xFFFFF1EE)
 val Brand500 = Color(0xFFEC5428)
 val Teal200 = Color(0xFF03DAC5)
-val green500 = Color(0xFF4CAF50)
+val Green500 = Color(0xFF4CAF50)
+val Orange500 = Color(0xFFFF9800)
+val Purple500 = Color(0xFF9C27B0)
 
 private object ColorPalette {
     @Stable

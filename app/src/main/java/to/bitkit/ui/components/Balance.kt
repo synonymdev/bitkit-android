@@ -17,19 +17,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.ui.MainUiState
-import to.bitkit.ui.screens.wallet.WalletRoutes
+import to.bitkit.ui.Routes
 import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun BalanceSummary(
     uiState: MainUiState.Content,
-    walletNavController: NavHostController,
+    navController: NavHostController,
 ) {
     BalanceView(
         label = "TOTAL BALANCE",
         value = uiState.totalBalanceSats,
     )
-    Spacer(modifier = Modifier.height(4.dp))
+    Spacer(modifier = Modifier.height(24.dp))
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -38,10 +38,8 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable {
-                    walletNavController.navigate(WalletRoutes.SAVINGS)
-                }
-                .padding(4.dp)
+                .clickable { navController.navigate(Routes.Savings.destination) }
+                .padding(vertical = 4.dp)
         ) {
             Text(
                 text = "SAVINGS",
@@ -57,9 +55,7 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable {
-                    walletNavController.navigate(WalletRoutes.SPENDING)
-                }
+                .clickable { navController.navigate(Routes.Spending.destination) }
                 .padding(4.dp)
         ) {
             Text(

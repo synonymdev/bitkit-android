@@ -80,6 +80,9 @@ class WakeNodeWorker @AssistedInject constructor(
                             Log.i(LDK, "Open channel request for order $orderId")
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)
+                            self.bestAttemptContent?.title = "Channel failed to open"
+                            self.bestAttemptContent?.body = e.message ?: "Unknown error"
+                            self.deliver()
                         }
                     }
                 }

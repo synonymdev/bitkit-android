@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.takeEnds
 import to.bitkit.models.LnPeer
-import to.bitkit.ui.theme.green500
+import to.bitkit.ui.theme.Green500
 
 @Composable
 internal fun Peers(
@@ -57,7 +57,7 @@ internal fun Peers(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(color = green500)
+                        .background(color = Green500)
                 )
                 Text(
                     text = "${it.nodeId.takeEnds(12)}@${it.address}",

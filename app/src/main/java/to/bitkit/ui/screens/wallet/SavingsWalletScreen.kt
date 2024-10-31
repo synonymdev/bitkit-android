@@ -25,6 +25,8 @@ import androidx.navigation.NavHostController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
+import to.bitkit.ui.screens.wallet.activity.ActivityLatest
+import to.bitkit.ui.screens.wallet.activity.ActivityType
 
 @Composable
 fun SavingsWalletScreen(
@@ -38,7 +40,6 @@ fun SavingsWalletScreen(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .verticalScroll(rememberScrollState())
     ) {
         Text(
             text = "Savings",
@@ -68,5 +69,7 @@ fun SavingsWalletScreen(
                 text = "Transfer To Spending",
             )
         }
+        Spacer(modifier = Modifier.height(24.dp))
+        ActivityLatest(ActivityType.ONCHAIN, navController)
     }
 }

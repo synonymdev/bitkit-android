@@ -1,16 +1,16 @@
 package to.bitkit.ui.screens.wallet
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,15 +29,11 @@ import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceSummary
 import to.bitkit.ui.screens.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.send.SendOptionsView
+import to.bitkit.ui.screens.wallet.activity.ActivityLatest
+import to.bitkit.ui.screens.wallet.activity.ActivityType
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.qrCodeScanner
 import to.bitkit.ui.theme.AppShapes
-
-object WalletRoutes {
-    const val HOME = "HOME"
-    const val SAVINGS = "SAVINGS"
-    const val SPENDING = "SPENDING"
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,22 +47,18 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        val walletNavController = rememberNavController()
-        NavHost(
-            navController = walletNavController,
-            startDestination = WalletRoutes.HOME,
-            modifier = Modifier.fillMaxSize()
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .fillMaxSize()
         ) {
-            composable(WalletRoutes.HOME) {
-                MainWalletScreen(uiState, walletNavController)
-            }
-            composable(WalletRoutes.SAVINGS) {
-                SavingsWalletScreen(navController)
-            }
-            composable(WalletRoutes.SPENDING) {
-                SpendingWalletScreen()
-            }
+            BalanceSummary(uiState, navController)
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Activity", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+            ActivityLatest(ActivityType.ALL, navController)
         }
+
         val scanner = qrCodeScanner()
         TabBar(
             onSendClicked = { viewModel.showSendSheet = true },
@@ -108,20 +100,5 @@ fun HomeScreen(
                 ReceiveQRScreen(uiState)
             }
         }
-    }
-}
-
-@Composable
-private fun MainWalletScreen(
-    uiState: MainUiState.Content,
-    walletNavController: NavHostController,
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        BalanceSummary(uiState, walletNavController)
     }
 }
