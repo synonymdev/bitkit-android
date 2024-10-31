@@ -34,6 +34,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ext.toast
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.pushNotification
@@ -85,6 +88,7 @@ fun DevSettingsScreen(
             FullWidthTextButton(viewModel::debugWipe) { Text("Wipe Wallet") }
             FullWidthTextButton(viewModel::debugActivityItems) { Text("Activity Items") }
             FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
+            FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
             HorizontalDivider()
             NotificationButton()
             FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }

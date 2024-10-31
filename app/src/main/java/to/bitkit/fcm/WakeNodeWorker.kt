@@ -17,6 +17,9 @@ import org.lightningdevkit.ldknode.Event
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Tag.LDK
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import to.bitkit.models.blocktank.BlocktankNotificationType.cjitPaymentArrived
 import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
@@ -80,7 +83,7 @@ class WakeNodeWorker @AssistedInject constructor(
                             Log.i(LDK, "Open channel request for order $orderId")
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)
-                            self.bestAttemptContent?.title = "Channel failed to open"
+                            self.bestAttemptContent?.title = "Channel open failed"
                             self.bestAttemptContent?.body = e.message ?: "Unknown error"
                             self.deliver()
                         }
@@ -108,7 +111,17 @@ class WakeNodeWorker @AssistedInject constructor(
         when (event) {
             is Event.PaymentReceived -> {
                 bestAttemptContent?.title = "Payment Received"
-                bestAttemptContent?.body = "⚡ ${event.amountMsat / 1000u}"
+                val sats = event.amountMsat / 1000u
+                // Save for UI to pick up
+                NewTransactionSheetDetails.save(
+                    appContext,
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.LIGHTNING,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        sats = sats.toLong(),
+                    )
+                )
+                bestAttemptContent?.body = "⚡ $sats"
                 if (self.notificationType == incomingHtlc) {
                     self.deliver()
                 }
@@ -125,8 +138,18 @@ class WakeNodeWorker @AssistedInject constructor(
                     self.bestAttemptContent?.title = "Payment received"
                     self.bestAttemptContent?.body = "Via new channel"
 
-                    LightningService.shared.channels?.first { it.channelId == event.channelId }?.let { channel ->
-                        self.bestAttemptContent?.title = "Received ⚡ ${channel.outboundCapacityMsat / 1000u} sats"
+                    LightningService.shared.channels?.firstOrNull { it.channelId == event.channelId }?.let { channel ->
+                        val sats = channel.outboundCapacityMsat / 1000u
+                        self.bestAttemptContent?.title = "Received ⚡ $sats sats"
+                        // Save for UI to pick up
+                        NewTransactionSheetDetails.save(
+                            appContext,
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.LIGHTNING,
+                                direction = NewTransactionSheetDirection.RECEIVED,
+                                sats = sats.toLong(),
+                            )
+                        )
                     }
                 } else if (self.notificationType == orderPaymentConfirmed) {
                     self.bestAttemptContent?.title = "Channel opened"

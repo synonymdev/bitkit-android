@@ -1,6 +1,7 @@
 package to.bitkit.ui
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,13 +41,23 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import org.lightningdevkit.ldknode.Event
 import to.bitkit.R
+import to.bitkit.env.Tag.LDK
+import to.bitkit.ext.millis
+import to.bitkit.ext.toast
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.wallet.HomeScreen
+import to.bitkit.ui.screens.wallet.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     val viewModel by viewModels<WalletViewModel>()
+    val app by viewModels<AppViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +65,7 @@ class MainActivity : ComponentActivity() {
         initNotificationChannel()
         logFcmToken()
 
+        viewModel.setOnEvent(::onLdkEvent)
         viewModel.start()
 
         setContent {
@@ -71,15 +83,81 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                if (app.showNewTransaction) {
+                    NewTransactionSheet(app)
+                }
             }
         }
     }
 
-    // override fun onStart() {
-    //     super.onStart()
-    //     viewModel.start()
-    // }
-    //
+    private fun onLdkEvent(event: Event) {
+        try {
+            when (event) {
+                is Event.PaymentReceived -> {
+                    app.showNewTransactionSheet(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.LIGHTNING,
+                            direction = NewTransactionSheetDirection.RECEIVED,
+                            sats = (event.amountMsat / 1000u).toLong(),
+                        )
+                    )
+                }
+
+                is Event.ChannelPending -> {
+                    // Only relevant for channels to external nodes
+                }
+
+                is Event.ChannelReady -> {
+                    // TODO: handle cjit as payment received
+                    val channel = LightningService.shared.channels?.firstOrNull { it.channelId == event.channelId }
+                    if (channel != null) {
+                        app.showNewTransactionSheet(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.LIGHTNING,
+                                direction = NewTransactionSheetDirection.SENT,
+                                sats = (channel.inboundCapacityMsat / 1000u).toLong(),
+                            )
+                        )
+                    } else {
+                        toast("Channel Opened")
+                    }
+                }
+
+                is Event.ChannelClosed -> {
+                    toast("Channel Closed")
+                }
+
+                is Event.PaymentSuccessful -> {
+                    app.showNewTransactionSheet(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.LIGHTNING,
+                            direction = NewTransactionSheetDirection.SENT,
+                            sats = event.feePaidMsat?.millis?.let { it / 1000u }?.toLong() ?: 0,
+                        )
+                    )
+                }
+
+                is Event.PaymentClaimable -> Unit
+                is Event.PaymentFailed -> {
+                    toast("Payment failed")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(LDK, "Ldk event handler error", e)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        val pendingTransaction = NewTransactionSheetDetails.load(this)
+        if (pendingTransaction != null) {
+            app.showNewTransactionSheet(pendingTransaction)
+            NewTransactionSheetDetails.clear(this)
+        }
+        // viewModel.start()
+    }
+
     // override fun onStop() {
     //     super.onStop()
     //     viewModel.stop()
