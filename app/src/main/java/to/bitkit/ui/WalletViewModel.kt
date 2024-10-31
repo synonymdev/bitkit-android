@@ -156,7 +156,7 @@ class WalletViewModel @Inject constructor(
 
     private fun sync() {
         viewModelScope.launch {
-            launch (bgDispatcher) bg@{
+            launch(bgDispatcher) bg@{
                 syncState()
 
                 if (isSyncingWallet) {
@@ -258,6 +258,21 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun refreshState() {
+        viewModelScope.launch {
+            sync()
+            launch(bgDispatcher) {
+                db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
+                    runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+                        .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
+                        .onSuccess { btOrders ->
+                            updateContentState { it.copy(orders = btOrders) }
+                        }
+                }
+            }
+        }
+    }
+
     fun registerForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
@@ -302,16 +317,6 @@ class WalletViewModel @Inject constructor(
             _bolt11 = lightningService.receive(description = "Bitkit")
 
             _bip21 = "bitcoin:$_onchainAddress?lightning=$_bolt11"
-        }
-    }
-
-    fun connectPeer(peer: LnPeer) {
-        viewModelScope.launch {
-            lightningService.connectPeer(peer)
-            runOnUiThread { toast("Peer connected.") }
-            updateContentState {
-                it.copy(peers = lightningService.peers.orEmpty())
-            }
         }
     }
 
@@ -478,20 +483,6 @@ class WalletViewModel @Inject constructor(
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) { blocktankService.getInfo() }
-    }
-
-    fun debugSync() {
-        _uiState.value = MainUiState.Loading
-        viewModelScope.launch {
-            sync()
-            db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
-                runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
-                    .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                    .onSuccess { btOrders ->
-                        updateContentState { it.copy(orders = btOrders) }
-                    }
-            }
-        }
     }
 
     fun debugBtOrdersSync() {

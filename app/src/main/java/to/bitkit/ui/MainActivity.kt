@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
-                            sats = event.feePaidMsat?.millis?.let { it / 1000u }?.toLong() ?: 0,
+                            sats = ((event.feePaidMsat ?: 0u) / 1000u).toLong(),
                         )
                     )
                 }
@@ -200,7 +200,7 @@ private fun MainScreen(
                     )
                 },
                 actions = {
-                    IconButton(viewModel::debugSync) {
+                    IconButton(viewModel::refreshState) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),
