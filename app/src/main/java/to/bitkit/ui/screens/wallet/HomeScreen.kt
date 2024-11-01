@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
+import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.MainUiState
@@ -46,7 +46,7 @@ import to.bitkit.ui.theme.AppShapes
 fun HomeScreen(
     viewModel: WalletViewModel,
     uiState: MainUiState.Content,
-    navController: NavHostController,
+    navController: NavController,
 ) = AppScaffold(navController, viewModel, stringResource(R.string.app_name)) {
     RequestNotificationPermissions()
     var showReceiveSheet by remember { mutableStateOf(false) }

@@ -17,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
@@ -45,12 +44,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             enableEdgeToEdge()
             AppThemeSurface {
-                val navController = rememberNavController()
-
-                AppNavHost(
-                    navController = navController,
-                    viewModel = viewModel,
-                ) {
+                AppNavHost(viewModel) { navController ->
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
                     Crossfade(uiState, label = "ContentCrossfade") {
                         when (val state = it.value) {

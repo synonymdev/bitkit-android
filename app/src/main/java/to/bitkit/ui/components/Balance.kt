@@ -15,7 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
+import androidx.navigation.NavController
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.navigateToSavings
 import to.bitkit.ui.navigateToSpending
@@ -24,7 +24,7 @@ import to.bitkit.ui.shared.moneyString
 @Composable
 fun BalanceSummary(
     uiState: MainUiState.Content,
-    navController: NavHostController,
+    navController: NavController,
 ) {
     BalanceView(
         label = "TOTAL BALANCE",

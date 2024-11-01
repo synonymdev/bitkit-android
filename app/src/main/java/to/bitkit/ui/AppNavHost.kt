@@ -7,6 +7,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
@@ -20,12 +21,12 @@ import to.bitkit.ui.settings.SettingsScreen
 
 @Composable
 fun AppNavHost(
-    navController: NavHostController,
     viewModel: WalletViewModel,
-    content: @Composable () -> Unit,
+    content: @Composable (NavController) -> Unit,
 ) {
+    val navController = rememberNavController()
     NavHost(navController, startDestination = Routes.Main) {
-        home(content)
+        home(content, navController)
         settings(viewModel, navController)
         nodeState(viewModel, navController)
         lightning(viewModel, navController)
@@ -39,9 +40,12 @@ fun AppNavHost(
 }
 
 // region destinations
-private fun NavGraphBuilder.home(content: @Composable () -> Unit) {
+private fun NavGraphBuilder.home(
+    content: @Composable (NavController) -> Unit,
+    navController: NavController,
+) {
     composable(Routes.Main) {
-        content()
+        content(navController)
     }
 }
 
