@@ -587,6 +587,7 @@ class WalletViewModel @Inject constructor(
     }
 
     fun stop() {
+        if (_nodeLifecycleState == NodeLifecycleState.Stopped) return
         viewModelScope.launch {
             _nodeLifecycleState = NodeLifecycleState.Stopping
             lightningService.stop()

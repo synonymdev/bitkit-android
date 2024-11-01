@@ -98,7 +98,7 @@ fun NotificationButton() {
         toast("Permission ${if (it) "Granted" else "Denied"}")
     }
 
-    val onClick = {
+    val onClick: () -> Unit = {
         if (context.requiresPermission(postNotificationsPermission)) {
             permissionLauncher.launch(postNotificationsPermission)
         } else {
@@ -108,12 +108,11 @@ fun NotificationButton() {
                 bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
             )
         }
-        Unit
     }
     val text by remember {
         derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
     }
-    FullWidthTextButton(onClick = onClick) { Text(text = text) }
+    FullWidthTextButton(onClick) { Text(text = text) }
 }
 
 @Composable

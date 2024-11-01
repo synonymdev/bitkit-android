@@ -35,11 +35,13 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.io.path.Path
 import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
+@Singleton
 class LightningService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(bgDispatcher) {
