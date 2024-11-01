@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -42,7 +43,11 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
                 .fillMaxHeight()
                 .padding(top = 100.dp)
         ) {
-            RestoreView(viewModel)
+            RestoreView(
+                onRestoreClick = { bip39Passphrase, bip39Mnemonic ->
+                    viewModel.restoreWallet(bip39Passphrase, bip39Mnemonic)
+                },
+            )
         }
     }
 
@@ -50,7 +55,7 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
         modifier = Modifier
             .imePadding()
             .systemBarsPadding()
-            .fillMaxHeight()
+            .fillMaxSize()
     ) {
         var bip39Passphrase by remember { mutableStateOf("") }
         Column(modifier = Modifier.padding(24.dp)) {
@@ -70,19 +75,29 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
         }
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider()
+
         FullWidthTextButton(
-            onClick = { viewModel.createWallet(bip39Passphrase) },
+            onClick = {
+                viewModel.createWallet(bip39Passphrase)
+            },
             horizontalArrangement = Arrangement.Center,
-        ) { Text("Create Wallet") }
+        ) {
+            Text("Create Wallet")
+        }
+
         FullWidthTextButton(
             onClick = { showRestore = true },
             horizontalArrangement = Arrangement.Center,
-        ) { Text("Restore Wallet") }
+        ) {
+            Text("Restore Wallet")
+        }
     }
 }
 
 @Composable
-private fun RestoreView(viewModel: WalletViewModel) {
+private fun RestoreView(
+    onRestoreClick: (bip39Passphrase: String, bip39Mnemonic: String) -> Unit,
+) {
     Column {
         var bip39Mnemonic by remember { mutableStateOf("") }
         var bip39Passphrase by remember { mutableStateOf("") }
@@ -112,8 +127,9 @@ private fun RestoreView(viewModel: WalletViewModel) {
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider()
         FullWidthTextButton(
-            onClick = { viewModel.restoreWallet(bip39Passphrase, bip39Mnemonic) },
+            onClick = { onRestoreClick(bip39Passphrase, bip39Mnemonic) },
             horizontalArrangement = Arrangement.Center,
+            enabled = bip39Mnemonic.isNotBlank(),
         ) {
             Text("Restore Wallet")
         }

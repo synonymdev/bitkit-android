@@ -138,49 +138,53 @@ class WalletViewModel @Inject constructor(
             // Always sync on start but don't need to wait for this
             sync()
 
-            launch { db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") } }
-            launch {
-                db.ordersDao().getAll().filter { it.isNotEmpty() }.collect { dbOrders ->
-                    Log.d(APP, "Database orders sync: $dbOrders")
+            launch(bgDispatcher) { observeDbConfig() }
+            launch(bgDispatcher) { syncDbOrders() }
+        }
+    }
 
-                    runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
-                        .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                        .onSuccess { btOrders ->
-                            updateContentState { it.copy(orders = btOrders) }
-                        }
+    private suspend fun observeDbConfig() {
+        db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") }
+    }
+
+    private suspend fun syncDbOrders() {
+        db.ordersDao().getAll().filter { it.isNotEmpty() }.collect { dbOrders ->
+            Log.d(APP, "Database orders sync: $dbOrders")
+
+            runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+                .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
+                .onSuccess { btOrders ->
+                    updateContentState { it.copy(orders = btOrders) }
                 }
-            }
         }
     }
 
     private var isSyncingWallet = false
 
     private fun sync() {
-        viewModelScope.launch {
-            launch(bgDispatcher) bg@{
-                syncState()
+        viewModelScope.launch(bgDispatcher) bg@{
+            syncState()
 
-                if (isSyncingWallet) {
-                    Log.w(APP, "Sync already in progress, waiting for existing sync.")
-                    while (isSyncingWallet) {
-                        delay(500)
-                    }
-                    return@bg
+            if (isSyncingWallet) {
+                Log.w(APP, "Sync already in progress, waiting for existing sync.")
+                while (isSyncingWallet) {
+                    delay(500)
                 }
-
-                isSyncingWallet = true
-                syncState()
-
-                try {
-                    lightningService.sync()
-                } catch (e: Exception) {
-                    isSyncingWallet = false
-                    throw e
-                }
-
-                isSyncingWallet = false
-                syncState()
+                return@bg
             }
+
+            isSyncingWallet = true
+            syncState()
+
+            try {
+                lightningService.sync()
+            } catch (e: Exception) {
+                isSyncingWallet = false
+                throw e
+            }
+
+            isSyncingWallet = false
+            syncState()
         }
     }
 
@@ -421,7 +425,9 @@ class WalletViewModel @Inject constructor(
         }
         viewModelScope.launch {
             runCatching {
-                lightningService.stop()
+                if (_nodeLifecycleState.isRunningOrStarting()) {
+                    stopLightningNode()
+                }
                 lightningService.wipeStorage(0)
                 keychain.wipe()
             }.onSuccess {
@@ -586,14 +592,19 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun stop() {
-        if (_nodeLifecycleState == NodeLifecycleState.Stopped) return
+    fun stopIfNeeded() {
+        if (_nodeLifecycleState.isStoppedOrStopping()) return
+
         viewModelScope.launch {
-            _nodeLifecycleState = NodeLifecycleState.Stopping
-            lightningService.stop()
-            _nodeLifecycleState = NodeLifecycleState.Stopped
-            syncState()
+            stopLightningNode()
         }
+    }
+
+    private suspend fun stopLightningNode() {
+        _nodeLifecycleState = NodeLifecycleState.Stopping
+        lightningService.stop()
+        _nodeLifecycleState = NodeLifecycleState.Stopped
+        syncState()
     }
 }
 
@@ -629,6 +640,9 @@ enum class NodeLifecycleState {
     Stopped,
     Starting,
     Running,
-    Stopping,
+    Stopping;
+
+    fun isStoppedOrStopping() = this == Stopped || this == Stopping
+    fun isRunningOrStarting() = this == Running || this == Starting
 }
 // endregion
