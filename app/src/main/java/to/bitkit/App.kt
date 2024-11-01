@@ -3,13 +3,13 @@ package to.bitkit
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
+import android.app.Application.ActivityLifecycleCallbacks
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.env.Env
 import javax.inject.Inject
-import kotlin.reflect.typeOf
 
 @HiltAndroidApp
 internal open class App : Application(), Configuration.Provider {
@@ -28,39 +28,33 @@ internal open class App : Application(), Configuration.Provider {
         Env.initAppStoragePath(filesDir.absolutePath)
     }
 
-    override fun onTerminate() {
-        super.onTerminate()
-        unregisterActivityLifecycleCallbacks(currentActivity).also { currentActivity = null }
-    }
-
     companion object {
         @SuppressLint("StaticFieldLeak") // Should be safe given its manual memory management
         internal var currentActivity: CurrentActivity? = null
     }
+}
 
-    // region currentActivity
-    inner class CurrentActivity : ActivityLifecycleCallbacks {
-        var value: Activity? = null
-            private set
+// region currentActivity
+class CurrentActivity : ActivityLifecycleCallbacks {
+    var value: Activity? = null
+        private set
 
-        override fun onActivityCreated(activity: Activity, bundle: Bundle?) {
-            this.value = activity
-        }
-
-        override fun onActivityStarted(activity: Activity) {
-            this.value = activity
-        }
-
-        override fun onActivityResumed(activity: Activity) {
-            this.value = activity
-        }
-
-        override fun onActivityPaused(activity: Activity) = Unit
-        override fun onActivityStopped(activity: Activity) = Unit
-        override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
-        override fun onActivityDestroyed(activity: Activity) = Unit
+    override fun onActivityCreated(activity: Activity, bundle: Bundle?) {
+        this.value = activity
     }
-    // endregion
+
+    override fun onActivityStarted(activity: Activity) {
+        this.value = activity
+    }
+
+    override fun onActivityResumed(activity: Activity) {
+        this.value = activity
+    }
+
+    override fun onActivityPaused(activity: Activity) = Unit
+    override fun onActivityStopped(activity: Activity) = Unit
+    override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
+    override fun onActivityDestroyed(activity: Activity) = Unit
 }
 
 /**
@@ -76,3 +70,4 @@ internal inline fun <reified T> currentActivity(): T? {
         else -> null
     }
 }
+// endregion
