@@ -138,6 +138,14 @@ class BlocktankService @Inject constructor(
         ServiceQueue.LSP.background {
             client.registerDevice(payload)
         }
+
+        // Cache token so we can avoid re-registering
+        if (keychain.exists(Key.PUSH_NOTIFICATION_TOKEN.name)) {
+            keychain.delete(Key.PUSH_NOTIFICATION_TOKEN.name)
+        }
+        keychain.saveString(Key.PUSH_NOTIFICATION_TOKEN.name, deviceToken)
+
+        Log.i(LSP, "Device registered for notifications")
     }
 
     suspend fun testNotification(deviceToken: String) {

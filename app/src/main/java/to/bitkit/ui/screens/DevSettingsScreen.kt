@@ -77,7 +77,7 @@ fun DevSettingsScreen(
             FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
             HorizontalDivider()
             NotificationButton()
-            FullWidthTextButton(viewModel::registerForNotifications) { Text("1. Register Device for Notifications") }
+            FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
             FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
         }
         Orders(uiState.orders, viewModel)

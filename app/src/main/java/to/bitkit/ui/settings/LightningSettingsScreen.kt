@@ -49,7 +49,7 @@ fun LightningSettingsScreen(
             )
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 NotificationButton()
-                FullWidthTextButton(viewModel::registerForNotifications) { Text("Register for notifications") }
+                FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("Register for notifications") }
                 FullWidthTextButton(viewModel::debugLspNotifications) { Text("Self test notification") }
                 FullWidthTextButton(viewModel::openChannel) { Text("Open channel to trusted peer") }
 

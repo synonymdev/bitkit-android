@@ -8,7 +8,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
@@ -48,6 +51,12 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(db.ordersDao()).thenReturn(mock())
         whenever(db.ordersDao().getAll()).thenReturn(mock())
 
+        val task = mock<Task<String>> {
+            on(it.isComplete).thenReturn(true)
+            on(it.result).thenReturn("cachedToken")
+        }
+        whenever(firebaseMessaging.token).thenReturn(task)
+
         sut = WalletViewModel(
             uiThread = testDispatcher,
             bgDispatcher = testDispatcher,
@@ -62,9 +71,8 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `uiState should emit Content state after sync`() = test {
-        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
+    fun `start should emit Content uiState`() = test {
+        setupExistingWalletMocks()
         val expectedUiState = MainUiState.Content(
             nodeId = "nodeId",
             onchainAddress = "onchainAddress",
@@ -75,7 +83,7 @@ class WalletViewModelTest : BaseUnitTest() {
             totalBalanceSats = 11_000u,
             totalOnchainSats = 10_000u,
             totalLightningSats = 1000u,
-            bolt11 = "",
+            bolt11 = "bolt11",
             bip21 = "bitcoin:onchainAddress",
             nodeLifecycleState = NodeLifecycleState.Running,
             nodeStatus = null,
@@ -91,16 +99,42 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `registerForNotifications should register device with FCM token`() = test {
-        val token = "test"
+    fun `start should register for notifications if token is not cached`() = test {
+        setupExistingWalletMocks()
         val task = mock<Task<String>> {
             on(it.isComplete).thenReturn(true)
-            on(it.result).thenReturn(token)
+            on(it.result).thenReturn("newToken")
         }
         whenever(firebaseMessaging.token).thenReturn(task)
+        whenever(keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)).thenReturn("cachedToken")
 
-        sut.registerForNotifications()
+        sut.start()
 
-        verify(blocktankService).registerDevice(token)
+        verify(blocktankService).registerDevice("newToken")
+    }
+
+    @Test
+    fun `start should skip register for notifications if token is cached`() = test {
+        setupExistingWalletMocks()
+        whenever(keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)).thenReturn("cachedToken")
+
+        sut.start()
+
+        verify(blocktankService, never()).registerDevice(anyString())
+    }
+
+    @Test
+    fun `manualRegisterForNotifications should register device with FCM token`() = test {
+        sut.manualRegisterForNotifications()
+
+        verify(blocktankService).registerDevice("cachedToken")
+    }
+
+    private fun setupExistingWalletMocks() {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
+        whenever(appStorage.onchainAddress).thenReturn("onchainAddress")
+        whenever(appStorage.bolt11).thenReturn("bolt11")
+        whenever(appStorage.bip21).thenReturn("bitcoin:onchainAddress")
     }
 }

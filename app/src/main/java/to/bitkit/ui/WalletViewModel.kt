@@ -138,6 +138,7 @@ class WalletViewModel @Inject constructor(
             // Always sync on start but don't need to wait for this
             sync()
 
+            launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
             launch(bgDispatcher) { syncDbOrders() }
         }
@@ -278,19 +279,17 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun registerForNotifications() {
-        viewModelScope.launch(bgDispatcher) {
-            val token = firebaseMessaging.token.await()
+    private suspend fun registerForNotificationsIfNeeded() {
+        val token = firebaseMessaging.token.await()
+        val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
-            val result = runCatching { blocktankService.registerDevice(token) }
-                .onFailure { Log.e(LSP, "Failed to register device with LSP", it) }
-            runOnUiThread {
-                when (result.isSuccess) {
-                    true -> toast("Device registered with LSP Notifications Server.")
-                    else -> toast("Failed to register device with LSP Notifications Server.")
-                }
-            }
+        if (cachedToken == token) {
+            Log.d(LSP, "Skipped registering for notifications, current device token already registered")
+            return
         }
+
+        runCatching { blocktankService.registerDevice(token) }
+            .onFailure { Log.e(LSP, "Failed to register device for notifications", it) }
     }
 
     private val incomingLightningCapacitySats: ULong?
@@ -448,6 +447,21 @@ class WalletViewModel @Inject constructor(
     private suspend fun runOnUiThread(block: suspend CoroutineScope.() -> Unit) = withContext(uiThread, block)
 
     // region debug
+    fun manualRegisterForNotifications() {
+        viewModelScope.launch(bgDispatcher) {
+            val token = firebaseMessaging.token.await()
+
+            val result = runCatching { blocktankService.registerDevice(token) }
+                .onFailure { Log.e(LSP, "Failed to register device with LSP", it) }
+            runOnUiThread {
+                when (result.isSuccess) {
+                    true -> toast("Device registered with LSP Notifications Server.")
+                    else -> toast("Failed to register device with LSP Notifications Server.")
+                }
+            }
+        }
+    }
+
     fun debugDb() {
         viewModelScope.launch {
             db.configDao().getAll().collect {
