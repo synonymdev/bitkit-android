@@ -25,8 +25,8 @@ fun AppNavHost(
     content: @Composable (NavController) -> Unit,
 ) {
     val navController = rememberNavController()
-    NavHost(navController, startDestination = Routes.Main) {
-        home(content, navController)
+    NavHost(navController, startDestination = Routes.INITIAL) {
+        initial(content, navController)
         settings(viewModel, navController)
         nodeState(viewModel, navController)
         lightning(viewModel, navController)
@@ -40,11 +40,11 @@ fun AppNavHost(
 }
 
 // region destinations
-private fun NavGraphBuilder.home(
+private fun NavGraphBuilder.initial(
     content: @Composable (NavController) -> Unit,
     navController: NavController,
 ) {
-    composable(Routes.Main) {
+    composable(Routes.INITIAL) {
         content(navController)
     }
 }
@@ -133,7 +133,7 @@ private fun NavGraphBuilder.activityItem(
 
 // region events
 fun NavController.navigateToHome() = navigate(
-    route = Routes.Main,
+    route = Routes.INITIAL,
     builder = { clearBackStack() },
 )
 
@@ -177,8 +177,7 @@ fun NavController.navigateToActivityItem(id: String) = navigate(
 private fun NavOptionsBuilder.clearBackStack() = popUpTo(id = 0)
 
 object Routes {
-    @Suppress("ConstPropertyName")
-    const val Main = "Main"
+    const val INITIAL = "INITIAL"
 
     @Serializable
     data object Settings

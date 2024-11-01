@@ -44,7 +44,7 @@ fun AppScaffold(
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val isBackButtonVisible by remember(currentBackStackEntry) {
         derivedStateOf {
-            navController.currentDestination?.route != Routes.Main
+            navController.currentDestination?.route != Routes.INITIAL
         }
     }
     Scaffold(
