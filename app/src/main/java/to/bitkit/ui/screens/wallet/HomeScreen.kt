@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallet
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,19 +15,23 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.R
+import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceSummary
+import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.send.SendOptionsView
@@ -42,6 +48,7 @@ fun HomeScreen(
     uiState: MainUiState.Content,
     navController: NavHostController,
 ) = AppScaffold(navController, viewModel, stringResource(R.string.app_name)) {
+    RequestNotificationPermissions()
     var showReceiveSheet by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
@@ -99,6 +106,21 @@ fun HomeScreen(
             ) {
                 ReceiveQRScreen(uiState)
             }
+        }
+    }
+}
+
+@Composable
+fun RequestNotificationPermissions() {
+    val context = LocalContext.current
+    var isGranted by remember { mutableStateOf(!context.requiresPermission(postNotificationsPermission)) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        isGranted = it
+    }
+
+    LaunchedEffect(isGranted) {
+        if (!isGranted) {
+            launcher.launch(postNotificationsPermission)
         }
     }
 }
