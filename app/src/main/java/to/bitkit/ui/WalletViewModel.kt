@@ -23,6 +23,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.ChannelId
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
@@ -102,10 +103,10 @@ class WalletViewModel @Inject constructor(
 
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
-    private var _onEvent: ((Event) -> Unit)? = null
+    private var onLdkEvent: ((Event) -> Unit)? = null
 
     fun setOnEvent(onEvent: (Event) -> Unit) {
-        _onEvent = onEvent
+        onLdkEvent = onEvent
     }
 
     fun start(walletIndex: Int = 0) {
@@ -125,7 +126,7 @@ class WalletViewModel @Inject constructor(
                     it.setup(walletIndex, mnemonic)
                     it.start { event ->
                         syncState()
-                        _onEvent?.invoke(event)
+                        onLdkEvent?.invoke(event)
                     }
                 }
             }.onFailure { Log.e(APP, "Init error", it) }
@@ -133,10 +134,10 @@ class WalletViewModel @Inject constructor(
             _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
 
-            launch { refreshBip21() }
+            launch(bgDispatcher) { refreshBip21() }
 
             // Always sync on start but don't need to wait for this
-            sync()
+            launch(bgDispatcher) { sync() }
 
             launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
@@ -162,31 +163,29 @@ class WalletViewModel @Inject constructor(
 
     private var isSyncingWallet = false
 
-    private fun sync() {
-        viewModelScope.launch(bgDispatcher) bg@{
-            syncState()
+    private suspend fun sync() {
+        syncState()
 
-            if (isSyncingWallet) {
-                Log.w(APP, "Sync already in progress, waiting for existing sync.")
-                while (isSyncingWallet) {
-                    delay(500)
-                }
-                return@bg
+        if (isSyncingWallet) {
+            Log.w(APP, "Sync already in progress, waiting for existing sync.")
+            while (isSyncingWallet) {
+                delay(500)
             }
-
-            isSyncingWallet = true
-            syncState()
-
-            try {
-                lightningService.sync()
-            } catch (e: Exception) {
-                isSyncingWallet = false
-                throw e
-            }
-
-            isSyncingWallet = false
-            syncState()
+            return
         }
+
+        isSyncingWallet = true
+        syncState()
+
+        try {
+            lightningService.sync()
+        } catch (e: Exception) {
+            isSyncingWallet = false
+            throw e
+        }
+
+        isSyncingWallet = false
+        syncState()
     }
 
     private fun syncState() {
@@ -333,6 +332,8 @@ class WalletViewModel @Inject constructor(
             }
         }
     }
+
+    fun findChannelById(id: ChannelId): ChannelDetails? = lightningService.channels?.find { it.channelId == id }
 
     fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {

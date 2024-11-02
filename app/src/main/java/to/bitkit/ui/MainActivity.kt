@@ -24,7 +24,6 @@ import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.wallet.HomeScreen
 import to.bitkit.ui.screens.wallet.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -82,7 +81,7 @@ class MainActivity : ComponentActivity() {
 
                 is Event.ChannelReady -> {
                     // TODO: handle cjit as payment received
-                    val channel = LightningService.shared.channels?.firstOrNull { it.channelId == event.channelId }
+                    val channel = viewModel.findChannelById(event.channelId)
                     if (channel != null) {
                         app.showNewTransactionSheet(
                             NewTransactionSheetDetails(
