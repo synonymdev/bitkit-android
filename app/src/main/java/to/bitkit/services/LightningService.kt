@@ -2,7 +2,6 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
@@ -24,6 +23,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
@@ -44,16 +44,15 @@ typealias NodeEventHandler = suspend (Event) -> Unit
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
+    private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
-    companion object {
-        val shared by lazy {
-            LightningService(Dispatchers.Default)
-        }
-    }
 
     var node: Node? = null
 
-    fun setup(walletIndex: Int, mnemonic: String) {
+    fun setup(walletIndex: Int) {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
         val dirPath = Env.ldkStoragePath(walletIndex)
 
         val builder = Builder
@@ -78,7 +77,7 @@ class LightningService @Inject constructor(
                 } else {
                     setGossipSourceP2p()
                 }
-                setEntropyBip39Mnemonic(mnemonic, passphrase = null)
+                setEntropyBip39Mnemonic(mnemonic, passphrase)
             }
 
         Log.d(LDK, "Building node…")

@@ -14,7 +14,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
-import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
@@ -28,26 +27,25 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirme
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.shared.ServiceError
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
-import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
     private val blocktankService: BlocktankService,
-    private val keychain: Keychain,
+    private val lightningService: LightningService,
 ) : CoroutineWorker(appContext, workerParams) {
+    private val self = this
+
     class VisibleNotification(var title: String = "", var body: String = "")
 
     private var bestAttemptContent: VisibleNotification? = VisibleNotification()
 
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
-
-    private val self = this
 
     private val deliverSignal = CompletableDeferred<Unit>()
 
@@ -63,11 +61,11 @@ class WakeNodeWorker @AssistedInject constructor(
         Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             withPerformanceLogging {
-                LightningService.shared.apply {
-                    setup(walletIndex = 0, mnemonic)
-                    start(timeout = 2.hours) { handleLdkEvent(it) } // stop() is done by deliver() via handleEvent()
+                // TODO: Only start node if it's not running or implement & use StateLocker
+                lightningService.let {
+                    it.setup(walletIndex = 0)
+                    it.start(timeout = 5.minutes) { event -> handleLdkEvent(event) }
                 }
 
                 // Once node is started, handle the manual channel opening if needed
@@ -138,7 +136,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     self.bestAttemptContent?.title = "Payment received"
                     self.bestAttemptContent?.body = "Via new channel"
 
-                    LightningService.shared.channels?.firstOrNull { it.channelId == event.channelId }?.let { channel ->
+                    lightningService.channels?.find { it.channelId == event.channelId }?.let { channel ->
                         val sats = channel.outboundCapacityMsat / 1000u
                         self.bestAttemptContent?.title = "Received ⚡ $sats sats"
                         // Save for UI to pick up
@@ -187,7 +185,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
-        LightningService.shared.stop()
+        lightningService.stop()
 
         bestAttemptContent?.run {
             pushNotification(title, body, context = appContext)

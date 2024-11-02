@@ -70,7 +70,7 @@ internal object Env {
             .toFile()
             .ensureDir()
             .absolutePath
-        Log.d(APP, "$dir storage path: $absolutePath")
+        Log.d(APP, "Using ${dir.uppercase()} storage path: $absolutePath")
         return absolutePath
     }
 

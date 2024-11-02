@@ -24,6 +24,10 @@ class AppStorage @Inject constructor(
         BOLT11,
         BIP21,
     }
+
+    fun clear() {
+        sharedPreferences.edit().clear().apply()
+    }
 }
 
 private class SharedPrefDelegate(private val key: AppStorage.Key) {

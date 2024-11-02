@@ -54,7 +54,6 @@ import to.bitkit.models.ScannedOptions
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.shared.ServiceError
 import to.bitkit.ui.screens.wallet.activity.testActivityItems
 import javax.inject.Inject
 
@@ -115,15 +114,12 @@ class WalletViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            // TODO move to lightningService.setup
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
-
             _nodeLifecycleState = NodeLifecycleState.Starting
             syncState()
 
             runCatching {
                 lightningService.let {
-                    it.setup(walletIndex, mnemonic)
+                    it.setup(walletIndex)
                     it.start { event ->
                         syncState()
                         onLdkEvent?.invoke(event)
@@ -430,6 +426,7 @@ class WalletViewModel @Inject constructor(
                 }
                 lightningService.wipeStorage(0)
                 keychain.wipe()
+                appStorage.clear()
             }.onSuccess {
                 start() // restart UI
             }.onFailure {
@@ -591,6 +588,7 @@ class WalletViewModel @Inject constructor(
             if (bip39Passphrase.isNotBlank()) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            // TODO emit sideEffect
             start()
         }
     }
@@ -605,6 +603,7 @@ class WalletViewModel @Inject constructor(
             }
             start()
         }
+        // TODO emit sideEffect
     }
 
     fun stopIfNeeded() {
