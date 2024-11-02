@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallet.sheets
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
@@ -25,23 +26,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.ui.AppViewModel
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.AppShapes
+import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTransactionSheet(
-    appViewModel: AppViewModel = hiltViewModel(),
+    appViewModel: AppViewModel,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -54,7 +58,11 @@ fun NewTransactionSheet(
             .fillMaxHeight()
             .padding(top = 100.dp)
     ) {
-        NewTransactionSheetView(appViewModel.newTransaction, sheetState, appViewModel)
+        NewTransactionSheetView(
+            details = appViewModel.newTransaction,
+            sheetState = sheetState,
+            onCloseClick = { appViewModel.showNewTransaction = false }
+        )
     }
 }
 
@@ -63,34 +71,8 @@ fun NewTransactionSheet(
 private fun NewTransactionSheetView(
     details: NewTransactionSheetDetails,
     sheetState: SheetState,
-    appViewModel: AppViewModel? = null,
+    onCloseClick: () -> Unit,
 ) {
-    val rotateAnim = remember { Animatable(0f) }
-    val offsetYAnim = remember { Animatable(0f) }
-
-    LaunchedEffect(sheetState.isVisible) {
-        if (sheetState.isVisible) {
-            launch {
-                rotateAnim.animateTo(
-                    targetValue = 360f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(3_200, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    )
-                )
-            }
-            launch {
-                offsetYAnim.animateTo(
-                    targetValue = 100f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(10_000, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse,
-                    )
-                )
-            }
-        }
-    }
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -121,23 +103,52 @@ private fun NewTransactionSheetView(
         )
 
         Spacer(modifier = Modifier.weight(1f))
-
-        // Confetti animation (rotation and vertical movement)
-        Text(
-            text = "🎉",
-            modifier = Modifier
-                .rotate(rotateAnim.value)
-                .offset { IntOffset(x = 0, y = offsetYAnim.value.roundToInt()) }
-        )
-
+        ConfettiAnimation(sheetState)
         Spacer(modifier = Modifier.weight(1f))
 
         Button(
-            onClick = { appViewModel?.showNewTransaction = false }
+            onClick = onCloseClick,
         ) {
-            Text("Close")
+            Text(stringResource(R.string.close))
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConfettiAnimation(sheetState: SheetState) {
+    val rotateAnim = remember { Animatable(0f) }
+    val offsetYAnim = remember { Animatable(0f) }
+
+    // Confetti Animation
+    LaunchedEffect(sheetState.isVisible) {
+        if (sheetState.isVisible) {
+            launch {
+                rotateAnim.animateTo(
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(3_200, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    )
+                )
+            }
+            launch {
+                offsetYAnim.animateTo(
+                    targetValue = 100f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(10_000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    )
+                )
+            }
+        }
+    }
+    Text(
+        text = "🎉",
+        modifier = Modifier
+            .rotate(rotateAnim.value)
+            .offset { IntOffset(x = 0, y = offsetYAnim.value.roundToInt()) }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -149,12 +160,15 @@ private fun PreviewNewTransactionSheetView() {
         sheetState.show()
     }
 
-    NewTransactionSheetView(
-        details = NewTransactionSheetDetails(
-            type = NewTransactionSheetType.LIGHTNING,
-            direction = NewTransactionSheetDirection.RECEIVED,
-            sats = 123456789,
-        ),
-        sheetState,
-    )
+    AppThemeSurface {
+        NewTransactionSheetView(
+            details = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                sats = 123456789,
+            ),
+            sheetState,
+            onCloseClick = {},
+        )
+    }
 }
