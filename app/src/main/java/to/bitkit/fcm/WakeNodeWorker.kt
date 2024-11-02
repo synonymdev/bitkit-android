@@ -9,6 +9,7 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -47,6 +48,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 
+    private val timeout = 2.minutes
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
@@ -65,7 +67,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 // TODO: Only start node if it's not running or implement & use StateLocker
                 lightningService.let {
                     it.setup(walletIndex = 0)
-                    it.start(timeout = 5.minutes) { event -> handleLdkEvent(event) }
+                    it.start(timeout) { event -> handleLdkEvent(event) }
                 }
 
                 // Once node is started, handle the manual channel opening if needed
@@ -87,7 +89,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     }
                 }
             }
-            deliverSignal.await()
+            withTimeout(timeout) { deliverSignal.await() } // Stops node on timeout & avoids notification replay by OS
             return Result.success()
         } catch (e: Exception) {
             val reason = e.message ?: "Unknown error"
