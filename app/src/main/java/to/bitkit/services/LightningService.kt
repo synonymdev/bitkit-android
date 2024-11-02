@@ -54,13 +54,13 @@ class LightningService @Inject constructor(
     var node: Node? = null
 
     fun setup(walletIndex: Int, mnemonic: String) {
-        val dir = Env.ldkStorage(walletIndex)
+        val dirPath = Env.ldkStoragePath(walletIndex)
 
         val builder = Builder
             .fromConfig(
                 defaultConfig().apply {
-                    storageDirPath = dir
-                    logDirPath = dir
+                    storageDirPath = dirPath
+                    logDirPath = dirPath
                     network = Env.network
                     logLevel = LogLevel.TRACE
                     walletSyncIntervalSecs = Env.walletSyncIntervalSecs
@@ -134,7 +134,7 @@ class LightningService @Inject constructor(
     fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
         Log.w(APP, "Wiping lightning storage…")
-        Path(Env.ldkStorage(walletIndex)).toFile().deleteRecursively()
+        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Log.i(APP, "Lightning wallet wiped")
     }
 
