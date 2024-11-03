@@ -1,7 +1,5 @@
 package to.bitkit.ui.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,26 +13,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ext.requiresPermission
-import to.bitkit.ext.toast
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.pushNotification
-import to.bitkit.ui.scaffold.AppScaffold
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.FullWidthTextButton
@@ -47,71 +38,57 @@ import to.bitkit.ui.shared.Peers
 fun DevSettingsScreen(
     viewModel: WalletViewModel,
     navController: NavController,
-) = AppScaffold(navController, viewModel, "Dev Settings") {
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    Column(
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        NodeDetails(uiState)
-        WalletDetails(uiState)
-        Peers(uiState.peers, viewModel::disconnectPeer)
-        Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-        Payments(viewModel)
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "Debug",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(12.dp)
+    ScreenColumn {
+        AppTopBar(navController, stringResource(R.string.dev_settings))
+        Column(
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            NodeDetails(uiState)
+            InfoField(
+                value = uiState.onchainAddress,
+                label = stringResource(R.string.address),
+                maxLength = 44,
+                trailingIcon = { CopyToClipboardButton(uiState.onchainAddress) },
             )
-            FullWidthTextButton(viewModel::debugDb) { Text("Database") }
-            FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
-            FullWidthTextButton(viewModel::debugFcmToken) { Text("Print FCM Token") }
-            FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
-            FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
-            FullWidthTextButton(viewModel::debugActivityItems) { Text("Activity Items") }
-            FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
-            FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
-            HorizontalDivider()
-            NotificationButton()
-            FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
-            FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+
+            Peers(uiState.peers, viewModel::disconnectPeer)
+            Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+            Payments(viewModel)
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Debug",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(12.dp)
+                )
+                FullWidthTextButton(viewModel::debugDb) { Text("Database") }
+                FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
+                FullWidthTextButton(viewModel::debugFcmToken) { Text("Print FCM Token") }
+                FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
+                FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
+                FullWidthTextButton(viewModel::debugActivityItems) { Text("Activity Items") }
+                FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
+                FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
+                HorizontalDivider()
+                FullWidthTextButton(::debugPushNotification) { Text("Test Local Notification") }
+                FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
+                FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+            }
+            Orders(uiState.orders, viewModel)
         }
-        Orders(uiState.orders, viewModel)
     }
 }
 
-@Composable
-fun NotificationButton() {
-    val context = LocalContext.current
-    var canPush by remember {
-        mutableStateOf(!context.requiresPermission(postNotificationsPermission))
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        canPush = it
-        toast("Permission ${if (it) "Granted" else "Denied"}")
-    }
-
-    val onClick: () -> Unit = {
-        if (context.requiresPermission(postNotificationsPermission)) {
-            permissionLauncher.launch(postNotificationsPermission)
-        } else {
-            pushNotification(
-                title = "Bitkit Notification",
-                text = "Short custom notification description",
-                bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
-            )
-        }
-    }
-    val text by remember {
-        derivedStateOf { if (canPush) "Test Local Notification" else "Enable Notification Permissions" }
-    }
-    FullWidthTextButton(onClick) { Text(text = text) }
+private fun debugPushNotification() {
+    pushNotification(
+        title = "Bitkit Notification",
+        text = "Short custom notification description",
+        bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
+    )
 }
 
 @Composable
@@ -140,16 +117,4 @@ fun NodeDetails(contentState: MainUiState) {
             trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
         )
     }
-}
-
-@Composable
-fun WalletDetails(
-    contentState: MainUiState,
-) {
-    InfoField(
-        value = contentState.onchainAddress,
-        label = stringResource(R.string.address),
-        maxLength = 44,
-        trailingIcon = { CopyToClipboardButton(contentState.onchainAddress) },
-    )
 }

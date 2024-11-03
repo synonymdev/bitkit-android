@@ -4,13 +4,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,49 +16,33 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import to.bitkit.R
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.navigateToSettings
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun AppScaffold(
     navController: NavController,
     viewModel: WalletViewModel,
     titleText: String,
     content: @Composable () -> Unit,
 ) {
-    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    val isBackButtonVisible by remember(currentBackStackEntry) {
-        derivedStateOf { navController.previousBackStackEntry != null }
-    }
     Scaffold(
         topBar = {
-            AppTopBar(
-                navController = navController,
-                navigationIcon = {
-                    if (isBackButtonVisible) {
-                        IconButton(onClick = navController::popBackStack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+            @OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
+                title = {
+                    Text(
+                        text = titleText,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
                 },
-                titleText = titleText,
                 actions = {
                     IconButton(viewModel::refreshState) {
                         Icon(
@@ -72,7 +53,7 @@ fun AppScaffold(
                     IconButton(onClick = navController::navigateToNodeState) {
                         Icon(
                             imageVector = Icons.Default.Bolt,
-                            contentDescription = "Node State",
+                            contentDescription = stringResource(R.string.node_state),
                         )
                     }
                     IconButton(navController::navigateToSettings) {

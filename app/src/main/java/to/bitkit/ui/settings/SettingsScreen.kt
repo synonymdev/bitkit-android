@@ -2,9 +2,7 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -18,17 +16,14 @@ import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToLightning
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 
 @Composable
 fun SettingsScreen(
     viewModel: WalletViewModel,
     navController: NavController,
 ) {
-    Column(
-        modifier = Modifier
-            .systemBarsPadding()
-            .fillMaxSize()
-    ) {
+    ScreenColumn {
         AppTopBar(navController, stringResource(R.string.settings))
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),

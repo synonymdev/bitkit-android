@@ -32,7 +32,8 @@ import to.bitkit.ext.amountSats
 import to.bitkit.ext.formatted
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.scaffold.AppScaffold
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
@@ -44,9 +45,12 @@ fun ActivityItemScreen(
     viewModel: WalletViewModel,
     navController: NavController,
     activityItem: Routes.ActivityItem,
-) = AppScaffold(navController, viewModel, "Activity Detail") {
-    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return@AppScaffold
-    ActivityItemView(item)
+) {
+    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return
+    ScreenColumn {
+        AppTopBar(navController, "Activity Details")
+        ActivityItemView(item)
+    }
 }
 
 @Composable

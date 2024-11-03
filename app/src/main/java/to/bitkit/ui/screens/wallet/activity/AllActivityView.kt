@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -33,11 +34,13 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
-import to.bitkit.ui.scaffold.AppScaffold
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -163,9 +166,12 @@ fun ActivityList(
 fun AllActivityScreen(
     viewModel: WalletViewModel,
     navController: NavController,
-) = AppScaffold(navController, viewModel, "All Activity") {
-    val items = viewModel.activityItems.value
-    AllActivityView(items, navController)
+) {
+    ScreenColumn {
+        AppTopBar(navController, stringResource(R.string.all_activity))
+        val items = viewModel.activityItems.value
+        AllActivityView(items, navController)
+    }
 }
 
 @Composable

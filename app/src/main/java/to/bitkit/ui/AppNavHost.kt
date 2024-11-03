@@ -56,7 +56,7 @@ fun AppNavHost(
         devSettings(walletViewModel, navController)
         savings(walletViewModel, navController)
         spending(walletViewModel, navController)
-        transfer(walletViewModel, navController)
+        transfer(navController)
         allActivity(walletViewModel, navController)
         activityItem(walletViewModel, navController)
     }
@@ -127,12 +127,11 @@ private fun NavGraphBuilder.spending(
 }
 
 private fun NavGraphBuilder.transfer(
-    walletViewModel: WalletViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Transfer> {
         val viewModel = hiltViewModel<TransferViewModel>()
-        TransferScreen(walletViewModel, viewModel, navController)
+        TransferScreen(viewModel, navController)
     }
 }
 

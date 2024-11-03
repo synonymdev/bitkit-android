@@ -4,11 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -28,6 +26,7 @@ import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.R
 import to.bitkit.ext.formatted
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
@@ -41,11 +40,7 @@ fun NodeStateScreen(
     navController: NavController,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    Column(
-        modifier = Modifier
-            .systemBarsPadding()
-            .fillMaxSize()
-    ) {
+    ScreenColumn {
         AppTopBar(navController, stringResource(R.string.node_state))
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp),
