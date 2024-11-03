@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -25,7 +27,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.R
 import to.bitkit.ext.formatted
-import to.bitkit.ui.scaffold.AppScaffold
+import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
@@ -37,87 +39,94 @@ import java.time.Instant
 fun NodeStateScreen(
     viewModel: WalletViewModel,
     navController: NavController,
-) = AppScaffold(navController, viewModel, "Node State") {
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     Column(
-        verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
+            .systemBarsPadding()
+            .fillMaxSize()
     ) {
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Row {
-                    Text(
-                        text = "Node State:",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = uiState.nodeLifecycleState.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                uiState.nodeStatus?.let {
+        AppTopBar(navController, stringResource(R.string.node_state))
+        Column(
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(16.dp)
+                ) {
                     Row {
                         Text(
-                            text = "Ready:",
+                            text = "Node State:",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = if (it.isRunning) "✅" else "⏳",
+                            text = uiState.nodeLifecycleState.name,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    Row {
-                        Text(
-                            text = "Last sync time:",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        val lastSyncTime = it.latestWalletSyncTimestamp
-                            ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
-                            ?: "Never"
-                        Text(
-                            text = lastSyncTime,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    Row {
-                        Text(
-                            text = "Block height:",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "${it.currentBestBlock.height}",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                    uiState.nodeStatus?.let {
+                        Row {
+                            Text(
+                                text = "Ready:",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = if (it.isRunning) "✅" else "⏳",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Row {
+                            Text(
+                                text = "Last sync time:",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            val lastSyncTime = it.latestWalletSyncTimestamp
+                                ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
+                                ?: "Never"
+                            Text(
+                                text = lastSyncTime,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Row {
+                            Text(
+                                text = "Block height:",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "${it.currentBestBlock.height}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
             }
+            InfoField(
+                value = uiState.nodeId,
+                label = stringResource(R.string.node_id),
+                maxLength = 44,
+                trailingIcon = { CopyToClipboardButton(uiState.nodeId) },
+            )
+            Peers(uiState.peers, viewModel::disconnectPeer)
+            Channels(
+                uiState.channels,
+                uiState.peers.isNotEmpty(),
+                viewModel::openChannel,
+                viewModel::closeChannel,
+            )
+            uiState.balanceDetails?.let {
+                Balances(it)
+            }
+            Spacer(modifier = Modifier.height(1.dp))
         }
-        InfoField(
-            value = uiState.nodeId,
-            label = stringResource(R.string.node_id),
-            maxLength = 44,
-            trailingIcon = { CopyToClipboardButton(uiState.nodeId) },
-        )
-        Peers(uiState.peers, viewModel::disconnectPeer)
-        Channels(
-            uiState.channels,
-            uiState.peers.isNotEmpty(),
-            viewModel::openChannel,
-            viewModel::closeChannel,
-        )
-        uiState.balanceDetails?.let {
-            Balances(it)
-        }
-        Spacer(modifier = Modifier.height(1.dp))
     }
 }
 

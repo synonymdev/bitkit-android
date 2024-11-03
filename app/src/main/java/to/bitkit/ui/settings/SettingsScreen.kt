@@ -2,7 +2,9 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -15,21 +17,28 @@ import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToLightning
-import to.bitkit.ui.scaffold.AppScaffold
+import to.bitkit.ui.scaffold.AppTopBar
 
 @Composable
 fun SettingsScreen(
     viewModel: WalletViewModel,
     navController: NavController,
-) = AppScaffold(navController, viewModel, stringResource(R.string.settings)) {
+) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
+            .systemBarsPadding()
+            .fillMaxSize()
     ) {
-        NavButton("Lightning") { navController.navigateToLightning() }
-        NavButton("Dev Settings") { navController.navigateToDevSettings() }
-        NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
+        AppTopBar(navController, stringResource(R.string.settings))
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            NavButton("Lightning") { navController.navigateToLightning() }
+            NavButton("Dev Settings") { navController.navigateToDevSettings() }
+            NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
+        }
     }
 }

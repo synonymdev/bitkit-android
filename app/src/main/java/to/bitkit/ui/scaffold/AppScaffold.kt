@@ -48,7 +48,8 @@ fun AppScaffold(
     }
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            AppTopBar(
+                navController = navController,
                 navigationIcon = {
                     if (isBackButtonVisible) {
                         IconButton(onClick = navController::popBackStack) {
@@ -60,13 +61,7 @@ fun AppScaffold(
                         }
                     }
                 },
-                title = {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                },
+                titleText = titleText,
                 actions = {
                     IconButton(viewModel::refreshState) {
                         Icon(

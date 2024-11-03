@@ -27,4 +27,6 @@
     <string name="wallet">Wallet</string>
     <string name="ready">Ready</string>
     <string name="pending">Pending</string>
+    <string name="savings">Savings</string>
+    <string name="node_state">Node State</string>
 </resources>
