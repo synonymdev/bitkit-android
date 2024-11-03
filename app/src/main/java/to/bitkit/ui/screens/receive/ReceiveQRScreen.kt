@@ -44,7 +44,7 @@ private object Routes {
 
 @Composable
 fun ReceiveQRScreen(
-    walletState: MainUiState.Content,
+    walletState: MainUiState,
     modifier: Modifier = Modifier,
     viewModel: ReceiveViewModel = hiltViewModel(),
 ) {
@@ -97,7 +97,7 @@ private fun ContentView(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
     navController: NavHostController,
-    walletState: MainUiState.Content,
+    walletState: MainUiState,
 ) {
     Column {
         val onchainAddress = walletState.onchainAddress

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
@@ -68,9 +69,8 @@ class WalletViewModel @Inject constructor(
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
+    private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
-    private val _contentState get() = _uiState.value.asContent() ?: error("UI not ready..")
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
 
@@ -150,7 +150,7 @@ class WalletViewModel @Inject constructor(
             runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
                 .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
                 .onSuccess { btOrders ->
-                    updateContentState { it.copy(orders = btOrders) }
+                    _uiState.update { it.copy(orders = btOrders) }
                 }
         }
     }
@@ -183,77 +183,79 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun syncState() {
-        _uiState.value = MainUiState.Content(
-            nodeId = lightningService.nodeId.orEmpty(),
-            onchainAddress = _onchainAddress,
-            bolt11 = _bolt11,
-            bip21 = _bip21,
-            nodeStatus = lightningService.status,
-            nodeLifecycleState = _nodeLifecycleState,
-            peers = lightningService.peers.orEmpty(),
-            channels = lightningService.channels.orEmpty(),
-            orders = _uiState.value.asContent()?.orders.orEmpty(),
-        )
+        _uiState.update {
+            it.copy(
+                nodeId = lightningService.nodeId.orEmpty(),
+                onchainAddress = _onchainAddress,
+                bolt11 = _bolt11,
+                bip21 = _bip21,
+                nodeStatus = lightningService.status,
+                nodeLifecycleState = _nodeLifecycleState,
+                peers = lightningService.peers.orEmpty(),
+                channels = lightningService.channels.orEmpty(),
+            )
+        }
 
         viewModelScope.launch {
-            // Load balances async
-            launch {
-                lightningService.balances?.let { b ->
-                    updateContentState {
-                        it.copy(
-                            totalOnchainSats = b.totalOnchainBalanceSats,
-                            totalLightningSats = b.totalLightningBalanceSats,
-                            totalBalanceSats = b.totalLightningBalanceSats + b.totalOnchainBalanceSats,
-                            balanceDetails = b,
-                        )
-                    }
-                }
+            launch(bgDispatcher) { syncBalances() }
+            launch(bgDispatcher) { syncActivityItems() }
+        }
+    }
+
+    private fun syncBalances() {
+        lightningService.balances?.let { b ->
+            _uiState.update {
+                it.copy(
+                    totalOnchainSats = b.totalOnchainBalanceSats,
+                    totalLightningSats = b.totalLightningBalanceSats,
+                    totalBalanceSats = b.totalLightningBalanceSats + b.totalOnchainBalanceSats,
+                    balanceDetails = b,
+                )
             }
-            // Load activity items async
-            launch {
-                lightningService.payments?.let { payments ->
-                    val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
+        }
+    }
 
-                    // TODO: eventually load other activity types from storage
-                    val allActivity = mutableListOf<PaymentDetails>()
-                    val latestLightningActivity = mutableListOf<PaymentDetails>()
-                    val latestOnchainActivity = mutableListOf<PaymentDetails>()
+    private fun syncActivityItems() {
+        lightningService.payments?.let { payments ->
+            val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
 
-                    sorted.forEach { details ->
-                        when (details.kind) {
-                            is PaymentKind.Onchain -> {
-                                allActivity.add(details)
-                                latestOnchainActivity.add(details)
-                            }
+            // TODO: eventually load other activity types from storage
+            val allActivity = mutableListOf<PaymentDetails>()
+            val latestLightningActivity = mutableListOf<PaymentDetails>()
+            val latestOnchainActivity = mutableListOf<PaymentDetails>()
 
-                            is PaymentKind.Bolt11 -> {
-                                if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
-                                    allActivity.add(details)
-                                    latestLightningActivity.add(details)
-                                }
-                            }
+            sorted.forEach { details ->
+                when (details.kind) {
+                    is PaymentKind.Onchain -> {
+                        allActivity.add(details)
+                        latestOnchainActivity.add(details)
+                    }
 
-                            is PaymentKind.Spontaneous -> {
-                                allActivity.add(details)
-                                latestLightningActivity.add(details)
-                            }
-
-                            is PaymentKind.Bolt11Jit -> Unit
-                            is PaymentKind.Bolt12Offer -> Unit
-                            is PaymentKind.Bolt12Refund -> Unit
+                    is PaymentKind.Bolt11 -> {
+                        if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
+                            allActivity.add(details)
+                            latestLightningActivity.add(details)
                         }
                     }
 
-                    // TODO: append activity items from lightning balances
+                    is PaymentKind.Spontaneous -> {
+                        allActivity.add(details)
+                        latestLightningActivity.add(details)
+                    }
 
-                    val limitLatest = 3
-                    activityItems.value = allActivity
-                    latestActivityItems.value = allActivity.take(limitLatest)
-                    latestLightningActivityItems.value = latestLightningActivity.take(limitLatest)
-                    latestOnchainActivityItems.value = latestOnchainActivity.take(limitLatest)
-
+                    is PaymentKind.Bolt11Jit -> Unit
+                    is PaymentKind.Bolt12Offer -> Unit
+                    is PaymentKind.Bolt12Refund -> Unit
                 }
             }
+
+            // TODO: append activity items from lightning balances
+
+            val limitLatest = 3
+            activityItems.value = allActivity
+            latestActivityItems.value = allActivity.take(limitLatest)
+            latestLightningActivityItems.value = latestLightningActivity.take(limitLatest)
+            latestOnchainActivityItems.value = latestOnchainActivity.take(limitLatest)
         }
     }
 
@@ -265,7 +267,7 @@ class WalletViewModel @Inject constructor(
                     runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
                         .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
                         .onSuccess { btOrders ->
-                            updateContentState { it.copy(orders = btOrders) }
+                            _uiState.update { it.copy(orders = btOrders) }
                         }
                 }
             }
@@ -297,7 +299,7 @@ class WalletViewModel @Inject constructor(
 
         _bip21 = "bitcoin:$_onchainAddress"
 
-        val hasChannels = _uiState.value.asContent()?.channels?.isNotEmpty() == true
+        val hasChannels = lightningService.channels?.isNotEmpty() == true
         if (!hasChannels) {
             _bolt11 = ""
         }
@@ -321,7 +323,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             lightningService.disconnectPeer(peer)
             runOnUiThread { toast("Peer disconnected.") }
-            updateContentState {
+            _uiState.update {
                 it.copy(peers = lightningService.peers.orEmpty())
             }
         }
@@ -394,8 +396,8 @@ class WalletViewModel @Inject constructor(
     }
 
     fun openChannel() {
-        val peer = _contentState.peers.first ?: error("No peer connected to open channel.")
         viewModelScope.launch(bgDispatcher) {
+            val peer = lightningService.peers?.first ?: error("No peer connected to open channel.")
             runOnUiThread { toast("Channel Pending.") }
             lightningService.openChannel(peer, 50000u, 10000u)
         }
@@ -428,13 +430,6 @@ class WalletViewModel @Inject constructor(
             }.onFailure {
                 runOnUiThread { toast("Failed to wipe: $it") }
             }
-        }
-    }
-
-    private fun updateContentState(update: (MainUiState.Content) -> MainUiState.Content) {
-        val stateValue = this._uiState.value
-        if (stateValue is MainUiState.Content) {
-            this._uiState.value = update(stateValue)
         }
     }
 
@@ -502,15 +497,13 @@ class WalletViewModel @Inject constructor(
     }
 
     fun debugBtOrdersSync() {
-        val orderIds = _contentState.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
+        val orderIds = _uiState.value.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
         viewModelScope.launch {
             runCatching { blocktankService.getOrders(orderIds) }
                 .onFailure { runOnUiThread { toast("Failed to fetch orders from Blocktank.") } }
                 .onSuccess { orders ->
                     runOnUiThread { toast("Orders synced") }
-                    updateContentState {
-                        it.copy(orders = orders)
-                    }
+                    _uiState.update { it.copy(orders = orders) }
                 }
         }
     }
@@ -592,31 +585,21 @@ class WalletViewModel @Inject constructor(
 }
 
 // region state
-sealed class MainUiState {
-    data object Loading : MainUiState()
-    data class Content(
-        val nodeId: String,
-        val totalOnchainSats: ULong? = null,
-        val totalLightningSats: ULong? = null,
-        val totalBalanceSats: ULong? = null,
-        val balanceDetails: BalanceDetails? = null,
-        val onchainAddress: String,
-        val bolt11: String,
-        val bip21: String,
-        val nodeStatus: NodeStatus?,
-        val nodeLifecycleState: NodeLifecycleState,
-        val peers: List<LnPeer>,
-        val channels: List<ChannelDetails>,
-        val orders: List<BtOrder>,
-    ) : MainUiState()
-
-    data class Error(
-        val title: String = "Error Title",
-        val message: String = "Error short description.",
-    ) : MainUiState()
-
-    fun asContent() = this as? Content
-}
+data class MainUiState(
+    val nodeId: String = "",
+    val totalOnchainSats: ULong? = null,
+    val totalLightningSats: ULong? = null,
+    val totalBalanceSats: ULong? = null,
+    val balanceDetails: BalanceDetails? = null,
+    val onchainAddress: String = "",
+    val bolt11: String = "",
+    val bip21: String = "",
+    val nodeStatus: NodeStatus? = null,
+    val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
+    val peers: List<LnPeer> = emptyList(),
+    val channels: List<ChannelDetails> = emptyList(),
+    val orders: List<BtOrder> = emptyList(),
+)
 
 enum class NodeLifecycleState {
     Stopped,

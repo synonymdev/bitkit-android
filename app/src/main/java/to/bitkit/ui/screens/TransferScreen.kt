@@ -3,12 +3,11 @@ package to.bitkit.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -42,7 +41,7 @@ fun TransferScreen(
     Column(
         modifier = Modifier
             .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
+            .fillMaxSize()
     ) {
         when (val state = uiState.value) {
             is TransferUiState.Create -> CreateView(viewModel)
@@ -69,8 +68,9 @@ private fun CreateView(viewModel: TransferViewModel) {
             viewModel.createOrder(spendingBalanceSats)
         },
         enabled = !isCreating,
+        loading = isCreating,
     ) {
-        Text(if (isCreating) "Creating order..." else "Continue")
+        Text("Continue")
     }
 }
 

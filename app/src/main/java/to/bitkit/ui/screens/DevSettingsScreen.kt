@@ -48,8 +48,7 @@ fun DevSettingsScreen(
     viewModel: WalletViewModel,
     navController: NavController,
 ) = AppScaffold(navController, viewModel, "Dev Settings") {
-    val state = viewModel.uiState.collectAsStateWithLifecycle()
-    val uiState = state.value.asContent() ?: return@AppScaffold
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
@@ -116,7 +115,7 @@ fun NotificationButton() {
 }
 
 @Composable
-fun NodeDetails(contentState: MainUiState.Content) {
+fun NodeDetails(contentState: MainUiState) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.Bottom,
@@ -145,7 +144,7 @@ fun NodeDetails(contentState: MainUiState.Content) {
 
 @Composable
 fun WalletDetails(
-    contentState: MainUiState.Content,
+    contentState: MainUiState,
 ) {
     InfoField(
         value = contentState.onchainAddress,

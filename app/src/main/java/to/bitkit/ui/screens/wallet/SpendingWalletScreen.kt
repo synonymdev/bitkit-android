@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,8 +22,7 @@ fun SpendingWalletScreen(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) = AppScaffold(navController, viewModel, "Spending") {
-    val state = viewModel.uiState.collectAsStateWithLifecycle()
-    val uiState = state.value.asContent() ?: return@AppScaffold
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier

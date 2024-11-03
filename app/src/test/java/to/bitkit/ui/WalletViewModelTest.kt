@@ -73,7 +73,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `start should emit Content uiState`() = test {
         setupExistingWalletMocks()
-        val expectedUiState = MainUiState.Content(
+        val expectedUiState = MainUiState(
             nodeId = "nodeId",
             onchainAddress = "onchainAddress",
             peers = emptyList(),

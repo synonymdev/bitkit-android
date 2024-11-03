@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,8 +31,7 @@ fun SavingsWalletScreen(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) = AppScaffold(navController, viewModel, "Savings") {
-    val state = viewModel.uiState.collectAsStateWithLifecycle()
-    val uiState = state.value.asContent() ?: return@AppScaffold
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier

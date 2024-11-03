@@ -23,7 +23,7 @@ import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun BalanceSummary(
-    uiState: MainUiState.Content,
+    uiState: MainUiState,
     navController: NavController,
 ) {
     BalanceView(

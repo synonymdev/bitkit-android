@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -37,8 +38,7 @@ fun NodeStateScreen(
     viewModel: WalletViewModel,
     navController: NavController,
 ) = AppScaffold(navController, viewModel, "Node State") {
-    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
-    val contentState = uiState.value.asContent() ?: return@AppScaffold
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier
@@ -57,11 +57,11 @@ fun NodeStateScreen(
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = contentState.nodeLifecycleState.name,
+                        text = uiState.nodeLifecycleState.name,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                contentState.nodeStatus?.let {
+                uiState.nodeStatus?.let {
                     Row {
                         Text(
                             text = "Ready:",
@@ -102,19 +102,19 @@ fun NodeStateScreen(
             }
         }
         InfoField(
-            value = contentState.nodeId,
+            value = uiState.nodeId,
             label = stringResource(R.string.node_id),
             maxLength = 44,
-            trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
+            trailingIcon = { CopyToClipboardButton(uiState.nodeId) },
         )
-        Peers(contentState.peers, viewModel::disconnectPeer)
+        Peers(uiState.peers, viewModel::disconnectPeer)
         Channels(
-            contentState.channels,
-            contentState.peers.isNotEmpty(),
+            uiState.channels,
+            uiState.peers.isNotEmpty(),
             viewModel::openChannel,
             viewModel::closeChannel,
         )
-        contentState.balanceDetails?.let {
+        uiState.balanceDetails?.let {
             Balances(it)
         }
         Spacer(modifier = Modifier.height(1.dp))

@@ -49,21 +49,14 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    when (val state = uiState) {
-        is MainUiState.Content -> HomeScreen(viewModel, state, navController)
-        else -> {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Text("ERROR: No content state", modifier = Modifier.align(Alignment.Center))
-            }
-        }
-    }
+    HomeScreen(viewModel, uiState, navController)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(
     viewModel: WalletViewModel,
-    uiState: MainUiState.Content,
+    uiState: MainUiState,
     navController: NavController,
 ) = AppScaffold(navController, viewModel, stringResource(R.string.app_name)) {
     RequestNotificationPermissions()
