@@ -2,9 +2,11 @@
 
 package to.bitkit.ext
 
+import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
+import android.content.ContextWrapper
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.util.Log
 import android.widget.Toast
@@ -64,3 +66,10 @@ fun Context.copyAssetToStorage(asset: String, dest: String) {
         Log.e(APP, "Failed to copy asset file: $asset", e)
     }
 }
+
+fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }

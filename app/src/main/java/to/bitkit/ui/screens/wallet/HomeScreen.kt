@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,9 +42,26 @@ import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.qrCodeScanner
 import to.bitkit.ui.theme.AppShapes
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    viewModel: WalletViewModel,
+    navController: NavController,
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    when (val state = uiState) {
+        is MainUiState.Content -> HomeScreen(viewModel, state, navController)
+        else -> {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Text("ERROR: No content state", modifier = Modifier.align(Alignment.Center))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeScreen(
     viewModel: WalletViewModel,
     uiState: MainUiState.Content,
     navController: NavController,
@@ -63,7 +81,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            ActivityLatest(ActivityType.ALL, navController)
+            ActivityLatest(ActivityType.ALL, viewModel, navController)
         }
 
         val scanner = qrCodeScanner()
@@ -90,7 +108,7 @@ fun HomeScreen(
                     .fillMaxHeight()
                     .padding(top = 100.dp)
             ) {
-                SendOptionsView()
+                SendOptionsView(viewModel)
             }
         }
         // Receive Sheet

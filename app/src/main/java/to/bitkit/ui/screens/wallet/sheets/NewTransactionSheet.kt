@@ -50,7 +50,7 @@ fun NewTransactionSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = { appViewModel.showNewTransaction = false },
+        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
         sheetState = sheetState,
         shape = AppShapes.sheet,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -61,7 +61,7 @@ fun NewTransactionSheet(
         NewTransactionSheetView(
             details = appViewModel.newTransaction,
             sheetState = sheetState,
-            onCloseClick = { appViewModel.showNewTransaction = false }
+            onCloseClick = { appViewModel.hideNewTransactionSheet() }
         )
     }
 }

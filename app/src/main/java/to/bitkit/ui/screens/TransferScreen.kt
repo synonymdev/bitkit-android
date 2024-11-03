@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.ui.WalletViewModel
@@ -35,8 +34,8 @@ import to.bitkit.ui.shared.OrderSummary
 @Composable
 fun TransferScreen(
     walletViewModel: WalletViewModel,
+    viewModel: TransferViewModel,
     navController: NavController,
-    viewModel: TransferViewModel = hiltViewModel(),
 ) = AppScaffold(navController, walletViewModel, "Transfer Funds") {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -97,7 +96,7 @@ private fun ConfirmView(
                 isPaying = true
                 viewModel.payOrder(state.order)
             },
-            enabled = !isPaying
+            enabled = !isPaying,
         ) {
             Text("Confirm")
         }

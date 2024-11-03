@@ -34,6 +34,6 @@ fun SpendingWalletScreen(
             value = uiState.totalLightningSats,
         )
         Spacer(modifier = Modifier.height(24.dp))
-        ActivityLatest(ActivityType.LIGHTNING, navController)
+        ActivityLatest(ActivityType.LIGHTNING, viewModel, navController)
     }
 }

@@ -1,6 +1,13 @@
 package to.bitkit.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.flowWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -9,9 +16,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.TransferScreen
+import to.bitkit.ui.screens.TransferViewModel
+import to.bitkit.ui.screens.wallet.HomeScreen
 import to.bitkit.ui.screens.wallet.SavingsWalletScreen
 import to.bitkit.ui.screens.wallet.SpendingWalletScreen
 import to.bitkit.ui.screens.wallet.activity.ActivityItemScreen
@@ -21,31 +31,44 @@ import to.bitkit.ui.settings.SettingsScreen
 
 @Composable
 fun AppNavHost(
-    viewModel: WalletViewModel,
-    content: @Composable (NavController) -> Unit,
+    appViewModel: AppViewModel,
+    walletViewModel: WalletViewModel,
+    onWalletWiped: () -> Unit,
 ) {
     val navController = rememberNavController()
-    NavHost(navController, startDestination = Routes.INITIAL) {
-        initial(content, navController)
-        settings(viewModel, navController)
-        nodeState(viewModel, navController)
-        lightning(viewModel, navController)
-        devSettings(viewModel, navController)
-        savings(viewModel, navController)
-        spending(viewModel, navController)
-        transfer(viewModel, navController)
-        allActivity(viewModel, navController)
-        activityItem(viewModel, navController)
+
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentOnWalletWiped by rememberUpdatedState(onWalletWiped)
+    LaunchedEffect(appViewModel, lifecycle) {
+        snapshotFlow { appViewModel.uiState }
+            .filter { it.walletExists == false }
+            .flowWithLifecycle(lifecycle)
+            .collect {
+                currentOnWalletWiped()
+            }
+    }
+
+    NavHost(navController, startDestination = Routes.Home) {
+        home(walletViewModel, navController)
+        settings(walletViewModel, navController)
+        nodeState(walletViewModel, navController)
+        lightning(walletViewModel, navController)
+        devSettings(walletViewModel, navController)
+        savings(walletViewModel, navController)
+        spending(walletViewModel, navController)
+        transfer(walletViewModel, navController)
+        allActivity(walletViewModel, navController)
+        activityItem(walletViewModel, navController)
     }
 }
 
 // region destinations
-private fun NavGraphBuilder.initial(
-    content: @Composable (NavController) -> Unit,
-    navController: NavController,
+private fun NavGraphBuilder.home(
+    viewModel: WalletViewModel,
+    navController: NavHostController,
 ) {
-    composable(Routes.INITIAL) {
-        content(navController)
+    composable<Routes.Home> {
+        HomeScreen(viewModel, navController)
     }
 }
 
@@ -104,11 +127,12 @@ private fun NavGraphBuilder.spending(
 }
 
 private fun NavGraphBuilder.transfer(
-    viewModel: WalletViewModel,
+    walletViewModel: WalletViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Transfer> {
-        TransferScreen(viewModel, navController)
+        val viewModel = hiltViewModel<TransferViewModel>()
+        TransferScreen(walletViewModel, viewModel, navController)
     }
 }
 
@@ -132,11 +156,6 @@ private fun NavGraphBuilder.activityItem(
 // endregion
 
 // region events
-fun NavController.navigateToHome() = navigate(
-    route = Routes.INITIAL,
-    builder = { clearBackStack() },
-)
-
 fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
 )
@@ -177,7 +196,8 @@ fun NavController.navigateToActivityItem(id: String) = navigate(
 private fun NavOptionsBuilder.clearBackStack() = popUpTo(id = 0)
 
 object Routes {
-    const val INITIAL = "INITIAL"
+    @Serializable
+    data object Home
 
     @Serializable
     data object Settings

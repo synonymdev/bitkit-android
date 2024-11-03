@@ -30,8 +30,8 @@ private object Routes {
 
 @Composable
 fun SendOptionsView(
+    viewModel: WalletViewModel,
     modifier: Modifier = Modifier,
-    viewModel: WalletViewModel = hiltViewModel(),
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,7 +75,7 @@ fun SendOptionsView(
                 }
             }
             composable(Routes.SEND_MANUALLY) {
-                SendEnterManuallyScreen()
+                SendEnterManuallyScreen(viewModel)
             }
         }
     }

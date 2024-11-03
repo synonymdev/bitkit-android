@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,13 +44,11 @@ fun AppScaffold(
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val isBackButtonVisible by remember(currentBackStackEntry) {
-        derivedStateOf {
-            navController.currentDestination?.route != Routes.INITIAL
-        }
+        derivedStateOf { navController.previousBackStackEntry != null }
     }
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 navigationIcon = {
                     if (isBackButtonVisible) {
                         IconButton(onClick = navController::popBackStack) {

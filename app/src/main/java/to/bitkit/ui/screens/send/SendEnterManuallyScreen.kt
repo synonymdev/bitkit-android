@@ -30,7 +30,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendEnterManuallyScreen(
-    viewModel: WalletViewModel? = hiltViewModel(),
+    viewModel: WalletViewModel?,
 ) {
     var inputText by remember { mutableStateOf("") }
 

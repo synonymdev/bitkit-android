@@ -28,7 +28,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -111,8 +110,8 @@ enum class ActivityType {
 @Composable
 fun ActivityLatest(
     type: ActivityType,
+    walletViewModel: WalletViewModel,
     navController: NavController,
-    walletViewModel: WalletViewModel = hiltViewModel(),
 ) {
     when (type) {
         ActivityType.ALL -> ActivityList(walletViewModel.latestActivityItems.value, navController)

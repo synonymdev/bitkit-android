@@ -61,6 +61,6 @@ fun SavingsWalletScreen(
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
-        ActivityLatest(ActivityType.ONCHAIN, navController)
+        ActivityLatest(ActivityType.ONCHAIN, viewModel, navController)
     }
 }

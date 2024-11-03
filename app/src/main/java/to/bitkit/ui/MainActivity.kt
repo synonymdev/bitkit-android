@@ -1,22 +1,12 @@
 package to.bitkit.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
@@ -24,49 +14,47 @@ import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.ui.screens.wallet.HomeScreen
 import to.bitkit.ui.screens.wallet.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    val viewModel by viewModels<WalletViewModel>()
-    val app by viewModels<AppViewModel>()
+    private val appViewModel by viewModels<AppViewModel>()
+    private val walletViewModel by viewModels<WalletViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
 
-        viewModel.setOnEvent(::onLdkEvent)
+        walletViewModel.setOnEvent(::onLdkEvent)
 
+        enableEdgeToEdge()
         setContent {
-            enableEdgeToEdge()
             AppThemeSurface {
-                AppNavHost(viewModel) { navController ->
-                    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
-                    Crossfade(uiState, label = "ContentCrossfade") {
-                        when (val state = it.value) {
-                            is MainUiState.Loading -> LoadingScreen()
-                            is MainUiState.NoWallet -> WelcomeScreen(viewModel)
-                            is MainUiState.Content -> HomeScreen(viewModel, state, navController)
-                            is MainUiState.Error -> ErrorScreen(state)
-                        }
-                    }
+                AppNavHost(appViewModel, walletViewModel) {
+                    launchStartupActivity()
                 }
 
-                if (app.showNewTransaction) {
-                    NewTransactionSheet(app)
+                if (appViewModel.showNewTransaction) {
+                    NewTransactionSheet(appViewModel)
                 }
             }
         }
+    }
+
+    private fun launchStartupActivity() {
+        startActivity(Intent(this, StartupActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+        })
+        finish()
     }
 
     private fun onLdkEvent(event: Event) = runOnUiThread {
         try {
             when (event) {
                 is Event.PaymentReceived -> {
-                    app.showNewTransactionSheet(
+                    appViewModel.showNewTransactionSheet(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.RECEIVED,
@@ -81,9 +69,9 @@ class MainActivity : ComponentActivity() {
 
                 is Event.ChannelReady -> {
                     // TODO: handle cjit as payment received
-                    val channel = viewModel.findChannelById(event.channelId)
+                    val channel = walletViewModel.findChannelById(event.channelId)
                     if (channel != null) {
-                        app.showNewTransactionSheet(
+                        appViewModel.showNewTransactionSheet(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
                                 direction = NewTransactionSheetDirection.SENT,
@@ -100,7 +88,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is Event.PaymentSuccessful -> {
-                    app.showNewTransactionSheet(
+                    appViewModel.showNewTransactionSheet(
                         NewTransactionSheetDetails(
                             type = NewTransactionSheetType.LIGHTNING,
                             direction = NewTransactionSheetDirection.SENT,
@@ -122,46 +110,17 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
 
-        viewModel.start()
+        walletViewModel.start()
 
         val pendingTransaction = NewTransactionSheetDetails.load(this)
         if (pendingTransaction != null) {
-            app.showNewTransactionSheet(pendingTransaction)
+            appViewModel.showNewTransactionSheet(pendingTransaction)
             NewTransactionSheetDetails.clear(this)
         }
     }
 
     override fun onStop() {
         super.onStop()
-        viewModel.stopIfNeeded()
-    }
-}
-
-@Composable
-fun LoadingScreen() {
-    Column(
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-fun ErrorScreen(uiState: MainUiState.Error) {
-    Column(
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Text(
-            text = uiState.title,
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Text(
-            text = uiState.message,
-            style = MaterialTheme.typography.titleSmall,
-        )
+        walletViewModel.stopIfNeeded()
     }
 }

@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.receive
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,6 +78,7 @@ fun ReceiveQRScreen(
             }
             composable(Routes.CJIT) {
                 ReceiveCjitScreen(
+                    viewModel = viewModel,
                     onCjitCreated = { invoice ->
                         cjitInvoice.value = invoice
                         navController.navigate(Routes.QR) {

@@ -31,7 +31,6 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
-import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.entities.OrderEntity
@@ -109,10 +108,9 @@ class WalletViewModel @Inject constructor(
     }
 
     fun start(walletIndex: Int = 0) {
-        if (!walletExists) {
-            _uiState.value = MainUiState.NoWallet
-            return
-        }
+        if (!walletExists) return
+        if (_nodeLifecycleState.isRunningOrStarting()) return
+
         viewModelScope.launch {
             _nodeLifecycleState = NodeLifecycleState.Starting
             syncState()
@@ -425,10 +423,8 @@ class WalletViewModel @Inject constructor(
                     stopLightningNode()
                 }
                 lightningService.wipeStorage(0)
-                keychain.wipe()
                 appStorage.clear()
-            }.onSuccess {
-                start() // restart UI
+                keychain.wipe()
             }.onFailure {
                 runOnUiThread { toast("Failed to wipe: $it") }
             }
@@ -579,33 +575,6 @@ class WalletViewModel @Inject constructor(
     }
     // endregion
 
-    fun createWallet(bip39Passphrase: String) {
-        _uiState.value = MainUiState.Loading
-
-        viewModelScope.launch {
-            val mnemonic = generateEntropyMnemonic()
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-            if (bip39Passphrase.isNotBlank()) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            // TODO emit sideEffect
-            start()
-        }
-    }
-
-    fun restoreWallet(bip39Passphrase: String, bip39Mnemonic: String) {
-        _uiState.value = MainUiState.Loading
-
-        viewModelScope.launch {
-            keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, bip39Mnemonic)
-            if (bip39Passphrase.isNotBlank()) {
-                keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
-            }
-            start()
-        }
-        // TODO emit sideEffect
-    }
-
     fun stopIfNeeded() {
         if (_nodeLifecycleState.isStoppedOrStopping()) return
 
@@ -625,7 +594,6 @@ class WalletViewModel @Inject constructor(
 // region state
 sealed class MainUiState {
     data object Loading : MainUiState()
-    data object NoWallet : MainUiState()
     data class Content(
         val nodeId: String,
         val totalOnchainSats: ULong? = null,

@@ -18,20 +18,40 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.flowWithLifecycle
+import kotlinx.coroutines.flow.filter
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WelcomeScreen(viewModel: WalletViewModel) {
+fun WelcomeScreen(
+    viewModel: WelcomeViewModel,
+    onWalletSubmitted: () -> Unit,
+) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentOnWalletSubmitted by rememberUpdatedState(onWalletSubmitted)
+    LaunchedEffect(viewModel, lifecycle)  {
+        snapshotFlow { viewModel.uiState }
+            .filter { it.isWalletSubmitted }
+            .flowWithLifecycle(lifecycle)
+            .collect {
+                currentOnWalletSubmitted()
+            }
+    }
+
     var showRestore by remember { mutableStateOf(false) }
     if (showRestore) {
         ModalBottomSheet(
@@ -76,11 +96,14 @@ fun WelcomeScreen(viewModel: WalletViewModel) {
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider()
 
+        var isCreating by remember { mutableStateOf(false) }
         FullWidthTextButton(
             onClick = {
+                isCreating = true
                 viewModel.createWallet(bip39Passphrase)
             },
             horizontalArrangement = Arrangement.Center,
+            loading = isCreating,
         ) {
             Text("Create Wallet")
         }
@@ -126,10 +149,16 @@ private fun RestoreView(
         }
         Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider()
+
+        var isRestoring by remember { mutableStateOf(false) }
         FullWidthTextButton(
-            onClick = { onRestoreClick(bip39Passphrase, bip39Mnemonic) },
+            onClick = {
+                isRestoring = true
+                onRestoreClick(bip39Passphrase, bip39Mnemonic)
+            },
             horizontalArrangement = Arrangement.Center,
             enabled = bip39Mnemonic.isNotBlank(),
+            loading = isRestoring,
         ) {
             Text("Restore Wallet")
         }

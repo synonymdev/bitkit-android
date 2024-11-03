@@ -28,10 +28,10 @@ import to.bitkit.ui.shared.FullWidthTextButton
 
 @Composable
 fun ReceiveCjitScreen(
-    viewModel: ReceiveViewModel = hiltViewModel(),
+    viewModel: ReceiveViewModel,
     modifier: Modifier = Modifier,
     onCjitCreated: (String) -> Unit,
-    onDismiss: () -> Unit = {},
+    onDismiss: () -> Unit,
 ) {
     DisposableEffect(Unit) {
         onDispose {
@@ -67,10 +67,11 @@ fun ReceiveCjitScreen(
                     viewModel.createCjit(it, "Bitkit")
                 }
             },
-            horizontalArrangement = Arrangement.Center,
             enabled = !uiState.isCreatingCjit,
+            loading = uiState.isCreatingCjit,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Text(text = if (uiState.isCreatingCjit) "Creating..." else "Continue")
+            Text("Continue")
         }
         uiState.cjitEntry?.let { entry ->
             LaunchedEffect(entry) {
@@ -79,9 +80,9 @@ fun ReceiveCjitScreen(
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-private fun ReceiveCjitScreenPreview() {
-    ReceiveCjitScreen(onCjitCreated = {})
-}
+// TODO: fix preview with viewModel
+// @Preview(showBackground = true)
+// @Composable
+// private fun ReceiveCjitScreenPreview() {
+//     ReceiveCjitScreen(onCjitCreated = {}, onDismiss = {})
+// }
