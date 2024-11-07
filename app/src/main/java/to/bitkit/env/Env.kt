@@ -17,6 +17,7 @@ internal object Env {
     val defaultWalletWordCount = 12
     val onchainWalletStopGap = 20_UL
     val walletSyncIntervalSecs = 60_UL
+    val feeRateCacheUpdateIntervalSecs = 60_UL
     val esploraParallelRequests = 6
     val trustedLnPeers
         get() = when (network) {

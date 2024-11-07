@@ -86,7 +86,6 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.WalletOperationFailed -> "Wallet operation failed."
                 is NodeException.WalletOperationTimeout -> "Wallet operation timeout."
                 is NodeException.OnchainTxSigningFailed -> "On-chain transaction signing failed."
-                is NodeException.MessageSigningFailed -> "Message signing failed."
                 is NodeException.TxSyncFailed -> "Transaction synchronization failed."
                 is NodeException.TxSyncTimeout -> "Transaction synchronization timeout."
                 is NodeException.GossipUpdateFailed -> "Gossip update failed."
@@ -113,6 +112,10 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.InsufficientFunds -> "Insufficient funds."
                 is NodeException.LiquiditySourceUnavailable -> "Liquidity source unavailable."
                 is NodeException.LiquidityFeeTooHigh -> "Liquidity fee too high."
+                is NodeException.UriParameterParsingFailed -> "URI parameter parsing failed."
+                is NodeException.InvalidUri -> "Invalid URI."
+                is NodeException.InvalidQuantity -> "Invalid quantity."
+                is NodeException.InvalidNodeAlias -> "Invalid node alias."
                 else -> exception.message
             }?.let { "LDK Node error: $it" }
         }

@@ -451,6 +451,13 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun manualNewAddress() {
+        viewModelScope.launch {
+            _onchainAddress = lightningService.newAddress()
+            syncState()
+        }
+    }
+
     fun debugDb() {
         viewModelScope.launch {
             db.configDao().getAll().collect {
