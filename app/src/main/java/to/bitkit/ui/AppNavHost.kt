@@ -19,8 +19,8 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
-import to.bitkit.ui.screens.TransferScreen
-import to.bitkit.ui.screens.TransferViewModel
+import to.bitkit.ui.screens.transfer.TransferScreen
+import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen

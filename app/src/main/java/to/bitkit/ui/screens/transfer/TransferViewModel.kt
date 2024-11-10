@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens
+package to.bitkit.ui.screens.transfer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
