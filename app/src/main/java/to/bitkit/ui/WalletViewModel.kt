@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -137,6 +138,15 @@ class WalletViewModel @Inject constructor(
             launch(bgDispatcher) { observeDbConfig() }
             launch(bgDispatcher) { syncDbOrders() }
         }
+    }
+
+    suspend fun observeLdkWallet() {
+        lightningService.syncFlow()
+            .filter { _nodeLifecycleState == NodeLifecycleState.Running }
+            .collect {
+                runCatching { sync() }
+                Log.v(APP, "App state synced with ldk-node.")
+            }
     }
 
     private suspend fun observeDbConfig() {

@@ -2,6 +2,12 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
@@ -40,12 +46,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.io.path.Path
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
 @Singleton
 class LightningService @Inject constructor(
-    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
 
@@ -400,5 +407,12 @@ class LightningService @Inject constructor(
     val peers: List<LnPeer>? get() = node?.listPeers()?.map { it.toLnPeer() }
     val channels: List<ChannelDetails>? get() = node?.listChannels()
     val payments: List<PaymentDetails>? get() = node?.listPayments()
+
+    fun syncFlow(): Flow<Unit> = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(Unit)
+            delay(Env.walletSyncIntervalSecs.toLong().seconds)
+        }
+    }.flowOn(bgDispatcher)
     // endregion
 }
