@@ -82,7 +82,7 @@ private fun HomeScreen(
             onSendClicked = { viewModel.showSendSheet = true },
             onReceiveClicked = { showReceiveSheet = true },
             onScanClicked = {
-                scanner.startScan().addOnCompleteListener { task ->
+                scanner?.startScan()?.addOnCompleteListener { task ->
                     task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
                         viewModel.onScanSuccess(data)
                     }
@@ -101,7 +101,7 @@ private fun HomeScreen(
                     .fillMaxHeight()
                     .padding(top = 100.dp)
             ) {
-                SendOptionsView(viewModel)
+                SendOptionsView()
             }
         }
         // Receive Sheet

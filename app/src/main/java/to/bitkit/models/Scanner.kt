@@ -1,6 +1,5 @@
 package to.bitkit.models
 
-import android.net.Uri
 import android.util.Log
 import to.bitkit.env.Tag.APP
 import to.bitkit.shared.AppError
@@ -48,16 +47,18 @@ class ScannedData(uri: String) {
                 // has BIP21 params
                 val bip21Data = decodeBIP21(uri)
                 if (bip21Data != null) {
-                    bip21Data.lightningInvoice?.let {
-                        add(ScannedOptions.Bolt11(it))
-                    } ?: add(
-                        ScannedOptions.Onchain(
-                            address = bip21Data.address,
-                            amount = bip21Data.amount,
-                            label = bip21Data.label,
-                            message = bip21Data.message,
+                    bip21Data.lightningInvoice
+                        ?.let {
+                            add(ScannedOptions.Bolt11(it))
+                        }
+                        ?: add(
+                            ScannedOptions.Onchain(
+                                address = bip21Data.address,
+                                amount = bip21Data.amount,
+                                label = bip21Data.label,
+                                message = bip21Data.message,
+                            )
                         )
-                    )
                 }
             }
 
