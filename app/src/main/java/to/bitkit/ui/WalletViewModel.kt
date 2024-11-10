@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -55,7 +54,7 @@ import to.bitkit.models.ScannedOptions
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.ui.screens.wallet.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.testActivityItems
 import javax.inject.Inject
 
 @HiltViewModel
@@ -382,7 +381,6 @@ class WalletViewModel @Inject constructor(
     }
 
     fun onSendManually(data: String) {
-        _scannedData = runCatching { ScannedData(data) }.getOrNull()
         _scannedData = runCatching { ScannedData(data) }
             .onFailure {
                 Log.e(APP, "Failed to read data from text field", it)

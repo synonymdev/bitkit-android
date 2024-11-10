@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.receive
+package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

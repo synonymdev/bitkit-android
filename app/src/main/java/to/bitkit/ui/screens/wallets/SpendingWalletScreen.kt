@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallet
+package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -17,8 +17,8 @@ import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallet.activity.ActivityLatest
-import to.bitkit.ui.screens.wallet.activity.ActivityType
+import to.bitkit.ui.screens.wallets.activity.ActivityLatest
+import to.bitkit.ui.screens.wallets.activity.ActivityType
 
 @Composable
 fun SpendingWalletScreen(

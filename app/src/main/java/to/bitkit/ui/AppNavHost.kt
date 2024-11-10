@@ -21,11 +21,11 @@ import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.TransferScreen
 import to.bitkit.ui.screens.TransferViewModel
-import to.bitkit.ui.screens.wallet.HomeScreen
-import to.bitkit.ui.screens.wallet.SavingsWalletScreen
-import to.bitkit.ui.screens.wallet.SpendingWalletScreen
-import to.bitkit.ui.screens.wallet.activity.ActivityItemScreen
-import to.bitkit.ui.screens.wallet.activity.AllActivityScreen
+import to.bitkit.ui.screens.wallets.HomeScreen
+import to.bitkit.ui.screens.wallets.SavingsWalletScreen
+import to.bitkit.ui.screens.wallets.SpendingWalletScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
+import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 

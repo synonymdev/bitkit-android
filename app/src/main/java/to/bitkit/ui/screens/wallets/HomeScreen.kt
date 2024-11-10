@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallet
+package to.bitkit.ui.screens.wallets
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,10 +34,10 @@ import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceSummary
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.receive.ReceiveQRScreen
-import to.bitkit.ui.screens.send.SendOptionsView
-import to.bitkit.ui.screens.wallet.activity.ActivityLatest
-import to.bitkit.ui.screens.wallet.activity.ActivityType
+import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
+import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.wallets.activity.ActivityLatest
+import to.bitkit.ui.screens.wallets.activity.ActivityType
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.qrCodeScanner
 import to.bitkit.ui.theme.AppShapes
