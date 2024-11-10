@@ -183,12 +183,6 @@ private fun AllActivityView(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
-        Text(
-            text = "All Activity",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(16.dp)
-        )
         if (items != null) {
             LazyColumn {
                 items(items = items, key = { it.id }) { item ->
