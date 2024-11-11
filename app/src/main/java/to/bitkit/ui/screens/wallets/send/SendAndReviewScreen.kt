@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ext.takeEnds
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppThemeSurface
@@ -34,9 +34,11 @@ fun SendAndReviewScreen(
         ) {
             Text(text = "Amount", fontWeight = FontWeight.Bold)
             Text(text = "${uiState.amount}")
+
             Spacer(modifier = Modifier.height(16.dp))
+
             Text(text = "To", fontWeight = FontWeight.Bold)
-            Text(text = uiState.address.takeEnds(12))
+            Text(text = uiState.address.ellipsisMiddle(25))
 
             Spacer(modifier = Modifier.weight(1f))
             FullWidthTextButton(
