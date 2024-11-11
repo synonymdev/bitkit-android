@@ -19,12 +19,15 @@ import to.bitkit.ext.toast
 import to.bitkit.models.ScannedData
 import to.bitkit.models.ScannedOptions
 import to.bitkit.services.LightningService
+import to.bitkit.services.ScannerService
+import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
 @HiltViewModel
 class SendViewModel @Inject constructor(
     @UiDispatcher private val uiThread: CoroutineDispatcher,
     private val lightningService: LightningService,
+    private val scannerService: ScannerService,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SendUiState())
     val uiState = _uiState.asStateFlow()
@@ -37,6 +40,7 @@ class SendViewModel @Inject constructor(
     fun setEvent(event: SendEvent) = viewModelScope.launch { events.emit(event) }
 
     private var _scannedData: ScannedData? = null
+    private var _scanResult: Scanner? = null
 
     init {
         observeEvents()
@@ -100,30 +104,32 @@ class SendViewModel @Inject constructor(
     }
 
     private fun onAddressContinue(data: String) {
-        _scannedData = runCatching { ScannedData(data) }
-            .onFailure {
-                Log.e(APP, "Failed to read data from text field", it)
-                toast("${it.message}")
-            }
-            .getOrNull()
-        _scannedData?.options?.first?.let { result ->
-            when (result) {
-                is ScannedOptions.Onchain -> {
+        viewModelScope.launch {
+            val scan = scannerService.decode(data)
+            _scanResult = scan
+            when (scan) {
+                is Scanner.OnChain -> {
                     _uiState.update {
                         it.copy(
-                            address = result.address,
-                            amount = result.amount ?: 0.0,
-                            label = result.label.orEmpty(),
-                            message = result.message.orEmpty(),
+                            address = scan.invoice.address,
+                            amount = scan.invoice.amountSatoshis,
+                            label = scan.invoice.label.orEmpty(),
+                            message = scan.invoice.message.orEmpty(),
                         )
                     }
                     setEffect(SendEffect.NavigateToAmount)
                 }
 
-                is ScannedOptions.Bolt11 -> {
-                    // TODO: implement
-                    toast(" Coming soon, input: $data.")
-                }
+                is Scanner.Lightning -> TODO()
+                is Scanner.LnurlAddress -> TODO()
+                is Scanner.LnurlAuth -> TODO()
+                is Scanner.LnurlChannel -> TODO()
+                is Scanner.LnurlPay -> TODO()
+                is Scanner.LnurlWithdraw -> TODO()
+                is Scanner.NodeId -> TODO()
+                is Scanner.OrangeTicket -> TODO()
+                is Scanner.PubkyAuth -> TODO()
+                is Scanner.TreasureHunt -> TODO()
             }
         }
     }
@@ -131,7 +137,7 @@ class SendViewModel @Inject constructor(
     private fun onAmountContinue(amount: String) {
         _uiState.update {
             it.copy(
-                amount = amount.toDoubleOrNull() ?: 0.0,
+                amount = amount.toULongOrNull() ?: 0u,
             )
         }
         setEffect(SendEffect.NavigateToReview)
@@ -150,7 +156,7 @@ class SendViewModel @Inject constructor(
 // region contract
 data class SendUiState(
     val address: String = "",
-    val amount: Double = 0.0,
+    val amount: ULong = 0u,
     val label: String = "",
     val message: String = "",
 )

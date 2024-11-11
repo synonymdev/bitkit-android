@@ -78,6 +78,7 @@ composeCompiler {
 }
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
+    implementation(libs.jna) { artifact { type = "aar" } }
     implementation(platform(libs.kotlin.bom))
     implementation(libs.core.ktx)
     implementation(libs.appcompat)

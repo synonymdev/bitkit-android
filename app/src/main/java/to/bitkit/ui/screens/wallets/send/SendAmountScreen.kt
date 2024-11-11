@@ -51,7 +51,7 @@ fun SendAmountScreen(
             )
             Spacer(modifier = Modifier.weight(1f))
             FullWidthTextButton(
-                enabled = inputText.isNotEmpty() && inputText.toDoubleOrNull() != 0.0,
+                enabled = inputText.isNotEmpty() && inputText.toULongOrNull() != 0uL,
                 horizontalArrangement = Arrangement.Center,
                 onClick = { onContinue(inputText) }
             ) {

@@ -11,6 +11,7 @@ firebaseBom = "33.2.0"
 googleServices = "4.4.2"
 hilt = "2.51.1"
 hiltAndroidx = "1.2.0"
+jna = "5.14.0"
 junit = "4.13.2"
 junitExt = "1.2.1"
 kotlin = "2.0.20"
@@ -52,6 +53,7 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltAndroidx" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltAndroidx" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltAndroidx" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
