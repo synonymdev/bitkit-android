@@ -49,10 +49,10 @@ fun SendOptionsView(
         ) {
             composable<SendRoutes.Options> {
                 SendOptionsContent(
-                    onPasteInvoice = { sendViewModel.onPasteInvoice(it) },
+                    onPasteInvoice = { sendViewModel.setEvent(SendEvent.Paste(it)) },
                     onContactClick = { toast("Coming Soon") },
                     onEnterManuallyClick = { sendViewModel.setEvent(SendEvent.EnterManually) },
-                    onScanSuccess = { sendViewModel.onScanSuccess(it) }
+                    onScanSuccess = { sendViewModel.setEvent(SendEvent.Scan(it)) }
                 )
             }
             composable<SendRoutes.Address> {
