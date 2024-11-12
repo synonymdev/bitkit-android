@@ -30,7 +30,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 @Composable
 fun SendAddressScreen(
     onBack: () -> Unit,
-    onContinue: (String) -> Unit = {},
+    onEvent: (SendEvent) -> Unit,
 ) {
     var inputText by remember { mutableStateOf("") }
 
@@ -68,7 +68,7 @@ fun SendAddressScreen(
             FullWidthTextButton(
                 enabled = inputText.isNotEmpty(),
                 horizontalArrangement = Arrangement.Center,
-                onClick = { onContinue(inputText) }
+                onClick = { onEvent(SendEvent.AddressContinue(inputText)) }
             ) {
                 Text("Continue")
             }
@@ -83,7 +83,7 @@ private fun SendEnterManuallyScreenPreview() {
     AppThemeSurface {
         SendAddressScreen(
             onBack = {},
-            onContinue = {},
+            onEvent = {},
         )
     }
 }

@@ -27,7 +27,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 @Composable
 fun SendAmountScreen(
     onBack: () -> Unit,
-    onContinue: (String) -> Unit,
+    onEvent: (SendEvent) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -53,7 +53,7 @@ fun SendAmountScreen(
             FullWidthTextButton(
                 enabled = inputText.isNotEmpty() && inputText.toULongOrNull() != 0uL,
                 horizontalArrangement = Arrangement.Center,
-                onClick = { onContinue(inputText) }
+                onClick = { onEvent(SendEvent.AmountContinue(inputText)) }
             ) {
                 Text(text = "Continue")
             }
@@ -67,7 +67,7 @@ private fun SendAmountViewPreview() {
     AppThemeSurface {
         SendAmountScreen(
             onBack = {},
-            onContinue = {},
+            onEvent = {},
         )
     }
 }

@@ -21,7 +21,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
-import to.bitkit.ext.toast
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.qrCodeScanner
@@ -49,29 +48,26 @@ fun SendOptionsView(
         ) {
             composable<SendRoutes.Options> {
                 SendOptionsContent(
-                    onPasteInvoice = { sendViewModel.setEvent(SendEvent.Paste(it)) },
-                    onContactClick = { toast("Coming Soon") },
-                    onEnterManuallyClick = { sendViewModel.setEvent(SendEvent.EnterManually) },
-                    onScanSuccess = { sendViewModel.setEvent(SendEvent.Scan(it)) }
+                    onEvent = { sendViewModel.setEvent(it) }
                 )
             }
             composable<SendRoutes.Address> {
                 SendAddressScreen(
                     onBack = { navController.popBackStack() },
-                    onContinue = { sendViewModel.setEvent(SendEvent.AddressContinue(it)) },
+                    onEvent = { sendViewModel.setEvent(it) },
                 )
             }
             composable<SendRoutes.Amount> {
                 SendAmountScreen(
                     onBack = { navController.popBackStack() },
-                    onContinue = { sendViewModel.setEvent(SendEvent.AmountContinue(it)) }
+                    onEvent = { sendViewModel.setEvent(it) }
                 )
             }
             composable<SendRoutes.ReviewAndSend> {
                 val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
                     onBack = { navController.popBackStack() },
-                    onContinue = { sendViewModel.setEvent(SendEvent.SwipeToPay) },
+                    onEvent = { sendViewModel.setEvent(it) },
                     uiState = uiState,
                 )
             }
@@ -81,10 +77,7 @@ fun SendOptionsView(
 
 @Composable
 private fun SendOptionsContent(
-    onContactClick: () -> Unit,
-    onPasteInvoice: (String) -> Unit,
-    onEnterManuallyClick: () -> Unit,
-    onScanSuccess: (String) -> Unit,
+    onEvent: (SendEvent) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -100,19 +93,19 @@ private fun SendOptionsContent(
         Spacer(modifier = Modifier.height(4.dp))
 
         NavButton("Contact", showIcon = false) {
-            onContactClick()
+            onEvent(SendEvent.Contact)
         }
         Spacer(modifier = Modifier.height(4.dp))
 
         val clipboard = LocalClipboardManager.current
         NavButton("Paste Invoice", showIcon = false) {
             val uri = clipboard.getText()?.text.orEmpty().trim()
-            onPasteInvoice(uri)
+            onEvent(SendEvent.Paste(uri))
         }
         Spacer(modifier = Modifier.height(4.dp))
 
         NavButton("Enter Manually") {
-            onEnterManuallyClick()
+            onEvent(SendEvent.EnterManually)
         }
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -120,7 +113,7 @@ private fun SendOptionsContent(
         NavButton("Scan QR Code") {
             scanner?.startScan()?.addOnCompleteListener { task ->
                 task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
-                    onScanSuccess(data)
+                    onEvent(SendEvent.Scan(data))
                 }
             }
         }
@@ -134,10 +127,7 @@ private fun SendOptionsContent(
 fun SendOptionsContentPreview() {
     AppThemeSurface {
         SendOptionsContent(
-            onContactClick = {},
-            onPasteInvoice = {},
-            onEnterManuallyClick = {},
-            onScanSuccess = {},
+            onEvent = {},
         )
     }
 }

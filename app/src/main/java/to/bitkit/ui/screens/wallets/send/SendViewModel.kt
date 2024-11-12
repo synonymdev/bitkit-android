@@ -46,6 +46,7 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             events.collect {
                 when (it) {
+                    SendEvent.Contact -> toast("Coming soon")
                     SendEvent.EnterManually -> setEffect(SendEffect.NavigateToAddress)
                     is SendEvent.AddressContinue -> onAddressContinue(it.data)
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
@@ -160,6 +161,7 @@ sealed class SendEffect {
 }
 
 sealed class SendEvent {
+    data object Contact : SendEvent()
     data object EnterManually : SendEvent()
     data class Paste(val data: String) : SendEvent()
     data class Scan(val data: String) : SendEvent()
