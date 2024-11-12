@@ -66,7 +66,7 @@ internal fun Channels(
 
                 ChannelItem(
                     isReady = it.isChannelReady,
-                    public = it.isPublic,
+                    isAnnounced = it.isAnnounced,
                     inboundHtlcMax = inboundHtlcMax.toLong(),
                     inboundHtlcMin = inboundHtlcMin.toLong(),
                     nextOutboundHtlcLimit = nextOutboundHtlcLimit.toLong(),
@@ -89,7 +89,7 @@ internal fun Channels(
 @Composable
 private fun ChannelItem(
     isReady: Boolean,
-    public: Boolean,
+    isAnnounced: Boolean,
     inboundHtlcMax: Long,
     inboundHtlcMin: Long,
     nextOutboundHtlcLimit: Long,
@@ -149,7 +149,7 @@ private fun ChannelItem(
         }
         Column {
             val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal)
-            Text("Public: $public", style = style)
+            Text("Announced: $isAnnounced", style = style)
             Text("Inbound htlc max: " + moneyString(inboundHtlcMax), style = style)
             Text("Inbound htlc min: " + moneyString(inboundHtlcMin), style = style)
             Text("Next outbound htlc limit: " + moneyString(nextOutboundHtlcLimit), style = style)
@@ -168,7 +168,7 @@ private fun ChannelItemPreview() {
             outbound = 1000,
             inbound = 1000,
             onClose = {},
-            public = false,
+            isAnnounced = false,
             inboundHtlcMax = 123L,
             inboundHtlcMin = 246L,
             nextOutboundHtlcLimit = 531L,

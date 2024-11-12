@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -41,7 +45,14 @@ fun NodeStateScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.node_state))
+        AppTopBar(navController, stringResource(R.string.node_state)) {
+            IconButton(viewModel::refreshState) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.sync),
+                )
+            }
+        }
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier
@@ -78,11 +89,25 @@ fun NodeStateScreen(
                         }
                         Row {
                             Text(
-                                text = "Last sync time:",
+                                text = "Last lightning wallet sync time:",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Spacer(modifier = Modifier.weight(1f))
-                            val lastSyncTime = it.latestWalletSyncTimestamp
+                            val lastSyncTime = it.latestLightningWalletSyncTimestamp
+                                ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
+                                ?: "Never"
+                            Text(
+                                text = lastSyncTime,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Row {
+                            Text(
+                                text = "Last onchain wallet sync time:",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            val lastSyncTime = it.latestOnchainWalletSyncTimestamp
                                 ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
                                 ?: "Never"
                             Text(

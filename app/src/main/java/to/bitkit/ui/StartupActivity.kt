@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint
 class StartupActivity : ComponentActivity() {
@@ -21,8 +22,10 @@ class StartupActivity : ComponentActivity() {
                 launchMainActivity()
             } else {
                 val viewModel = hiltViewModel<WelcomeViewModel>()
-                WelcomeScreen(viewModel) {
-                    launchMainActivity()
+                AppThemeSurface {
+                    WelcomeScreen(viewModel) {
+                        launchMainActivity()
+                    }
                 }
             }
         }

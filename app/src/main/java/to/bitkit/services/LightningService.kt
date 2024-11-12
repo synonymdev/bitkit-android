@@ -2,6 +2,12 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
@@ -11,8 +17,10 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.MaxDustHtlcExposure
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
@@ -38,12 +46,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.io.path.Path
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
 @Singleton
 class LightningService @Inject constructor(
-    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
 
@@ -62,7 +71,6 @@ class LightningService @Inject constructor(
                     logDirPath = dirPath
                     network = Env.network
                     logLevel = LogLevel.TRACE
-                    walletSyncIntervalSecs = Env.walletSyncIntervalSecs
 
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
                     anchorChannelsConfig = AnchorChannelsConfig(
@@ -71,7 +79,14 @@ class LightningService @Inject constructor(
                     )
                 })
             .apply {
-                setEsploraServer(Env.esploraUrl)
+                setChainSourceEsplora(
+                    serverUrl = Env.esploraUrl,
+                    config = EsploraSyncConfig(
+                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.feeRateCacheUpdateIntervalSecs,
+                    ),
+                )
                 if (Env.ldkRgsServerUrl != null) {
                     setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
                 } else {
@@ -157,7 +172,7 @@ class LightningService @Inject constructor(
         runCatching {
             for (channel in node.listChannels()) {
                 val config = channel.config
-                config.setMaxDustHtlcExposureFromFixedLimit(limitMsat = 999_999_UL.millis)
+                config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
                 node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
                 Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
             }
@@ -225,13 +240,12 @@ class LightningService @Inject constructor(
 
         try {
             ServiceQueue.LDK.background {
-                node.connectOpenChannel(
+                node.openChannel(
                     nodeId = peer.nodeId,
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
                     pushToCounterpartyMsat = pushToCounterpartySats?.millis,
                     channelConfig = null,
-                    announceChannel = false,
                 )
             }
         } catch (e: NodeException) {
@@ -284,7 +298,7 @@ class LightningService @Inject constructor(
         return ServiceQueue.LDK.background {
             node.bolt11Payment().run {
                 when (sats != null) {
-                    true -> sendUsingAmount(bolt11, sats.millis)
+                    true -> sendUsingAmount(bolt11, sats.millis, null)
                     else -> send(bolt11)
                 }
             }
@@ -393,5 +407,12 @@ class LightningService @Inject constructor(
     val peers: List<LnPeer>? get() = node?.listPeers()?.map { it.toLnPeer() }
     val channels: List<ChannelDetails>? get() = node?.listChannels()
     val payments: List<PaymentDetails>? get() = node?.listPayments()
+
+    fun syncFlow(): Flow<Unit> = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(Unit)
+            delay(Env.walletSyncIntervalSecs.toLong().seconds)
+        }
+    }.flowOn(bgDispatcher)
     // endregion
 }

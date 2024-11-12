@@ -37,6 +37,10 @@ fun AppNavHost(
 ) {
     val navController = rememberNavController()
 
+    LaunchedEffect(Unit) {
+        walletViewModel.observeLdkWallet()
+    }
+
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val currentOnWalletWiped by rememberUpdatedState(onWalletWiped)
     LaunchedEffect(appViewModel, lifecycle) {

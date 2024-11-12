@@ -6,9 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -52,8 +57,19 @@ fun DevSettingsScreen(
             InfoField(
                 value = uiState.onchainAddress,
                 label = stringResource(R.string.address),
-                maxLength = 44,
-                trailingIcon = { CopyToClipboardButton(uiState.onchainAddress) },
+                maxLength = 36,
+                trailingIcon = {
+                    Row {
+                        CopyToClipboardButton(uiState.onchainAddress)
+                        IconButton(onClick = viewModel::manualNewAddress) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                },
             )
 
             Peers(uiState.peers, viewModel::disconnectPeer)
@@ -77,6 +93,7 @@ fun DevSettingsScreen(
                 FullWidthTextButton(::debugPushNotification) { Text("Test Local Notification") }
                 FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
                 FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+                HorizontalDivider()
             }
             Orders(uiState.orders, viewModel)
         }
