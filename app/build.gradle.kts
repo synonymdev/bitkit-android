@@ -99,7 +99,7 @@ dependencies {
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.ktx)
     implementation(libs.lifecycle.viewmodel.compose) // ViewModel utils for Compose
-    implementation(libs.lifecycle.livedata.ktx) // LiveData
+    implementation(libs.lifecycle.process) // ProcessLifecycleOwner
     implementation(libs.lifecycle.runtime.ktx) // Lifecycles wo ViewModel/LiveData
     implementation(libs.lifecycle.runtime.compose) // Lifecycle utils for Compose
     implementation(libs.lifecycle.viewmodel.savedstate) // Saved state for ViewModel
@@ -108,6 +108,8 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

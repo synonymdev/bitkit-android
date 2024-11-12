@@ -117,14 +117,16 @@ class BlocktankClient @Inject constructor(
 
     private suspend inline fun <reified T> post(url: String, payload: Any? = null): T {
         val response = client.post(url) { payload?.let { setBody(it) } }
+        Log.d(APP, "Http call: $response")
         return when (response.status.isSuccess()) {
             true -> {
-                val responseBody = runCatching { response.body<T>() }.getOrElse { throw BlocktankError.InvalidResponse }
-                Log.d(APP, "Http call: $response; response: $responseBody")
+                val responseBody = runCatching { response.body<T>() }.getOrElse {
+                    throw BlocktankError.InvalidResponse(it.message.orEmpty())
+                }
                 responseBody
             }
 
-            else -> throw BlocktankError.InvalidResponse
+            else -> throw BlocktankError.InvalidResponse(response.status.description)
         }
     }
 
@@ -134,20 +136,22 @@ class BlocktankClient @Inject constructor(
                 queryParams?.forEach { parameters.appendAll(it.key, it.value) }
             }
         }
+        Log.d(APP, "Http call: $response")
         return when (response.status.isSuccess()) {
             true -> {
-                val responseBody = runCatching { response.body<T>() }.getOrElse { throw BlocktankError.InvalidResponse }
-                Log.d(APP, "Http call: $response; response: $responseBody")
+                val responseBody = runCatching { response.body<T>() }.getOrElse {
+                    throw BlocktankError.InvalidResponse(it.message.orEmpty())
+                }
                 responseBody
             }
 
-            else -> throw BlocktankError.InvalidResponse
+            else -> throw BlocktankError.InvalidResponse(response.status.description)
         }
     }
 }
 
 sealed class BlocktankError(message: String) : AppError(message) {
-    data object InvalidResponse : BlocktankError("Invalid response.")
+    data class InvalidResponse(override val message: String) : BlocktankError(message)
 }
 
 @Serializable

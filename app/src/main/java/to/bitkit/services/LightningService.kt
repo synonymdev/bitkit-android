@@ -2,7 +2,6 @@ package to.bitkit.services
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
@@ -24,6 +23,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
@@ -35,30 +35,31 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.shared.LdkError
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.io.path.Path
 import kotlin.time.Duration
 
 typealias NodeEventHandler = suspend (Event) -> Unit
 
+@Singleton
 class LightningService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
+    private val keychain: Keychain,
 ) : BaseCoroutineScope(bgDispatcher) {
-    companion object {
-        val shared by lazy {
-            LightningService(Dispatchers.Default)
-        }
-    }
 
     var node: Node? = null
 
-    fun setup(walletIndex: Int, mnemonic: String) {
-        val dir = Env.ldkStorage(walletIndex)
+    fun setup(walletIndex: Int) {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+        val dirPath = Env.ldkStoragePath(walletIndex)
 
         val builder = Builder
             .fromConfig(
                 defaultConfig().apply {
-                    storageDirPath = dir
-                    logDirPath = dir
+                    storageDirPath = dirPath
+                    logDirPath = dirPath
                     network = Env.network
                     logLevel = LogLevel.TRACE
                     walletSyncIntervalSecs = Env.walletSyncIntervalSecs
@@ -76,7 +77,7 @@ class LightningService @Inject constructor(
                 } else {
                     setGossipSourceP2p()
                 }
-                setEntropyBip39Mnemonic(mnemonic, passphrase = null)
+                setEntropyBip39Mnemonic(mnemonic, passphrase)
             }
 
         Log.d(LDK, "Building node…")
@@ -93,16 +94,17 @@ class LightningService @Inject constructor(
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        onEvent?.let {
-            launch(coroutineContext) {
+        onEvent?.let { eventHandler ->
+            shouldListenForEvents = true
+            launch {
                 try {
                     if (timeout != null) {
-                        withTimeout(timeout) { listen(it) }
+                        withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
-                        listen(it)
+                        listenForEvents(eventHandler)
                     }
                 } catch (e: Exception) {
-                    Log.e(LDK, "Error in event listener", e)
+                    Log.e(LDK, "LDK event listener error", e)
                 }
             }
         }
@@ -117,20 +119,21 @@ class LightningService @Inject constructor(
     }
 
     suspend fun stop() {
+        shouldListenForEvents = false
         val node = this.node ?: throw ServiceError.NodeNotStarted
 
         Log.d(LDK, "Stopping node…")
         ServiceQueue.LDK.background {
             node.stop()
+            this@LightningService.node = null
         }
-        node.close().also { this.node = null }
         Log.i(LDK, "Node stopped")
     }
 
     fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
         Log.w(APP, "Wiping lightning storage…")
-        Path(Env.ldkStorage(walletIndex)).toFile().deleteRecursively()
+        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Log.i(APP, "Lightning wallet wiped")
     }
 
@@ -151,11 +154,15 @@ class LightningService @Inject constructor(
             return
         }
         val node = this.node ?: throw ServiceError.NodeNotStarted
-        for (channel in node.listChannels()) {
-            val config = channel.config
-            config.setMaxDustHtlcExposureFromFixedLimit(limitMsat= 999999_UL.millis)
-            node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
-            Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+        runCatching {
+            for (channel in node.listChannels()) {
+                val config = channel.config
+                config.setMaxDustHtlcExposureFromFixedLimit(limitMsat = 999_999_UL.millis)
+                node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+                Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+            }
+        }.onFailure {
+            Log.e(LDK, "Failed to update channel config", it)
         }
     }
 
@@ -286,18 +293,21 @@ class LightningService @Inject constructor(
     // endregion
 
     // region events
-    private suspend fun listen(onEvent: NodeEventHandler? = null) {
-        while (true) {
+    private var shouldListenForEvents = true
+
+    private suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
+        while (shouldListenForEvents) {
             val node = this.node ?: let {
                 Log.e(LDK, ServiceError.NodeNotStarted.message.orEmpty())
                 return
             }
             val event = node.nextEventAsync()
-            onEvent?.invoke(event)
 
-            // TODO: actual event handler
+            Log.d(LDK, "LDK eventHandled: $event")
+            node.eventHandled()
+
             logEvent(event)
-            this.node?.eventHandled()
+            onEvent?.invoke(event)
         }
     }
 

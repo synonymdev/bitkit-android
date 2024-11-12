@@ -8,13 +8,13 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
-import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
@@ -28,20 +28,19 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirme
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.shared.ServiceError
-import to.bitkit.shared.nameof
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
     private val blocktankService: BlocktankService,
-    private val keychain: Keychain,
+    private val lightningService: LightningService,
 ) : CoroutineWorker(appContext, workerParams) {
+    private val self = this
+
     class VisibleNotification(var title: String = "", var body: String = "")
 
     private var bestAttemptContent: VisibleNotification? = VisibleNotification()
@@ -49,7 +48,8 @@ class WakeNodeWorker @AssistedInject constructor(
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 
-    private val self = this
+    private val timeout = 2.minutes
+    private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
         Log.d(LDK, "Node wakeup from notification…")
@@ -59,16 +59,15 @@ class WakeNodeWorker @AssistedInject constructor(
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Log.d(LDK, "${nameof(this)} notification type: $notificationType")
-        Log.d(LDK, "${nameof(this)} notification payload: $notificationPayload")
+        Log.d(LDK, "${this::class.simpleName} notification type: $notificationType")
+        Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
             withPerformanceLogging {
-                LightningService.shared.apply {
-                    setup(walletIndex = 0, mnemonic)
-                    start(timeout = 2.hours) { handleEvent(it) } // stop() is done by deliver() via handleEvent()
-                    // sync() // TODO why (not) ?
+                // TODO: Only start node if it's not running or implement & use StateLocker
+                lightningService.let {
+                    it.setup(walletIndex = 0)
+                    it.start(timeout) { event -> handleLdkEvent(event) }
                 }
 
                 // Once node is started, handle the manual channel opening if needed
@@ -79,8 +78,8 @@ class WakeNodeWorker @AssistedInject constructor(
                         Log.e(LDK, "Missing orderId")
                     } else {
                         try {
-                            blocktankService.openChannel(orderId)
                             Log.i(LDK, "Open channel request for order $orderId")
+                            blocktankService.openChannel(orderId)
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)
                             self.bestAttemptContent?.title = "Channel open failed"
@@ -90,6 +89,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     }
                 }
             }
+            withTimeout(timeout) { deliverSignal.await() } // Stops node on timeout & avoids notification replay by OS
             return Result.success()
         } catch (e: Exception) {
             val reason = e.message ?: "Unknown error"
@@ -107,7 +107,7 @@ class WakeNodeWorker @AssistedInject constructor(
      * Listens for LDK events and delivers the notification if the event matches the notification type.
      * @param event The LDK event to check.
      */
-    private suspend fun handleEvent(event: Event) {
+    private suspend fun handleLdkEvent(event: Event) {
         when (event) {
             is Event.PaymentReceived -> {
                 bestAttemptContent?.title = "Payment Received"
@@ -138,7 +138,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     self.bestAttemptContent?.title = "Payment received"
                     self.bestAttemptContent?.body = "Via new channel"
 
-                    LightningService.shared.channels?.firstOrNull { it.channelId == event.channelId }?.let { channel ->
+                    lightningService.channels?.find { it.channelId == event.channelId }?.let { channel ->
                         val sats = channel.outboundCapacityMsat / 1000u
                         self.bestAttemptContent?.title = "Received ⚡ $sats sats"
                         // Save for UI to pick up
@@ -159,13 +159,16 @@ class WakeNodeWorker @AssistedInject constructor(
             }
 
             is Event.ChannelClosed -> {
+                self.bestAttemptContent?.title = "Channel closed"
+                self.bestAttemptContent?.body = "Reason: ${event.reason}"
+
                 if (self.notificationType == mutualClose) {
-                    self.bestAttemptContent?.title = "Channel closed"
                     self.bestAttemptContent?.body = "Balance moved from spending to savings"
                 } else if (self.notificationType == orderPaymentConfirmed) {
                     self.bestAttemptContent?.title = "Channel failed to open in the background"
                     self.bestAttemptContent?.body = "Please try again"
                 }
+
                 self.deliver()
             }
 
@@ -175,7 +178,6 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentFailed -> {
                 self.bestAttemptContent?.title = "Payment failed"
                 self.bestAttemptContent?.body = "⚡ ${event.reason}"
-                self.deliver()
 
                 if (self.notificationType == wakeToTimeout) {
                     self.deliver()
@@ -185,12 +187,13 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
-        delay(30.seconds)
-        LightningService.shared.stop()
+        lightningService.stop()
 
         bestAttemptContent?.run {
             pushNotification(title, body, context = appContext)
             Log.i(LDK, "Delivered notification")
         }
+
+        deliverSignal.complete(Unit)
     }
 }

@@ -62,7 +62,7 @@ internal object Env {
         appStoragePath = path
     }
 
-    fun ldkStorage(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
         require(::appStoragePath.isInitialized) { "App storage path should be init as context.filesDir.absolutePath." }
@@ -70,7 +70,7 @@ internal object Env {
             .toFile()
             .ensureDir()
             .absolutePath
-        Log.d(APP, "$dir storage path: $absolutePath")
+        Log.d(APP, "Using ${dir.uppercase()} storage path: $absolutePath")
         return absolutePath
     }
 

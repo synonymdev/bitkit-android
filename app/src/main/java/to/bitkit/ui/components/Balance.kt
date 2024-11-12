@@ -15,15 +15,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
+import androidx.navigation.NavController
 import to.bitkit.ui.MainUiState
-import to.bitkit.ui.Routes
+import to.bitkit.ui.navigateToSavings
+import to.bitkit.ui.navigateToSpending
 import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun BalanceSummary(
-    uiState: MainUiState.Content,
-    navController: NavHostController,
+    uiState: MainUiState,
+    navController: NavController,
 ) {
     BalanceView(
         label = "TOTAL BALANCE",
@@ -38,7 +39,7 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { navController.navigate(Routes.Savings.destination) }
+                .clickable { navController.navigateToSavings() }
                 .padding(vertical = 4.dp)
         ) {
             Text(
@@ -55,7 +56,7 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { navController.navigate(Routes.Spending.destination) }
+                .clickable { navController.navigateToSpending() }
                 .padding(4.dp)
         ) {
             Text(

@@ -27,8 +27,6 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 internal class FcmService : FirebaseMessagingService() {
-    private lateinit var token: String
-
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 
@@ -55,7 +53,6 @@ internal class FcmService : FirebaseMessagingService() {
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
-                    sendNotification(it.title, it.message)
                     decryptPayload(it)
                 }
                 isEncryptedNotification
@@ -148,9 +145,8 @@ internal class FcmService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        this.token = token
-        Log.d(FCM, "FCM registration token refreshed: $token")
-        // TODO call sharedViewModel.registerForNotifications(token)
+        // this.token = token
+        // TODO call blocktankService.registerDevice(token)
     }
 }
 

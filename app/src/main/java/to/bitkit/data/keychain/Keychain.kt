@@ -8,7 +8,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
@@ -72,6 +74,8 @@ class Keychain @Inject constructor(
         return snapshot.contains(key.indexed)
     }
 
+    fun observeExists(key: Key): Flow<Boolean> = context.keychain.data.map { it.contains(key.name.indexed) }
+
     suspend fun wipe() {
         if (!Env.isDebug || Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
 
@@ -88,8 +92,9 @@ class Keychain @Inject constructor(
         }
 
     enum class Key {
+        PUSH_NOTIFICATION_TOKEN,
         PUSH_NOTIFICATION_PRIVATE_KEY,
         BIP39_MNEMONIC,
-        BIP39_PASSPHRASE,
+        BIP39_PASSPHRASE;
     }
 }

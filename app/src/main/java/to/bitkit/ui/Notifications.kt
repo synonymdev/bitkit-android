@@ -15,12 +15,9 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.R
 import to.bitkit.currentActivity
 import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.FCM
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
 import to.bitkit.ext.requiresPermission
@@ -32,7 +29,7 @@ fun Context.initNotificationChannel(
     id: String = CHANNEL_MAIN,
     name: String = getString(R.string.app_notifications_channel_name),
     desc: String = getString(R.string.app_notifications_channel_desc),
-    importance: Int = NotificationManager.IMPORTANCE_DEFAULT,
+    importance: Int = NotificationManager.IMPORTANCE_HIGH,
 ) {
     val channel = NotificationChannel(id, name, importance).apply { description = desc }
     notificationManager.createNotificationChannel(channel)
@@ -52,7 +49,7 @@ internal fun Context.notificationBuilder(
 
     return NotificationCompat.Builder(this, channelId)
         .setSmallIcon(R.drawable.ic_notification)
-        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
         .setContentIntent(pendingIntent) // fired on tap
         .setAutoCancel(true) // remove on tap
@@ -93,15 +90,3 @@ val postNotificationsPermission
     } else {
         TODO("Cant request 'POST_NOTIFICATIONS' permissions on SDK < 33")
     }
-
-fun logFcmToken() {
-    FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-        if (!task.isSuccessful) {
-            Log.w(FCM, "FCM registration token error:", task.exception)
-            return@OnCompleteListener
-        }
-        val token = task.result
-        // TODO call sharedViewModel.registerForNotifications(token) and move the listener body to there
-        Log.d(FCM, "FCM registration token: $token")
-    })
-}

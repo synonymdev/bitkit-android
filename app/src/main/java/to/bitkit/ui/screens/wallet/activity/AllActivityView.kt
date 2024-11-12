@@ -23,21 +23,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.R
 import to.bitkit.ext.amountSats
-import to.bitkit.ui.ActivityItemRoute
-import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.navigateToActivityItem
+import to.bitkit.ui.navigateToAllActivity
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -51,7 +54,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { navController?.navigate(ActivityItemRoute(item.id)) })
+            .clickable(onClick = { navController?.navigateToActivityItem(item.id) })
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         PaymentStatusIcon(item)
@@ -110,8 +113,8 @@ enum class ActivityType {
 @Composable
 fun ActivityLatest(
     type: ActivityType,
+    walletViewModel: WalletViewModel,
     navController: NavController,
-    walletViewModel: WalletViewModel = hiltViewModel(),
 ) {
     when (type) {
         ActivityType.ALL -> ActivityList(walletViewModel.latestActivityItems.value, navController)
@@ -141,7 +144,7 @@ fun ActivityList(
                     Text("No activity", Modifier.padding(16.dp))
                 } else {
                     TextButton(
-                        onClick = { navController?.navigate(Routes.AllActivity.destination) },
+                        onClick = { navController?.navigateToAllActivity() },
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text("Show All Activity")
@@ -161,11 +164,14 @@ fun ActivityList(
 
 @Composable
 fun AllActivityScreen(
-    walletViewModel: WalletViewModel = hiltViewModel(),
+    viewModel: WalletViewModel,
     navController: NavController,
 ) {
-    val items = walletViewModel.activityItems.value
-    AllActivityView(items, navController)
+    ScreenColumn {
+        AppTopBar(navController, stringResource(R.string.all_activity))
+        val items = viewModel.activityItems.value
+        AllActivityView(items, navController)
+    }
 }
 
 @Composable

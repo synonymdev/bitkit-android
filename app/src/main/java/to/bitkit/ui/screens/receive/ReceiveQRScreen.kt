@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.receive
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,7 +44,7 @@ private object Routes {
 
 @Composable
 fun ReceiveQRScreen(
-    walletState: MainUiState.Content,
+    walletState: MainUiState,
     modifier: Modifier = Modifier,
     viewModel: ReceiveViewModel = hiltViewModel(),
 ) {
@@ -79,6 +78,7 @@ fun ReceiveQRScreen(
             }
             composable(Routes.CJIT) {
                 ReceiveCjitScreen(
+                    viewModel = viewModel,
                     onCjitCreated = { invoice ->
                         cjitInvoice.value = invoice
                         navController.navigate(Routes.QR) {
@@ -97,7 +97,7 @@ private fun ContentView(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
     navController: NavHostController,
-    walletState: MainUiState.Content,
+    walletState: MainUiState,
 ) {
     Column {
         val onchainAddress = walletState.onchainAddress

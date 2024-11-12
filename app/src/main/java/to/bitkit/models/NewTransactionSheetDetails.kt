@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import to.bitkit.data.APP_PREFS
 import to.bitkit.di.json
 import to.bitkit.env.Tag.APP
 
@@ -15,7 +16,6 @@ data class NewTransactionSheetDetails(
     val sats: Long,
 ) {
     companion object {
-        private const val APP_PREFS = "bitkit_prefs"
         private const val BACKGROUND_TRANSACTION_KEY = "backgroundTransaction"
 
         fun save(context: Context, details: NewTransactionSheetDetails) {
