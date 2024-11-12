@@ -270,12 +270,10 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
-            node.bolt11Payment().run {
-                if (sat != null) {
-                    receive(sat.millis, description, expirySecs)
-                } else {
-                    receiveVariableAmount(description, expirySecs)
-                }
+            if (sat != null) {
+                node.bolt11Payment().receive(sat.millis, description, expirySecs)
+            } else {
+                node.bolt11Payment().receiveVariableAmount(description, expirySecs)
             }
         }
     }
@@ -296,11 +294,9 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Paying bolt11: $bolt11")
 
         return ServiceQueue.LDK.background {
-            node.bolt11Payment().run {
-                when (sats != null) {
-                    true -> sendUsingAmount(bolt11, sats.millis, null)
-                    else -> send(bolt11)
-                }
+            when (sats != null) {
+                true -> node.bolt11Payment().sendUsingAmount(bolt11, sats.millis, null)
+                else -> node.bolt11Payment().send(bolt11, null)
             }
         }
     }
