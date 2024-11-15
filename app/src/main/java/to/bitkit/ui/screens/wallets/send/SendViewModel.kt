@@ -46,16 +46,61 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             events.collect {
                 when (it) {
-                    SendEvent.Contact -> toast("Coming soon")
+                    SendEvent.Contact -> toast("Coming soon: Contact")
                     SendEvent.EnterManually -> setEffect(SendEffect.NavigateToAddress)
+                    is SendEvent.AddressChange -> onAddressChange(it.value)
+                    SendEvent.AddressReset -> _uiState.update { state ->
+                        state.copy(
+                            addressInput = "",
+                            isAddressInputValid = false,
+                        )
+                    }
+
                     is SendEvent.AddressContinue -> onAddressContinue(it.data)
+                    is SendEvent.AmountChange -> onAmountChange(it.value)
+                    SendEvent.AmountReset -> _uiState.update { state ->
+                        state.copy(
+                            amountInput = "",
+                            isAmountInputValid = false,
+                        )
+                    }
+
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
                     is SendEvent.Paste -> onPasteInvoice(it.data)
                     is SendEvent.Scan -> onScanSuccess(it.data)
+                    SendEvent.SpeedAndFee -> toast("Coming soon: Speed and Fee")
                     SendEvent.SwipeToPay -> onPay()
                 }
             }
         }
+    }
+
+    private fun onAddressChange(value: String) {
+        viewModelScope.launch {
+            val result = runCatching { scannerService.decode(value) }
+            _uiState.update {
+                it.copy(
+                    addressInput = value,
+                    isAddressInputValid = result.isSuccess,
+                )
+            }
+        }
+    }
+
+    private fun onAmountChange(value: String) {
+        val isAmountValid = validateAmount(value)
+        _uiState.update {
+            it.copy(
+                amountInput = value,
+                isAmountInputValid = isAmountValid,
+            )
+        }
+    }
+
+    private fun validateAmount(value: String): Boolean {
+        if (value.isBlank()) return false
+        val amount = value.toULongOrNull() ?: return false
+        return amount > 0u
     }
 
     private fun onPasteInvoice(data: String) {
@@ -89,7 +134,7 @@ class SendViewModel @Inject constructor(
 
             null -> {
                 // TODO implement
-                toast("Error…")
+                toast("Error decoding data")
             }
 
             else -> {
@@ -108,8 +153,13 @@ class SendViewModel @Inject constructor(
         return result
     }
 
-    private suspend fun send(bolt11: String) {
-        runCatching { lightningService.send(bolt11) }
+    private suspend fun sendOnchain(address: String, amount: ULong) {
+        runCatching { lightningService.send(address = address, amount) }
+            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
+    }
+
+    private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
+        runCatching { lightningService.send(bolt11 = bolt11, amount) }
             .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
     }
 
@@ -137,7 +187,12 @@ class SendViewModel @Inject constructor(
     }
 
     private fun onPay() {
-        toast("Coming soon")
+        viewModelScope.launch {
+            val address = uiState.value.address
+            val amount = uiState.value.amount
+            sendOnchain(address, amount)
+            withContext(uiThread) { toast("Sent success. TODO: handler") }
+        }
     }
 
     override fun onCleared() {
@@ -149,7 +204,11 @@ class SendViewModel @Inject constructor(
 // region contract
 data class SendUiState(
     val address: String = "",
+    val addressInput: String = "",
+    val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
+    val amountInput: String = "",
+    val isAmountInputValid: Boolean = false,
     val label: String = "",
     val message: String = "",
 )
@@ -165,8 +224,16 @@ sealed class SendEvent {
     data object EnterManually : SendEvent()
     data class Paste(val data: String) : SendEvent()
     data class Scan(val data: String) : SendEvent()
+
+    data object AddressReset : SendEvent()
+    data class AddressChange(val value: String) : SendEvent()
     data class AddressContinue(val data: String) : SendEvent()
+
+    data object AmountReset: SendEvent()
     data class AmountContinue(val amount: String) : SendEvent()
+    data class AmountChange(val value: String) : SendEvent()
+
     data object SwipeToPay : SendEvent()
+    data object SpeedAndFee : SendEvent()
 }
 // endregion

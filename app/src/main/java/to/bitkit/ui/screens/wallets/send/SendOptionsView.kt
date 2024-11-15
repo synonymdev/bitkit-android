@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.qrCodeScanner
@@ -52,13 +54,17 @@ fun SendOptionsView(
                 )
             }
             composable<SendRoutes.Address> {
+                val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
                 SendAddressScreen(
+                    uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { sendViewModel.setEvent(it) },
                 )
             }
             composable<SendRoutes.Amount> {
+                val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
                 SendAmountScreen(
+                    uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { sendViewModel.setEvent(it) }
                 )
@@ -84,33 +90,33 @@ private fun SendOptionsContent(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar("Send Bitcoin")
+        SheetTopBar(stringResource(R.string.title_send))
         Text(
-            text = "TO",
+            text = stringResource(R.string.label_to),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Normal,
         )
         Spacer(modifier = Modifier.height(4.dp))
 
-        NavButton("Contact", showIcon = false) {
+        NavButton(stringResource(R.string.contact), showIcon = false) {
             onEvent(SendEvent.Contact)
         }
         Spacer(modifier = Modifier.height(4.dp))
 
         val clipboard = LocalClipboardManager.current
-        NavButton("Paste Invoice", showIcon = false) {
+        NavButton(stringResource(R.string.paste_invoice), showIcon = false) {
             val uri = clipboard.getText()?.text.orEmpty().trim()
             onEvent(SendEvent.Paste(uri))
         }
         Spacer(modifier = Modifier.height(4.dp))
 
-        NavButton("Enter Manually") {
+        NavButton(stringResource(R.string.enter_manually)) {
             onEvent(SendEvent.EnterManually)
         }
         Spacer(modifier = Modifier.height(4.dp))
 
         val scanner = qrCodeScanner()
-        NavButton("Scan QR Code") {
+        NavButton(stringResource(R.string.scan_qr)) {
             scanner?.startScan()?.addOnCompleteListener { task ->
                 task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
                     onEvent(SendEvent.Scan(data))

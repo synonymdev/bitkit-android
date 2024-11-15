@@ -1,7 +1,9 @@
 <resources>
     <string name="add">Add</string>
     <string name="address">Address</string>
+    <string name="address_placeholder">Enter a Bitcoin address or a Lighting invoice</string>
     <string name="all_activity">All Activity</string>
+    <string name="amount_placeholder">Enter Bitcoin Amount</string>
     <string name="app_name" translatable="false">Bitkit</string>
     <string name="app_notifications_channel_desc">Main Notification Channel for generic notifications.</string>
     <string name="app_notifications_channel_id" translatable="false">channel_app</string>
@@ -11,15 +13,23 @@
     <string name="channels">Channels</string>
     <string name="close">Close</string>
     <string name="connect">Connect</string>
+    <string name="contact">Contact</string>
+    <string name="continue_button">Continue</string>
     <string name="dev_settings">Dev Settings</string>
     <string name="disconnect">Disconnect</string>
     <string name="home">Home</string>
+    <string name="label_amount">AMOUNT</string>
+    <string name="label_confirms_in">CONFIRMS IN</string>
+    <string name="label_speed">SPEED AND FEE</string>
+    <string name="label_tags">TAGS</string>
+    <string name="label_to">TO</string>
     <string name="invoice">Invoice</string>
     <string name="lightning">Lightning</string>
     <string name="mnemonic">Mnemonic</string>
     <string name="node_id">Node Id</string>
     <string name="node_state">Node State</string>
     <string name="notifications">Notifications</string>
+    <string name="paste_invoice">Paste Invoice</string>
     <string name="pay">Pay</string>
     <string name="peers">Peers</string>
     <string name="pending">Pending</string>
@@ -33,4 +43,9 @@
     <string name="sync">Sync</string>
     <string name="transfer_funds">Transfer Funds</string>
     <string name="wallet">Wallet</string>
+    <string name="title_send">Send Bitcoin</string>
+    <string name="title_send_amount">Bitcoin Amount</string>
+    <string name="title_send_review">Review &amp; Send</string>
+    <string name="enter_manually">Enter Manually</string>
+    <string name="scan_qr">Scan QR</string>
 </resources>
