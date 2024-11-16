@@ -89,6 +89,13 @@ class SendViewModel @Inject constructor(
         }
     }
 
+    private fun onAddressContinue(data: String) {
+        viewModelScope.launch {
+            val scan = decodeDataOrNull(data)
+            handleData(scan)
+        }
+    }
+
     private fun onAmountChange(value: String) {
         val isAmountValid = validateAmount(value)
         _uiState.update {
@@ -97,6 +104,15 @@ class SendViewModel @Inject constructor(
                 isAmountInputValid = isAmountValid,
             )
         }
+    }
+
+    private fun onAmountContinue(amount: String) {
+        _uiState.update {
+            it.copy(
+                amount = amount.toULongOrNull() ?: 0u,
+            )
+        }
+        setEffect(SendEffect.NavigateToReview)
     }
 
     private fun validateAmount(value: String): Boolean {
@@ -110,6 +126,13 @@ class SendViewModel @Inject constructor(
             Log.e(APP, "No data in clipboard")
             return
         }
+        viewModelScope.launch {
+            val scan = decodeDataOrNull(data)
+            handleData(scan)
+        }
+    }
+
+    private fun onScanSuccess(data: String) {
         viewModelScope.launch {
             val scan = decodeDataOrNull(data)
             handleData(scan)
@@ -156,30 +179,6 @@ class SendViewModel @Inject constructor(
         return result
     }
 
-    private suspend fun sendOnchain(address: String, amount: ULong) {
-        runCatching { lightningService.send(address = address, amount) }
-            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
-    }
-
-    private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
-        runCatching { lightningService.send(bolt11 = bolt11, amount) }
-            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
-    }
-
-    private fun onScanSuccess(data: String) {
-        viewModelScope.launch {
-            val scan = decodeDataOrNull(data)
-            handleData(scan)
-        }
-    }
-
-    private fun onAddressContinue(data: String) {
-        viewModelScope.launch {
-            val scan = decodeDataOrNull(data)
-            handleData(scan)
-        }
-    }
-
     private fun resetAmount() {
         _uiState.update { state ->
             state.copy(
@@ -189,15 +188,6 @@ class SendViewModel @Inject constructor(
         }
     }
 
-    private fun onAmountContinue(amount: String) {
-        _uiState.update {
-            it.copy(
-                amount = amount.toULongOrNull() ?: 0u,
-            )
-        }
-        setEffect(SendEffect.NavigateToReview)
-    }
-
     private fun onPay() {
         viewModelScope.launch {
             val address = uiState.value.address
@@ -205,6 +195,16 @@ class SendViewModel @Inject constructor(
             sendOnchain(address, amount)
             withContext(uiThread) { toast("Sent success. TODO: handler") }
         }
+    }
+
+    private suspend fun sendOnchain(address: String, amount: ULong) {
+        runCatching { lightningService.send(address = address, amount) }
+            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
+    }
+
+    private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
+        runCatching { lightningService.send(bolt11 = bolt11, amount) }
+            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
     }
 
     override fun onCleared() {
