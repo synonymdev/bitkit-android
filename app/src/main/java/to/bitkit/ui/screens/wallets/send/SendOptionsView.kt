@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusWeak
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,8 +28,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
-import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.send.components.SendButton
 import to.bitkit.ui.shared.util.qrCodeScanner
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -72,9 +77,9 @@ fun SendOptionsView(
             composable<SendRoutes.ReviewAndSend> {
                 val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
+                    uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { sendViewModel.setEvent(it) },
-                    uiState = uiState,
                 )
             }
         }
@@ -98,25 +103,37 @@ private fun SendOptionsContent(
         )
         Spacer(modifier = Modifier.height(4.dp))
 
-        NavButton(stringResource(R.string.contact), showIcon = false) {
+        SendButton(
+            label = stringResource(R.string.contact),
+            icon = Icons.Default.Person,
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
             onEvent(SendEvent.Contact)
         }
-        Spacer(modifier = Modifier.height(4.dp))
 
         val clipboard = LocalClipboardManager.current
-        NavButton(stringResource(R.string.paste_invoice), showIcon = false) {
+        SendButton(
+            label = stringResource(R.string.paste_invoice),
+            icon = Icons.Default.ContentPaste,
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
             val uri = clipboard.getText()?.text.orEmpty().trim()
             onEvent(SendEvent.Paste(uri))
         }
-        Spacer(modifier = Modifier.height(4.dp))
 
-        NavButton(stringResource(R.string.enter_manually)) {
+        SendButton(
+            label = stringResource(R.string.enter_manually),
+            icon = Icons.Outlined.Edit,
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
             onEvent(SendEvent.EnterManually)
         }
-        Spacer(modifier = Modifier.height(4.dp))
 
         val scanner = qrCodeScanner()
-        NavButton(stringResource(R.string.scan_qr)) {
+        SendButton(
+            stringResource(id = R.string.scan_qr),
+            icon = Icons.Default.CenterFocusWeak,
+        ) {
             scanner?.startScan()?.addOnCompleteListener { task ->
                 task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
                     onEvent(SendEvent.Scan(data))
@@ -130,7 +147,7 @@ private fun SendOptionsContent(
 // region preview
 @Preview(showBackground = true)
 @Composable
-fun SendOptionsContentPreview() {
+private fun SendOptionsContentPreview() {
     AppThemeSurface {
         SendOptionsContent(
             onEvent = {},

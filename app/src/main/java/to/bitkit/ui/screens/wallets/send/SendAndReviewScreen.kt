@@ -29,9 +29,9 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendAndReviewScreen(
+    uiState: SendUiState,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
-    uiState: SendUiState,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -50,7 +50,7 @@ fun SendAndReviewScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LabelText(text = "TO")
+            LabelText(text = stringResource(R.string.label_to))
             Text(text = uiState.address.ellipsisMiddle(25))
 
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
@@ -108,12 +108,12 @@ fun SendAndReviewScreen(
 private fun SendAndReviewPreview() {
     AppThemeSurface {
         SendAndReviewScreen(
-            onBack = {},
-            onEvent = {},
             uiState = SendUiState(
                 amount = 1234uL,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
             ),
+            onBack = {},
+            onEvent = {},
         )
     }
 }

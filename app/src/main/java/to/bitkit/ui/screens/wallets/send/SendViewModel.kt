@@ -118,7 +118,7 @@ class SendViewModel @Inject constructor(
     private fun validateAmount(value: String): Boolean {
         if (value.isBlank()) return false
         val amount = value.toULongOrNull() ?: return false
-        return amount > 0u
+        return amount > getMinOnchainTx()
     }
 
     private fun onPasteInvoice(data: String) {
@@ -205,6 +205,11 @@ class SendViewModel @Inject constructor(
     private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
         runCatching { lightningService.send(bolt11 = bolt11, amount) }
             .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
+    }
+
+    private fun getMinOnchainTx(): ULong {
+        // TODO implement min tx size
+        return 400uL
     }
 
     override fun onCleared() {
