@@ -47,24 +47,12 @@ class SendViewModel @Inject constructor(
             events.collect {
                 when (it) {
                     SendEvent.Contact -> toast("Coming soon: Contact")
-                    SendEvent.EnterManually -> setEffect(SendEffect.NavigateToAddress)
+                    SendEvent.EnterManually -> onEnterManuallyClick()
                     is SendEvent.AddressChange -> onAddressChange(it.value)
-                    SendEvent.AddressReset -> _uiState.update { state ->
-                        state.copy(
-                            addressInput = "",
-                            isAddressInputValid = false,
-                        )
-                    }
-
+                    SendEvent.AddressReset -> resetAddress()
                     is SendEvent.AddressContinue -> onAddressContinue(it.data)
                     is SendEvent.AmountChange -> onAmountChange(it.value)
-                    SendEvent.AmountReset -> _uiState.update { state ->
-                        state.copy(
-                            amountInput = "",
-                            isAmountInputValid = false,
-                        )
-                    }
-
+                    SendEvent.AmountReset -> resetAmount()
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
                     is SendEvent.Paste -> onPasteInvoice(it.data)
                     is SendEvent.Scan -> onScanSuccess(it.data)
@@ -72,6 +60,20 @@ class SendViewModel @Inject constructor(
                     SendEvent.SwipeToPay -> onPay()
                 }
             }
+        }
+    }
+
+    private fun onEnterManuallyClick() {
+        resetAddress()
+        setEffect(SendEffect.NavigateToAddress)
+    }
+
+    private fun resetAddress() {
+        _uiState.update { state ->
+            state.copy(
+                addressInput = "",
+                isAddressInputValid = false,
+            )
         }
     }
 
@@ -125,6 +127,7 @@ class SendViewModel @Inject constructor(
                         message = scan.invoice.message.orEmpty(),
                     )
                 }
+                resetAmount()
                 setEffect(SendEffect.NavigateToAmount)
             }
 
@@ -174,6 +177,15 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             val scan = decodeDataOrNull(data)
             handleData(scan)
+        }
+    }
+
+    private fun resetAmount() {
+        _uiState.update { state ->
+            state.copy(
+                amountInput = "",
+                isAmountInputValid = false,
+            )
         }
     }
 
@@ -229,7 +241,7 @@ sealed class SendEvent {
     data class AddressChange(val value: String) : SendEvent()
     data class AddressContinue(val data: String) : SendEvent()
 
-    data object AmountReset: SendEvent()
+    data object AmountReset : SendEvent()
     data class AmountContinue(val amount: String) : SendEvent()
     data class AmountChange(val value: String) : SendEvent()
 
