@@ -158,28 +158,28 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Syncing LDK…")
         ServiceQueue.LDK.background {
             node.syncWallets()
-            launch { setMaxDustHtlcExposureForCurrentChannels() }
+            // launch { setMaxDustHtlcExposureForCurrentChannels() }
         }
         Log.i(LDK, "LDK synced")
     }
 
-    private fun setMaxDustHtlcExposureForCurrentChannels() {
-        if (Env.network != Network.REGTEST) {
-            Log.d(LDK, "Not updating channel config for non-regtest network")
-            return
-        }
-        val node = this.node ?: throw ServiceError.NodeNotStarted
-        runCatching {
-            for (channel in node.listChannels()) {
-                val config = channel.config
-                config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
-                node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
-                Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
-            }
-        }.onFailure {
-            Log.e(LDK, "Failed to update channel config", it)
-        }
-    }
+    // private fun setMaxDustHtlcExposureForCurrentChannels() {
+    //     if (Env.network != Network.REGTEST) {
+    //         Log.d(LDK, "Not updating channel config for non-regtest network")
+    //         return
+    //     }
+    //     val node = this.node ?: throw ServiceError.NodeNotStarted
+    //     runCatching {
+    //         for (channel in node.listChannels()) {
+    //             val config = channel.config
+    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
+    //             node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+    //             Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+    //         }
+    //     }.onFailure {
+    //         Log.e(LDK, "Failed to update channel config", it)
+    //     }
+    // }
 
     suspend fun sign(message: String): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
