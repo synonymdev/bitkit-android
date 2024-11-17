@@ -200,7 +200,9 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             val address = uiState.value.address
             val amount = uiState.value.amount
-            val result = sendOnchain(address, amount)
+            val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }.getOrNull()
+                ?: return@launch // TODO show error
+            val result = sendOnchain(validatedAddress.address, amount)
             if (result.isSuccess) {
                 setEffect(
                     SendEffect.PaymentSuccess(
