@@ -105,9 +105,9 @@ private fun HomeScreen(
                     .padding(top = 100.dp)
             ) {
                 SendOptionsView(
-                    onComplete = {
+                    onComplete = { sheet ->
                         viewModel.showSendSheet = false
-                        appViewModel.showNewTransactionSheet(it)
+                        sheet?.let { appViewModel.showNewTransactionSheet(it) }
                     }
                 )
             }

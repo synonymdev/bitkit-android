@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.truncate
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -52,8 +53,16 @@ fun SendAndReviewScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LabelText(text = stringResource(R.string.label_to))
-            Text(text = uiState.address.ellipsisMiddle(25))
+            LabelText(
+                text = stringResource(
+                    if (uiState.payMethod == SendMethod.ONCHAIN) R.string.label_to else R.string.label_invoice
+                )
+            )
+            val destination = when (uiState.payMethod) {
+                SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
+                SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
+            }
+            Text(text = destination)
 
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 

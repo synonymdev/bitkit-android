@@ -39,3 +39,11 @@ private fun onChainMock() = Scanner.OnChain(
     )
 )
 // endregion
+
+fun OnChainInvoice.supportsLightning(): Boolean {
+    return params?.containsKey("lightning") == true
+}
+
+fun OnChainInvoice.bolt11(): String? {
+    return params?.get("lightning")
+}

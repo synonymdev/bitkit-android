@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Tag.APP
@@ -21,6 +22,8 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
+import to.bitkit.services.bolt11
+import to.bitkit.services.supportsLightning
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
@@ -40,7 +43,7 @@ class SendViewModel @Inject constructor(
     private val events = MutableSharedFlow<SendEvent>()
     fun setEvent(event: SendEvent) = viewModelScope.launch { events.emit(event) }
 
-    private var _scanResult: Scanner? = null
+    private var scan: Scanner? = null
 
     init {
         observeEvents()
@@ -62,6 +65,7 @@ class SendViewModel @Inject constructor(
                     is SendEvent.AmountChange -> onAmountChange(it.value)
                     SendEvent.AmountReset -> resetAmount()
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
+                    SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
 
                     SendEvent.SpeedAndFee -> toast("Coming soon: Speed and Fee")
                     SendEvent.SwipeToPay -> onPay()
@@ -113,6 +117,19 @@ class SendViewModel @Inject constructor(
         }
     }
 
+    private fun onPaymentMethodSwitch() {
+        val nextPaymentMethod = when (uiState.value.payMethod) {
+            SendMethod.ONCHAIN -> SendMethod.LIGHTNING
+            SendMethod.LIGHTNING -> SendMethod.ONCHAIN
+        }
+        _uiState.update {
+            it.copy(
+                payMethod = nextPaymentMethod,
+                isAmountInputValid = validateAmount(it.amountInput, nextPaymentMethod),
+            )
+        }
+    }
+
     private fun onAmountContinue(amount: String) {
         _uiState.update {
             it.copy(
@@ -122,10 +139,16 @@ class SendViewModel @Inject constructor(
         setEffect(SendEffect.NavigateToReview)
     }
 
-    private fun validateAmount(value: String): Boolean {
+    private fun validateAmount(
+        value: String,
+        payMethod: SendMethod = uiState.value.payMethod,
+    ): Boolean {
         if (value.isBlank()) return false
         val amount = value.toULongOrNull() ?: return false
-        return amount > getMinOnchainTx()
+        return when (payMethod) {
+            SendMethod.ONCHAIN -> amount > getMinOnchainTx()
+            else -> amount > 0u
+        }
     }
 
     private fun onPasteInvoice(data: String) {
@@ -152,12 +175,15 @@ class SendViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         address = scan.invoice.address,
+                        bolt11 = scan.invoice.bolt11(),
                         amount = scan.invoice.amountSatoshis,
                         label = scan.invoice.label.orEmpty(),
                         message = scan.invoice.message.orEmpty(),
-                        params = scan.invoice.params,
+                        isUnified = scan.invoice.supportsLightning(),
+                        payMethod = SendMethod.ONCHAIN,
                     )
                 }
+                // TODO handle non-0 sats bolt11
                 resetAmount()
                 setEffect(SendEffect.NavigateToAmount)
             }
@@ -183,7 +209,7 @@ class SendViewModel @Inject constructor(
             .onFailure { Log.e(APP, "Failed to decode input data", it) }
             .getOrNull()
 
-        _scanResult = result
+        scan = result
         return result
     }
 
@@ -198,21 +224,44 @@ class SendViewModel @Inject constructor(
 
     private fun onPay() {
         viewModelScope.launch {
-            val address = uiState.value.address
-            val amount = uiState.value.amount
-            val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }.getOrNull()
-                ?: return@launch // TODO show error
-            val result = sendOnchain(validatedAddress.address, amount)
-            if (result.isSuccess) {
-                setEffect(
-                    SendEffect.PaymentSuccess(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.ONCHAIN,
-                            direction = NewTransactionSheetDirection.SENT,
-                            sats = amount.toLong(),
-                        )
-                    )
-                )
+            when (val scanResult = scan) {
+                is Scanner.OnChain -> {
+                    val amount = uiState.value.amount
+
+                    when (uiState.value.payMethod) {
+                        SendMethod.ONCHAIN -> {
+                            val address = uiState.value.address
+                            val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
+                                .getOrNull()
+                                ?: return@launch // TODO show error
+                            val result = sendOnchain(validatedAddress.address, amount)
+                            if (result.isSuccess) {
+                                setEffect(
+                                    SendEffect.PaymentSuccess(
+                                        NewTransactionSheetDetails(
+                                            type = NewTransactionSheetType.ONCHAIN,
+                                            direction = NewTransactionSheetDirection.SENT,
+                                            sats = amount.toLong(),
+                                        )
+                                    )
+                                )
+                            }
+                        }
+
+                        SendMethod.LIGHTNING -> {
+                            val bolt11 = scanResult.invoice.bolt11()
+                                ?: return@launch // TODO show error
+                            val result = sendLightning(bolt11, amount)
+                            if (result.isSuccess) {
+                                setEffect(SendEffect.PaymentSuccess())
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    withContext(uiThread) { toast("Coming soon: send options") }
+                }
             }
         }
     }
@@ -224,9 +273,11 @@ class SendViewModel @Inject constructor(
             }
     }
 
-    private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
-        runCatching { lightningService.send(bolt11 = bolt11, amount) }
-            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
+    private suspend fun sendLightning(bolt11: String, amount: ULong? = null): Result<PaymentId> {
+        return runCatching { lightningService.send(bolt11 = bolt11, amount) }
+            .onFailure {
+                withContext(uiThread) { toast("Error sending: $it") }
+            }
     }
 
     private fun getMinOnchainTx(): ULong {
@@ -243,6 +294,7 @@ class SendViewModel @Inject constructor(
 // region contract
 data class SendUiState(
     val address: String = "",
+    val bolt11: String? = null,
     val addressInput: String = "",
     val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
@@ -250,14 +302,17 @@ data class SendUiState(
     val isAmountInputValid: Boolean = false,
     val label: String = "",
     val message: String = "",
-    val params: Map<String, String>? = null,
+    val isUnified: Boolean = false,
+    val payMethod: SendMethod = SendMethod.ONCHAIN,
 )
+
+enum class SendMethod { ONCHAIN, LIGHTNING }
 
 sealed class SendEffect {
     data object NavigateToAddress : SendEffect()
     data object NavigateToAmount : SendEffect()
     data object NavigateToReview : SendEffect()
-    data class PaymentSuccess(val details: NewTransactionSheetDetails) : SendEffect()
+    data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
 sealed class SendEvent {
@@ -276,5 +331,6 @@ sealed class SendEvent {
 
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
+    data object PaymentMethodSwitch : SendEvent()
 }
 // endregion

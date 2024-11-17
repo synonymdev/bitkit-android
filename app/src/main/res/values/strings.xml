@@ -20,6 +20,7 @@
     <string name="home">Home</string>
     <string name="label_amount">AMOUNT</string>
     <string name="label_confirms_in">CONFIRMS IN</string>
+    <string name="label_invoice">INVOICE</string>
     <string name="label_speed">SPEED AND FEE</string>
     <string name="label_tags">TAGS</string>
     <string name="label_to">TO</string>

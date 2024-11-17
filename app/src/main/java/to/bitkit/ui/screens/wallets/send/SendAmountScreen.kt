@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,22 +9,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
@@ -62,7 +61,25 @@ fun SendAmountScreen(
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
             )
+            Row(modifier = Modifier.padding(vertical = 8.dp)) {
+                Spacer(modifier = Modifier.weight(1f))
+                if (uiState.isUnified) {
+                    OutlinedColorButton(
+                        onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                        color = if (uiState.payMethod == SendMethod.ONCHAIN)
+                            colorScheme.primary else colorScheme.secondary
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (uiState.payMethod == SendMethod.ONCHAIN) R.string.savings else R.string.spending
+                            )
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
+
             PrimaryButton(
                 text = stringResource(R.string.continue_button),
                 enabled = uiState.isAmountInputValid,
@@ -79,7 +96,10 @@ fun SendAmountScreen(
 private fun SendAmountViewPreview() {
     AppThemeSurface {
         SendAmountScreen(
-            uiState = SendUiState(),
+            uiState = SendUiState(
+                isUnified = true,
+                payMethod = SendMethod.LIGHTNING,
+            ),
             onBack = {},
             onEvent = {},
         )
