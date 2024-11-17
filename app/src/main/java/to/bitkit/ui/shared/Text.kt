@@ -20,7 +20,6 @@ internal fun moneyString(
     // val locale = Locale.current.platformLocale
     return buildAnnotatedString {
         append(NumberFormat.getNumberInstance(locale).format(value))
-        append(" ")
         currency?.let {
             append(" ")
             withStyle(SpanStyle(color = colorScheme.onBackground.copy(0.5f))) {

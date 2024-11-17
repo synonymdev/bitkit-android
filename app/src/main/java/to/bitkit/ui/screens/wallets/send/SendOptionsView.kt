@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.components.SendButton
 import to.bitkit.ui.shared.util.qrCodeScanner
@@ -35,6 +36,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendOptionsView(
+    onComplete: (NewTransactionSheetDetails) -> Unit,
 ) {
     val sendViewModel = hiltViewModel<SendViewModel>()
     Column(modifier = Modifier.fillMaxSize()) {
@@ -45,6 +47,7 @@ fun SendOptionsView(
                     is SendEffect.NavigateToAmount -> navController.navigate(SendRoutes.Amount)
                     is SendEffect.NavigateToAddress -> navController.navigate(SendRoutes.Address)
                     is SendEffect.NavigateToReview -> navController.navigate(SendRoutes.ReviewAndSend)
+                    is SendEffect.PaymentSuccess -> onComplete(it.details)
                 }
             }
         }

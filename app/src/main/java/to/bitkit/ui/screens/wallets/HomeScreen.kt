@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
+import to.bitkit.ui.AppViewModel
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceSummary
@@ -45,17 +46,19 @@ import to.bitkit.ui.theme.AppShapes
 @Composable
 fun HomeScreen(
     viewModel: WalletViewModel,
+    appViewModel: AppViewModel,
     navController: NavController,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    HomeScreen(viewModel, uiState, navController)
+    HomeScreen(viewModel, appViewModel, uiState, navController)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(
     viewModel: WalletViewModel,
+    appViewModel: AppViewModel,
     uiState: MainUiState,
     navController: NavController,
 ) = AppScaffold(navController, viewModel, stringResource(R.string.app_name)) {
@@ -101,7 +104,12 @@ private fun HomeScreen(
                     .fillMaxHeight()
                     .padding(top = 100.dp)
             ) {
-                SendOptionsView()
+                SendOptionsView(
+                    onComplete = {
+                        viewModel.showSendSheet = false
+                        appViewModel.showNewTransactionSheet(it)
+                    }
+                )
             }
         }
         // Receive Sheet

@@ -12,9 +12,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Txid
 import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.toast
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
 import uniffi.bitkitcore.Scanner
@@ -48,14 +52,17 @@ class SendViewModel @Inject constructor(
                 when (it) {
                     SendEvent.Contact -> toast("Coming soon: Contact")
                     SendEvent.EnterManually -> onEnterManuallyClick()
+                    is SendEvent.Paste -> onPasteInvoice(it.data)
+                    is SendEvent.Scan -> onScanSuccess(it.data)
+
                     is SendEvent.AddressChange -> onAddressChange(it.value)
                     SendEvent.AddressReset -> resetAddress()
                     is SendEvent.AddressContinue -> onAddressContinue(it.data)
+
                     is SendEvent.AmountChange -> onAmountChange(it.value)
                     SendEvent.AmountReset -> resetAmount()
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
-                    is SendEvent.Paste -> onPasteInvoice(it.data)
-                    is SendEvent.Scan -> onScanSuccess(it.data)
+
                     SendEvent.SpeedAndFee -> toast("Coming soon: Speed and Fee")
                     SendEvent.SwipeToPay -> onPay()
                 }
@@ -148,6 +155,7 @@ class SendViewModel @Inject constructor(
                         amount = scan.invoice.amountSatoshis,
                         label = scan.invoice.label.orEmpty(),
                         message = scan.invoice.message.orEmpty(),
+                        params = scan.invoice.params,
                     )
                 }
                 resetAmount()
@@ -192,14 +200,26 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             val address = uiState.value.address
             val amount = uiState.value.amount
-            sendOnchain(address, amount)
-            withContext(uiThread) { toast("Sent success. TODO: handler") }
+            val result = sendOnchain(address, amount)
+            if (result.isSuccess) {
+                setEffect(
+                    SendEffect.PaymentSuccess(
+                        NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.ONCHAIN,
+                            direction = NewTransactionSheetDirection.SENT,
+                            sats = amount.toLong(),
+                        )
+                    )
+                )
+            }
         }
     }
 
-    private suspend fun sendOnchain(address: String, amount: ULong) {
-        runCatching { lightningService.send(address = address, amount) }
-            .onFailure { withContext(uiThread) { toast("Error sending: $it") } }
+    private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
+        return runCatching { lightningService.send(address = address, amount) }
+            .onFailure {
+                withContext(uiThread) { toast("Error sending: $it") }
+            }
     }
 
     private suspend fun sendLightning(bolt11: String, amount: ULong? = null) {
@@ -209,7 +229,7 @@ class SendViewModel @Inject constructor(
 
     private fun getMinOnchainTx(): ULong {
         // TODO implement min tx size
-        return 400uL
+        return 600uL
     }
 
     override fun onCleared() {
@@ -228,12 +248,14 @@ data class SendUiState(
     val isAmountInputValid: Boolean = false,
     val label: String = "",
     val message: String = "",
+    val params: Map<String, String>? = null,
 )
 
 sealed class SendEffect {
     data object NavigateToAddress : SendEffect()
     data object NavigateToAmount : SendEffect()
     data object NavigateToReview : SendEffect()
+    data class PaymentSuccess(val details: NewTransactionSheetDetails) : SendEffect()
 }
 
 sealed class SendEvent {

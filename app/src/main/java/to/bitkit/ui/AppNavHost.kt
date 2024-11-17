@@ -53,7 +53,7 @@ fun AppNavHost(
     }
 
     NavHost(navController, startDestination = Routes.Home) {
-        home(walletViewModel, navController)
+        home(walletViewModel, appViewModel, navController)
         settings(walletViewModel, navController)
         nodeState(walletViewModel, navController)
         lightning(walletViewModel, navController)
@@ -69,10 +69,11 @@ fun AppNavHost(
 // region destinations
 private fun NavGraphBuilder.home(
     viewModel: WalletViewModel,
+    appViewModel: AppViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
-        HomeScreen(viewModel, navController)
+        HomeScreen(viewModel, appViewModel, navController)
     }
 }
 

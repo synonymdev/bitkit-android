@@ -23,6 +23,7 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
@@ -44,7 +45,8 @@ fun SendAndReviewScreen(
         ) {
             LabelText(text = stringResource(R.string.label_amount))
             Text(
-                text = "${uiState.amount}", style = MaterialTheme.typography.titleLarge,
+                text = moneyString(uiState.amount.toLong()),
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
             )
 
