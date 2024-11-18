@@ -61,11 +61,11 @@ class SendViewModel @Inject constructor(
                     is SendEvent.Scan -> onScanSuccess(it.data)
 
                     is SendEvent.AddressChange -> onAddressChange(it.value)
-                    SendEvent.AddressReset -> resetAddress()
+                    SendEvent.AddressReset -> resetAddressInput()
                     is SendEvent.AddressContinue -> onAddressContinue(it.data)
 
                     is SendEvent.AmountChange -> onAmountChange(it.value)
-                    SendEvent.AmountReset -> resetAmount()
+                    SendEvent.AmountReset -> resetAmountInput()
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
                     SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
 
@@ -77,11 +77,11 @@ class SendViewModel @Inject constructor(
     }
 
     private fun onEnterManuallyClick() {
-        resetAddress()
+        resetAddressInput()
         setEffect(SendEffect.NavigateToAddress)
     }
 
-    private fun resetAddress() {
+    private fun resetAddressInput() {
         _uiState.update { state ->
             state.copy(
                 addressInput = "",
@@ -196,7 +196,7 @@ class SendViewModel @Inject constructor(
                     setEffect(SendEffect.NavigateToReview)
                     return
                 }
-                resetAmount()
+                resetAmountInput()
                 setEffect(SendEffect.NavigateToAmount)
             }
 
@@ -212,7 +212,7 @@ class SendViewModel @Inject constructor(
                     )
                 }
                 if (invoice.amountSatoshis == 0uL) {
-                    resetAmount()
+                    resetAmountInput()
                     setEffect(SendEffect.NavigateToAmount)
                 } else {
                     setEffect(SendEffect.NavigateToReview)
@@ -231,7 +231,7 @@ class SendViewModel @Inject constructor(
         }
     }
 
-    private fun resetAmount() {
+    private fun resetAmountInput() {
         _uiState.update { state ->
             state.copy(
                 amountInput = "",
