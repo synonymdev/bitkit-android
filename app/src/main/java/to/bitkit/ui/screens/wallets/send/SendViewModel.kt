@@ -260,6 +260,9 @@ class SendViewModel @Inject constructor(
                                 )
                             )
                         )
+                    } else {
+                        // TODO error UI
+                        Log.e(APP, "Error sending onchain payment", result.exceptionOrNull())
                     }
                 }
 
@@ -272,6 +275,9 @@ class SendViewModel @Inject constructor(
                     val result = sendLightning(bolt11, paymentAmount)
                     if (result.isSuccess) {
                         setEffect(SendEffect.PaymentSuccess())
+                    } else {
+                        // TODO error UI
+                        Log.e(APP, "Error sending lightning payment", result.exceptionOrNull())
                     }
                 }
             }
