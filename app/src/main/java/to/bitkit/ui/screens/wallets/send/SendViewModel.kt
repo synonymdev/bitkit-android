@@ -177,20 +177,25 @@ class SendViewModel @Inject constructor(
         when (scan) {
             is Scanner.OnChain -> {
                 val invoice: OnChainInvoice = scan.invoice
+                val lnInvoice: LightningInvoice? = invoice.bolt11()?.let { bolt11 ->
+                    val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
+                    (decoded as? Scanner.Lightning)?.invoice
+                }
                 _uiState.update {
                     it.copy(
                         address = invoice.address,
                         bolt11 = invoice.bolt11(),
                         amount = invoice.amountSatoshis,
                         isUnified = invoice.supportsLightning(),
-                        decodedInvoice = invoice.bolt11()?.let { bolt11 ->
-                            val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
-                            (decoded as? Scanner.Lightning)?.invoice
-                        },
-                        payMethod = SendMethod.ONCHAIN,
+                        decodedInvoice = lnInvoice,
+                        payMethod = lnInvoice?.let { SendMethod.LIGHTNING  } ?: SendMethod.ONCHAIN,
                     )
                 }
-                // TODO handle non-0 sats bolt11
+                val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis != null && lnInvoice.amountSatoshis > 0uL
+                if (isLnInvoiceWithAmount) {
+                    setEffect(SendEffect.NavigateToReview)
+                    return
+                }
                 resetAmount()
                 setEffect(SendEffect.NavigateToAmount)
             }
