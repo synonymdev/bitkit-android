@@ -24,6 +24,8 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
 import to.bitkit.services.bolt11
 import to.bitkit.services.supportsLightning
+import uniffi.bitkitcore.LightningInvoice
+import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
@@ -102,8 +104,7 @@ class SendViewModel @Inject constructor(
 
     private fun onAddressContinue(data: String) {
         viewModelScope.launch {
-            val scan = decodeDataOrNull(data)
-            handleData(scan)
+            decodeAndHandle(data)
         }
     }
 
@@ -157,29 +158,35 @@ class SendViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val scan = decodeDataOrNull(data)
-            handleData(scan)
+            decodeAndHandle(data)
         }
     }
 
     private fun onScanSuccess(data: String) {
         viewModelScope.launch {
-            val scan = decodeDataOrNull(data)
-            handleData(scan)
+            decodeAndHandle(data)
         }
     }
 
-    private fun handleData(scan: Scanner?) {
+    private suspend fun decodeAndHandle(data: String) {
+        val scan = runCatching { scannerService.decode(data) }
+            .onFailure { Log.e(APP, "Failed to decode input data", it) }
+            .getOrNull()
+        this.scan = scan
+
         when (scan) {
             is Scanner.OnChain -> {
+                val invoice: OnChainInvoice = scan.invoice
                 _uiState.update {
                     it.copy(
-                        address = scan.invoice.address,
-                        bolt11 = scan.invoice.bolt11(),
-                        amount = scan.invoice.amountSatoshis,
-                        label = scan.invoice.label.orEmpty(),
-                        message = scan.invoice.message.orEmpty(),
-                        isUnified = scan.invoice.supportsLightning(),
+                        address = invoice.address,
+                        bolt11 = invoice.bolt11(),
+                        amount = invoice.amountSatoshis,
+                        isUnified = invoice.supportsLightning(),
+                        decodedInvoice = invoice.bolt11()?.let { bolt11 ->
+                            val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
+                            (decoded as? Scanner.Lightning)?.invoice
+                        },
                         payMethod = SendMethod.ONCHAIN,
                     )
                 }
@@ -189,7 +196,22 @@ class SendViewModel @Inject constructor(
             }
 
             is Scanner.Lightning -> {
-                toast("Lightning coming soon: ${scan.invoice}")
+                val invoice: LightningInvoice = scan.invoice
+                _uiState.update {
+                    it.copy(
+                        amount = invoice.amountSatoshis,
+                        bolt11 = data,
+                        description = invoice.description.orEmpty(),
+                        decodedInvoice = invoice,
+                        payMethod = SendMethod.LIGHTNING,
+                    )
+                }
+                if (invoice.amountSatoshis == 0uL) {
+                    resetAmount()
+                    setEffect(SendEffect.NavigateToAmount)
+                } else {
+                    setEffect(SendEffect.NavigateToReview)
+                }
             }
 
             null -> {
@@ -204,15 +226,6 @@ class SendViewModel @Inject constructor(
         }
     }
 
-    private suspend fun decodeDataOrNull(data: String): Scanner? {
-        val result = runCatching { scannerService.decode(data) }
-            .onFailure { Log.e(APP, "Failed to decode input data", it) }
-            .getOrNull()
-
-        scan = result
-        return result
-    }
-
     private fun resetAmount() {
         _uiState.update { state ->
             state.copy(
@@ -224,43 +237,37 @@ class SendViewModel @Inject constructor(
 
     private fun onPay() {
         viewModelScope.launch {
-            when (val scanResult = scan) {
-                is Scanner.OnChain -> {
-                    val amount = uiState.value.amount
-
-                    when (uiState.value.payMethod) {
-                        SendMethod.ONCHAIN -> {
-                            val address = uiState.value.address
-                            val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
-                                .getOrNull()
-                                ?: return@launch // TODO show error
-                            val result = sendOnchain(validatedAddress.address, amount)
-                            if (result.isSuccess) {
-                                setEffect(
-                                    SendEffect.PaymentSuccess(
-                                        NewTransactionSheetDetails(
-                                            type = NewTransactionSheetType.ONCHAIN,
-                                            direction = NewTransactionSheetDirection.SENT,
-                                            sats = amount.toLong(),
-                                        )
-                                    )
+            val amount = uiState.value.amount
+            when (uiState.value.payMethod) {
+                SendMethod.ONCHAIN -> {
+                    val address = uiState.value.address
+                    val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
+                        .getOrNull()
+                        ?: return@launch // TODO show error
+                    val result = sendOnchain(validatedAddress.address, amount)
+                    if (result.isSuccess) {
+                        setEffect(
+                            SendEffect.PaymentSuccess(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.ONCHAIN,
+                                    direction = NewTransactionSheetDirection.SENT,
+                                    sats = amount.toLong(),
                                 )
-                            }
-                        }
-
-                        SendMethod.LIGHTNING -> {
-                            val bolt11 = scanResult.invoice.bolt11()
-                                ?: return@launch // TODO show error
-                            val result = sendLightning(bolt11, amount)
-                            if (result.isSuccess) {
-                                setEffect(SendEffect.PaymentSuccess())
-                            }
-                        }
+                            )
+                        )
                     }
                 }
 
-                else -> {
-                    withContext(uiThread) { toast("Coming soon: send options") }
+                SendMethod.LIGHTNING -> {
+                    val bolt11 = uiState.value.bolt11 ?: return@launch // TODO show error
+                    // Determine if we should override amount
+                    val decodedInvoice = uiState.value.decodedInvoice
+                    val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
+                    val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
+                    val result = sendLightning(bolt11, paymentAmount)
+                    if (result.isSuccess) {
+                        setEffect(SendEffect.PaymentSuccess())
+                    }
                 }
             }
         }
@@ -300,10 +307,10 @@ data class SendUiState(
     val amount: ULong = 0u,
     val amountInput: String = "",
     val isAmountInputValid: Boolean = false,
-    val label: String = "",
-    val message: String = "",
+    val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
+    val decodedInvoice: LightningInvoice? = null,
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
