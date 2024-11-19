@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -22,9 +24,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppTextFieldDefaults
@@ -61,22 +66,39 @@ fun SendAmountScreen(
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
             )
-            Row(modifier = Modifier.padding(vertical = 8.dp)) {
+
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+                Column {
+                    val balances = LocalBalances.current
+                    LabelText(text = stringResource(R.string.label_available))
+                    Text(
+                        text = when (uiState.payMethod) {
+                            SendMethod.ONCHAIN -> moneyString(balances.totalOnchainSats.toLong())
+                            SendMethod.LIGHTNING -> moneyString(balances.totalLightningSats.toLong())
+                        }
+                    )
+                }
                 Spacer(modifier = Modifier.weight(1f))
-                if (uiState.isUnified) {
-                    OutlinedColorButton(
-                        onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
-                        color = if (uiState.payMethod == SendMethod.ONCHAIN)
-                            colorScheme.primary else colorScheme.secondary
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (uiState.payMethod == SendMethod.ONCHAIN) R.string.savings else R.string.spending
-                            )
-                        )
+                OutlinedColorButton(
+                    onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+                    enabled = uiState.isUnified,
+                    color = when (uiState.payMethod) {
+                        SendMethod.ONCHAIN -> colorScheme.primary
+                        SendMethod.LIGHTNING -> colorScheme.secondary
                     }
+                ) {
+                    Text(
+                        text = when (uiState.payMethod) {
+                            SendMethod.ONCHAIN -> stringResource(R.string.savings)
+                            SendMethod.LIGHTNING -> stringResource(R.string.spending)
+                        }
+                    )
                 }
             }
+            HorizontalDivider()
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -97,7 +119,6 @@ private fun SendAmountViewPreview() {
     AppThemeSurface {
         SendAmountScreen(
             uiState = SendUiState(
-                isUnified = true,
                 payMethod = SendMethod.LIGHTNING,
             ),
             onBack = {},

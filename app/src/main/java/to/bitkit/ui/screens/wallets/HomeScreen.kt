@@ -73,7 +73,7 @@ private fun HomeScreen(
                 .padding(horizontal = 24.dp)
                 .fillMaxSize()
         ) {
-            BalanceSummary(uiState, navController)
+            BalanceSummary(navController)
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(16.dp))
@@ -93,6 +93,7 @@ private fun HomeScreen(
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
         // Send Sheet
         if (viewModel.showSendSheet) {
             ModalBottomSheet(
@@ -112,6 +113,7 @@ private fun HomeScreen(
                 )
             }
         }
+
         // Receive Sheet
         if (showReceiveSheet) {
             ModalBottomSheet(
