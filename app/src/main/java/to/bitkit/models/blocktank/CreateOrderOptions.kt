@@ -19,6 +19,7 @@ data class CreateOrderRequest(
     val wakeToOpen: WakeToOpen? = null,
     val nodeId: String? = null,
     val refundOnchainAddress: String? = null,
+    val announceChannel: Boolean = false,
     // endregion
 ) {
     fun withOptions(options: CreateOrderOptions): CreateOrderRequest {
@@ -34,6 +35,7 @@ data class CreateOrderRequest(
             wakeToOpen = options.wakeToOpen,
             nodeId = options.nodeId,
             refundOnchainAddress = options.refundOnchainAddress,
+            announceChannel = options.announceChannel,
         )
     }
 }
@@ -100,6 +102,12 @@ data class CreateOrderOptions(
      * User entered refund onchain address.
      */
     val refundOnchainAddress: String? = null,
+
+    /**
+     * Should channel be public
+     */
+    val announceChannel: Boolean,
+
     // endregion
 ) {
     @Serializable
@@ -124,6 +132,7 @@ data class CreateOrderOptions(
             zeroConfPayment = null,
             zeroReserve = false,
             wakeToOpen = null,
+            announceChannel = false,
         )
     }
 }

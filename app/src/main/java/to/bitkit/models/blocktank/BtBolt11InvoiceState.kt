@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Suppress("EnumEntryName")
 @Serializable
-enum class BtBolt11PaymentState {
+enum class BtBolt11InvoiceState {
     /**
      * Expect payment
      */
