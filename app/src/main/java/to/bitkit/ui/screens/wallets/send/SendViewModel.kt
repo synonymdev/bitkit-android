@@ -202,6 +202,10 @@ class SendViewModel @Inject constructor(
 
             is Scanner.Lightning -> {
                 val invoice: LightningInvoice = scan.invoice
+                if (invoice.isExpired) {
+                    toast("This invoice has expired")
+                    return
+                }
                 _uiState.update {
                     it.copy(
                         amount = invoice.amountSatoshis,
