@@ -25,7 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ext.takeEnds
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.theme.Green500
 
@@ -60,7 +60,7 @@ internal fun Peers(
                         .background(color = Green500)
                 )
                 Text(
-                    text = "${it.nodeId.takeEnds(12)}@${it.address}",
+                    text = "${it.nodeId.ellipsisMiddle(25)}@${it.address}",
                     style = MaterialTheme.typography.labelSmall,
                     overflow = TextOverflow.Ellipsis,
                     maxLines = 1,

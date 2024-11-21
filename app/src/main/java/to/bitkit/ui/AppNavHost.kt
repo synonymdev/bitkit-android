@@ -19,13 +19,13 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.screens.DevSettingsScreen
-import to.bitkit.ui.screens.TransferScreen
-import to.bitkit.ui.screens.TransferViewModel
-import to.bitkit.ui.screens.wallet.HomeScreen
-import to.bitkit.ui.screens.wallet.SavingsWalletScreen
-import to.bitkit.ui.screens.wallet.SpendingWalletScreen
-import to.bitkit.ui.screens.wallet.activity.ActivityItemScreen
-import to.bitkit.ui.screens.wallet.activity.AllActivityScreen
+import to.bitkit.ui.screens.transfer.TransferScreen
+import to.bitkit.ui.screens.transfer.TransferViewModel
+import to.bitkit.ui.screens.wallets.HomeScreen
+import to.bitkit.ui.screens.wallets.SavingsWalletScreen
+import to.bitkit.ui.screens.wallets.SpendingWalletScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
+import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 
@@ -53,7 +53,7 @@ fun AppNavHost(
     }
 
     NavHost(navController, startDestination = Routes.Home) {
-        home(walletViewModel, navController)
+        home(walletViewModel, appViewModel, navController)
         settings(walletViewModel, navController)
         nodeState(walletViewModel, navController)
         lightning(walletViewModel, navController)
@@ -69,10 +69,11 @@ fun AppNavHost(
 // region destinations
 private fun NavGraphBuilder.home(
     viewModel: WalletViewModel,
+    appViewModel: AppViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
-        HomeScreen(viewModel, navController)
+        HomeScreen(viewModel, appViewModel, navController)
     }
 }
 

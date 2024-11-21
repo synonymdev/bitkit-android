@@ -31,7 +31,7 @@ fun PagerWithIndicator(
             modifier = Modifier.weight(1f)
         )
         @Suppress("DEPRECATION")
-        (HorizontalPagerIndicator(
+        HorizontalPagerIndicator(
             pagerState = pagerState,
             pageCount = pagerState.pageCount,
             indicatorWidth = 8.dp,
@@ -41,6 +41,6 @@ fun PagerWithIndicator(
                 .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.large)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .align(Alignment.CenterHorizontally)
-        ))
+        )
     }
 }

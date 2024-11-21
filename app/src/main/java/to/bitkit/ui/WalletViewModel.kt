@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -51,11 +50,10 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.ScannedData
-import to.bitkit.models.ScannedOptions
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.ui.screens.wallet.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.testActivityItems
 import javax.inject.Inject
 
 @HiltViewModel
@@ -351,46 +349,6 @@ class WalletViewModel @Inject constructor(
 
     fun createInvoice(amountSats: ULong, description: String = "Bitkit", expirySeconds: UInt = 7200u): String {
         return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
-    }
-
-    fun onPasteFromClipboard(data: String) {
-        if (data.isBlank()) {
-            Log.e(APP, "No data in clipboard")
-            return
-        }
-        _scannedData = runCatching { ScannedData(data) }
-            .onFailure {
-                Log.e(APP, "Failed to read data from clipboard", it)
-                toast("${it.message}")
-            }
-            .getOrNull()
-
-        Log.d(APP, "Pasted data: $_scannedData")
-
-        // TODO: nav to next view instead
-        _scannedData?.options?.first?.let {
-            when (it) {
-                is ScannedOptions.Onchain -> {
-                    toast("Onchain address: ${it.address}")
-                }
-
-                is ScannedOptions.Bolt11 -> {
-                    send(it.invoice)
-                }
-            }
-        }
-    }
-
-    fun onSendManually(data: String) {
-        _scannedData = runCatching { ScannedData(data) }.getOrNull()
-        _scannedData = runCatching { ScannedData(data) }
-            .onFailure {
-                Log.e(APP, "Failed to read data from text field", it)
-                toast("${it.message}")
-            }
-            .getOrNull()
-        // TODO: nav to next view
-        toast("Input: $data. Coming soon.")
     }
 
     fun onScanSuccess(data: String) {

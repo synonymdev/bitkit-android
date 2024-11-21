@@ -32,7 +32,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
-import to.bitkit.ext.takeEnds
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
@@ -103,7 +103,7 @@ private fun ChannelItem(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = channelId.takeEnds(25),
+            text = channelId.ellipsisMiddle(50),
             style = MaterialTheme.typography.labelSmall,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
@@ -164,7 +164,7 @@ private fun ChannelItemPreview() {
     AppThemeSurface {
         ChannelItem(
             isReady = true,
-            channelId = "0000000000",
+            channelId = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789",
             outbound = 1000,
             inbound = 1000,
             onClose = {},
