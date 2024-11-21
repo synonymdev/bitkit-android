@@ -22,8 +22,8 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
-import to.bitkit.services.bolt11
-import to.bitkit.services.supportsLightning
+import to.bitkit.services.lightningParam
+import to.bitkit.services.hasLightingParam
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.Scanner
@@ -177,16 +177,23 @@ class SendViewModel @Inject constructor(
         when (scan) {
             is Scanner.OnChain -> {
                 val invoice: OnChainInvoice = scan.invoice
-                val lnInvoice: LightningInvoice? = invoice.bolt11()?.let { bolt11 ->
+                val lnInvoice: LightningInvoice? = invoice.lightningParam()?.let { bolt11 ->
                     val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
-                    (decoded as? Scanner.Lightning)?.invoice
+                    val lightningInvoice = (decoded as? Scanner.Lightning)?.invoice ?: return@let null
+
+                    if (lightningService.canSend(lightningInvoice.amountSatoshis)) {
+                        return@let lightningInvoice
+                    } else {
+                        // Ignore lighting
+                        return@let null
+                    }
                 }
                 _uiState.update {
                     it.copy(
                         address = invoice.address,
-                        bolt11 = invoice.bolt11(),
+                        bolt11 = invoice.lightningParam(),
                         amount = invoice.amountSatoshis,
-                        isUnified = invoice.supportsLightning(),
+                        isUnified = invoice.hasLightingParam(),
                         decodedInvoice = lnInvoice,
                         payMethod = lnInvoice?.let { SendMethod.LIGHTNING  } ?: SendMethod.ONCHAIN,
                     )
@@ -206,6 +213,11 @@ class SendViewModel @Inject constructor(
                     toast("This invoice has expired")
                     return
                 }
+                if (!lightningService.canSend(invoice.amountSatoshis)) {
+                    toast("Insufficient Funds. You do not have enough funds to send this payment.")
+                    return
+                }
+
                 _uiState.update {
                     it.copy(
                         amount = invoice.amountSatoshis,
@@ -255,6 +267,8 @@ class SendViewModel @Inject constructor(
                         ?: return@launch // TODO show error
                     val result = sendOnchain(validatedAddress.address, amount)
                     if (result.isSuccess) {
+                        val txId = result.getOrNull()
+                        Log.i(APP, "Onchain send result txid: $txId")
                         setEffect(
                             SendEffect.PaymentSuccess(
                                 NewTransactionSheetDetails(
@@ -278,6 +292,8 @@ class SendViewModel @Inject constructor(
                     val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
                     val result = sendLightning(bolt11, paymentAmount)
                     if (result.isSuccess) {
+                        val paymentHash = result.getOrNull()
+                        Log.i(APP, "Lightning send result payment hash: $paymentHash")
                         setEffect(SendEffect.PaymentSuccess())
                     } else {
                         // TODO error UI

@@ -40,10 +40,10 @@ private fun onChainMock() = Scanner.OnChain(
 )
 // endregion
 
-fun OnChainInvoice.supportsLightning(): Boolean {
+fun OnChainInvoice.hasLightingParam(): Boolean {
     return params?.containsKey("lightning") == true
 }
 
-fun OnChainInvoice.bolt11(): String? {
+fun OnChainInvoice.lightningParam(): String? {
     return params?.get("lightning")
 }
