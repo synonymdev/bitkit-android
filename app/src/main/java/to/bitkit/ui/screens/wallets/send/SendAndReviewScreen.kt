@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
@@ -18,14 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ext.truncate
 import to.bitkit.ui.components.LabelText
-import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.send.components.SwipeButton
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.LightModePreview
@@ -47,7 +49,9 @@ fun SendAndReviewScreen(
             onBack()
         }
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
         ) {
             LabelText(text = stringResource(R.string.label_amount))
             Text(
@@ -147,9 +151,11 @@ fun SendAndReviewScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-            PrimaryButton(
-                text = stringResource(R.string.pay),
-                onClick = { onEvent(SendEvent.SwipeToPay) }
+            SwipeButton(
+                onComplete = {
+                    delay(300)
+                    onEvent(SendEvent.SwipeToPay)
+                }
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
