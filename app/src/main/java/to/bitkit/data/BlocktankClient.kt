@@ -59,7 +59,6 @@ class BlocktankClient @Inject constructor(
         post<IgnoreResponse>(
             "${Env.blocktankClientServer}/channels/$orderId/open", OpenChannelRequest(
                 connectionStringOrPubkey = nodeId,
-                announceChannel = false,
             )
         )
     }
@@ -179,5 +178,4 @@ data class TestNotificationRequest(
 @Serializable
 data class OpenChannelRequest(
     val connectionStringOrPubkey: String,
-    val announceChannel: Boolean,
 )

@@ -36,7 +36,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendOptionsView(
-    onComplete: (NewTransactionSheetDetails) -> Unit,
+    onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
     val sendViewModel = hiltViewModel<SendViewModel>()
     Column(modifier = Modifier.fillMaxSize()) {
@@ -47,7 +47,7 @@ fun SendOptionsView(
                     is SendEffect.NavigateToAmount -> navController.navigate(SendRoutes.Amount)
                     is SendEffect.NavigateToAddress -> navController.navigate(SendRoutes.Address)
                     is SendEffect.NavigateToReview -> navController.navigate(SendRoutes.ReviewAndSend)
-                    is SendEffect.PaymentSuccess -> onComplete(it.details)
+                    is SendEffect.PaymentSuccess -> onComplete(it.sheet)
                 }
             }
         }

@@ -14,5 +14,4 @@ object AppTextFieldDefaults {
             unfocusedIndicatorColor = Color.Transparent,
             focusedIndicatorColor = Color.Transparent,
         )
-
 }

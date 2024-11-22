@@ -1,7 +1,9 @@
 package to.bitkit.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -52,18 +54,24 @@ fun AppNavHost(
             }
     }
 
-    NavHost(navController, startDestination = Routes.Home) {
-        home(walletViewModel, appViewModel, navController)
-        settings(walletViewModel, navController)
-        nodeState(walletViewModel, navController)
-        lightning(walletViewModel, navController)
-        devSettings(walletViewModel, navController)
-        savings(walletViewModel, navController)
-        spending(walletViewModel, navController)
-        transfer(navController)
-        allActivity(walletViewModel, navController)
-        activityItem(walletViewModel, navController)
+    val balance by walletViewModel.balanceState.collectAsState()
+    CompositionLocalProvider(
+        LocalBalances provides balance,
+    ) {
+        NavHost(navController, startDestination = Routes.Home) {
+            home(walletViewModel, appViewModel, navController)
+            settings(walletViewModel, navController)
+            nodeState(walletViewModel, navController)
+            lightning(walletViewModel, navController)
+            devSettings(walletViewModel, navController)
+            savings(walletViewModel, navController)
+            spending(walletViewModel, navController)
+            transfer(navController)
+            allActivity(walletViewModel, navController)
+            activityItem(walletViewModel, navController)
+        }
     }
+
 }
 
 // region destinations

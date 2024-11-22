@@ -20,8 +20,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
-import org.lightningdevkit.ldknode.MaxDustHtlcExposure
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -158,28 +156,28 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Syncing LDK…")
         ServiceQueue.LDK.background {
             node.syncWallets()
-            launch { setMaxDustHtlcExposureForCurrentChannels() }
+            // launch { setMaxDustHtlcExposureForCurrentChannels() }
         }
         Log.i(LDK, "LDK synced")
     }
 
-    private fun setMaxDustHtlcExposureForCurrentChannels() {
-        if (Env.network != Network.REGTEST) {
-            Log.d(LDK, "Not updating channel config for non-regtest network")
-            return
-        }
-        val node = this.node ?: throw ServiceError.NodeNotStarted
-        runCatching {
-            for (channel in node.listChannels()) {
-                val config = channel.config
-                config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
-                node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
-                Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
-            }
-        }.onFailure {
-            Log.e(LDK, "Failed to update channel config", it)
-        }
-    }
+    // private fun setMaxDustHtlcExposureForCurrentChannels() {
+    //     if (Env.network != Network.REGTEST) {
+    //         Log.d(LDK, "Not updating channel config for non-regtest network")
+    //         return
+    //     }
+    //     val node = this.node ?: throw ServiceError.NodeNotStarted
+    //     runCatching {
+    //         for (channel in node.listChannels()) {
+    //             val config = channel.config
+    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
+    //             node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
+    //             Log.i(LDK, "Updated channel config for: ${channel.userChannelId}")
+    //         }
+    //     }.onFailure {
+    //         Log.e(LDK, "Failed to update channel config", it)
+    //     }
+    // }
 
     suspend fun sign(message: String): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
@@ -276,6 +274,25 @@ class LightningService @Inject constructor(
                 node.bolt11Payment().receiveVariableAmount(description, expirySecs)
             }
         }
+    }
+
+    fun canSend(amountSats: ULong): Boolean {
+        val channels = this.channels
+        if (channels == null) {
+            Log.w(LDK, "Channels not available")
+            return false
+        }
+
+        val totalNextOutboundHtlcLimitSats = channels
+            .filter { it.isUsable }
+            .sumOf { it.nextOutboundHtlcLimitMsat / 1000uL }
+
+        if (totalNextOutboundHtlcLimitSats < amountSats) {
+            Log.w(LDK, "Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats")
+            return false
+        }
+
+        return true
     }
 
     suspend fun send(address: Address, sats: ULong): Txid {

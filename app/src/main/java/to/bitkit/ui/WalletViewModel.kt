@@ -45,6 +45,7 @@ import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.first
 import to.bitkit.ext.toast
+import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -71,6 +72,9 @@ class WalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
+    private val _balanceState = MutableStateFlow(BalanceState())
+    val balanceState = _balanceState.asStateFlow()
+
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
 
     private var _onchainAddress: String
@@ -89,6 +93,7 @@ class WalletViewModel @Inject constructor(
 
     var showSendSheet by mutableStateOf(false)
 
+    // TODO compute derivatives of activityItems
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
         private set
     var latestActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
@@ -211,13 +216,13 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun syncBalances() {
-        lightningService.balances?.let { b ->
-            _uiState.update {
+        lightningService.balances?.let { balance ->
+            _uiState.update { it.copy(balanceDetails = balance) }
+            _balanceState.update {
                 it.copy(
-                    totalOnchainSats = b.totalOnchainBalanceSats,
-                    totalLightningSats = b.totalLightningBalanceSats,
-                    totalBalanceSats = b.totalLightningBalanceSats + b.totalOnchainBalanceSats,
-                    balanceDetails = b,
+                    totalOnchainSats = balance.totalOnchainBalanceSats,
+                    totalLightningSats = balance.totalLightningBalanceSats,
+                    totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats,
                 )
             }
         }
@@ -562,9 +567,6 @@ class WalletViewModel @Inject constructor(
 // region state
 data class MainUiState(
     val nodeId: String = "",
-    val totalOnchainSats: ULong? = null,
-    val totalLightningSats: ULong? = null,
-    val totalBalanceSats: ULong? = null,
     val balanceDetails: BalanceDetails? = null,
     val onchainAddress: String = "",
     val bolt11: String = "",

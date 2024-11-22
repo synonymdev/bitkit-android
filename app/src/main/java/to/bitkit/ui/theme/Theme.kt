@@ -21,13 +21,14 @@ val Teal200 = Color(0xFF03DAC5)
 val Green500 = Color(0xFF4CAF50)
 val Orange500 = Color(0xFFFF9800)
 val Purple500 = Color(0xFF9C27B0)
+val Purple700 = Color(0xFFB95CE8)
 
 private object ColorPalette {
     @Stable
     val Light = lightColorScheme(
         primary = Brand500,
         primaryContainer = Brand50,
-        secondary = Teal200,
+        secondary = Purple700,
         background = Color.White,
         surface = Color.White,
         surfaceVariant = Gray100,
@@ -45,7 +46,7 @@ private object ColorPalette {
     @Stable
     val Dark = darkColorScheme(
         primary = Brand500,
-        secondary = Teal200,
+        secondary = Purple700,
         background = Color.Black,
         surface = Color.Black,
         surfaceVariant = gray900,
