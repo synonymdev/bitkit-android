@@ -16,10 +16,10 @@ android {
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -124,6 +124,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
     ksp(libs.hilt.compiler)
+    androidTestImplementation(libs.hilt.android.testing) // instrumented tests
+    testImplementation(libs.hilt.android.testing) // robolectric tests
     // WorkManager
     implementation(libs.hilt.work)
     implementation(libs.work.runtime.ktx)
