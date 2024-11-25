@@ -14,6 +14,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.BottomSheetType
+import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,6 +28,12 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             keychain.observeExists(Keychain.Key.BIP39_MNEMONIC).collect { walletExists ->
                 uiState = uiState.copy(walletExists = walletExists)
+            }
+        }
+
+        viewModelScope.launch {
+            ToastEventBus.events.collect {
+                toast(it.type, it.title, it.description, it.autoHide, it.visibilityTime)
             }
         }
     }
@@ -75,7 +82,7 @@ class AppViewModel @Inject constructor(
         title: String,
         description: String,
         autoHide: Boolean = true,
-        visibilityTime: Long = 3000,
+        visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
     ) {
         currentToast = Toast(
             type = type,

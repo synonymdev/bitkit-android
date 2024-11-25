@@ -8,4 +8,8 @@ data class Toast(
     val visibilityTime: Long,
 ) {
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
+
+    companion object {
+        const val VISIBILITY_TIME_DEFAULT = 3000L
+    }
 }
