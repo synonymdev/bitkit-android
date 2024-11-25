@@ -3,9 +3,10 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ButtonDefaults
@@ -53,8 +54,10 @@ fun ReceiveQRScreen(
 
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
+            .fillMaxWidth()
+            .fillMaxHeight(.875f)
+            .imePadding()
+            .padding(horizontal = 16.dp),
     ) {
         Text(
             text = "Receive Bitcoin",
@@ -147,6 +150,7 @@ private fun ContentView(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

@@ -14,6 +14,7 @@ import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -32,13 +33,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppThemeSurface {
-                AppNavHost(appViewModel, walletViewModel) {
+                ContentView(appViewModel, walletViewModel) {
                     launchStartupActivity()
                 }
 
-                if (appViewModel.showNewTransaction) {
-                    NewTransactionSheet(appViewModel)
-                }
+                ToastOverlay(
+                    toast = appViewModel.currentToast,
+                    onDismiss = {
+                        appViewModel.hideToast()
+                    }
+                )
+            }
+
+            if (appViewModel.showNewTransaction) {
+                NewTransactionSheet(appViewModel)
             }
         }
     }

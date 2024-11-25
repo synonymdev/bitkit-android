@@ -11,13 +11,13 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 val Gray100 = Color(0xFFF4F4F4)
-val Gray200 = Color(0xFFE0E0E0)
 val Gray300 = Color(0xFFBDBDBD)
 val Gray400 = Color(0xFFABABAB)
 val gray900 = Color(0xFF212121)
 val Brand50 = Color(0xFFFFF1EE)
 val Brand500 = Color(0xFFEC5428)
-val Teal200 = Color(0xFF03DAC5)
+val Blue500 = Color(0xFF2196F3)
+val Red500 = Color(0xFFF44336)
 val Green500 = Color(0xFF4CAF50)
 val Orange500 = Color(0xFFFF9800)
 val Purple500 = Color(0xFF9C27B0)

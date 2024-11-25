@@ -55,7 +55,6 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             events.collect {
                 when (it) {
-                    SendEvent.Contact -> toast("Coming soon: Contact")
                     SendEvent.EnterManually -> onEnterManuallyClick()
                     is SendEvent.Paste -> onPasteInvoice(it.data)
                     is SendEvent.Scan -> onScanSuccess(it.data)
@@ -104,7 +103,7 @@ class SendViewModel @Inject constructor(
 
     private fun onAddressContinue(data: String) {
         viewModelScope.launch {
-            decodeAndHandle(data)
+            handleScannedData(data)
         }
     }
 
@@ -158,17 +157,17 @@ class SendViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            decodeAndHandle(data)
+            handleScannedData(data)
         }
     }
 
     private fun onScanSuccess(data: String) {
         viewModelScope.launch {
-            decodeAndHandle(data)
+            handleScannedData(data)
         }
     }
 
-    private suspend fun decodeAndHandle(data: String) {
+    private suspend fun handleScannedData(data: String) {
         val scan = runCatching { scannerService.decode(data) }
             .onFailure { Log.e(APP, "Failed to decode input data", it) }
             .getOrNull()
@@ -354,7 +353,6 @@ sealed class SendEffect {
 }
 
 sealed class SendEvent {
-    data object Contact : SendEvent()
     data object EnterManually : SendEvent()
     data class Paste(val data: String) : SendEvent()
     data class Scan(val data: String) : SendEvent()

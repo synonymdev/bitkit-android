@@ -2,9 +2,7 @@ package to.bitkit.ui
 
 import android.content.Context
 import android.util.Log
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -90,8 +88,6 @@ class WalletViewModel @Inject constructor(
         set(value) = let { appStorage.bip21 = value }
 
     private var _scannedData: ScannedData? = null
-
-    var showSendSheet by mutableStateOf(false)
 
     // TODO compute derivatives of activityItems
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
@@ -364,7 +360,6 @@ class WalletViewModel @Inject constructor(
             }
             .getOrNull()
         Log.d(APP, "Scanned data: $data")
-        showSendSheet = true
         // TODO: handle
     }
 

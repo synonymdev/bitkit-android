@@ -2,8 +2,11 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusWeak
@@ -15,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
@@ -26,9 +30,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.components.SendButton
 import to.bitkit.ui.shared.util.qrCodeScanner
@@ -39,7 +45,12 @@ fun SendOptionsView(
     onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
     val sendViewModel = hiltViewModel<SendViewModel>()
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(.875f)
+            .imePadding()
+    ) {
         val navController = rememberNavController()
         LaunchedEffect(sendViewModel, navController) {
             sendViewModel.effect.collect {
@@ -93,6 +104,8 @@ fun SendOptionsView(
 private fun SendOptionsContent(
     onEvent: (SendEvent) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    val app = appViewModel
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -111,7 +124,9 @@ private fun SendOptionsContent(
             icon = Icons.Default.Person,
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            onEvent(SendEvent.Contact)
+            scope.launch {
+                app?.toast(Exception("Coming soon: Contact"))
+            }
         }
 
         val clipboard = LocalClipboardManager.current
@@ -134,12 +149,18 @@ private fun SendOptionsContent(
 
         val scanner = qrCodeScanner()
         SendButton(
-            stringResource(id = R.string.scan_qr),
+            stringResource(R.string.scan_qr),
             icon = Icons.Default.CenterFocusWeak,
         ) {
             scanner?.startScan()?.addOnCompleteListener { task ->
-                task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
-                    onEvent(SendEvent.Scan(data))
+                if (task.isSuccessful) {
+                    task.result?.rawValue?.let { data ->
+                        onEvent(SendEvent.Scan(data))
+                    }
+                } else {
+                    task.exception?.let {
+                        app?.toast(it)
+                    }
                 }
             }
         }
