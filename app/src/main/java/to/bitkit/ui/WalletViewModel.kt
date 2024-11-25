@@ -9,7 +9,6 @@ import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +18,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ChannelId
@@ -35,29 +33,26 @@ import to.bitkit.data.AppStorage
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
-import to.bitkit.env.Tag.LDK
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.first
-import to.bitkit.ext.toast
 import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.ScannedData
+import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.wallets.activity.testActivityItems
+import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 @HiltViewModel
 class WalletViewModel @Inject constructor(
-    @UiDispatcher private val uiThread: CoroutineDispatcher,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @ApplicationContext private val appContext: Context,
     private val appStorage: AppStorage,
@@ -86,8 +81,6 @@ class WalletViewModel @Inject constructor(
     private var _bip21: String
         get() = appStorage.bip21
         set(value) = let { appStorage.bip21 = value }
-
-    private var _scannedData: ScannedData? = null
 
     // TODO compute derivatives of activityItems
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
@@ -331,7 +324,7 @@ class WalletViewModel @Inject constructor(
     fun disconnectPeer(peer: LnPeer) {
         viewModelScope.launch {
             lightningService.disconnectPeer(peer)
-            runOnUiThread { toast("Peer disconnected.") }
+            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Success", description = "Peer disconnected.")
             _uiState.update {
                 it.copy(peers = lightningService.peers.orEmpty())
             }
@@ -344,7 +337,13 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             runCatching { lightningService.send(bolt11) }
                 .onSuccess { syncState() }
-                .onFailure { runOnUiThread { toast("Error sending: $it") } }
+                .onFailure {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = "Error sending",
+                        description = it.message ?: "Unknown error"
+                    )
+                }
         }
     }
 
@@ -353,41 +352,45 @@ class WalletViewModel @Inject constructor(
     }
 
     fun onScanSuccess(data: String) {
-        _scannedData = runCatching { ScannedData(data) }
-            .onFailure {
-                Log.e(APP, "Failed to read data from scanner", it)
-                toast("${it.message}")
-            }
-            .getOrNull()
-        Log.d(APP, "Scanned data: $data")
-        // TODO: handle
+        viewModelScope.launch {
+            // TODO: handle
+            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Success", description = "Not implemented:\n$data")
+        }
     }
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
             val peer = lightningService.peers?.first ?: error("No peer connected to open channel.")
-            runOnUiThread { toast("Channel Pending.") }
-            lightningService.openChannel(peer, 50000u, 10000u)
+            runCatching { lightningService.openChannel(peer, 50000u, 10000u) }
+                .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = "Channel Pending",
+                        description = "Awaiting next block..."
+                    )
+                }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
-            }.onFailure {
-                Log.e(LDK, "Failed to close channel", it)
-            }
+            runCatching { lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId) }
+                .onFailure { ToastEventBus.send(it) }
             syncState()
         }
     }
 
     fun wipeStorage() {
-        if (Env.network != Network.REGTEST) {
-            toast("Can only nuke on regtest.")
-            return
-        }
         viewModelScope.launch {
+            if (Env.network != Network.REGTEST) {
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error",
+                    description = "Can only wipe on regtest."
+                )
+                return@launch
+            }
             runCatching {
                 if (_nodeLifecycleState.isRunningOrStarting()) {
                     stopLightningNode()
@@ -396,26 +399,24 @@ class WalletViewModel @Inject constructor(
                 appStorage.clear()
                 keychain.wipe()
             }.onFailure {
-                runOnUiThread { toast("Failed to wipe: $it") }
+                ToastEventBus.send(it)
             }
         }
     }
-
-    private suspend fun runOnUiThread(block: suspend CoroutineScope.() -> Unit) = withContext(uiThread, block)
 
     // region debug
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-
-            val result = runCatching { blocktankService.registerDevice(token) }
-                .onFailure { Log.e(LSP, "Failed to register device with LSP", it) }
-            runOnUiThread {
-                when (result.isSuccess) {
-                    true -> toast("Device registered with LSP Notifications Server.")
-                    else -> toast("Failed to register device with LSP Notifications Server.")
+            runCatching { blocktankService.registerDevice(token) }
+                .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = "Success",
+                        description = "Registered for notifications."
+                    )
                 }
-            }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
@@ -475,33 +476,35 @@ class WalletViewModel @Inject constructor(
         val orderIds = _uiState.value.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
         viewModelScope.launch {
             runCatching { blocktankService.getOrders(orderIds) }
-                .onFailure { runOnUiThread { toast("Failed to fetch orders from Blocktank.") } }
                 .onSuccess { orders ->
-                    runOnUiThread { toast("Orders synced") }
                     _uiState.update { it.copy(orders = orders) }
                 }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun debugBtCreateOrder(sats: Int) {
         viewModelScope.launch {
-            val result = runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
+            runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
                 .onSuccess { order ->
                     launch {
                         db.ordersDao().upsert(OrderEntity(order.id))
                         Log.d(APP, "Order ID saved to DB: ${order.id}")
                     }
                 }
-            runOnUiThread { toast(if (result.isSuccess) "Order created" else "Failed to create order") }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun debugBtPayOrder(order: BtOrder) {
         viewModelScope.launch {
             runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
-                .onFailure { runOnUiThread { toast("Failed to pay for order ${it.message}") } }
                 .onSuccess { txId ->
-                    runOnUiThread { toast("Payment sent $txId") }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = "Order paid",
+                        description = "Tx ID: $txId"
+                    )
                     // TODO: watch this order for updates
                     launch {
                         Log.d(DEV, "Syncing orders")
@@ -510,36 +513,55 @@ class WalletViewModel @Inject constructor(
                         debugBtOrdersSync()
                     }
                 }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun debugBtManualOpenChannel(order: BtOrder) {
         viewModelScope.launch {
             runCatching { blocktankService.openChannel(order.id) }
-                .onFailure { runOnUiThread { toast("Manual open error: ${it.message}") } }
-                .onSuccess { runOnUiThread { toast("Manual open success") } }
+                .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.INFO,
+                        title = "Success",
+                        description = "Opened channel manually"
+                    )
+                }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun debugActivityItems() {
-        val testItems = testActivityItems.toList()
-        activityItems.value = testItems
-        latestActivityItems.value = testItems.take(3)
-        latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
-        latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
-        toast("Test activity items added")
+        viewModelScope.launch {
+            val testItems = testActivityItems.toList()
+            activityItems.value = testItems
+            latestActivityItems.value = testItems.take(3)
+            latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
+            latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = "Success",
+                description = "Test activity items added"
+            )
+        }
     }
 
     fun debugTransactionSheet() {
-        NewTransactionSheetDetails.save(
-            appContext,
-            NewTransactionSheetDetails(
-                type = NewTransactionSheetType.LIGHTNING,
-                direction = NewTransactionSheetDirection.RECEIVED,
-                sats = 123456789,
+        viewModelScope.launch {
+            NewTransactionSheetDetails.save(
+                appContext,
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.LIGHTNING,
+                    direction = NewTransactionSheetDirection.RECEIVED,
+                    sats = 123456789,
+                )
             )
-        )
-        toast("Transaction cached. Restart app to see sheet.")
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = "Transaction sheet cached",
+                description = "Restart app to see sheet."
+            )
+        }
     }
     // endregion
 

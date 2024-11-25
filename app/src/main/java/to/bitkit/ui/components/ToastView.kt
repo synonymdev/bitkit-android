@@ -8,11 +8,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -26,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush.Companion.verticalGradient
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,7 +48,7 @@ fun ToastView(
     toast: Toast,
     onDismiss: () -> Unit,
 ) {
-    val backgroundColor = when (toast.type) {
+    val tintColor = when (toast.type) {
         Toast.ToastType.SUCCESS -> Green500
         Toast.ToastType.INFO -> Blue500
         Toast.ToastType.LIGHTNING -> Purple500
@@ -58,7 +62,8 @@ fun ToastView(
             .fillMaxWidth()
             .systemBarsPadding()
             .padding(horizontal = 16.dp)
-            .background(backgroundColor.copy(alpha = 0.95f), RoundedCornerShape(8.dp))
+            .background(verticalGradient(listOf(tintColor, Color.Black), startY = -100f), RoundedCornerShape(8.dp))
+            .border(1.dp, tintColor, RoundedCornerShape(8.dp))
             .padding(16.dp)
     ) {
         Row(
@@ -70,9 +75,11 @@ fun ToastView(
                     text = toast.title,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        fontSize = 17.sp,
+                        color = tintColor,
                     )
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = toast.description,
                     style = MaterialTheme.typography.bodyMedium.copy(

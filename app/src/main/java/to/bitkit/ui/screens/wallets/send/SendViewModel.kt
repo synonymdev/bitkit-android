@@ -11,19 +11,19 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.di.UiDispatcher
 import to.bitkit.env.Tag.APP
-import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.Toast
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
-import to.bitkit.services.lightningParam
 import to.bitkit.services.hasLightingParam
+import to.bitkit.services.lightningParam
+import to.bitkit.ui.shared.toast.ToastEventBus
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.Scanner
@@ -68,7 +68,7 @@ class SendViewModel @Inject constructor(
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
                     SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
 
-                    SendEvent.SpeedAndFee -> toast("Coming soon: Speed and Fee")
+                    SendEvent.SpeedAndFee -> ToastEventBus.send(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onPay()
                 }
             }
@@ -194,14 +194,16 @@ class SendViewModel @Inject constructor(
                         amount = invoice.amountSatoshis,
                         isUnified = invoice.hasLightingParam(),
                         decodedInvoice = lnInvoice,
-                        payMethod = lnInvoice?.let { SendMethod.LIGHTNING  } ?: SendMethod.ONCHAIN,
+                        payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
                     )
                 }
                 val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis != null && lnInvoice.amountSatoshis > 0uL
                 if (isLnInvoiceWithAmount) {
+                    Log.i(APP, "Found amount in invoice, proceeding with payment")
                     setEffect(SendEffect.NavigateToReview)
                     return
                 }
+                Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
                 resetAmountInput()
                 setEffect(SendEffect.NavigateToAmount)
             }
@@ -209,11 +211,19 @@ class SendViewModel @Inject constructor(
             is Scanner.Lightning -> {
                 val invoice: LightningInvoice = scan.invoice
                 if (invoice.isExpired) {
-                    toast("This invoice has expired")
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = "Invoice Expired",
+                        description = "This invoice has expired."
+                    )
                     return
                 }
                 if (!lightningService.canSend(invoice.amountSatoshis)) {
-                    toast("Insufficient Funds. You do not have enough funds to send this payment.")
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = "Insufficient Funds",
+                        description = "You do not have enough funds to send this payment."
+                    )
                     return
                 }
 
@@ -226,22 +236,31 @@ class SendViewModel @Inject constructor(
                         payMethod = SendMethod.LIGHTNING,
                     )
                 }
-                if (invoice.amountSatoshis == 0uL) {
+                if (invoice.amountSatoshis > 0uL) {
+                    Log.i(APP, "Found amount in invoice, proceeding with payment")
+                    setEffect(SendEffect.NavigateToReview)
+                } else {
+                    Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
                     resetAmountInput()
                     setEffect(SendEffect.NavigateToAmount)
-                } else {
-                    setEffect(SendEffect.NavigateToReview)
                 }
             }
 
             null -> {
-                // TODO implement
-                toast("Error decoding data")
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error",
+                    description = "Error decoding data"
+                )
             }
 
             else -> {
-                // TODO implement
-                toast("Coming soon…")
+                Log.w(APP, "Unhandled invoice type:: $data")
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Unsupported",
+                    description = "This type of invoice is not supported yet"
+                )
             }
         }
     }
@@ -306,14 +325,22 @@ class SendViewModel @Inject constructor(
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
         return runCatching { lightningService.send(address = address, amount) }
             .onFailure {
-                withContext(uiThread) { toast("Error sending: $it") }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error Sending",
+                    description = it.message ?: "Unknown error"
+                )
             }
     }
 
     private suspend fun sendLightning(bolt11: String, amount: ULong? = null): Result<PaymentId> {
         return runCatching { lightningService.send(bolt11 = bolt11, amount) }
             .onFailure {
-                withContext(uiThread) { toast("Error sending: $it") }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error Sending",
+                    description = it.message ?: "Unknown error"
+                )
             }
     }
 

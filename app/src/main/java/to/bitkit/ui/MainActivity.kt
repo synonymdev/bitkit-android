@@ -10,10 +10,10 @@ import androidx.activity.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
-import to.bitkit.ext.toast
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -87,12 +87,20 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                     } else {
-                        toast("Channel Opened")
+                        appViewModel.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = "Channel opened",
+                            description = "Ready to send"
+                        )
                     }
                 }
 
                 is Event.ChannelClosed -> {
-                    toast("Channel Closed")
+                    appViewModel.toast(
+                        type = Toast.ToastType.LIGHTNING,
+                        title = "Channel closed",
+                        description = "Balance moved from spending to savings"
+                    )
                 }
 
                 is Event.PaymentSuccessful -> {
@@ -107,7 +115,11 @@ class MainActivity : ComponentActivity() {
 
                 is Event.PaymentClaimable -> Unit
                 is Event.PaymentFailed -> {
-                    toast("Payment failed")
+                    appViewModel.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = "Payment failed",
+                        description = event.reason?.name ?: "Unknown error"
+                    )
                 }
             }
         } catch (e: Exception) {

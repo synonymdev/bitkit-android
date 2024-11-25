@@ -3,51 +3,38 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.lightningdevkit.ldknode.Txid
-import to.bitkit.data.AppDb
-import to.bitkit.data.entities.OrderEntity
-import to.bitkit.di.BgDispatcher
-import to.bitkit.di.UiDispatcher
-import to.bitkit.ext.toast
-import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.CJitEntry
 import to.bitkit.services.BlocktankService
-import to.bitkit.services.LightningService
+import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 @HiltViewModel
 class ReceiveViewModel @Inject constructor(
-    @UiDispatcher private val uiThread: CoroutineDispatcher,
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val db: AppDb,
     private val blocktankService: BlocktankService,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow<ReceiveUiState>(ReceiveUiState())
+    private val _uiState = MutableStateFlow(ReceiveUiState())
     val uiState = _uiState.asStateFlow()
 
     fun createCjit(sats: Int, description: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isCreatingCjit = true,
-            )
+            _uiState.update { it.copy(isCreatingCjit = true) }
             runCatching { blocktankService.createCjit(sats, description) }
                 .onSuccess { entry ->
-                    // launch { db.cjitDao().upsert(OrderEntity(order.id)) } // TODO cache cjit entries in DB
-                    _uiState.value = _uiState.value.copy(
-                        cjitEntry = entry,
-                        isCreatingCjit = false,
-                    )
+                    // TODO cache cjit entries in DB
+                    _uiState.update {
+                        it.copy(
+                            cjitEntry = entry,
+                            isCreatingCjit = false,
+                        )
+                    }
                 }
                 .onFailure {
-                    _uiState.value = _uiState.value.copy(
-                        isCreatingCjit = false,
-                    )
-                    withContext(uiThread) { toast( "$it") }
+                    _uiState.update { state -> state.copy(isCreatingCjit = false) }
+                    ToastEventBus.send(it)
                 }
         }
     }
