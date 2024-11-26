@@ -29,7 +29,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.ext.amountSats
-import to.bitkit.ext.formatted
+import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.scaffold.AppTopBar
@@ -38,7 +38,6 @@ import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
-import java.time.Instant
 
 @Composable
 fun ActivityItemScreen(
@@ -115,7 +114,7 @@ fun ActivityItemView(
 
         Text(text = "Date")
         Text(
-            text = Instant.ofEpochSecond(item.latestUpdateTimestamp.toLong()).formatted(),
+            text = item.latestUpdateTimestamp.toActivityItemDate(),
             style = MaterialTheme.typography.bodySmall,
         )
 
