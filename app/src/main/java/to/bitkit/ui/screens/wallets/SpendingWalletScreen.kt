@@ -9,14 +9,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.ActivityLatest
-import to.bitkit.ui.screens.wallets.activity.ActivityType
+import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 
 @Composable
 fun SpendingWalletScreen(
@@ -35,7 +35,11 @@ fun SpendingWalletScreen(
                 value = balances.totalLightningSats,
             )
             Spacer(modifier = Modifier.height(24.dp))
-            ActivityLatest(ActivityType.LIGHTNING, viewModel, navController)
+            ActivityListWithHeaders(
+                items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Bolt11 },
+                navController = navController,
+                showFooter = true,
+            )
         }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.AppViewModel
@@ -32,8 +33,8 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.ActivityLatest
-import to.bitkit.ui.screens.wallets.activity.ActivityType
+import to.bitkit.ui.screens.wallets.activity.ActivityList
+import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
@@ -77,14 +78,17 @@ fun HomeScreen(
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(horizontal = 24.dp)
+                        .padding(horizontal = 16.dp)
                         .fillMaxSize()
                 ) {
                     BalanceSummary(navController)
                     Spacer(modifier = Modifier.height(24.dp))
                     Text("Activity", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(16.dp))
-                    ActivityLatest(ActivityType.ALL, walletViewModel, navController)
+                    ActivityList(
+                        items = walletViewModel.activityItems.value?.take(3),
+                        navController = navController,
+                    )
                 }
 
                 val scanner = qrCodeScanner()

@@ -56,7 +56,116 @@ import to.bitkit.ui.theme.Purple500
 import java.util.Calendar
 
 @Composable
-fun ActivityRow(
+fun AllActivityScreen(
+    viewModel: WalletViewModel,
+    navController: NavController,
+) {
+    ScreenColumn {
+        AppTopBar(navController, stringResource(R.string.all_activity))
+        val items = viewModel.activityItems.value
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            ActivityListWithHeaders(items, navController)
+        }
+    }
+}
+
+@Composable
+fun ActivityListWithHeaders(
+    items: List<PaymentDetails>?,
+    navController: NavController? = null,
+    showFooter: Boolean = false,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        if (items != null) {
+            val groupedItems = groupActivityItems(items)
+
+            LazyColumn(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                itemsIndexed(groupedItems) { index, item ->
+                    when (item) {
+                        is String -> {
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            )
+                        }
+
+                        is PaymentDetails -> {
+                            ActivityRow(item, navController)
+                            if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
+                                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+                            }
+                        }
+                    }
+                }
+                if (showFooter) {
+                    item {
+                        if (items.isEmpty()) {
+                            Text("No activity", Modifier.padding(16.dp))
+                        } else {
+                            TextButton(
+                                onClick = { navController?.navigateToAllActivity() },
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                Text("Show All Activity")
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Text("No activity", Modifier.padding(16.dp))
+        }
+    }
+}
+
+@Composable
+fun ActivityList(
+    items: List<PaymentDetails>?,
+    navController: NavController? = null,
+) {
+    if (items != null) {
+        LazyColumn(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(items = items, key = { it.id }) { item ->
+                ActivityRow(item, navController)
+                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+            }
+            item {
+                if (items.isEmpty()) {
+                    Text("No activity", Modifier.padding(16.dp))
+                } else {
+                    TextButton(
+                        onClick = { navController?.navigateToAllActivity() },
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        Text("Show All Activity")
+                    }
+                }
+            }
+        }
+    } else {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("No activity available.", Modifier.padding(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActivityRow(
     item: PaymentDetails,
     navController: NavController? = null,
 ) {
@@ -104,7 +213,7 @@ fun ActivityRow(
 }
 
 @Composable
-fun PaymentStatusIcon(item: PaymentDetails) {
+private fun PaymentStatusIcon(item: PaymentDetails) {
     when {
         item.status == PaymentStatus.FAILED -> {
             IconInCircle(
@@ -128,7 +237,7 @@ fun PaymentStatusIcon(item: PaymentDetails) {
 }
 
 @Composable
-fun IconInCircle(
+private fun IconInCircle(
     icon: ImageVector,
     tint: Color,
     modifier: Modifier = Modifier,
@@ -149,116 +258,8 @@ fun IconInCircle(
     }
 }
 
-enum class ActivityType {
-    ALL, LIGHTNING, ONCHAIN
-}
-
-@Composable
-fun ActivityLatest(
-    type: ActivityType,
-    walletViewModel: WalletViewModel,
-    navController: NavController,
-) {
-    when (type) {
-        ActivityType.ALL -> ActivityList(walletViewModel.latestActivityItems.value, navController)
-        ActivityType.LIGHTNING -> ActivityList(walletViewModel.latestLightningActivityItems.value, navController)
-        ActivityType.ONCHAIN -> ActivityList(walletViewModel.latestOnchainActivityItems.value, navController)
-    }
-}
-
-@Composable
-fun ActivityList(
-    items: List<PaymentDetails>?,
-    navController: NavController? = null,
-) {
-    if (items != null) {
-        LazyColumn(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(items = items, key = { it.id }) { item ->
-                ActivityRow(item, navController)
-                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
-            }
-            item {
-                if (items.isEmpty()) {
-                    Text("No activity", Modifier.padding(16.dp))
-                } else {
-                    TextButton(
-                        onClick = { navController?.navigateToAllActivity() },
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        Text("Show All Activity")
-                    }
-                }
-            }
-        }
-    } else {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("No activity available.", Modifier.padding(16.dp))
-        }
-    }
-}
-
-@Composable
-fun AllActivityScreen(
-    viewModel: WalletViewModel,
-    navController: NavController,
-) {
-    ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.all_activity))
-        val items = viewModel.activityItems.value
-        AllActivityView(items, navController)
-    }
-}
-
-@Composable
-private fun AllActivityView(
-    items: List<PaymentDetails>?,
-    navController: NavController? = null,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        if (items != null) {
-            val groupedItems = groupActivityItems(items)
-
-            LazyColumn {
-                itemsIndexed(groupedItems) { index, item ->
-                    when (item) {
-                        is String -> {
-                            Text(
-                                text = item,
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                            )
-                        }
-
-                        is PaymentDetails -> {
-                            ActivityRow(item, navController)
-                            if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
-                                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            Text("No activity", Modifier.padding(16.dp))
-        }
-    }
-}
-
 // region utils
-fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
+private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
     val date = Calendar.getInstance()
 
     val beginningOfDay = Calendar.getInstance().apply {
@@ -350,10 +351,12 @@ fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
 // region preview
 @LightModePreview
 @Composable
-fun PreviewAllActivityView() {
+fun PreviewActivityListWithHeadersView() {
     AppThemeSurface {
         val sampleItems = PaymentDetailsPreviewProvider().values.toList()
-        AllActivityView(items = sampleItems)
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            ActivityListWithHeaders(items = sampleItems)
+        }
     }
 }
 

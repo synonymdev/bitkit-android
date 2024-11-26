@@ -41,7 +41,7 @@ fun TabBar(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 16.dp)
     ) {
         Row {
             Button(
