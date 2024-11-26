@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -31,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
@@ -49,8 +49,11 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.moneyString
+import to.bitkit.ui.shared.util.LightModePreview
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
+import java.util.Calendar
 
 @Composable
 fun ActivityRow(
@@ -219,13 +222,33 @@ private fun AllActivityView(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
     ) {
         if (items != null) {
+            val groupedItems = groupActivityItems(items)
+
             LazyColumn {
-                items(items = items, key = { it.id }) { item ->
-                    ActivityRow(item, navController)
-                    HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+                itemsIndexed(groupedItems) { index, item ->
+                    when (item) {
+                        is String -> {
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            )
+                        }
+
+                        is PaymentDetails -> {
+                            ActivityRow(item, navController)
+                            if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
+                                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -234,81 +257,172 @@ private fun AllActivityView(
     }
 }
 
+// region utils
+fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
+    val date = Calendar.getInstance()
+
+    val beginningOfDay = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val beginningOfYesterday = Calendar.getInstance().apply {
+        timeInMillis = beginningOfDay
+        add(Calendar.DATE, -1)
+    }.timeInMillis
+
+    val beginningOfWeek = Calendar.getInstance().apply {
+        set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val beginningOfMonth = Calendar.getInstance().apply {
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val beginningOfYear = Calendar.getInstance().apply {
+        set(Calendar.DAY_OF_YEAR, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val today = mutableListOf<PaymentDetails>()
+    val yesterday = mutableListOf<PaymentDetails>()
+    val week = mutableListOf<PaymentDetails>()
+    val month = mutableListOf<PaymentDetails>()
+    val year = mutableListOf<PaymentDetails>()
+    val earlier = mutableListOf<PaymentDetails>()
+
+    for (item in activityItems) {
+        val itemTimestampMillis = item.latestUpdateTimestamp.toLong() * 1000L
+        when {
+            itemTimestampMillis >= beginningOfDay -> today.add(item)
+            itemTimestampMillis >= beginningOfYesterday -> yesterday.add(item)
+            itemTimestampMillis >= beginningOfWeek -> week.add(item)
+            itemTimestampMillis >= beginningOfMonth -> month.add(item)
+            itemTimestampMillis >= beginningOfYear -> year.add(item)
+            else -> earlier.add(item)
+        }
+    }
+
+    val result = mutableListOf<Any>()
+    if (today.isNotEmpty()) {
+        result.add("TODAY")
+        result.addAll(today)
+    }
+    if (yesterday.isNotEmpty()) {
+        result.add("YESTERDAY")
+        result.addAll(yesterday)
+    }
+    if (week.isNotEmpty()) {
+        result.add("THIS WEEK")
+        result.addAll(week)
+    }
+    if (month.isNotEmpty()) {
+        result.add("THIS MONTH")
+        result.addAll(month)
+    }
+    if (year.isNotEmpty()) {
+        result.add("THIS YEAR")
+        result.addAll(year)
+    }
+    if (earlier.isNotEmpty()) {
+        result.add("EARLIER")
+        result.addAll(earlier)
+    }
+
+    return result
+}
+
+// endregion
+
 // region preview
-@Preview(showBackground = true)
+@LightModePreview
 @Composable
 fun PreviewAllActivityView() {
-    val sampleItems = PaymentDetailsPreviewProvider().values.toList()
-    AllActivityView(items = sampleItems)
+    AppThemeSurface {
+        val sampleItems = PaymentDetailsPreviewProvider().values.toList()
+        AllActivityView(items = sampleItems)
+    }
 }
 
-@Preview(showBackground = true)
+@LightModePreview
 @Composable
 fun PreviewActivityListItems() {
-    val sampleItems = PaymentDetailsPreviewProvider().values.toList()
-    ActivityList(items = sampleItems)
+    AppThemeSurface {
+        val sampleItems = PaymentDetailsPreviewProvider().values.toList()
+        ActivityList(items = sampleItems)
+    }
 }
 
-@Preview(showBackground = true)
+@LightModePreview
 @Composable
 fun PreviewActivityListEmpty() {
     ActivityList(items = emptyList())
 }
 
-@Preview(showBackground = true)
+@LightModePreview
 @Composable
 fun PreviewActivityListNull() {
     ActivityList(items = null)
 }
 
 val testActivityItems: Sequence<PaymentDetails> = sequenceOf(
+    // Today
     PaymentDetails(
         id = "1",
-        kind = PaymentKind.Onchain,
-        amountMsat = 1234_000u,
+        kind = PaymentKind.Bolt11("bolt11", null, null),
+        amountMsat = 10_000u,
         direction = PaymentDirection.INBOUND,
-        status = PaymentStatus.FAILED,
-        latestUpdateTimestamp = 1711110966_UL
+        status = PaymentStatus.SUCCEEDED,
+        latestUpdateTimestamp = (Calendar.getInstance().timeInMillis / 1000).toULong()
     ),
+    // Yesterday
     PaymentDetails(
         id = "2",
         kind = PaymentKind.Onchain,
-        amountMsat = 23_456_000u,
+        amountMsat = 2000_000u,
         direction = PaymentDirection.OUTBOUND,
         status = PaymentStatus.PENDING,
-        latestUpdateTimestamp = 1725810966_UL
+        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -1) }.timeInMillis / 1000).toULong()
     ),
+    // This Week
     PaymentDetails(
         id = "3",
         kind = PaymentKind.Bolt11("bolt11", null, null),
-        amountMsat = 541_000u,
+        amountMsat = 30_000u,
         direction = PaymentDirection.INBOUND,
-        status = PaymentStatus.SUCCEEDED,
-        latestUpdateTimestamp = 1729510966_UL
+        status = PaymentStatus.FAILED,
+        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -3) }.timeInMillis / 1000).toULong()
     ),
+    // This Month
     PaymentDetails(
         id = "4",
         kind = PaymentKind.Onchain,
-        amountMsat = 826_000u,
+        amountMsat = 4000_000u,
         direction = PaymentDirection.OUTBOUND,
         status = PaymentStatus.SUCCEEDED,
-        latestUpdateTimestamp = 1713510966_UL
+        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -15) }.timeInMillis / 1000).toULong()
     ),
+    // Earlier
     PaymentDetails(
         id = "5",
-        kind = PaymentKind.Bolt11("bolt11", null, null),
-        amountMsat = 42_000u,
-        direction = PaymentDirection.OUTBOUND,
-        status = PaymentStatus.FAILED,
-        latestUpdateTimestamp = 1716510966_UL
-    ),
-    PaymentDetails(
-        id = "6",
-        kind = PaymentKind.Bolt11("bolt11", null, null),
-        amountMsat = 107_000u,
-        direction = PaymentDirection.OUTBOUND,
-        status = PaymentStatus.SUCCEEDED,
-        latestUpdateTimestamp = 1717510966_UL
+        kind = PaymentKind.Onchain,
+        amountMsat = 5000_000u,
+        direction = PaymentDirection.INBOUND,
+        status = PaymentStatus.PENDING,
+        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.timeInMillis / 1000).toULong()
     ),
 )
 
@@ -317,7 +431,7 @@ private class PaymentDetailsPreviewProvider : PreviewParameterProvider<PaymentDe
         get() = testActivityItems
 }
 
-@Preview(showBackground = true)
+@LightModePreview
 @Composable
 private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::class) item: PaymentDetails) {
     ActivityRow(item)

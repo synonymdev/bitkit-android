@@ -200,7 +200,8 @@ class WalletViewModel @Inject constructor(
 
         viewModelScope.launch {
             launch(bgDispatcher) { syncBalances() }
-            launch(bgDispatcher) { syncActivityItems() }
+            // launch(bgDispatcher) { syncActivityItems() }
+            debugActivityItems()
         }
     }
 
@@ -538,11 +539,11 @@ class WalletViewModel @Inject constructor(
             latestActivityItems.value = testItems.take(3)
             latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
             latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = "Success",
-                description = "Test activity items added"
-            )
+            // ToastEventBus.send(
+            //     type = Toast.ToastType.INFO,
+            //     title = "Success",
+            //     description = "Test activity items added"
+            // )
         }
     }
 
