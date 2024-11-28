@@ -9,7 +9,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.mockito.ArgumentMatchers.anyString
-import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -58,7 +57,6 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(firebaseMessaging.token).thenReturn(task)
 
         sut = WalletViewModel(
-            uiThread = testDispatcher,
             bgDispatcher = testDispatcher,
             appContext = mock(),
             appStorage = appStorage,

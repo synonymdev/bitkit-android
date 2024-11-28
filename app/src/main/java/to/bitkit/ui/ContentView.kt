@@ -32,7 +32,7 @@ import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 
 @Composable
-fun AppNavHost(
+fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
     onWalletWiped: () -> Unit,
@@ -56,6 +56,8 @@ fun AppNavHost(
 
     val balance by walletViewModel.balanceState.collectAsState()
     CompositionLocalProvider(
+        LocalAppViewModel provides appViewModel,
+        LocalWalletViewModel provides walletViewModel,
         LocalBalances provides balance,
     ) {
         NavHost(navController, startDestination = Routes.Home) {

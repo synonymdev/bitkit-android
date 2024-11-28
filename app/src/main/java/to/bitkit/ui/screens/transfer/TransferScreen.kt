@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -57,6 +59,8 @@ fun TransferScreen(
 private fun CreateView(viewModel: TransferViewModel) {
     var isCreating by remember { mutableStateOf(false) }
     var spendingBalanceSats by remember { mutableIntStateOf(50_000) }
+    val scope = rememberCoroutineScope()
+
     OutlinedTextField(
         label = { Text("Sats") },
         value = "$spendingBalanceSats",
@@ -68,7 +72,13 @@ private fun CreateView(viewModel: TransferViewModel) {
     FullWidthTextButton(
         onClick = {
             isCreating = true
-            viewModel.createOrder(spendingBalanceSats)
+            scope.launch {
+                try {
+                    viewModel.createOrder(spendingBalanceSats)
+                } catch (e: Exception) {
+                    isCreating = false
+                }
+            }
         },
         enabled = !isCreating,
         loading = isCreating,

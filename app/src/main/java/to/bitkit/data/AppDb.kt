@@ -51,7 +51,12 @@ abstract class AppDb : RoomDatabase() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         val request = OneTimeWorkRequestBuilder<SeedDbWorker>().build()
-                        WorkManager.getInstance(context).enqueue(request)
+                        try {
+                            WorkManager.getInstance(context).enqueue(request)
+                        } catch (_: Exception) {
+                            // ignore - occurs in ui tests
+                        }
+
                     }
                 })
                 .build()

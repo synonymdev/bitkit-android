@@ -23,14 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.Routes
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun TabBar(
-    onSendClicked: () -> Unit,
-    onReceiveClicked: () -> Unit,
-    onScanClicked: () -> Unit,
+    onSendClick: () -> Unit,
+    onReceiveClick: () -> Unit,
+    onScanClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val buttonColors = ButtonDefaults.buttonColors(
@@ -46,7 +45,7 @@ fun TabBar(
     ) {
         Row {
             Button(
-                onClick = onSendClicked,
+                onClick = onSendClick,
                 shape = RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50),
                 colors = buttonColors,
                 contentPadding = contentPadding,
@@ -56,7 +55,7 @@ fun TabBar(
                 Text("Send")
             }
             Button(
-                onClick = onReceiveClicked,
+                onClick = onReceiveClick,
                 shape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50),
                 colors = buttonColors,
                 contentPadding = contentPadding,
@@ -67,7 +66,7 @@ fun TabBar(
             }
         }
         IconButton(
-            onClick = onScanClicked,
+            onClick = onScanClick,
             modifier = Modifier
                 .size(60.dp)
                 .border(1.dp, buttonColors.containerColor, MaterialTheme.shapes.large)
@@ -89,9 +88,9 @@ fun TabBar(
 private fun TabBarPreview() {
     AppThemeSurface {
         TabBar(
-            onSendClicked = {},
-            onReceiveClicked = {},
-            onScanClicked = {},
+            onSendClick = {},
+            onReceiveClick = {},
+            onScanClick = {},
         )
     }
 }

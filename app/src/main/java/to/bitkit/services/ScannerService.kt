@@ -13,32 +13,7 @@ class ScannerService @Inject constructor() {
     fun validateBitcoinAddress(input: String): ValidationResult {
         return uniffi.bitkitcore.validateBitcoinAddress(input)
     }
-
-    suspend fun decodeMock(input: String): Scanner {
-        val inputMock = MockScannerInput.valueOf(input)
-        return when (inputMock) {
-            MockScannerInput.OnChain -> onChainMock()
-            MockScannerInput.Lightning -> TODO()
-        }
-    }
 }
-
-enum class MockScannerInput {
-    OnChain,
-    Lightning,
-}
-
-// region mocks
-private fun onChainMock() = Scanner.OnChain(
-    invoice = OnChainInvoice(
-        address = "btcAddress",
-        amountSatoshis = 1234u,
-        label = "label",
-        message = "message",
-        params = mapOf("param1" to "value1"),
-    )
-)
-// endregion
 
 fun OnChainInvoice.hasLightingParam(): Boolean {
     return params?.containsKey("lightning") == true
