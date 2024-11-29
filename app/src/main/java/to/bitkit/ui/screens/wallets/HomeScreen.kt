@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -51,7 +50,7 @@ import to.bitkit.ui.shared.util.qrCodeScanner
 fun HomeScreen(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
-    navController: NavController,
+    rootNavController: NavController,
 ) {
     val uiState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
@@ -77,29 +76,29 @@ fun HomeScreen(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            val nestedNavController = rememberNavController()
+            val walletNavController = rememberNavController()
             NavHost(
-                navController = nestedNavController,
+                navController = walletNavController,
                 startDestination = HomeRoutes.Home
             ) {
                 composable<HomeRoutes.Home> {
-                    HomeContentView(navController, walletViewModel, nestedNavController)
+                    HomeContentView(rootNavController, walletNavController, walletViewModel)
                 }
                 composable<HomeRoutes.Savings> {
                     SavingsWalletScreen(
                         viewModel = walletViewModel,
-                        onAllActivityButtonClick = { navController.navigateToAllActivity() },
-                        onActivityItemClick = { navController.navigateToActivityItem(it) },
-                        onTransferClick = { navController.navigateToTransfer() },
-                        onBackClick = { nestedNavController.popBackStack() },
+                        onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
+                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onTransferClick = { rootNavController.navigateToTransfer() },
+                        onBackClick = { walletNavController.popBackStack() },
                     )
                 }
                 composable<HomeRoutes.Spending> {
                     SpendingWalletScreen(
                         viewModel = walletViewModel,
-                        onAllActivityButtonClick = { navController.navigateToAllActivity() },
-                        onActivityItemClick = { navController.navigateToActivityItem(it) },
-                        onBackCLick = { nestedNavController.popBackStack() }
+                        onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
+                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onBackCLick = { walletNavController.popBackStack() }
                     )
                 }
 
@@ -124,11 +123,11 @@ fun HomeScreen(
 
 @Composable
 private fun HomeContentView(
-    navController: NavController,
+    rootNavController: NavController,
+    walletNavController: NavController,
     walletViewModel: WalletViewModel,
-    nestedNavController: NavHostController,
 ) {
-    AppScaffold(navController, walletViewModel, stringResource(R.string.app_name)) {
+    AppScaffold(rootNavController, walletViewModel, stringResource(R.string.app_name)) {
         RequestNotificationPermissions()
         Column(
             modifier = Modifier
@@ -136,16 +135,16 @@ private fun HomeContentView(
                 .fillMaxSize()
         ) {
             BalanceSummary(
-                onSavingsClick = { nestedNavController.navigate(HomeRoutes.Savings) },
-                onSpendingClick = { nestedNavController.navigate(HomeRoutes.Savings) },
+                onSavingsClick = { walletNavController.navigate(HomeRoutes.Savings) },
+                onSpendingClick = { walletNavController.navigate(HomeRoutes.Savings) },
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(16.dp))
             ActivityList(
                 items = walletViewModel.activityItems.value?.take(3),
-                onAllActivityClick = { navController.navigateToAllActivity() },
-                onActivityItemClick = { navController.navigateToActivityItem(it) },
+                onAllActivityClick = { rootNavController.navigateToAllActivity() },
+                onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
             )
         }
     }
