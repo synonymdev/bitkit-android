@@ -193,8 +193,8 @@ class WalletViewModel @Inject constructor(
 
         viewModelScope.launch {
             launch(bgDispatcher) { syncBalances() }
-            // launch(bgDispatcher) { syncActivityItems() }
-            debugActivityItems()
+            launch(bgDispatcher) { syncActivityItems() }
+            // debugActivityItems()
         }
     }
 

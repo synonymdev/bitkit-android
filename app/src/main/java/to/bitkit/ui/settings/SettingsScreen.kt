@@ -24,7 +24,7 @@ fun SettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.settings))
+        AppTopBar(stringResource(R.string.settings), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier

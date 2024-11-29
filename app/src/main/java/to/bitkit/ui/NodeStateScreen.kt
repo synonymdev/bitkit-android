@@ -45,14 +45,17 @@ fun NodeStateScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.node_state)) {
-            IconButton(viewModel::refreshState) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.sync),
-                )
-            }
-        }
+        AppTopBar(
+            stringResource(R.string.node_state),
+            onBackClick = { navController.popBackStack() },
+            actions = {
+                IconButton(viewModel::refreshState) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.sync),
+                    )
+                }
+            })
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier

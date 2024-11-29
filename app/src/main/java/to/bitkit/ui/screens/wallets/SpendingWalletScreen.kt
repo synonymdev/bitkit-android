@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
 import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
@@ -21,11 +20,13 @@ import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 @Composable
 fun SpendingWalletScreen(
     viewModel: WalletViewModel,
-    navController: NavHostController,
+    onAllActivityButtonClick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
+    onBackCLick: () -> Unit,
 ) {
     val balances = LocalBalances.current
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.spending))
+        AppTopBar(stringResource(R.string.spending), onBackCLick)
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -37,8 +38,9 @@ fun SpendingWalletScreen(
             Spacer(modifier = Modifier.height(24.dp))
             ActivityListWithHeaders(
                 items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Bolt11 },
-                navController = navController,
                 showFooter = true,
+                onAllActivityButtonClick = onAllActivityButtonClick,
+                onActivityItemClick = onActivityItemClick,
             )
         }
     }

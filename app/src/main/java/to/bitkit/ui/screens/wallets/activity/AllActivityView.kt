@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -44,8 +43,6 @@ import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.navigateToActivityItem
-import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.moneyString
@@ -58,13 +55,17 @@ import java.util.Calendar
 @Composable
 fun AllActivityScreen(
     viewModel: WalletViewModel,
-    navController: NavController,
+    onBackCLick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
 ) {
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.all_activity))
-        val items = viewModel.activityItems.value
+        AppTopBar(stringResource(R.string.all_activity), onBackCLick)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            ActivityListWithHeaders(items, navController)
+            ActivityListWithHeaders(
+                items = viewModel.activityItems.value,
+                onAllActivityButtonClick = { }, // Do Nothing - button is not shown
+                onActivityItemClick = onActivityItemClick,
+            )
         }
     }
 }
@@ -72,8 +73,9 @@ fun AllActivityScreen(
 @Composable
 fun ActivityListWithHeaders(
     items: List<PaymentDetails>?,
-    navController: NavController? = null,
     showFooter: Boolean = false,
+    onAllActivityButtonClick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -99,7 +101,7 @@ fun ActivityListWithHeaders(
                         }
 
                         is PaymentDetails -> {
-                            ActivityRow(item, navController)
+                            ActivityRow(item, onActivityItemClick)
                             if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
                                 HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
                             }
@@ -112,7 +114,7 @@ fun ActivityListWithHeaders(
                             Text("No activity", Modifier.padding(16.dp))
                         } else {
                             TextButton(
-                                onClick = { navController?.navigateToAllActivity() },
+                                onClick = onAllActivityButtonClick,
                                 modifier = Modifier.padding(8.dp)
                             ) {
                                 Text("Show All Activity")
@@ -130,7 +132,8 @@ fun ActivityListWithHeaders(
 @Composable
 fun ActivityList(
     items: List<PaymentDetails>?,
-    navController: NavController? = null,
+    onAllActivityClick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
 ) {
     if (items != null) {
         LazyColumn(
@@ -138,7 +141,7 @@ fun ActivityList(
             modifier = Modifier.fillMaxWidth()
         ) {
             items(items = items, key = { it.id }) { item ->
-                ActivityRow(item, navController)
+                ActivityRow(item, onActivityItemClick)
                 HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
             }
             item {
@@ -146,7 +149,7 @@ fun ActivityList(
                     Text("No activity", Modifier.padding(16.dp))
                 } else {
                     TextButton(
-                        onClick = { navController?.navigateToAllActivity() },
+                        onClick = onAllActivityClick,
                         modifier = Modifier.padding(8.dp)
                     ) {
                         Text("Show All Activity")
@@ -167,13 +170,13 @@ fun ActivityList(
 @Composable
 private fun ActivityRow(
     item: PaymentDetails,
-    navController: NavController? = null,
+    onClick: (String) -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { navController?.navigateToActivityItem(item.id) })
+            .clickable(onClick = { onClick(item.id) })
             .padding(horizontal = 0.dp, vertical = 16.dp)
     ) {
         PaymentStatusIcon(item)
@@ -262,19 +265,19 @@ private fun IconInCircle(
 private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
     val date = Calendar.getInstance()
 
-    val beginningOfDay = Calendar.getInstance().apply {
+    val beginningOfDay = date.apply {
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    val beginningOfYesterday = Calendar.getInstance().apply {
+    val beginningOfYesterday = date.apply {
         timeInMillis = beginningOfDay
         add(Calendar.DATE, -1)
     }.timeInMillis
 
-    val beginningOfWeek = Calendar.getInstance().apply {
+    val beginningOfWeek = date.apply {
         set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -282,7 +285,7 @@ private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    val beginningOfMonth = Calendar.getInstance().apply {
+    val beginningOfMonth = date.apply {
         set(Calendar.DAY_OF_MONTH, 1)
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -290,7 +293,7 @@ private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    val beginningOfYear = Calendar.getInstance().apply {
+    val beginningOfYear = date.apply {
         set(Calendar.DAY_OF_YEAR, 1)
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -355,7 +358,7 @@ fun PreviewActivityListWithHeadersView() {
     AppThemeSurface {
         val sampleItems = PaymentDetailsPreviewProvider().values.toList()
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            ActivityListWithHeaders(items = sampleItems)
+            ActivityListWithHeaders(sampleItems, onAllActivityButtonClick = { }, onActivityItemClick = { })
         }
     }
 }
@@ -365,20 +368,32 @@ fun PreviewActivityListWithHeadersView() {
 fun PreviewActivityListItems() {
     AppThemeSurface {
         val sampleItems = PaymentDetailsPreviewProvider().values.toList()
-        ActivityList(items = sampleItems)
+        ActivityList(
+            sampleItems,
+            onAllActivityClick = { },
+            onActivityItemClick = { },
+        )
     }
 }
 
 @LightModePreview
 @Composable
 fun PreviewActivityListEmpty() {
-    ActivityList(items = emptyList())
+    ActivityList(
+        items = emptyList(),
+        onAllActivityClick = { },
+        onActivityItemClick = { },
+    )
 }
 
 @LightModePreview
 @Composable
 fun PreviewActivityListNull() {
-    ActivityList(items = null)
+    ActivityList(
+        items = null,
+        onAllActivityClick = { },
+        onActivityItemClick = { },
+    )
 }
 
 val testActivityItems: Sequence<PaymentDetails> = sequenceOf(
@@ -437,6 +452,6 @@ private class PaymentDetailsPreviewProvider : PreviewParameterProvider<PaymentDe
 @LightModePreview
 @Composable
 private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::class) item: PaymentDetails) {
-    ActivityRow(item)
+    ActivityRow(item, onClick = { })
 }
 // endregion

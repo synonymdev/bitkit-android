@@ -41,7 +41,9 @@ fun TransferScreen(
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle()
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.transfer_funds))
+        AppTopBar(
+            stringResource(R.string.transfer_funds),
+            onBackClick = { navController.popBackStack() })
         Column(
             modifier = Modifier
                 .padding(horizontal = 24.dp)

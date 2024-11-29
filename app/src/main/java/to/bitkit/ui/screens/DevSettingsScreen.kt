@@ -46,7 +46,7 @@ fun DevSettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.dev_settings))
+        AppTopBar(stringResource(R.string.dev_settings), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier

@@ -15,15 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun AppTopBar(
-    navController: NavController,
     titleText: String,
-    navigationIcon: @Composable () -> Unit = screenNavIcon(navController),
+    onBackClick: () -> Unit,
+    navigationIcon: @Composable () -> Unit = backNavIcon(onBackClick),
     actions: @Composable (RowScope.() -> Unit) = {},
 ) {
     CenterAlignedTopAppBar(
@@ -39,8 +38,8 @@ fun AppTopBar(
     )
 }
 
-private fun screenNavIcon(navController: NavController) = @Composable {
-    IconButton(onClick = navController::popBackStack) {
+private fun backNavIcon(onBackClick: () -> Unit) = @Composable {
+    IconButton(onClick = onBackClick) {
         Icon(
             imageVector = Icons.AutoMirrored.Default.ArrowBack,
             contentDescription = stringResource(R.string.back),

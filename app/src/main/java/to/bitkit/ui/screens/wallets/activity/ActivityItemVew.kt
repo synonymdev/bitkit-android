@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -42,12 +41,12 @@ import to.bitkit.ui.theme.Purple500
 @Composable
 fun ActivityItemScreen(
     viewModel: WalletViewModel,
-    navController: NavController,
     activityItem: Routes.ActivityItem,
+    onBackClick: () -> Unit,
 ) {
     val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return
     ScreenColumn {
-        AppTopBar(navController, "Activity Details")
+        AppTopBar("Activity Details", onBackClick = onBackClick)
         ActivityItemView(item)
     }
 }
