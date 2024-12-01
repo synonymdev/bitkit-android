@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.shared.moneyString
@@ -88,7 +89,7 @@ fun BalanceView(
             ?: "Loading…"
         Text(
             text = "$valueText",
-            style = MaterialTheme.typography.titleLarge,
+            fontSize = 46.sp,
             fontWeight = FontWeight.Black,
         )
     }

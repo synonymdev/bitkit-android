@@ -28,11 +28,13 @@ import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    currencyViewModel: CurrencyViewModel,
     onWalletWiped: () -> Unit,
 ) {
     val navController = rememberNavController()
@@ -56,6 +58,7 @@ fun ContentView(
     CompositionLocalProvider(
         LocalAppViewModel provides appViewModel,
         LocalWalletViewModel provides walletViewModel,
+        LocalCurrencyViewModel provides currencyViewModel,
         LocalBalances provides balance,
     ) {
         NavHost(navController, startDestination = Routes.Home) {

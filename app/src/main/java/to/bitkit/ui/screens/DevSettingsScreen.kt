@@ -28,6 +28,7 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.MainUiState
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -94,6 +95,8 @@ fun DevSettingsScreen(
                 FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
                 FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
                 HorizontalDivider()
+                val currency = currencyViewModel
+                FullWidthTextButton({ currency?.triggerRefresh() }) { Text("Refresh Currency Rates") }
             }
             Orders(uiState.orders, viewModel)
         }

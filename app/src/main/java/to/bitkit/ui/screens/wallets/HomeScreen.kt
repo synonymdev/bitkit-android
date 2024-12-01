@@ -115,7 +115,9 @@ fun HomeScreen(
                         }
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding()
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .systemBarsPadding()
             )
         }
     }

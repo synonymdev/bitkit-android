@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
+import to.bitkit.models.FxRateResponse
 import to.bitkit.models.blocktank.Bt0ConfMinTxFeeWindow
 import to.bitkit.models.blocktank.BtEstimateFeeResponse
 import to.bitkit.models.blocktank.BtInfo
@@ -114,6 +115,13 @@ class BlocktankClient @Inject constructor(
     }
     // endregion
 
+    // region rates
+    suspend fun fetchLatestRates(): FxRateResponse {
+        return get<FxRateResponse>(Env.blocktankFxRateServer)
+    }
+    // endregion
+
+    // region utils
     private suspend inline fun <reified T> post(url: String, payload: Any? = null): T {
         val response = client.post(url) { payload?.let { setBody(it) } }
         Log.d(APP, "Http call: $response")
@@ -147,6 +155,7 @@ class BlocktankClient @Inject constructor(
             else -> throw BlocktankError.InvalidResponse(response.status.description)
         }
     }
+    // endregion
 }
 
 sealed class BlocktankError(message: String) : AppError(message) {

@@ -17,11 +17,13 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.CurrencyViewModel
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
+    private val currencyViewModel by viewModels<CurrencyViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +35,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppThemeSurface {
-                ContentView(appViewModel, walletViewModel) {
+                ContentView(appViewModel, walletViewModel, currencyViewModel) {
                     launchStartupActivity()
                 }
 
