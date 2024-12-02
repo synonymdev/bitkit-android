@@ -134,9 +134,7 @@ fun BalanceHeaderView(
                         val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .height(62.dp)
-                                .fillMaxWidth()
+                            modifier = Modifier.height(62.dp)
                         ) {
                             if (prefix != null) {
                                 Text(
@@ -171,7 +169,6 @@ fun BalanceHeaderView(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .height(24.dp)
-                                .fillMaxWidth()
                                 .padding(bottom = 4.dp)
                         ) {
                             if (prefix != null) {
@@ -193,9 +190,7 @@ fun BalanceHeaderView(
                         // Fiat large row
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .height(62.dp)
-                                .fillMaxWidth()
+                            modifier = Modifier.height(62.dp)
                         ) {
                             if (prefix != null) {
                                 Text(

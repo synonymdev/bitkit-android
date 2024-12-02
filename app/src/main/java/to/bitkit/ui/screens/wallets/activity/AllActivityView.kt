@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.ContentAlpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -26,8 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -42,14 +48,16 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
+import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
+import to.bitkit.viewmodels.PrimaryDisplay
 import java.util.Calendar
 
 @Composable
@@ -194,7 +202,9 @@ private fun ActivityRow(
                 PaymentStatus.SUCCEEDED -> "Received"
             }
         }
-        Column {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(
                 text = displayText,
                 fontWeight = FontWeight.Bold
@@ -205,12 +215,56 @@ private fun ActivityRow(
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        val symbol = when (item.direction) {
-            PaymentDirection.OUTBOUND -> "-"
-            PaymentDirection.INBOUND -> "+"
-        }
+        val amountPrefix = if (item.direction == PaymentDirection.OUTBOUND) "-" else "+"
         item.amountSats?.let { sats ->
-            Text("$symbol " + moneyString(sats.toLong()))
+            val currency = currencyViewModel ?: return
+            val rates by currency.rates.collectAsState()
+            val primaryDisplay by currency.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
+            val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
+
+            converted?.let { converted ->
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                text = amountPrefix,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                            )
+                            Text(text = btcComponents.value)
+                        }
+                        Text(
+                            text = "${converted.symbol} ${converted.formatted}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                text = amountPrefix,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                            )
+                            Text(text = "${converted.symbol} ${converted.formatted}")
+                        }
+
+                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                        Text(
+                            text = btcComponents.value,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                        )
+                    }
+                }
+            }
         }
     }
 }
