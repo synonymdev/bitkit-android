@@ -36,6 +36,7 @@ import to.bitkit.viewmodels.PrimaryDisplay
 @Composable
 fun BalanceHeaderView(
     sats: Long,
+    modifier: Modifier = Modifier,
     prefix: String? = null,
     showBitcoinSymbol: Boolean = true,
 ) {
@@ -49,11 +50,10 @@ fun BalanceHeaderView(
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.Start,
-        modifier = Modifier
+        modifier = modifier
             .graphicsLayer {
                 alpha = if (isPressed) 0.5f else 1f
             }
-            .fillMaxWidth()
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {

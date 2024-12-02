@@ -28,6 +28,7 @@
     <string name="label_invoice_expiration">INVOICE EXPIRATION</string>
     <string name="label_note">NOTE</string>
     <string name="label_speed">SPEED AND FEE</string>
+    <string name="label_status">STATUS</string>
     <string name="label_tags">TAGS</string>
     <string name="label_to">TO</string>
     <string name="label_savings">SAVINGS</string>

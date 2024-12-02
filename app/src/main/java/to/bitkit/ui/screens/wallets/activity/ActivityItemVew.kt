@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -20,20 +21,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ui.Routes
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -55,6 +58,7 @@ fun ActivityItemScreen(
 fun ActivityItemView(
     item: PaymentDetails,
 ) {
+    val amountPrefix = if (item.direction == PaymentDirection.OUTBOUND) "-" else "+"
     Column(
         modifier = Modifier.padding(16.dp)
     ) {
@@ -63,16 +67,13 @@ fun ActivityItemView(
             modifier = Modifier.fillMaxWidth(),
         ) {
             item.amountSats?.let { amountSats ->
-                val text = (if (item.direction == PaymentDirection.OUTBOUND) "-" else "+") +
-                    moneyString(amountSats.toLong())
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
+                BalanceHeaderView(
+                    sats = amountSats.toLong(),
+                    prefix = amountPrefix,
+                    showBitcoinSymbol = false,
+                    modifier = Modifier.weight(1f),
                 )
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             val icon = when (item.kind) {
                 PaymentKind.Onchain -> Icons.Default.Link
@@ -87,13 +88,14 @@ fun ActivityItemView(
             )
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+        LabelText(text = stringResource(R.string.label_status))
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 8.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             val (statusText, statusIcon, statusColor) = when (item.status) {
                 PaymentStatus.PENDING -> Triple("Pending", Icons.Default.AccessTime, Color.Gray)
-                PaymentStatus.SUCCEEDED -> Triple("Confirmed", Icons.Default.Check, Green500)
+                PaymentStatus.SUCCEEDED -> Triple("Successful", Icons.Default.Check, Green500)
                 PaymentStatus.FAILED -> Triple("Failed", Icons.Default.Close, Color.Red)
             }
 
@@ -101,6 +103,7 @@ fun ActivityItemView(
                 imageVector = statusIcon,
                 contentDescription = null,
                 tint = statusColor,
+                modifier = Modifier.size(20.dp)
             )
             Text(
                 text = statusText,
@@ -111,7 +114,7 @@ fun ActivityItemView(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-        Text(text = "Date")
+        LabelText(text = "DATE")
         Text(
             text = item.latestUpdateTimestamp.toActivityItemDate(),
             style = MaterialTheme.typography.bodySmall,
