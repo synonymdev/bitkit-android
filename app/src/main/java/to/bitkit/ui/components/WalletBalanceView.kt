@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.currencyViewModel
@@ -41,10 +40,8 @@ fun RowScope.WalletBalanceView(
             .weight(1f)
             .then(modifier)
     ) {
-        Text(
+        LabelText(
             text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Normal,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         converted?.let { converted ->

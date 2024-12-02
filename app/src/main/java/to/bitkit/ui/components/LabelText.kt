@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun LabelText(
@@ -16,6 +17,7 @@ fun LabelText(
     Text(
         text = text,
         style = LocalTextStyle.current.copy(
+            fontSize = 12.sp,
             color = LocalContentColor.current.copy(alpha = 0.64f),
         ),
         modifier = modifier.padding(vertical = 4.dp),

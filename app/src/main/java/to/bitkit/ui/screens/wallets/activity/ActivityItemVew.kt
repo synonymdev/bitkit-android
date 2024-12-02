@@ -60,7 +60,7 @@ fun ActivityItemView(
 ) {
     val amountPrefix = if (item.direction == PaymentDirection.OUTBOUND) "-" else "+"
     Column(
-        modifier = Modifier.padding(16.dp)
+        modifier = Modifier.padding(horizontal = 16.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
