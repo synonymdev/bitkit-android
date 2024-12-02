@@ -24,7 +24,9 @@ import to.bitkit.env.Tag.DEV
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
+import to.bitkit.ui.shared.toast.ToastEventBus
 import java.util.Date
 import javax.inject.Inject
 
@@ -65,6 +67,21 @@ class CurrencyViewModel @Inject constructor(
 
     init {
         startPolling()
+        observeStaleData()
+    }
+
+    private fun observeStaleData() {
+        viewModelScope.launch {
+            hasStaleData.collect { isStale ->
+                if (isStale) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = "Rates currently unavailable",
+                        description = "An error has occurred. Please try again later."
+                    )
+                }
+            }
+        }
     }
 
     private fun startPolling() {
