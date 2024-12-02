@@ -142,7 +142,7 @@ private fun HomeContentView(
             BalanceHeaderView(sats = balances.totalSats.toLong())
             BalanceSummary(
                 onSavingsClick = { walletNavController.navigate(HomeRoutes.Savings) },
-                onSpendingClick = { walletNavController.navigate(HomeRoutes.Savings) },
+                onSpendingClick = { walletNavController.navigate(HomeRoutes.Spending) },
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
