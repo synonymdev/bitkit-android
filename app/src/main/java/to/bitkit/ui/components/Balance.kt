@@ -27,11 +27,7 @@ fun BalanceSummary(
     onSpendingClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
-    BalanceView(
-        label = stringResource(R.string.label_balance_total),
-        value = balances.totalSats,
-    )
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(32.dp))
     Row(
         modifier = Modifier
             .fillMaxWidth()

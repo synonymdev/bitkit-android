@@ -10,11 +10,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
@@ -35,6 +37,7 @@ enum class PrimaryDisplay(val displayName: String) {
 class CurrencyViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val currencyService: CurrencyService,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _rates = MutableStateFlow<List<FxRate>>(emptyList())
     val rates = _rates.asStateFlow()
@@ -47,7 +50,8 @@ class CurrencyViewModel @Inject constructor(
 
     var selectedCurrency = "USD"
     var displayUnit = BitcoinDisplayUnit.MODERN
-    var primaryDisplay = PrimaryDisplay.BITCOIN
+
+    val primaryDisplay = settingsStore.primaryDisplay
 
     private var lastSuccessfulRefresh: Date? = null
 
@@ -96,7 +100,12 @@ class CurrencyViewModel @Inject constructor(
     }
 
     fun togglePrimaryDisplay() {
-        primaryDisplay = if (primaryDisplay == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
+        viewModelScope.launch {
+            primaryDisplay.firstOrNull()?.let {
+                val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
+                settingsStore.setPrimaryDisplayUnit(newDisplay)
+            }
+        }
     }
 
     // UI Helpers

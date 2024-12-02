@@ -31,7 +31,9 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.AppViewModel
+import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.WalletViewModel
+import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BalanceSummary
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.SheetHost
@@ -136,6 +138,8 @@ private fun HomeContentView(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
         ) {
+            val balances = LocalBalances.current
+            BalanceHeaderView(sats = balances.totalSats.toLong())
             BalanceSummary(
                 onSavingsClick = { walletNavController.navigate(HomeRoutes.Savings) },
                 onSpendingClick = { walletNavController.navigate(HomeRoutes.Savings) },

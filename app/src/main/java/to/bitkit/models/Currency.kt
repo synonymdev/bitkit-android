@@ -2,6 +2,8 @@ package to.bitkit.models
 import kotlinx.serialization.Serializable
 import kotlinx.datetime.Instant
 import java.math.BigDecimal
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -50,22 +52,24 @@ data class ConvertedAmount(
 
     fun bitcoinDisplay(unit: BitcoinDisplayUnit): BitcoinDisplayComponents {
         val symbol = "₿"
+        val spaceSeparator = ' '
         val formattedValue = when (unit) {
             BitcoinDisplayUnit.MODERN -> {
-                val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+                val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+                    groupingSeparator = spaceSeparator
+                }
+                val formatter = DecimalFormat("#,###", formatSymbols).apply {
                     isGroupingUsed = true
                 }
                 formatter.format(sats)
             }
             BitcoinDisplayUnit.CLASSIC -> {
-                val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
-                    minimumFractionDigits = 8
-                    maximumFractionDigits = 8
+                val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+                    groupingSeparator = spaceSeparator
                 }
+                val formatter = DecimalFormat("#,###.########", formatSymbols)
                 formatter.format(btcValue)
             }
         }
-
         return BitcoinDisplayComponents(symbol, formattedValue)
-    }
-}
+    }}

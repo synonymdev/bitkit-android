@@ -7,7 +7,8 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.shared.AppError
 import java.math.BigDecimal
-import java.text.NumberFormat
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,7 +44,10 @@ class CurrencyService @Inject constructor(
         val btcAmount = BigDecimal(sats).divide(BigDecimal(100_000_000))
         val value = btcAmount.multiply(BigDecimal(rate.rate))
 
-        val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+        val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+            decimalSeparator = ','
+        }
+        val formatter = DecimalFormat("#,##0.00", symbols).apply {
             minimumFractionDigits = 2
             maximumFractionDigits = 2
         }
