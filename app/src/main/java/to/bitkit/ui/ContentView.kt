@@ -69,7 +69,7 @@ fun ContentView(
             settings(walletViewModel, navController)
             nodeState(walletViewModel, navController)
             generalSettings(navController)
-            defaultUnitSettings(navController)
+            defaultUnitSettings(currencyViewModel, navController)
             localCurrencySettings(navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
@@ -116,9 +116,12 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     }
 }
 
-private fun NavGraphBuilder.defaultUnitSettings(navController: NavHostController) {
+private fun NavGraphBuilder.defaultUnitSettings(
+    currencyViewModel: CurrencyViewModel,
+    navController: NavHostController,
+) {
     composable<Routes.DefaultUnitSettings> {
-        DefaultUnitSettingsScreen(navController)
+        DefaultUnitSettingsScreen(currencyViewModel, navController)
     }
 }
 

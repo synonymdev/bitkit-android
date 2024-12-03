@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.currencyViewModel
@@ -220,6 +221,7 @@ private fun ActivityRow(
             val currency = currencyViewModel ?: return
             val rates by currency.rates.collectAsState()
             val primaryDisplay by currency.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
+            val displayUnit by currency.displayUnit.collectAsState(BitcoinDisplayUnit.MODERN)
             val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
 
             converted?.let { converted ->
@@ -228,7 +230,7 @@ private fun ActivityRow(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                        val btcComponents = converted.bitcoinDisplay(displayUnit)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
@@ -256,7 +258,7 @@ private fun ActivityRow(
                             Text(text = "${converted.symbol} ${converted.formatted}")
                         }
 
-                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                        val btcComponents = converted.bitcoinDisplay(displayUnit)
                         Text(
                             text = btcComponents.value,
                             style = MaterialTheme.typography.bodySmall,

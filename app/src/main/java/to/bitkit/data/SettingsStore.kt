@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import to.bitkit.ext.enumValueOfOrNull
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.viewmodels.PrimaryDisplay
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,7 +32,19 @@ class SettingsStore @Inject constructor(
         }
     }
 
+    val displayUnit: Flow<BitcoinDisplayUnit> = store.data
+        .map {
+            it[BTC_DISPLAY_UNIT_KEY]?.let { x -> enumValueOfOrNull<BitcoinDisplayUnit>(x) } ?: BitcoinDisplayUnit.MODERN
+        }
+
+    suspend fun setBtcDisplayUnit(unit: BitcoinDisplayUnit) {
+        store.edit {
+            it[BTC_DISPLAY_UNIT_KEY] = unit.name
+        }
+    }
+
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
+        private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
     }
 }

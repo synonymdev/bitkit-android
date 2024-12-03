@@ -10,6 +10,8 @@
     <string name="app_notifications_channel_name">App Notifications</string>
     <string name="back">Back</string>
     <string name="balance">Balance</string>
+    <string name="bitcoin_display_modern">Modern</string>
+    <string name="bitcoin_display_classic">Classic</string>
     <string name="channels">Channels</string>
     <string name="close">Close</string>
     <string name="connect">Connect</string>

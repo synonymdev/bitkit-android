@@ -30,9 +30,9 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import java.util.Date
 import javax.inject.Inject
 
-enum class PrimaryDisplay(val displayName: String) {
-    BITCOIN("Bitcoin"),
-    FIAT("Fiat")
+enum class PrimaryDisplay {
+    BITCOIN,
+    FIAT
 }
 
 @HiltViewModel
@@ -48,11 +48,11 @@ class CurrencyViewModel @Inject constructor(
     val error = _error.asStateFlow()
 
     private val _hasStaleData = MutableStateFlow(false)
-    val hasStaleData = _hasStaleData.asStateFlow()
+    private val hasStaleData = _hasStaleData.asStateFlow()
 
     var selectedCurrency = "USD"
-    var displayUnit = BitcoinDisplayUnit.MODERN
 
+    val displayUnit = settingsStore.displayUnit
     val primaryDisplay = settingsStore.primaryDisplay
 
     private var lastSuccessfulRefresh: Date? = null
@@ -122,6 +122,18 @@ class CurrencyViewModel @Inject constructor(
                 val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
                 settingsStore.setPrimaryDisplayUnit(newDisplay)
             }
+        }
+    }
+
+    fun setPrimaryDisplayUnit(unit: PrimaryDisplay) {
+        viewModelScope.launch {
+            settingsStore.setPrimaryDisplayUnit(unit)
+        }
+    }
+
+    fun setBtcDisplayUnit(unit: BitcoinDisplayUnit) {
+        viewModelScope.launch {
+            settingsStore.setBtcDisplayUnit(unit)
         }
     }
 

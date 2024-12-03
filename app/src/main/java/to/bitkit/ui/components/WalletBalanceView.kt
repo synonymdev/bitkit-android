@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.viewmodels.PrimaryDisplay
@@ -33,6 +34,7 @@ fun RowScope.WalletBalanceView(
     val currency = currencyViewModel ?: return
     val rates by currency.rates.collectAsState()
     val primaryDisplay by currency.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
+    val displayUnit by currency.displayUnit.collectAsState(BitcoinDisplayUnit.MODERN)
     val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
 
     Column(
@@ -46,7 +48,7 @@ fun RowScope.WalletBalanceView(
         )
         converted?.let { converted ->
             if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                val btcComponents = converted.bitcoinDisplay(displayUnit)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
