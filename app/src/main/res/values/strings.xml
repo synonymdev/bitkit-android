@@ -15,9 +15,12 @@
     <string name="connect">Connect</string>
     <string name="contact">Contact</string>
     <string name="continue_button">Continue</string>
+    <string name="default_unit">Default Unit</string>
     <string name="dev_settings">Dev Settings</string>
     <string name="disconnect">Disconnect</string>
+    <string name="general">General</string>
     <string name="home">Home</string>
+    <string name="invoice">Invoice</string>
     <string name="label_amount">AMOUNT</string>
     <string name="label_available">AVAILABLE</string>
     <string name="label_balance_total">TOTAL BALANCE</string>
@@ -31,8 +34,8 @@
     <string name="label_to">TO</string>
     <string name="label_savings">SAVINGS</string>
     <string name="label_spending">SPENDING</string>
-    <string name="invoice">Invoice</string>
     <string name="lightning">Lightning</string>
+    <string name="local_currency">Local Currency</string>
     <string name="mnemonic">Mnemonic</string>
     <string name="node_id">Node Id</string>
     <string name="node_state">Node State</string>

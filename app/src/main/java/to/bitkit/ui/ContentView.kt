@@ -26,7 +26,10 @@ import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
+import to.bitkit.ui.settings.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
+import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.viewmodels.CurrencyViewModel
 
@@ -65,6 +68,9 @@ fun ContentView(
             home(walletViewModel, appViewModel, navController)
             settings(walletViewModel, navController)
             nodeState(walletViewModel, navController)
+            generalSettings(navController)
+            defaultUnitSettings(navController)
+            localCurrencySettings(navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
             transfer(navController)
@@ -101,6 +107,24 @@ private fun NavGraphBuilder.nodeState(
 ) {
     composable<Routes.NodeState> {
         NodeStateScreen(viewModel, navController)
+    }
+}
+
+private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
+    composable<Routes.GeneralSettings> {
+        GeneralSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.defaultUnitSettings(navController: NavHostController) {
+    composable<Routes.DefaultUnitSettings> {
+        DefaultUnitSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.localCurrencySettings(navController: NavHostController) {
+    composable<Routes.LocalCurrencySettings> {
+        LocalCurrencySettingsScreen(navController)
     }
 }
 
@@ -167,6 +191,18 @@ fun NavController.navigateToNodeState() = navigate(
     route = Routes.NodeState,
 )
 
+fun NavController.navigateToGeneralSettings() = navigate(
+    route = Routes.GeneralSettings,
+)
+
+fun NavController.navigateToDefaultUnitSettings() = navigate(
+    route = Routes.DefaultUnitSettings,
+)
+
+fun NavController.navigateToLocalCurrencySettings() = navigate(
+    route = Routes.LocalCurrencySettings,
+)
+
 fun NavController.navigateToLightning() = navigate(
     route = Routes.Lightning,
 )
@@ -199,6 +235,15 @@ object Routes {
 
     @Serializable
     data object NodeState
+
+    @Serializable
+    data object GeneralSettings
+
+    @Serializable
+    data object DefaultUnitSettings
+
+    @Serializable
+    data object LocalCurrencySettings
 
     @Serializable
     data object Lightning
