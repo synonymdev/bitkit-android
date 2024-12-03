@@ -1,12 +1,9 @@
 package to.bitkit.ui.components
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.viewmodels.PrimaryDisplay
@@ -52,7 +51,7 @@ fun BalanceHeaderView(
         horizontalAlignment = Alignment.Start,
         modifier = modifier
             .graphicsLayer {
-                alpha = if (isPressed) 0.5f else 1f
+                this.alpha = if (isPressed) 0.5f else 1f
             }
             .pointerInput(Unit) {
                 detectTapGestures(
@@ -68,152 +67,115 @@ fun BalanceHeaderView(
             }
     ) {
         converted?.let { converted ->
-            AnimatedContent(
-                targetState = primaryDisplay,
-                transitionSpec = {
-                    val direction = if (targetState == PrimaryDisplay.BITCOIN)
-                        AnimatedContentTransitionScope.SlideDirection.Up
-                    else
-                        AnimatedContentTransitionScope.SlideDirection.Down
-
-                    slideIntoContainer(
-                        towards = direction,
-                        animationSpec = spring(
-                            dampingRatio = 0.8f,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) + fadeIn(
-                        animationSpec = spring(
-                            dampingRatio = 0.8f,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) togetherWith
-                        slideOutOfContainer(
-                            towards = direction,
-                            animationSpec = spring(
-                                dampingRatio = 0.8f,
-                                stiffness = Spring.StiffnessMedium
-                            )
-                        ) + fadeOut(
-                        animationSpec = spring(
-                            dampingRatio = 0.8f,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    )
-                },
-                contentAlignment = Alignment.TopStart,
-                label = "ConversionDisplay"
-            ) { display ->
-                if (display == PrimaryDisplay.BITCOIN) {
-                    Column {
-                        // Bitcoin small row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .height(24.dp)
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp)
-                        ) {
-                            if (prefix != null) {
-                                Text(
-                                    text = prefix,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.alpha(0.6f)
-                                )
-                            }
+            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                Column {
+                    // Bitcoin small row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .height(24.dp)
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                    ) {
+                        if (prefix != null) {
                             Text(
-                                text = "${converted.symbol} ${converted.formatted}",
+                                text = prefix,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.alpha(0.6f)
                             )
                         }
+                        Text(
+                            text = "${converted.symbol} ${converted.formatted}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.alpha(0.6f)
+                        )
+                    }
 
-                        // Bitcoin large row
-                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(62.dp)
-                        ) {
-                            if (prefix != null) {
-                                Text(
-                                    text = prefix,
-                                    fontSize = 46.sp,
-                                    fontWeight = FontWeight.Black,
-                                    modifier = Modifier.alpha(0.6f)
-                                )
-                            }
-                            if (showBitcoinSymbol) {
-                                Text(
-                                    text = btcComponents.symbol,
-                                    fontSize = 46.sp,
-                                    fontWeight = FontWeight.Black,
-                                    modifier = Modifier
-                                        .alpha(0.6f)
-                                        .padding(end = 8.dp)
-                                )
-                            }
+                    // Bitcoin large row
+                    val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(62.dp)
+                    ) {
+                        if (prefix != null) {
                             Text(
-                                text = btcComponents.value,
+                                text = prefix,
                                 fontSize = 46.sp,
                                 fontWeight = FontWeight.Black,
-                            )
-                        }
-                    }
-                } else {  // FIAT
-                    Column {
-                        // Fiat small row
-                        val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .height(24.dp)
-                                .padding(bottom = 4.dp)
-                        ) {
-                            if (prefix != null) {
-                                Text(
-                                    text = prefix,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.alpha(0.6f)
-                                )
-                            }
-                            Text(
-                                text = "${btcComponents.symbol} ${btcComponents.value}",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
                                 modifier = Modifier.alpha(0.6f)
                             )
                         }
-
-                        // Fiat large row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(62.dp)
-                        ) {
-                            if (prefix != null) {
-                                Text(
-                                    text = prefix,
-                                    fontSize = 46.sp,
-                                    fontWeight = FontWeight.Black,
-                                    modifier = Modifier.alpha(0.6f)
-                                )
-                            }
+                        if (showBitcoinSymbol) {
                             Text(
-                                text = converted.symbol,
+                                text = btcComponents.symbol,
                                 fontSize = 46.sp,
                                 fontWeight = FontWeight.Black,
                                 modifier = Modifier
                                     .alpha(0.6f)
                                     .padding(end = 8.dp)
                             )
+                        }
+                        Text(
+                            text = btcComponents.value,
+                            fontSize = 46.sp,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                }
+            } else {  // FIAT
+                Column {
+                    // Fiat small row
+                    val btcComponents = converted.bitcoinDisplay(currency.displayUnit)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .height(24.dp)
+                            .padding(bottom = 4.dp)
+                    ) {
+                        if (prefix != null) {
                             Text(
-                                text = converted.formatted,
-                                fontSize = 46.sp,
-                                fontWeight = FontWeight.Black,
+                                text = prefix,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.alpha(0.6f)
                             )
                         }
+                        Text(
+                            text = "${btcComponents.symbol} ${btcComponents.value}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.alpha(0.6f)
+                        )
+                    }
+
+                    // Fiat large row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(62.dp)
+                    ) {
+                        if (prefix != null) {
+                            Text(
+                                text = prefix,
+                                fontSize = 46.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.alpha(0.6f)
+                            )
+                        }
+                        Text(
+                            text = converted.symbol,
+                            fontSize = 46.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier
+                                .alpha(0.6f)
+                                .padding(end = 8.dp)
+                        )
+                        Text(
+                            text = converted.formatted,
+                            fontSize = 46.sp,
+                            fontWeight = FontWeight.Black,
+                        )
                     }
                 }
             }
