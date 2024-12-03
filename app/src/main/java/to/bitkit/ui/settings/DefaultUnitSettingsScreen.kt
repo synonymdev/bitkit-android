@@ -24,8 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -53,8 +52,7 @@ fun DefaultUnitSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            val primaryDisplay by currencyViewModel.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
-            val displayUnit by currencyViewModel.displayUnit.collectAsState(BitcoinDisplayUnit.MODERN)
+            val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
             SectionTitle(title = "DISPLAY AMOUNTS IN")
 
             CurrencyOptionRow(

@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.FxRate
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -47,10 +47,11 @@ fun LocalCurrencySettingsScreen(
     ScreenColumn {
         AppTopBar(stringResource(R.string.local_currency), onBackClick = { navController.popBackStack() })
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp).imePadding()
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .imePadding()
         ) {
-            val rates by currencyViewModel.rates.collectAsState()
-            val selectedCurrency by currencyViewModel.selectedCurrency.collectAsState()
+            val (rates, _, _, selectedCurrency) = LocalCurrencies.current
             var searchText by remember { mutableStateOf("") }
 
             val filteredRates = rates.filter { rate ->
@@ -77,7 +78,9 @@ fun LocalCurrencySettingsScreen(
                         modifier = Modifier.size(18.dp)
                     )
                 },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
             )
 
             LazyColumn {

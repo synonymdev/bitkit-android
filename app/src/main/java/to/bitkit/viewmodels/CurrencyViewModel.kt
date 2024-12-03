@@ -9,12 +9,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -42,23 +41,8 @@ class CurrencyViewModel @Inject constructor(
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
-    private val _rates = MutableStateFlow<List<FxRate>>(emptyList())
-    val rates = _rates.asStateFlow()
-
-    private val _error = MutableStateFlow<Throwable?>(null)
-    val error = _error.asStateFlow()
-
-    private val _hasStaleData = MutableStateFlow(false)
-    private val hasStaleData = _hasStaleData.asStateFlow()
-
-    val selectedCurrency = settingsStore.selectedCurrency.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Lazily,
-        initialValue = "USD"
-    )
-
-    val displayUnit = settingsStore.displayUnit
-    val primaryDisplay = settingsStore.primaryDisplay
+    private val _uiState = MutableStateFlow(CurrencyUiState())
+    val uiState = _uiState.asStateFlow()
 
     private var lastSuccessfulRefresh: Date? = null
 
@@ -73,11 +57,12 @@ class CurrencyViewModel @Inject constructor(
     init {
         startPolling()
         observeStaleData()
+        collectSettingsData()
     }
 
     private fun observeStaleData() {
         viewModelScope.launch {
-            hasStaleData.collect { isStale ->
+            uiState.map { it.hasStaleData }.distinctUntilChanged().collect { isStale ->
                 if (isStale) {
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -106,23 +91,47 @@ class CurrencyViewModel @Inject constructor(
     private suspend fun refresh() {
         try {
             val fetchedRates = currencyService.fetchLatestRates()
-            _rates.update { fetchedRates }
+            _uiState.update {
+                it.copy(
+                    rates = fetchedRates,
+                    error = null,
+                    hasStaleData = false
+                )
+            }
             lastSuccessfulRefresh = Date()
-            _error.update { null }
-            _hasStaleData.update { false }
         } catch (e: Exception) {
-            _error.update { e }
+            _uiState.update { it.copy(error = e) }
             Log.e(APP, "Currency rates refresh failed", e)
 
             lastSuccessfulRefresh?.let { last ->
-                _hasStaleData.update { Date().time - last.time > Env.fxRateStaleThreshold }
+                _uiState.update { it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold) }
+            }
+        }
+    }
+
+    private fun collectSettingsData() {
+        viewModelScope.launch {
+            settingsStore.selectedCurrency.collect { currency ->
+                _uiState.update { it.copy(selectedCurrency = currency) }
+            }
+        }
+
+        viewModelScope.launch {
+            settingsStore.displayUnit.collect { unit ->
+                _uiState.update { it.copy(displayUnit = unit) }
+            }
+        }
+
+        viewModelScope.launch {
+            settingsStore.primaryDisplay.collect { display ->
+                _uiState.update { it.copy(primaryDisplay = display) }
             }
         }
     }
 
     fun togglePrimaryDisplay() {
         viewModelScope.launch {
-            primaryDisplay.firstOrNull()?.let {
+            uiState.value.primaryDisplay.let {
                 val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
                 settingsStore.setPrimaryDisplayUnit(newDisplay)
             }
@@ -150,8 +159,17 @@ class CurrencyViewModel @Inject constructor(
 
     // UI Helpers
     fun convert(sats: Long, currency: String? = null): ConvertedAmount? {
-        val targetCurrency = currency ?: selectedCurrency.value
-        val rate = currencyService.getCurrentRate(targetCurrency, _rates.value)
+        val targetCurrency = currency ?: uiState.value.selectedCurrency
+        val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
     }
 }
+
+data class CurrencyUiState(
+    val rates: List<FxRate> = emptyList(),
+    val error: Throwable? = null,
+    val hasStaleData: Boolean = false,
+    val selectedCurrency: String = "USD",
+    val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
+    val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
+)

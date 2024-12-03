@@ -28,11 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -40,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -48,8 +44,8 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
-import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
@@ -219,9 +215,7 @@ private fun ActivityRow(
         val amountPrefix = if (item.direction == PaymentDirection.OUTBOUND) "-" else "+"
         item.amountSats?.let { sats ->
             val currency = currencyViewModel ?: return
-            val rates by currency.rates.collectAsState()
-            val primaryDisplay by currency.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
-            val displayUnit by currency.displayUnit.collectAsState(BitcoinDisplayUnit.MODERN)
+            val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
             val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
 
             converted?.let { converted ->

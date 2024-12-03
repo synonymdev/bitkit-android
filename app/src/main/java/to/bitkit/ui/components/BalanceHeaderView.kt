@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,8 +20,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.viewmodels.PrimaryDisplay
 
@@ -34,9 +33,7 @@ fun BalanceHeaderView(
     showBitcoinSymbol: Boolean = true,
 ) {
     val currency = currencyViewModel ?: return
-    val rates by currency.rates.collectAsState()
-    val primaryDisplay by currency.primaryDisplay.collectAsState(PrimaryDisplay.BITCOIN)
-    val displayUnit by currency.displayUnit.collectAsState(BitcoinDisplayUnit.MODERN)
+    val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
 
     var isPressed by remember { mutableStateOf(false) }
