@@ -149,7 +149,7 @@ private fun HomeContentView(
                 .fillMaxSize()
         ) {
             val balances = LocalBalances.current
-            BalanceHeaderView(sats = balances.totalSats.toLong())
+            BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(32.dp))
             Row(
                 modifier = Modifier

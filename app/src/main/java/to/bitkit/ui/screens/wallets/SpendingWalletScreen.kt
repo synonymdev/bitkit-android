@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -30,7 +31,7 @@ fun SpendingWalletScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            BalanceHeaderView(sats = balances.totalLightningSats.toLong())
+            BalanceHeaderView(sats = balances.totalLightningSats.toLong(), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(24.dp))
             ActivityListWithHeaders(
                 items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Bolt11 },

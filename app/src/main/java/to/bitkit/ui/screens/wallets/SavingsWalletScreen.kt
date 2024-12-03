@@ -40,7 +40,7 @@ fun SavingsWalletScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            BalanceHeaderView(sats = balances.totalOnchainSats.toLong())
+            BalanceHeaderView(sats = balances.totalOnchainSats.toLong(), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedButton(
                 onClick = onTransferClick,
