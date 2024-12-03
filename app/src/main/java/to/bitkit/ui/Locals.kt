@@ -8,6 +8,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 
 // Locals
 val LocalBalances = compositionLocalOf { BalanceState() }
+val LocalCurrency = compositionLocalOf { "USD" }
 
 //  Statics
 val LocalAppViewModel = staticCompositionLocalOf<AppViewModel?> { null }

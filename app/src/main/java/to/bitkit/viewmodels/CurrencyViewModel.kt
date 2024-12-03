@@ -9,10 +9,12 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -20,7 +22,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.DEV
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
@@ -50,7 +51,11 @@ class CurrencyViewModel @Inject constructor(
     private val _hasStaleData = MutableStateFlow(false)
     private val hasStaleData = _hasStaleData.asStateFlow()
 
-    var selectedCurrency = "USD"
+    val selectedCurrency = settingsStore.selectedCurrency.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Lazily,
+        initialValue = "USD"
+    )
 
     val displayUnit = settingsStore.displayUnit
     val primaryDisplay = settingsStore.primaryDisplay
@@ -95,7 +100,6 @@ class CurrencyViewModel @Inject constructor(
     fun triggerRefresh() {
         viewModelScope.launch {
             refresh()
-            Log.d(DEV, rates.value.toString())
         }
     }
 
@@ -137,9 +141,16 @@ class CurrencyViewModel @Inject constructor(
         }
     }
 
+    fun setSelectedCurrency(currency: String) {
+        viewModelScope.launch {
+            settingsStore.setSelectedCurrency(currency)
+            refresh()
+        }
+    }
+
     // UI Helpers
     fun convert(sats: Long, currency: String? = null): ConvertedAmount? {
-        val targetCurrency = currency ?: selectedCurrency
+        val targetCurrency = currency ?: selectedCurrency.value
         val rate = currencyService.getCurrentRate(targetCurrency, _rates.value)
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
     }

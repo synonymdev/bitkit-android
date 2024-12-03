@@ -43,8 +43,20 @@ class SettingsStore @Inject constructor(
         }
     }
 
+    val selectedCurrency: Flow<String> = store.data
+        .map {
+            it[SELECTED_CURRENCY_KEY] ?: "USD"
+        }
+
+    suspend fun setSelectedCurrency(currency: String) {
+        store.edit {
+            it[SELECTED_CURRENCY_KEY] = currency
+        }
+    }
+
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
         private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
+        private val SELECTED_CURRENCY_KEY = stringPreferencesKey("selected_currency")
     }
 }

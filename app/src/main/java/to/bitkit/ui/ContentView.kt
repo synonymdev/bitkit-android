@@ -58,11 +58,14 @@ fun ContentView(
     }
 
     val balance by walletViewModel.balanceState.collectAsState()
+    val selectedCurrency by currencyViewModel.selectedCurrency.collectAsState()
+
     CompositionLocalProvider(
         LocalAppViewModel provides appViewModel,
         LocalWalletViewModel provides walletViewModel,
         LocalCurrencyViewModel provides currencyViewModel,
         LocalBalances provides balance,
+        LocalCurrency provides selectedCurrency,
     ) {
         NavHost(navController, startDestination = Routes.Home) {
             home(walletViewModel, appViewModel, navController)
@@ -70,7 +73,7 @@ fun ContentView(
             nodeState(walletViewModel, navController)
             generalSettings(navController)
             defaultUnitSettings(currencyViewModel, navController)
-            localCurrencySettings(navController)
+            localCurrencySettings(currencyViewModel, navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
             transfer(navController)
@@ -125,9 +128,12 @@ private fun NavGraphBuilder.defaultUnitSettings(
     }
 }
 
-private fun NavGraphBuilder.localCurrencySettings(navController: NavHostController) {
+private fun NavGraphBuilder.localCurrencySettings(
+    currencyViewModel: CurrencyViewModel,
+    navController: NavHostController
+) {
     composable<Routes.LocalCurrencySettings> {
-        LocalCurrencySettingsScreen(navController)
+        LocalCurrencySettingsScreen(currencyViewModel, navController)
     }
 }
 
