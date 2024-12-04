@@ -17,28 +17,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
+import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.BalanceView
-import to.bitkit.ui.navigateToTransfer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.ActivityLatest
-import to.bitkit.ui.screens.wallets.activity.ActivityType
+import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 
 @Composable
 fun SavingsWalletScreen(
     viewModel: WalletViewModel,
-    navController: NavController,
+    onAllActivityButtonClick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
+    onTransferClick: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.savings))
+        AppTopBar(stringResource(R.string.savings), onBackClick)
         Column(
             modifier = Modifier
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 16.dp)
         ) {
             BalanceView(
                 label = stringResource(R.string.label_balance_savings),
@@ -46,7 +47,7 @@ fun SavingsWalletScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedButton(
-                onClick = { navController.navigateToTransfer() },
+                onClick = onTransferClick,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
@@ -63,7 +64,12 @@ fun SavingsWalletScreen(
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
-            ActivityLatest(ActivityType.ONCHAIN, viewModel, navController)
+            ActivityListWithHeaders(
+                items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Onchain },
+                showFooter = true,
+                onAllActivityButtonClick = onAllActivityButtonClick,
+                onActivityItemClick = onActivityItemClick,
+            )
         }
     }
 }

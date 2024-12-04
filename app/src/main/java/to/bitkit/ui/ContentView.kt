@@ -24,8 +24,6 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
 import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
-import to.bitkit.ui.screens.wallets.SavingsWalletScreen
-import to.bitkit.ui.screens.wallets.SpendingWalletScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
@@ -66,8 +64,6 @@ fun ContentView(
             nodeState(walletViewModel, navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
-            savings(walletViewModel, navController)
-            spending(walletViewModel, navController)
             transfer(navController)
             allActivity(walletViewModel, navController)
             activityItem(walletViewModel, navController)
@@ -123,24 +119,6 @@ private fun NavGraphBuilder.devSettings(
     }
 }
 
-private fun NavGraphBuilder.savings(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
-) {
-    composable<Routes.Savings> {
-        SavingsWalletScreen(viewModel, navController)
-    }
-}
-
-private fun NavGraphBuilder.spending(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
-) {
-    composable<Routes.Spending> {
-        SpendingWalletScreen(viewModel, navController)
-    }
-}
-
 private fun NavGraphBuilder.transfer(
     navController: NavHostController,
 ) {
@@ -155,7 +133,11 @@ private fun NavGraphBuilder.allActivity(
     navController: NavHostController,
 ) {
     composable<Routes.AllActivity> {
-        AllActivityScreen(viewModel, navController)
+        AllActivityScreen(
+            viewModel = viewModel,
+            onBackCLick = { navController.popBackStack() },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
+        )
     }
 }
 
@@ -164,7 +146,11 @@ private fun NavGraphBuilder.activityItem(
     navController: NavHostController,
 ) {
     composable<Routes.ActivityItem> { navBackEntry ->
-        ActivityItemScreen(viewModel, navController, activityItem = navBackEntry.toRoute())
+        ActivityItemScreen(
+            viewModel = viewModel,
+            activityItem = navBackEntry.toRoute(),
+            onBackClick = { navController.popBackStack() },
+        )
     }
 }
 // endregion
@@ -184,14 +170,6 @@ fun NavController.navigateToLightning() = navigate(
 
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
-)
-
-fun NavController.navigateToSavings() = navigate(
-    route = Routes.Savings,
-)
-
-fun NavController.navigateToSpending() = navigate(
-    route = Routes.Spending,
 )
 
 fun NavController.navigateToTransfer() = navigate(
@@ -224,12 +202,6 @@ object Routes {
 
     @Serializable
     data object DevSettings
-
-    @Serializable
-    data object Savings
-
-    @Serializable
-    data object Spending
 
     @Serializable
     data object Transfer

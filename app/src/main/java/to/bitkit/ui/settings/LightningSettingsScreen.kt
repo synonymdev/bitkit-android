@@ -30,7 +30,7 @@ fun LightningSettingsScreen(
     navController: NavHostController,
 ) {
     ScreenColumn {
-        AppTopBar(navController, stringResource(R.string.lightning))
+        AppTopBar(stringResource(R.string.lightning), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier

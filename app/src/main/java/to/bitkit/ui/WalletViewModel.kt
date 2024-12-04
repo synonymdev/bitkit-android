@@ -82,14 +82,7 @@ class WalletViewModel @Inject constructor(
         get() = appStorage.bip21
         set(value) = let { appStorage.bip21 = value }
 
-    // TODO compute derivatives of activityItems
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
-        private set
-    var latestActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
-        private set
-    var latestLightningActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
-        private set
-    var latestOnchainActivityItems = mutableStateOf<List<PaymentDetails>?>(null)
         private set
 
     private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -201,6 +194,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             launch(bgDispatcher) { syncBalances() }
             launch(bgDispatcher) { syncActivityItems() }
+            // debugActivityItems()
         }
     }
 
@@ -223,26 +217,21 @@ class WalletViewModel @Inject constructor(
 
             // TODO: eventually load other activity types from storage
             val allActivity = mutableListOf<PaymentDetails>()
-            val latestLightningActivity = mutableListOf<PaymentDetails>()
-            val latestOnchainActivity = mutableListOf<PaymentDetails>()
 
             sorted.forEach { details ->
                 when (details.kind) {
                     is PaymentKind.Onchain -> {
                         allActivity.add(details)
-                        latestOnchainActivity.add(details)
                     }
 
                     is PaymentKind.Bolt11 -> {
                         if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
                             allActivity.add(details)
-                            latestLightningActivity.add(details)
                         }
                     }
 
                     is PaymentKind.Spontaneous -> {
                         allActivity.add(details)
-                        latestLightningActivity.add(details)
                     }
 
                     is PaymentKind.Bolt11Jit -> Unit
@@ -252,12 +241,7 @@ class WalletViewModel @Inject constructor(
             }
 
             // TODO: append activity items from lightning balances
-
-            val limitLatest = 3
             activityItems.value = allActivity
-            latestActivityItems.value = allActivity.take(limitLatest)
-            latestLightningActivityItems.value = latestLightningActivity.take(limitLatest)
-            latestOnchainActivityItems.value = latestOnchainActivity.take(limitLatest)
         }
     }
 
@@ -533,16 +517,13 @@ class WalletViewModel @Inject constructor(
 
     fun debugActivityItems() {
         viewModelScope.launch {
-            val testItems = testActivityItems.toList()
+            val testItems = testActivityItems.toList().sortedByDescending { it.latestUpdateTimestamp }
             activityItems.value = testItems
-            latestActivityItems.value = testItems.take(3)
-            latestLightningActivityItems.value = testItems.filter { it.kind is PaymentKind.Bolt11 }.take(3)
-            latestOnchainActivityItems.value = testItems.filter { it.kind is PaymentKind.Onchain }.take(3)
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = "Success",
-                description = "Test activity items added"
-            )
+            // ToastEventBus.send(
+            //     type = Toast.ToastType.INFO,
+            //     title = "Success",
+            //     description = "Test activity items added"
+            // )
         }
     }
 

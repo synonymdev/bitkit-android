@@ -16,16 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
-import to.bitkit.ui.navigateToSavings
-import to.bitkit.ui.navigateToSpending
 import to.bitkit.ui.shared.moneyString
 
 @Composable
 fun BalanceSummary(
-    navController: NavController,
+    onSavingsClick: () -> Unit,
+    onSpendingClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
     BalanceView(
@@ -41,7 +39,7 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { navController.navigateToSavings() }
+                .clickable(onClick = onSavingsClick)
                 .padding(vertical = 4.dp)
         ) {
             Text(
@@ -58,7 +56,7 @@ fun BalanceSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { navController.navigateToSpending() }
+                .clickable(onClick = onSpendingClick)
                 .padding(4.dp)
         ) {
             Text(
