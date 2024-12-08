@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
                         appViewModel.showNewTransactionSheet(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
-                                direction = NewTransactionSheetDirection.SENT,
+                                direction = NewTransactionSheetDirection.RECEIVED,
                                 sats = (channel.inboundCapacityMsat / 1000u).toLong(),
                             )
                         )

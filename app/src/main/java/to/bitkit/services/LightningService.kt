@@ -96,7 +96,11 @@ class LightningService @Inject constructor(
         Log.d(LDK, "Building node…")
 
         node = try {
-            builder.build()
+            builder.buildWithVssStoreAndFixedHeaders(
+                vssUrl = Env.vssServerUrl,
+                storeId = Env.vssStoreId,
+                fixedHeaders = emptyMap(),
+            )
         } catch (e: BuildException) {
             throw LdkError(e)
         }

@@ -34,6 +34,16 @@ internal object Env {
             Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             else -> null
         }
+    val vssServerUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
+            else -> TODO("${network.name} network not implemented")
+        }
+    val vssStoreId
+        get() = when (network) {
+            Network.REGTEST -> "bitkit_regtest_2"
+            else -> TODO("${network.name} network not implemented")
+        }
     val esploraUrl
         get() = when (network) {
             Network.REGTEST -> "https://electrs-regtest.synonym.to"
