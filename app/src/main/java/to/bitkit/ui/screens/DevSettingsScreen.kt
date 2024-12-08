@@ -49,9 +49,9 @@ fun DevSettingsScreen(
     ScreenColumn {
         AppTopBar(stringResource(R.string.dev_settings), onBackClick = { navController.popBackStack() })
         Column(
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             NodeDetails(uiState)

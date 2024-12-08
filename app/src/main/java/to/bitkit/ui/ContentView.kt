@@ -26,11 +26,14 @@ import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
+import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.backups.BackupWalletScreen
+import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -74,6 +77,9 @@ fun ContentView(
             generalSettings(navController)
             defaultUnitSettings(currencyViewModel, navController)
             localCurrencySettings(currencyViewModel, navController)
+            backupSettings(navController)
+            backupWalletSettings(navController)
+            restoreWalletSettings(navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
             transfer(navController)
@@ -81,7 +87,6 @@ fun ContentView(
             activityItem(walletViewModel, navController)
         }
     }
-
 }
 
 // region destinations
@@ -134,6 +139,30 @@ private fun NavGraphBuilder.localCurrencySettings(
 ) {
     composable<Routes.LocalCurrencySettings> {
         LocalCurrencySettingsScreen(currencyViewModel, navController)
+    }
+}
+
+private fun NavGraphBuilder.backupSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.BackupSettings> {
+        BackupSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.backupWalletSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.BackupWalletSettings> {
+        BackupWalletScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.restoreWalletSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.RestoreWalletSettings> {
+        RestoreWalletScreen(navController)
     }
 }
 
@@ -212,6 +241,18 @@ fun NavController.navigateToLocalCurrencySettings() = navigate(
     route = Routes.LocalCurrencySettings,
 )
 
+fun NavController.navigateToBackupSettings() = navigate(
+    route = Routes.BackupSettings,
+)
+
+fun NavController.navigateToBackupWalletSettings() = navigate(
+    route = Routes.BackupWalletSettings,
+)
+
+fun NavController.navigateToRestoreWalletSettings() = navigate(
+    route = Routes.RestoreWalletSettings,
+)
+
 fun NavController.navigateToLightning() = navigate(
     route = Routes.Lightning,
 )
@@ -253,6 +294,15 @@ object Routes {
 
     @Serializable
     data object LocalCurrencySettings
+
+    @Serializable
+    data object BackupSettings
+
+    @Serializable
+    data object BackupWalletSettings
+
+    @Serializable
+    data object RestoreWalletSettings
 
     @Serializable
     data object Lightning

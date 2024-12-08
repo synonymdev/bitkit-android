@@ -12,6 +12,9 @@
     <string name="balance">Balance</string>
     <string name="bitcoin_display_modern">Modern</string>
     <string name="bitcoin_display_classic">Classic</string>
+    <string name="button_backup_settings">Back up or Restore</string>
+    <string name="button_backup_wallet">Back up your wallet</string>
+    <string name="button_restore_wallet">Reset and restore wallet</string>
     <string name="channels">Channels</string>
     <string name="close">Close</string>
     <string name="connect">Connect</string>
@@ -56,6 +59,9 @@
     <string name="sync">Sync</string>
     <string name="transfer_funds">Transfer Funds</string>
     <string name="wallet">Wallet</string>
+    <string name="title_backup_settings">Back Up Or Restore</string>
+    <string name="title_backup_wallet">Your Recovery Phrase</string>
+    <string name="title_restore_wallet">Reset And Restore</string>
     <string name="title_send">Send Bitcoin</string>
     <string name="title_send_amount">Bitcoin Amount</string>
     <string name="title_send_review">Review &amp; Send</string>
