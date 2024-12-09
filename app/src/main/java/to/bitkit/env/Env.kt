@@ -9,8 +9,8 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import kotlin.io.path.Path
 
+@Suppress("ConstPropertyName")
 internal object Env {
-    const val SEED = "universe more push obey later jazz huge buzz magnet team muscle robust"
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
@@ -44,8 +44,14 @@ internal object Env {
             Network.REGTEST -> "https://api.stag.blocktank.to"
             else -> TODO("Not yet implemented")
         }
+
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
     val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
+    val blocktankFxRateServer get() = "${blocktankBaseUrl}/fx/rates/btc"
+
+    const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
+    const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
+
     val pushNotificationFeatures = listOf(
         BlocktankNotificationType.incomingHtlc,
         BlocktankNotificationType.mutualClose,

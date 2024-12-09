@@ -11,31 +11,26 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.components.NavButton
-import to.bitkit.ui.navigateToDevSettings
-import to.bitkit.ui.navigateToGeneralSettings
-import to.bitkit.ui.navigateToLightning
+import to.bitkit.ui.navigateToDefaultUnitSettings
+import to.bitkit.ui.navigateToLocalCurrencySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
 @Composable
-fun SettingsScreen(
-    viewModel: WalletViewModel,
+fun GeneralSettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.settings), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.general), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            NavButton(stringResource(R.string.general)) { navController.navigateToGeneralSettings() }
-            NavButton("Lightning") { navController.navigateToLightning() }
-            NavButton("Dev Settings") { navController.navigateToDevSettings() }
-            NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
+            NavButton(stringResource(R.string.default_unit)) { navController.navigateToDefaultUnitSettings() }
+            NavButton(stringResource(R.string.local_currency)) { navController.navigateToLocalCurrencySettings() }
         }
     }
 }

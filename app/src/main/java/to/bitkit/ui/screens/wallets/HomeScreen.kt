@@ -2,15 +2,23 @@ package to.bitkit.ui.screens.wallets
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,10 +39,12 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.AppViewModel
+import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.components.BalanceSummary
+import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToTransfer
@@ -45,6 +55,8 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.qrCodeScanner
+import to.bitkit.ui.theme.Orange500
+import to.bitkit.ui.theme.Purple500
 
 @Composable
 fun HomeScreen(
@@ -115,7 +127,9 @@ fun HomeScreen(
                         }
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding()
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .systemBarsPadding()
             )
         }
     }
@@ -134,10 +148,34 @@ private fun HomeContentView(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
         ) {
-            BalanceSummary(
-                onSavingsClick = { walletNavController.navigate(HomeRoutes.Savings) },
-                onSpendingClick = { walletNavController.navigate(HomeRoutes.Savings) },
-            )
+            val balances = LocalBalances.current
+            BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(32.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+            ) {
+                WalletBalanceView(
+                    title = stringResource(R.string.label_savings),
+                    sats = balances.totalOnchainSats.toLong(),
+                    icon = Icons.Default.CurrencyBitcoin,
+                    iconColor = Orange500,
+                    modifier = Modifier
+                        .clickable(onClick = { walletNavController.navigate(HomeRoutes.Savings) })
+                        .padding(vertical = 4.dp),
+                )
+                VerticalDivider()
+                WalletBalanceView(
+                    title = stringResource(R.string.label_spending),
+                    sats = balances.totalLightningSats.toLong(),
+                    icon = Icons.Default.Bolt,
+                    iconColor = Purple500,
+                    modifier = Modifier
+                        .clickable(onClick = { walletNavController.navigate(HomeRoutes.Spending) })
+                        .padding(4.dp),
+                )
+            }
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(16.dp))

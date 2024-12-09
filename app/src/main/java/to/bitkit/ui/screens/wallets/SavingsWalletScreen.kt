@@ -21,7 +21,7 @@ import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.WalletViewModel
-import to.bitkit.ui.components.BalanceView
+import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
@@ -38,13 +38,9 @@ fun SavingsWalletScreen(
     ScreenColumn {
         AppTopBar(stringResource(R.string.savings), onBackClick)
         Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            BalanceView(
-                label = stringResource(R.string.label_balance_savings),
-                value = balances.totalOnchainSats,
-            )
+            BalanceHeaderView(sats = balances.totalOnchainSats.toLong(), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedButton(
                 onClick = onTransferClick,

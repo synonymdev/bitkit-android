@@ -26,13 +26,18 @@ import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
+import to.bitkit.ui.settings.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
+import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    currencyViewModel: CurrencyViewModel,
     onWalletWiped: () -> Unit,
 ) {
     val navController = rememberNavController()
@@ -53,15 +58,22 @@ fun ContentView(
     }
 
     val balance by walletViewModel.balanceState.collectAsState()
+    val currencies by currencyViewModel.uiState.collectAsState()
+
     CompositionLocalProvider(
         LocalAppViewModel provides appViewModel,
         LocalWalletViewModel provides walletViewModel,
+        LocalCurrencyViewModel provides currencyViewModel,
         LocalBalances provides balance,
+        LocalCurrencies provides currencies,
     ) {
         NavHost(navController, startDestination = Routes.Home) {
             home(walletViewModel, appViewModel, navController)
             settings(walletViewModel, navController)
             nodeState(walletViewModel, navController)
+            generalSettings(navController)
+            defaultUnitSettings(currencyViewModel, navController)
+            localCurrencySettings(currencyViewModel, navController)
             lightning(walletViewModel, navController)
             devSettings(walletViewModel, navController)
             transfer(navController)
@@ -98,6 +110,30 @@ private fun NavGraphBuilder.nodeState(
 ) {
     composable<Routes.NodeState> {
         NodeStateScreen(viewModel, navController)
+    }
+}
+
+private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
+    composable<Routes.GeneralSettings> {
+        GeneralSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.defaultUnitSettings(
+    currencyViewModel: CurrencyViewModel,
+    navController: NavHostController,
+) {
+    composable<Routes.DefaultUnitSettings> {
+        DefaultUnitSettingsScreen(currencyViewModel, navController)
+    }
+}
+
+private fun NavGraphBuilder.localCurrencySettings(
+    currencyViewModel: CurrencyViewModel,
+    navController: NavHostController,
+) {
+    composable<Routes.LocalCurrencySettings> {
+        LocalCurrencySettingsScreen(currencyViewModel, navController)
     }
 }
 
@@ -164,6 +200,18 @@ fun NavController.navigateToNodeState() = navigate(
     route = Routes.NodeState,
 )
 
+fun NavController.navigateToGeneralSettings() = navigate(
+    route = Routes.GeneralSettings,
+)
+
+fun NavController.navigateToDefaultUnitSettings() = navigate(
+    route = Routes.DefaultUnitSettings,
+)
+
+fun NavController.navigateToLocalCurrencySettings() = navigate(
+    route = Routes.LocalCurrencySettings,
+)
+
 fun NavController.navigateToLightning() = navigate(
     route = Routes.Lightning,
 )
@@ -196,6 +244,15 @@ object Routes {
 
     @Serializable
     data object NodeState
+
+    @Serializable
+    data object GeneralSettings
+
+    @Serializable
+    data object DefaultUnitSettings
+
+    @Serializable
+    data object LocalCurrencySettings
 
     @Serializable
     data object Lightning
