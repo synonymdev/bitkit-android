@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ContentAlpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -54,6 +53,7 @@ import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
+import to.bitkit.ui.theme.secondaryColor
 import to.bitkit.viewmodels.PrimaryDisplay
 import java.util.Calendar
 
@@ -231,14 +231,14 @@ private fun ActivityRow(
                         ) {
                             Text(
                                 text = amountPrefix,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                                color = secondaryColor,
                             )
                             Text(text = btcComponents.value)
                         }
                         Text(
                             text = "${converted.symbol} ${converted.formatted}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                            color = secondaryColor,
                         )
                     } else {
                         Row(
@@ -247,7 +247,7 @@ private fun ActivityRow(
                         ) {
                             Text(
                                 text = amountPrefix,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                                color = secondaryColor,
                             )
                             Text(text = "${converted.symbol} ${converted.formatted}")
                         }
@@ -256,7 +256,7 @@ private fun ActivityRow(
                         Text(
                             text = btcComponents.value,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+                            color = secondaryColor,
                         )
                     }
                 }

@@ -1,6 +1,7 @@
 package to.bitkit.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.ContentAlpha
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,6 +23,9 @@ val Green500 = Color(0xFF4CAF50)
 val Orange500 = Color(0xFFFF9800)
 val Purple500 = Color(0xFF9C27B0)
 val Purple700 = Color(0xFFB95CE8)
+
+val secondaryColor: Color
+    @Composable get() = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
 
 private object ColorPalette {
     @Stable
