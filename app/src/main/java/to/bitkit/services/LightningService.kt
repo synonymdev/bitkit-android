@@ -73,12 +73,12 @@ class LightningService @Inject constructor(
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
                     anchorChannelsConfig = AnchorChannelsConfig(
                         trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 1000u,
+                        perChannelReserveSats = 1u,
                     )
                 })
             .apply {
                 setChainSourceEsplora(
-                    serverUrl = Env.esploraUrl,
+                    serverUrl = Env.esploraServerUrl,
                     config = EsploraSyncConfig(
                         onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                         lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,

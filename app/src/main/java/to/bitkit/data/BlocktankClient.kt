@@ -117,7 +117,7 @@ class BlocktankClient @Inject constructor(
 
     // region rates
     suspend fun fetchLatestRates(): FxRateResponse {
-        return get<FxRateResponse>(Env.blocktankFxRateServer)
+        return get<FxRateResponse>(Env.btcRatesServer)
     }
     // endregion
 

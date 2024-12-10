@@ -23,6 +23,7 @@ internal object Env {
         get() = when (network) {
             Network.REGTEST -> listOf(
                 Peers.btStaging,
+                // Peers.btStagingOld,
                 // Peers.polarToRegtest,
                 // Peers.local,
             )
@@ -41,23 +42,23 @@ internal object Env {
         }
     val vssStoreId
         get() = when (network) {
-            Network.REGTEST -> "bitkit_regtest_2"
+            Network.REGTEST -> "bitkit_android_regtest_2"
             else -> TODO("${network.name} network not implemented")
         }
-    val esploraUrl
+    val esploraServerUrl
         get() = when (network) {
-            Network.REGTEST -> "https://electrs-regtest.synonym.to"
-            else -> TODO("Not yet implemented")
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
+            else -> TODO("${network.name} network not implemented")
         }
     private val blocktankBaseUrl
         get() = when (network) {
-            Network.REGTEST -> "https://api.stag.blocktank.to"
-            else -> TODO("Not yet implemented")
+            Network.REGTEST -> "https://api.stag0.blocktank.to"
+            else -> TODO("${network.name} network not implemented")
         }
 
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
     val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
-    val blocktankFxRateServer get() = "${blocktankBaseUrl}/fx/rates/btc"
+    val btcRatesServer get() = "https://bitkit.stag0.blocktank.to/fx/rates/btc" // TODO: switch to prod when available
 
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
@@ -93,6 +94,10 @@ internal object Env {
 
     object Peers {
         val btStaging = LnPeer(
+            nodeId = "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc",
+            address = "34.65.86.104:9400",
+        )
+        val btStagingOld = LnPeer(
             nodeId = "03b9a456fb45d5ac98c02040d39aec77fa3eeb41fd22cf40b862b393bcfc43473a",
             address = "35.233.47.252:9400",
         )
