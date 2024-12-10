@@ -20,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
+import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
 import to.bitkit.ui.screens.transfer.TransferViewModel
@@ -60,31 +61,37 @@ fun ContentView(
             }
     }
 
-    val balance by walletViewModel.balanceState.collectAsState()
-    val currencies by currencyViewModel.uiState.collectAsState()
+    val walletUiState by walletViewModel.uiState.collectAsState()
 
-    CompositionLocalProvider(
-        LocalAppViewModel provides appViewModel,
-        LocalWalletViewModel provides walletViewModel,
-        LocalCurrencyViewModel provides currencyViewModel,
-        LocalBalances provides balance,
-        LocalCurrencies provides currencies,
-    ) {
-        NavHost(navController, startDestination = Routes.Home) {
-            home(walletViewModel, appViewModel, navController)
-            settings(walletViewModel, navController)
-            nodeState(walletViewModel, navController)
-            generalSettings(navController)
-            defaultUnitSettings(currencyViewModel, navController)
-            localCurrencySettings(currencyViewModel, navController)
-            backupSettings(navController)
-            backupWalletSettings(navController)
-            restoreWalletSettings(navController)
-            lightning(walletViewModel, navController)
-            devSettings(walletViewModel, navController)
-            transfer(navController)
-            allActivity(walletViewModel, navController)
-            activityItem(walletViewModel, navController)
+    if (walletUiState.nodeLifecycleState == NodeLifecycleState.Initializing) {
+        InitializingWalletView()
+    } else {
+        val balance by walletViewModel.balanceState.collectAsState()
+        val currencies by currencyViewModel.uiState.collectAsState()
+
+        CompositionLocalProvider(
+            LocalAppViewModel provides appViewModel,
+            LocalWalletViewModel provides walletViewModel,
+            LocalCurrencyViewModel provides currencyViewModel,
+            LocalBalances provides balance,
+            LocalCurrencies provides currencies,
+        ) {
+            NavHost(navController, startDestination = Routes.Home) {
+                home(walletViewModel, appViewModel, navController)
+                settings(walletViewModel, navController)
+                nodeState(walletViewModel, navController)
+                generalSettings(navController)
+                defaultUnitSettings(currencyViewModel, navController)
+                localCurrencySettings(currencyViewModel, navController)
+                backupSettings(navController)
+                backupWalletSettings(navController)
+                restoreWalletSettings(navController)
+                lightning(walletViewModel, navController)
+                devSettings(walletViewModel, navController)
+                transfer(navController)
+                allActivity(walletViewModel, navController)
+                activityItem(walletViewModel, navController)
+            }
         }
     }
 }

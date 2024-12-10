@@ -30,6 +30,8 @@ class MainActivity : ComponentActivity() {
 
         initNotificationChannel()
 
+        val isInitializingWallet = intent.getBooleanExtra(EXTRA_INIT_WALLET, false)
+        walletViewModel.initNodeLifecycleState(isInitializingWallet)
         walletViewModel.setOnEvent(::onLdkEvent)
 
         enableEdgeToEdge()
@@ -144,5 +146,9 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         walletViewModel.stopIfNeeded()
+    }
+
+    companion object {
+        const val EXTRA_INIT_WALLET = "EXTRA_INIT_WALLET"
     }
 }

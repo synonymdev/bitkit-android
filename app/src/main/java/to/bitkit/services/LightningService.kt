@@ -56,7 +56,7 @@ class LightningService @Inject constructor(
 
     var node: Node? = null
 
-    fun setup(walletIndex: Int) {
+    suspend fun setup(walletIndex: Int) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
@@ -95,14 +95,16 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Building node…")
 
-        node = try {
-            builder.buildWithVssStoreAndFixedHeaders(
-                vssUrl = Env.vssServerUrl,
-                storeId = Env.vssStoreId,
-                fixedHeaders = emptyMap(),
-            )
-        } catch (e: BuildException) {
-            throw LdkError(e)
+        ServiceQueue.LDK.background {
+            node = try {
+                builder.buildWithVssStoreAndFixedHeaders(
+                    vssUrl = Env.vssServerUrl,
+                    storeId = Env.vssStoreId,
+                    fixedHeaders = emptyMap(),
+                )
+            } catch (e: BuildException) {
+                throw LdkError(e)
+            }
         }
 
         Log.i(LDK, "LDK node setup")
