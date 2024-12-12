@@ -50,7 +50,7 @@ internal object Env {
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
             else -> TODO("${network.name} network not implemented")
         }
-    private val blocktankBaseUrl
+    val blocktankBaseUrl
         get() = when (network) {
             Network.REGTEST -> "https://api.stag0.blocktank.to"
             else -> TODO("${network.name} network not implemented")

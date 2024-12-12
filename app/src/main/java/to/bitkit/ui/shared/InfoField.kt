@@ -7,18 +7,19 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.VisualTransformation
 import to.bitkit.ui.shared.util.ellipsisVisualTransformation
 
 @Composable
 internal fun InfoField(
     value: String,
-    label: String,
-    maxLength: Int,
+    label: String? = null,
+    maxLength: Int? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     onValueChange: (String) -> Unit = {},
 ) {
     OutlinedTextField(
-        label = { Text(label) },
+        label = { label?.let { Text(it) } },
         value = value,
         onValueChange = onValueChange,
         trailingIcon = trailingIcon,
@@ -34,7 +35,7 @@ internal fun InfoField(
             )
         },
         textStyle = MaterialTheme.typography.labelSmall,
-        visualTransformation = ellipsisVisualTransformation(maxLength),
+        visualTransformation = maxLength?.let { ellipsisVisualTransformation(it) } ?: VisualTransformation.None,
         modifier = Modifier.fillMaxWidth()
     )
 }

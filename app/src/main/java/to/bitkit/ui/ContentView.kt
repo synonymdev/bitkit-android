@@ -28,6 +28,8 @@ import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
+import to.bitkit.ui.settings.BlocktankRegtestScreen
+import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
@@ -88,6 +90,7 @@ fun ContentView(
                 restoreWalletSettings(navController)
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
+                regtestSettings(navController)
                 transfer(navController)
                 allActivity(walletViewModel, navController)
                 activityItem(walletViewModel, navController)
@@ -191,6 +194,15 @@ private fun NavGraphBuilder.devSettings(
     }
 }
 
+private fun NavGraphBuilder.regtestSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.RegtestSettings> {
+        val viewModel = hiltViewModel<BlocktankRegtestViewModel>()
+        BlocktankRegtestScreen(viewModel, navController)
+    }
+}
+
 private fun NavGraphBuilder.transfer(
     navController: NavHostController,
 ) {
@@ -268,6 +280,10 @@ fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
 )
 
+fun NavController.navigateToRegtestSettings() = navigate(
+    route = Routes.RegtestSettings,
+)
+
 fun NavController.navigateToTransfer() = navigate(
     route = Routes.Transfer,
 )
@@ -316,6 +332,9 @@ object Routes {
 
     @Serializable
     data object DevSettings
+
+    @Serializable
+    data object RegtestSettings
 
     @Serializable
     data object Transfer

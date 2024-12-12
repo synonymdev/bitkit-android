@@ -22,6 +22,10 @@ import to.bitkit.models.blocktank.CreateCjitOptions
 import to.bitkit.models.blocktank.CreateCjitRequest
 import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.models.blocktank.CreateOrderRequest
+import to.bitkit.models.blocktank.RegtestCloseChannelRequest
+import to.bitkit.models.blocktank.RegtestDepositRequest
+import to.bitkit.models.blocktank.RegtestMineRequest
+import to.bitkit.models.blocktank.RegtestPayRequest
 import to.bitkit.shared.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -118,6 +122,55 @@ class BlocktankClient @Inject constructor(
     // region rates
     suspend fun fetchLatestRates(): FxRateResponse {
         return get<FxRateResponse>(Env.btcRatesServer)
+    }
+    // endregion
+
+    // region regtest
+    /**
+     * Mines a number of blocks on the regtest network.
+     * @param count Number of blocks to mine. Default is 1.
+     */
+    suspend fun regtestMine(count: Int = 1) {
+         val payload = RegtestMineRequest(count)
+        post<IgnoreResponse>("${Env.blocktankClientServer}/regtest/chain/mine", payload)
+    }
+
+    /**
+     * Deposits a number of satoshis to an address on the regtest network.
+     * @param address Address to deposit to.
+     * @param amountSat Amount of satoshis to deposit. Default is 10,000,000.
+     * @return Onchain transaction ID.
+     */
+    suspend fun regtestDeposit(address: String, amountSat: Int = 10_000_000): String {
+        val payload = RegtestDepositRequest(address = address, amountSat = amountSat)
+        return post("${Env.blocktankClientServer}/regtest/chain/deposit", payload)
+    }
+
+    /**
+     * Pays an invoice on the regtest network.
+     * @param invoice Invoice to pay.
+     * @param amountSat Amount of satoshis to pay (only for 0-amount invoices).
+     * @return Blocktank payment ID.
+     */
+    suspend fun regtestPay(invoice: String, amountSat: Int? = null): String {
+        val payload = RegtestPayRequest(invoice = invoice, amountSat = amountSat)
+        return post("${Env.blocktankClientServer}/regtest/channel/pay", payload)
+    }
+
+    /**
+     * Closes a channel on the regtest network.
+     * @param fundingTxId Funding transaction ID.
+     * @param vout Funding transaction output index.
+     * @param forceCloseAfterS Time in seconds to force-close the channel after. Default is 24 hours (86400). Set it to 0 for immediate force close.
+     * @return Closing transaction ID.
+     */
+    suspend fun regtestCloseChannel(fundingTxId: String, vout: Int, forceCloseAfterS: Int = 86400): String {
+        val payload = RegtestCloseChannelRequest(
+            fundingTxId = fundingTxId,
+            vout = vout,
+            forceCloseAfterS = forceCloseAfterS,
+        )
+        return post("${Env.blocktankClientServer}/regtest/channel/close", payload)
     }
     // endregion
 
