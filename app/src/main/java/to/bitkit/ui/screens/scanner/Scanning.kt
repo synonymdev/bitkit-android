@@ -1,4 +1,4 @@
-package to.bitkit.ui.shared.util
+package to.bitkit.ui.screens.scanner
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext

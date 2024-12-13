@@ -47,6 +47,7 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
+import to.bitkit.ui.navigateToQrScanner
 import to.bitkit.ui.navigateToTransfer
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
@@ -54,7 +55,7 @@ import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
-import to.bitkit.ui.shared.util.qrCodeScanner
+import to.bitkit.ui.screens.scanner.qrCodeScanner
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
 
@@ -113,20 +114,12 @@ fun HomeScreen(
                         onBackCLick = { walletNavController.popBackStack() }
                     )
                 }
-
             }
 
-            val scanner = qrCodeScanner()
             TabBar(
                 onSendClick = { appViewModel.showSheet(BottomSheetType.Send) },
                 onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
-                onScanClick = {
-                    scanner?.startScan()?.addOnCompleteListener { task ->
-                        task.takeIf { it.isSuccessful }?.result?.rawValue?.let { data ->
-                            walletViewModel.onScanSuccess(data)
-                        }
-                    }
-                },
+                onScanClick = { rootNavController.navigateToQrScanner() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()

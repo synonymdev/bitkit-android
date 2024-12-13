@@ -63,6 +63,7 @@
     <string name="title_backup_wallet">Your Recovery Phrase</string>
     <string name="title_receive">Receive Bitcoin</string>
     <string name="title_restore_wallet">Reset And Restore</string>
+    <string name="title_scan">Scan QR Code</string>
     <string name="title_send">Send Bitcoin</string>
     <string name="title_send_amount">Bitcoin Amount</string>
     <string name="title_send_review">Review &amp; Send</string>

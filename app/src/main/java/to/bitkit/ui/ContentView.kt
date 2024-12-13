@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.screens.DevSettingsScreen
+import to.bitkit.ui.screens.scanner.QrScanViewModel
+import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
 import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
@@ -97,6 +99,7 @@ fun ContentView(
                 transfer(navController)
                 allActivity(walletViewModel, navController)
                 activityItem(walletViewModel, navController)
+                qrScanner(navController)
             }
         }
     }
@@ -240,6 +243,18 @@ private fun NavGraphBuilder.activityItem(
         )
     }
 }
+
+private fun NavGraphBuilder.qrScanner(
+    navController: NavHostController,
+) {
+    composable<Routes.QrScanner> {
+        val viewModel = hiltViewModel<QrScanViewModel>()
+        QrScanningScreen(
+            viewModel = viewModel,
+            navController = navController,
+        )
+    }
+}
 // endregion
 
 // region events
@@ -298,6 +313,10 @@ fun NavController.navigateToAllActivity() = navigate(
 fun NavController.navigateToActivityItem(id: String) = navigate(
     route = Routes.ActivityItem(id),
 )
+
+fun NavController.navigateToQrScanner() = navigate(
+    route = Routes.QrScanner,
+)
 // endregion
 
 private fun NavOptionsBuilder.clearBackStack() = popUpTo(id = 0)
@@ -347,4 +366,7 @@ object Routes {
 
     @Serializable
     data class ActivityItem(val id: String)
+
+    @Serializable
+    data object QrScanner
 }

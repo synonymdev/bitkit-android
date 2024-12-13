@@ -86,9 +86,14 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
-    implementation("com.google.zxing:core:3.5.1")
-    // implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.zxing:core:3.5.2")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // CameraX
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)

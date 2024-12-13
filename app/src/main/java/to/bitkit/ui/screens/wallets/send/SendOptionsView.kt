@@ -37,7 +37,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.components.SendButton
-import to.bitkit.ui.shared.util.qrCodeScanner
+import to.bitkit.ui.screens.scanner.qrCodeScanner
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
