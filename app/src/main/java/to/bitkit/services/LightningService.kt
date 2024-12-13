@@ -20,6 +20,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -35,6 +36,8 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.millis
+import to.bitkit.ext.toHex
+import to.bitkit.ext.toSha256
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
@@ -95,11 +98,21 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Building node…")
 
+        // MARK: Temp fix as we don't have VSS auth yet
+        if (Env.network != Network.REGTEST) {
+            error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")
+        }
+        val mnemonicData = mnemonic.encodeToByteArray()
+        val hashedMnemonic = mnemonicData.toSha256()
+        val storeIdHack = Env.vssStoreId + hashedMnemonic.toHex()
+
+        Log.i(APP, "storeIdHack: $storeIdHack")
+
         ServiceQueue.LDK.background {
             node = try {
                 builder.buildWithVssStoreAndFixedHeaders(
                     vssUrl = Env.vssServerUrl,
-                    storeId = Env.vssStoreId,
+                    storeId = storeIdHack,
                     fixedHeaders = emptyMap(),
                 )
             } catch (e: BuildException) {

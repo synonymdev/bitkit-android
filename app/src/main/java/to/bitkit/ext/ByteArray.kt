@@ -4,6 +4,7 @@ package to.bitkit.ext
 
 import java.io.ByteArrayOutputStream
 import java.io.ObjectOutputStream
+import java.security.MessageDigest
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -30,3 +31,8 @@ fun Any.convertToByteArray(): ByteArray {
 }
 
 val String.uByteList get() = this.toByteArray().map { it.toUByte() }
+
+fun ByteArray.toSha256(): ByteArray {
+    val digest = MessageDigest.getInstance("SHA-256")
+    return digest.digest(this)
+}
