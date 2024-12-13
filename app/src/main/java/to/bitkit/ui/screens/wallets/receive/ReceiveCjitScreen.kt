@@ -1,32 +1,45 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import to.bitkit.R
+import to.bitkit.env.Tag.APP
+import to.bitkit.ext.formatWithDotSeparator
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.walletViewModel
 
 @Composable
 fun ReceiveCjitScreen(
-    viewModel: ReceiveViewModel,
     modifier: Modifier = Modifier,
     onCjitCreated: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -36,51 +49,104 @@ fun ReceiveCjitScreen(
             onDismiss()
         }
     }
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val app = appViewModel ?: return
+    val wallet = walletViewModel ?: return
+    val blocktank = blocktankViewModel ?: return
+    val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
+
     var amount by remember { mutableStateOf("") }
+    var isCreatingInvoice by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(modifier = modifier.fillMaxWidth()) {
         val focusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-        OutlinedTextField(
-            label = { Text("Amount in sats") },
+        TextField(
+            placeholder = {
+                Text("Amount in sats", style = MaterialTheme.typography.titleLarge)
+            },
             value = amount,
             onValueChange = { amount = it },
+            colors = AppTextFieldDefaults.transparent,
+            shape = MaterialTheme.shapes.small,
+            textStyle = MaterialTheme.typography.titleLarge,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
         )
-        Spacer(modifier = Modifier.height(24.dp))
-        Column {
-            // TODO: CJIT limits from blocktank info
-            Text("TODO: Cjit Limits")
-        }
         Spacer(modifier = Modifier.weight(1f))
+
+        blocktank.info?.let { info ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Min amount view
+                Column(
+                    modifier = Modifier
+                        .clickable {
+                            amount = (info.options.minChannelSizeSat / 2).toString()
+                        }
+                ) {
+                    Text(
+                        text = "Minimum",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    )
+                    Text(
+                        text = (info.options.minChannelSizeSat / 2).formatWithDotSeparator(),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+
+                // Max amount view
+                Column(
+                    modifier = Modifier
+                        .clickable {
+                            amount = (info.options.maxChannelSizeSat / 2).toString()
+                        }
+                ) {
+                    Text(
+                        text = "Maximum",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    )
+                    Text(
+                        text = (info.options.maxChannelSizeSat / 2).formatWithDotSeparator(),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                // TODO: switch to USD
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
         FullWidthTextButton(
             onClick = {
-                amount.toIntOrNull()?.let {
-                    viewModel.createCjit(it, "Bitkit")
+                if (walletUiState.nodeId.isEmpty()) return@FullWidthTextButton
+                amount.toIntOrNull()?.let { amountValue ->
+                    scope.launch {
+                        isCreatingInvoice = true
+                        try {
+                            val entry = blocktank.createCjit(amountSats = amountValue, description = "Bitkit")
+                            onCjitCreated(entry.invoice.request)
+                        } catch (e: Exception) {
+                            app.toast(e)
+                            Log.e(APP, "Failed to create cjit", e)
+                        } finally {
+                            isCreatingInvoice = false
+                        }
+                    }
                 }
             },
-            enabled = !uiState.isCreatingCjit,
-            loading = uiState.isCreatingCjit,
+            enabled = !isCreatingInvoice,
+            loading = isCreatingInvoice,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Text("Continue")
-        }
-        uiState.cjitEntry?.let { entry ->
-            LaunchedEffect(entry) {
-                onCjitCreated(entry.invoice.request)
-            }
+            Text(stringResource(R.string.continue_button))
         }
     }
 }
-// TODO: fix preview with viewModel
-// @Preview(showBackground = true)
-// @Composable
-// private fun ReceiveCjitScreenPreview() {
-//     ReceiveCjitScreen(onCjitCreated = {}, onDismiss = {})
-// }

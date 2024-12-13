@@ -37,12 +37,14 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun ContentView(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    blocktankViewModel: BlocktankViewModel,
     currencyViewModel: CurrencyViewModel,
     onWalletWiped: () -> Unit,
 ) {
@@ -74,6 +76,7 @@ fun ContentView(
         CompositionLocalProvider(
             LocalAppViewModel provides appViewModel,
             LocalWalletViewModel provides walletViewModel,
+            LocalBlocktankViewModel provides blocktankViewModel,
             LocalCurrencyViewModel provides currencyViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,

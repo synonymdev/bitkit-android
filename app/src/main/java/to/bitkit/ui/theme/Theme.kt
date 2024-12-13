@@ -36,8 +36,8 @@ private object ColorPalette {
         background = Color.White,
         surface = Color.White,
         surfaceVariant = Gray100,
-        outline = Gray300,
-        outlineVariant = Gray400,
+        outline = Gray100,
+        outlineVariant = Gray100, // divider default
         // Other default colors to override
         /*
         onPrimary = Color.White,

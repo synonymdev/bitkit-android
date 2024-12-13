@@ -286,7 +286,7 @@ class WalletViewModel @Inject constructor(
     private val incomingLightningCapacitySats: ULong?
         get() = lightningService.channels?.sumOf { it.inboundCapacityMsat / 1000u }
 
-    private suspend fun refreshBip21() {
+    suspend fun refreshBip21() {
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress()
         } else {
@@ -313,6 +313,7 @@ class WalletViewModel @Inject constructor(
 
             _bip21 = "bitcoin:$_onchainAddress?lightning=$_bolt11"
         }
+        syncState()
     }
 
     fun disconnectPeer(peer: LnPeer) {

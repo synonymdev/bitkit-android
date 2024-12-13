@@ -61,6 +61,7 @@
     <string name="wallet">Wallet</string>
     <string name="title_backup_settings">Back Up Or Restore</string>
     <string name="title_backup_wallet">Your Recovery Phrase</string>
+    <string name="title_receive">Receive Bitcoin</string>
     <string name="title_restore_wallet">Reset And Restore</string>
     <string name="title_send">Send Bitcoin</string>
     <string name="title_send_amount">Bitcoin Amount</string>

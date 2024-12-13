@@ -37,7 +37,6 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.theme.secondaryColor
 
 @Composable
@@ -53,6 +52,7 @@ fun BackupWalletScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             val app = appViewModel ?: return@Column
+
             var mnemonic by remember { mutableStateOf("") }
             var showMnemonic by remember { mutableStateOf(false) }
             val clipboard = LocalClipboardManager.current
@@ -118,10 +118,10 @@ fun BackupWalletScreen(
                                     showMnemonic = true
                                 } catch (e: Exception) {
                                     Log.e(APP, "Failed to load mnemonic", e)
-                                    ToastEventBus.send(
-                                        Toast.ToastType.ERROR,
-                                        "Error",
-                                        "Could not retrieve backup phrase"
+                                    app.toast(
+                                        type = Toast.ToastType.ERROR,
+                                        title = "Error",
+                                        description = "Could not retrieve backup phrase",
                                     )
                                 }
                             }
