@@ -79,7 +79,6 @@ fun SwipeButton(
             // Text in the middle
             Text(
                 text = "Swipe To Pay",
-                color = Color.Black,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .alpha(1.0f - (offsetX / (maxWidth - buttonHeightPx)))

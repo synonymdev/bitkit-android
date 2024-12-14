@@ -55,7 +55,6 @@ import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
-import to.bitkit.ui.screens.scanner.qrCodeScanner
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
 
@@ -66,21 +65,23 @@ fun HomeScreen(
     rootNavController: NavController,
 ) {
     val uiState by walletViewModel.uiState.collectAsState()
-    val currentSheet by appViewModel.currentSheet
+    val currentSheet = appViewModel.currentSheet
     SheetHost(
         appViewModel,
         sheets = {
-            when (currentSheet) {
-                BottomSheetType.Send -> {
+            when (val sheet = currentSheet.value) {
+                is BottomSheetType.Send -> {
                     SendOptionsView(
-                        onComplete = { sheet ->
+                        appViewModel = appViewModel,
+                        startDestination = sheet.route,
+                        onComplete = { txSheet ->
                             appViewModel.hideSheet()
-                            sheet?.let { appViewModel.showNewTransactionSheet(it) }
+                            txSheet?.let { appViewModel.showNewTransactionSheet(it) }
                         }
                     )
                 }
 
-                BottomSheetType.Receive -> {
+                is BottomSheetType.Receive -> {
                     ReceiveQRScreen(uiState)
                 }
 
@@ -117,7 +118,7 @@ fun HomeScreen(
             }
 
             TabBar(
-                onSendClick = { appViewModel.showSheet(BottomSheetType.Send) },
+                onSendClick = { appViewModel.showSheet(BottomSheetType.Send()) },
                 onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                 onScanClick = { rootNavController.navigateToQrScanner() },
                 modifier = Modifier

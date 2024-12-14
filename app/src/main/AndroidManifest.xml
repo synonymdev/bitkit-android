@@ -69,10 +69,6 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="@string/app_notifications_channel_id" />
-        <!-- Download the scanner module to the device while the app is installed from the Play Store . -->
-        <meta-data
-            android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="barcode_ui" />
     </application>
 
 </manifest>

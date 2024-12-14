@@ -14,19 +14,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -50,15 +40,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
 @Composable
 fun QrScanningScreen(
-    viewModel: QrScanViewModel,
     navController: NavController,
+    onScanSuccess: (String) -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val app = appViewModel ?: return
+
+    // TODO maybe replace & drop accompanist permissions
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
 
@@ -87,7 +80,13 @@ fun QrScanningScreen(
         imageAnalysis.setAnalyzer(
             Dispatchers.Default.asExecutor(),
             QrCodeAnalyzer { result ->
-                viewModel.onQrCodeDetected(result)
+                if (result.isSuccess) {
+                    val qrCode = requireNotNull(result.getOrNull())
+                    onScanSuccess(qrCode)
+                } else {
+                    val error = requireNotNull(result.exceptionOrNull())
+                    app.toast(error)
+                }
             }
         )
     }
@@ -114,10 +113,7 @@ fun QrScanningScreen(
         grantedContent = {
             ScreenColumn {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
-                Content(
-                    previewView = previewView,
-                    uiState = uiState,
-                )
+                Content(previewView = previewView)
             }
         }
     )
@@ -126,7 +122,6 @@ fun QrScanningScreen(
 @Composable
 private fun Content(
     previewView: PreviewView,
-    uiState: QrScanUIState,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -167,16 +162,6 @@ private fun Content(
                     blendMode = BlendMode.Clear
                 )
             }
-        }
-        if (uiState.detectedQR.isNotEmpty()) {
-            Text(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-                    .background(Color.White.copy(alpha = .6f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                text = uiState.detectedQR,
-            )
         }
     }
 }

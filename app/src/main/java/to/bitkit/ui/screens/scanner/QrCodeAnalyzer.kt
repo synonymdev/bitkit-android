@@ -14,7 +14,7 @@ import to.bitkit.env.Tag.APP
 
 @OptIn(ExperimentalGetImage::class)
 class QrCodeAnalyzer(
-    private val onQrCodeDetected: (String) -> Unit,
+    private val onScanResult: (Result<String>) -> Unit,
 ) : ImageAnalysis.Analyzer {
     private var isScanning = true
 
@@ -38,15 +38,16 @@ class QrCodeAnalyzer(
                             barcodes.forEach { barcode ->
                                 barcode.rawValue?.let { qrCode ->
                                     isScanning = false
-                                    // Success callback
-                                    onQrCodeDetected(qrCode)
+                                    onScanResult(Result.success(qrCode))
                                     image.close()
                                     return@addOnCompleteListener
                                 }
                             }
                         }
                     } else {
-                        Log.e(APP, it.exception?.message.orEmpty(), it.exception)
+                        val error = it.exception ?: Exception("Scan failed")
+                        Log.e(APP, error.message.orEmpty(), error)
+                        onScanResult(Result.failure(error))
                     }
                     image.close()
                 }

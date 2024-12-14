@@ -25,7 +25,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,17 +33,21 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.ui.AppViewModel
+import to.bitkit.ui.SendEffect
+import to.bitkit.ui.SendEvent
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.components.SendButton
-import to.bitkit.ui.screens.scanner.qrCodeScanner
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendOptionsView(
+    appViewModel: AppViewModel,
+    startDestination: SendRoute = SendRoute.Options,
     onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
-    val sendViewModel = hiltViewModel<SendViewModel>()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -52,12 +55,13 @@ fun SendOptionsView(
             .imePadding()
     ) {
         val navController = rememberNavController()
-        LaunchedEffect(sendViewModel, navController) {
-            sendViewModel.effect.collect {
+        LaunchedEffect(appViewModel, navController) {
+            appViewModel.sendEffect.collect {
                 when (it) {
-                    is SendEffect.NavigateToAmount -> navController.navigate(SendRoutes.Amount)
-                    is SendEffect.NavigateToAddress -> navController.navigate(SendRoutes.Address)
-                    is SendEffect.NavigateToReview -> navController.navigate(SendRoutes.ReviewAndSend)
+                    is SendEffect.NavigateToAmount -> navController.navigate(SendRoute.Amount)
+                    is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
+                    is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
+                    is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
                     is SendEffect.PaymentSuccess -> onComplete(it.sheet)
                 }
             }
@@ -65,35 +69,41 @@ fun SendOptionsView(
 
         NavHost(
             navController = navController,
-            startDestination = SendRoutes.Options,
+            startDestination = startDestination,
         ) {
-            composable<SendRoutes.Options> {
+            composable<SendRoute.Options> {
                 SendOptionsContent(
-                    onEvent = { sendViewModel.setEvent(it) }
+                    onEvent = { appViewModel.setSendEvent(it) }
                 )
             }
-            composable<SendRoutes.Address> {
-                val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
+            composable<SendRoute.Address> {
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAddressScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onEvent = { sendViewModel.setEvent(it) },
+                    onEvent = { appViewModel.setSendEvent(it) },
                 )
             }
-            composable<SendRoutes.Amount> {
-                val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
+            composable<SendRoute.Amount> {
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAmountScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onEvent = { sendViewModel.setEvent(it) }
+                    onEvent = { appViewModel.setSendEvent(it) }
                 )
             }
-            composable<SendRoutes.ReviewAndSend> {
-                val uiState by sendViewModel.uiState.collectAsStateWithLifecycle()
+            composable<SendRoute.QrScanner> {
+                QrScanningScreen(navController = navController) { qrCode ->
+                    navController.popBackStack()
+                    appViewModel.onScanSuccess(data = qrCode)
+                }
+            }
+            composable<SendRoute.ReviewAndSend> {
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onEvent = { sendViewModel.setEvent(it) },
+                    onEvent = { appViewModel.setSendEvent(it) },
                 )
             }
         }
@@ -147,22 +157,11 @@ private fun SendOptionsContent(
             onEvent(SendEvent.EnterManually)
         }
 
-        val scanner = qrCodeScanner()
         SendButton(
-            stringResource(R.string.scan_qr),
+            label = stringResource(R.string.scan_qr),
             icon = Icons.Default.CenterFocusWeak,
         ) {
-            scanner?.startScan()?.addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    task.result?.rawValue?.let { data ->
-                        onEvent(SendEvent.Scan(data))
-                    }
-                } else {
-                    task.exception?.let {
-                        app?.toast(it)
-                    }
-                }
-            }
+            onEvent(SendEvent.Scan)
         }
         Spacer(modifier = Modifier.weight(1f))
     }
@@ -180,16 +179,19 @@ private fun SendOptionsContentPreview() {
 }
 // endregion
 
-private object SendRoutes {
+interface SendRoute {
     @Serializable
-    data object Options
+    data object Options : SendRoute
 
     @Serializable
-    data object Address
+    data object Address : SendRoute
 
     @Serializable
-    data object Amount
+    data object Amount : SendRoute
 
     @Serializable
-    data object ReviewAndSend
+    data object QrScanner : SendRoute
+
+    @Serializable
+    data object ReviewAndSend : SendRoute
 }
