@@ -191,8 +191,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    // TODO handle all cases for mainScanner: onChainWithoutAmount, lnWithAmount, lnWithoutAmount, etc…
-    suspend fun handleScannedData(uri: String) {
+    private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
             .onFailure { Log.e(APP, "Failed to decode input data", it) }
             .getOrNull()
@@ -216,17 +215,22 @@ class AppViewModel @Inject constructor(
                         payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
                     )
                 }
-                val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis != null && lnInvoice.amountSatoshis > 0uL
+                val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } != null
                 if (isLnInvoiceWithAmount) {
                     Log.i(APP, "Found amount in invoice, proceeding with payment")
-                    setSendEffect(SendEffect.NavigateToReview)
+
+                    if (isMainScanner) {
+                        showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
+                    } else {
+                        setSendEffect(SendEffect.NavigateToReview)
+                    }
                     return
                 }
                 Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
                 resetAmountInput()
 
                 if (isMainScanner) {
-                    showSheet(BottomSheetType.Send(route = SendRoute.Amount))
+                    showSheet(BottomSheetType.Send(SendRoute.Amount))
                 } else {
                     setSendEffect(SendEffect.NavigateToAmount)
                 }
@@ -262,11 +266,21 @@ class AppViewModel @Inject constructor(
                 }
                 if (invoice.amountSatoshis > 0uL) {
                     Log.i(APP, "Found amount in invoice, proceeding with payment")
-                    setSendEffect(SendEffect.NavigateToReview)
+
+                    if (isMainScanner) {
+                        showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
+                    } else {
+                        setSendEffect(SendEffect.NavigateToReview)
+                    }
                 } else {
                     Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
                     resetAmountInput()
-                    setSendEffect(SendEffect.NavigateToAmount)
+
+                    if (isMainScanner) {
+                        showSheet(BottomSheetType.Send(SendRoute.Amount))
+                    } else {
+                        setSendEffect(SendEffect.NavigateToAmount)
+                    }
                 }
             }
 
@@ -292,8 +306,8 @@ class AppViewModel @Inject constructor(
     private fun resetAmountInput() {
         _sendUiState.update { state ->
             state.copy(
-                amountInput = "",
-                isAmountInputValid = false,
+                amountInput = state.amount.toString(),
+                isAmountInputValid = validateAmount(state.amount.toString()),
             )
         }
     }
@@ -320,6 +334,7 @@ class AppViewModel @Inject constructor(
                                 )
                             )
                         )
+                        resetSendState()
                     } else {
                         // TODO error UI
                         Log.e(APP, "Error sending onchain payment", result.exceptionOrNull())
@@ -337,6 +352,7 @@ class AppViewModel @Inject constructor(
                         val paymentHash = result.getOrNull()
                         Log.i(APP, "Lightning send result payment hash: $paymentHash")
                         setSendEffect(SendEffect.PaymentSuccess())
+                        resetSendState()
                     } else {
                         // TODO error UI
                         Log.e(APP, "Error sending lightning payment", result.exceptionOrNull())
@@ -371,6 +387,10 @@ class AppViewModel @Inject constructor(
     private fun getMinOnchainTx(): ULong {
         // TODO implement min tx size
         return 600uL
+    }
+
+    fun resetSendState() {
+        _sendUiState.value = SendUiState()
     }
     // endregion
 

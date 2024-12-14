@@ -1,5 +1,8 @@
 package to.bitkit.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -234,7 +237,20 @@ private fun NavGraphBuilder.qrScanner(
     appViewModel: AppViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.QrScanner> {
+    composable<Routes.QrScanner>(
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = tween(durationMillis = 300)
+            )
+        },
+        exitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(durationMillis = 300)
+            )
+        },
+    ) {
         QrScanningScreen(navController = navController) { qrCode ->
             navController.popBackStack()
             appViewModel.onScanSuccess(

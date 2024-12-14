@@ -3,6 +3,8 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
+import android.util.Log
+import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -16,9 +18,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -37,12 +47,13 @@ import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.env.Tag.APP
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import java.util.concurrent.Executors
 
 @Composable
 fun QrScanningScreen(
@@ -71,36 +82,52 @@ fun QrScanningScreen(
 
     val context = LocalContext.current
     val previewView = remember { PreviewView(context) }
-    val preview = Preview.Builder().build()
-    val imageAnalysis: ImageAnalysis = ImageAnalysis.Builder()
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .build()
+    val preview by remember { mutableStateOf(Preview.Builder().build()) }
+    val imageAnalysis by remember {
+        mutableStateOf(
+            ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+        )
+    }
 
     LaunchedEffect(lensFacing) {
         imageAnalysis.setAnalyzer(
-            Dispatchers.Default.asExecutor(),
+            Executors.newSingleThreadExecutor(),
             QrCodeAnalyzer { result ->
                 if (result.isSuccess) {
                     val qrCode = requireNotNull(result.getOrNull())
+                    Log.d(APP, "Scan success: $qrCode")
                     onScanSuccess(qrCode)
                 } else {
                     val error = requireNotNull(result.exceptionOrNull())
+                    Log.e(APP, "Failed to scan QR code", error)
                     app.toast(error)
                 }
             }
         )
     }
 
-    val cameraSelector = CameraSelector.Builder()
-        .requireLensFacing(lensFacing)
-        .build()
+    val cameraSelector = remember(lensFacing) {
+        CameraSelector.Builder()
+            .requireLensFacing(lensFacing)
+            .build()
+    }
     var camera by remember { mutableStateOf<Camera?>(null) }
 
     LaunchedEffect(lensFacing) {
-        val cameraProvider = ProcessCameraProvider.getInstance(context)
-        camera = withContext(Dispatchers.IO) { cameraProvider.get() }
-            .bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
+        val cameraProvider = withContext(Dispatchers.IO) {
+            ProcessCameraProvider.getInstance(context).get()
+        }
+        camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
         preview.surfaceProvider = previewView.surfaceProvider
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            camera?.let {
+                ProcessCameraProvider.getInstance(context).get().unbindAll()
+            }
+        }
     }
 
     CameraPermissionRequiredView(
@@ -126,17 +153,17 @@ private fun Content(
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { previewView }
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds(),
+            factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
         )
-        val widthInPx: Float
-        val heightInPx: Float
-        val radiusInPx: Float
-        with(LocalDensity.current) {
-            widthInPx = 350.dp.toPx()
-            heightInPx = 350.dp.toPx()
-            radiusInPx = 16.dp.toPx()
+        val (widthInPx, heightInPx, radiusInPx) = with(LocalDensity.current) {
+            remember {
+                Triple(350.dp.toPx(), 350.dp.toPx(), 16.dp.toPx())
+            }
         }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
