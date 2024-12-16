@@ -41,7 +41,7 @@ class LdkMigrationTest {
     }
 
     @Test
-    fun nodeShouldStartFromBackupAfterMigration() {
+    fun nodeShouldStartFromBackupAfterMigration() = runBlocking {
         val seed = testContext.readAsset("ldk-backup/seed.bin")
         val manager = testContext.readAsset("ldk-backup/manager.bin")
         val monitor = testContext.readAsset("ldk-backup/monitor.bin")
