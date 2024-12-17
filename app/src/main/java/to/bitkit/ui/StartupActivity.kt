@@ -12,6 +12,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import to.bitkit.ui.onboarding.TermsOfUseScreen
+import to.bitkit.ui.onboarding.WelcomeScreen
+import to.bitkit.ui.onboarding.WelcomeViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 
 @AndroidEntryPoint

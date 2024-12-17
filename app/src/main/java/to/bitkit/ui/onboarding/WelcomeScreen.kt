@@ -1,4 +1,4 @@
-package to.bitkit.ui
+package to.bitkit.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
