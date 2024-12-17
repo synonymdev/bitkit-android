@@ -20,6 +20,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -35,6 +36,8 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.millis
+import to.bitkit.ext.toHex
+import to.bitkit.ext.toSha256
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
@@ -56,7 +59,7 @@ class LightningService @Inject constructor(
 
     var node: Node? = null
 
-    fun setup(walletIndex: Int) {
+    suspend fun setup(walletIndex: Int) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
@@ -73,12 +76,12 @@ class LightningService @Inject constructor(
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
                     anchorChannelsConfig = AnchorChannelsConfig(
                         trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 1000u,
+                        perChannelReserveSats = 1u,
                     )
                 })
             .apply {
                 setChainSourceEsplora(
-                    serverUrl = Env.esploraUrl,
+                    serverUrl = Env.esploraServerUrl,
                     config = EsploraSyncConfig(
                         onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                         lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
@@ -95,10 +98,26 @@ class LightningService @Inject constructor(
 
         Log.d(LDK, "Building node…")
 
-        node = try {
-            builder.build()
-        } catch (e: BuildException) {
-            throw LdkError(e)
+        // MARK: Temp fix as we don't have VSS auth yet
+        if (Env.network != Network.REGTEST) {
+            error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")
+        }
+        val mnemonicData = mnemonic.encodeToByteArray()
+        val hashedMnemonic = mnemonicData.toSha256()
+        val storeIdHack = Env.vssStoreId + hashedMnemonic.toHex()
+
+        Log.i(APP, "storeIdHack: $storeIdHack")
+
+        ServiceQueue.LDK.background {
+            node = try {
+                builder.buildWithVssStoreAndFixedHeaders(
+                    vssUrl = Env.vssServerUrl,
+                    storeId = storeIdHack,
+                    fixedHeaders = emptyMap(),
+                )
+            } catch (e: BuildException) {
+                throw LdkError(e)
+            }
         }
 
         Log.i(LDK, "LDK node setup")

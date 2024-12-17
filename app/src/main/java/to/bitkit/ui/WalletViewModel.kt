@@ -70,6 +70,13 @@ class WalletViewModel @Inject constructor(
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
 
+    fun initNodeLifecycleState(isInitializingWallet: Boolean) {
+        if (isInitializingWallet) {
+            _nodeLifecycleState = NodeLifecycleState.Initializing
+            _uiState.update { it.copy(nodeLifecycleState = _nodeLifecycleState) }
+        }
+    }
+
     private var _onchainAddress: String
         get() = appStorage.onchainAddress
         set(value) = let { appStorage.onchainAddress = value }
@@ -98,7 +105,10 @@ class WalletViewModel @Inject constructor(
         if (_nodeLifecycleState.isRunningOrStarting()) return
 
         viewModelScope.launch {
-            _nodeLifecycleState = NodeLifecycleState.Starting
+            if (_nodeLifecycleState != NodeLifecycleState.Initializing) {
+                // Initializing means it's a wallet restore or create so we need to show the loading view
+                _nodeLifecycleState = NodeLifecycleState.Starting
+            }
             syncState()
 
             runCatching {
@@ -276,7 +286,7 @@ class WalletViewModel @Inject constructor(
     private val incomingLightningCapacitySats: ULong?
         get() = lightningService.channels?.sumOf { it.inboundCapacityMsat / 1000u }
 
-    private suspend fun refreshBip21() {
+    suspend fun refreshBip21() {
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress()
         } else {
@@ -303,6 +313,7 @@ class WalletViewModel @Inject constructor(
 
             _bip21 = "bitcoin:$_onchainAddress?lightning=$_bolt11"
         }
+        syncState()
     }
 
     fun disconnectPeer(peer: LnPeer) {
@@ -580,7 +591,8 @@ enum class NodeLifecycleState {
     Stopped,
     Starting,
     Running,
-    Stopping;
+    Stopping,
+    Initializing;
 
     fun isStoppedOrStopping() = this == Stopped || this == Stopping
     fun isRunningOrStarting() = this == Running || this == Starting

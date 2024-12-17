@@ -16,6 +16,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,20 +24,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.ui.MainUiState
+import to.bitkit.ui.NodeLifecycleState
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.walletViewModel
 
 private object Routes {
     const val QR = "qr_screen"
@@ -47,10 +56,24 @@ private object Routes {
 fun ReceiveQRScreen(
     walletState: MainUiState,
     modifier: Modifier = Modifier,
-    viewModel: ReceiveViewModel = hiltViewModel(),
 ) {
+    val app = appViewModel ?: return
+    val wallet = walletViewModel ?: return
+    val blocktank = blocktankViewModel ?: return
+
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val cjitActive = remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            coroutineScope {
+                launch { wallet.refreshBip21() }
+                launch { blocktank.refreshInfo() }
+            }
+        } catch (e: Exception) {
+            app.toast(e)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -59,12 +82,7 @@ fun ReceiveQRScreen(
             .imePadding()
             .padding(horizontal = 16.dp),
     ) {
-        Text(
-            text = "Receive Bitcoin",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-        Spacer(modifier = Modifier.height(24.dp))
+        SheetTopBar(stringResource(R.string.title_receive))
 
         val navController = rememberNavController()
         NavHost(
@@ -81,7 +99,6 @@ fun ReceiveQRScreen(
             }
             composable(Routes.CJIT) {
                 ReceiveCjitScreen(
-                    viewModel = viewModel,
                     onCjitCreated = { invoice ->
                         cjitInvoice.value = invoice
                         navController.navigate(Routes.QR) {
@@ -122,35 +139,46 @@ private fun ContentView(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        Column {
-            if (cjitInvoice.value == null) {
-                Text(
-                    text = "Want to receive lighting funds?",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Normal,
-                )
-            }
-            Row {
-                Text(
-                    text = "Receive on Spending Balance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Switch(
-                    checked = cjitActive.value,
-                    onCheckedChange = {
-                        cjitActive.value = it
-                        if (it) {
-                            navController.navigate(Routes.CJIT)
-                        } else {
-                            cjitInvoice.value = null
-                        }
-                    }
-                )
+        if (walletState.nodeLifecycleState == NodeLifecycleState.Running && walletState.channels.isEmpty()) {
+            ReceiveLightningFunds(cjitInvoice, cjitActive) {
+                cjitActive.value = it
+                if (it) {
+                    navController.navigate(Routes.CJIT)
+                } else {
+                    cjitInvoice.value = null
+                }
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ReceiveLightningFunds(
+    cjitInvoice: MutableState<String?>,
+    cjitActive: MutableState<Boolean>,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Column {
+        if (cjitInvoice.value == null) {
+            Text(
+                text = "Want to receive lighting funds?",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Normal,
+            )
+        }
+        Row {
+            Text(
+                text = "Receive on Spending Balance",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.align(Alignment.CenterVertically)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(
+                checked = cjitActive.value,
+                onCheckedChange = onCheckedChange,
+            )
+        }
     }
 }
 

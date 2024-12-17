@@ -107,6 +107,10 @@ class AppViewModel @Inject constructor(
         currentToast = null
     }
     // endregion
+
+    fun loadMnemonic(): String? {
+        return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
+    }
 }
 
 data class AppUiState(

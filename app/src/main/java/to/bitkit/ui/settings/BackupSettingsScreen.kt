@@ -12,25 +12,25 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.NavButton
-import to.bitkit.ui.navigateToDefaultUnitSettings
-import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToBackupWalletSettings
+import to.bitkit.ui.navigateToRestoreWalletSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
 @Composable
-fun GeneralSettingsScreen(
+fun BackupSettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.general), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.title_backup_settings), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            NavButton(stringResource(R.string.default_unit)) { navController.navigateToDefaultUnitSettings() }
-            NavButton(stringResource(R.string.local_currency)) { navController.navigateToLocalCurrencySettings() }
+            NavButton(stringResource(R.string.button_backup_wallet)) { navController.navigateToBackupWalletSettings() }
+            NavButton(stringResource(R.string.button_restore_wallet)) { navController.navigateToRestoreWalletSettings() }
         }
     }
 }

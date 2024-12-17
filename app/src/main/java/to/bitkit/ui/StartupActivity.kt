@@ -24,16 +24,17 @@ class StartupActivity : ComponentActivity() {
                 val viewModel = hiltViewModel<WelcomeViewModel>()
                 AppThemeSurface {
                     WelcomeScreen(viewModel) {
-                        launchMainActivity()
+                        launchMainActivity(isInitializingWallet = true)
                     }
                 }
             }
         }
     }
 
-    private fun launchMainActivity() {
+    private fun launchMainActivity(isInitializingWallet: Boolean = false) {
         startActivity(Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_INIT_WALLET, isInitializingWallet)
         })
         finish()
     }

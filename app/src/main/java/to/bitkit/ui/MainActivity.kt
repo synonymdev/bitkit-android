@@ -17,12 +17,14 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
+    private val blocktankViewModel by viewModels<BlocktankViewModel>()
     private val currencyViewModel by viewModels<CurrencyViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,12 +32,19 @@ class MainActivity : ComponentActivity() {
 
         initNotificationChannel()
 
+        val isInitializingWallet = intent.getBooleanExtra(EXTRA_INIT_WALLET, false)
+        walletViewModel.initNodeLifecycleState(isInitializingWallet)
         walletViewModel.setOnEvent(::onLdkEvent)
 
         enableEdgeToEdge()
         setContent {
             AppThemeSurface {
-                ContentView(appViewModel, walletViewModel, currencyViewModel) {
+                ContentView(
+                    appViewModel = appViewModel,
+                    walletViewModel = walletViewModel,
+                    blocktankViewModel = blocktankViewModel,
+                    currencyViewModel = currencyViewModel,
+                ) {
                     launchStartupActivity()
                 }
 
@@ -84,7 +93,7 @@ class MainActivity : ComponentActivity() {
                         appViewModel.showNewTransactionSheet(
                             NewTransactionSheetDetails(
                                 type = NewTransactionSheetType.LIGHTNING,
-                                direction = NewTransactionSheetDirection.SENT,
+                                direction = NewTransactionSheetDirection.RECEIVED,
                                 sats = (channel.inboundCapacityMsat / 1000u).toLong(),
                             )
                         )
@@ -144,5 +153,9 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         walletViewModel.stopIfNeeded()
+    }
+
+    companion object {
+        const val EXTRA_INIT_WALLET = "EXTRA_INIT_WALLET"
     }
 }
