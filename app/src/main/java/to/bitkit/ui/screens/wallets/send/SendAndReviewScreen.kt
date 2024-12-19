@@ -25,6 +25,9 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ext.truncate
+import to.bitkit.ui.SendEvent
+import to.bitkit.ui.SendMethod
+import to.bitkit.ui.SendUiState
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.components.SwipeButton

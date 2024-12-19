@@ -1,40 +1,27 @@
 package to.bitkit.ui
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.runtime.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
-import androidx.navigation.NavController
-import androidx.navigation.NavGraphBuilder
-import androidx.navigation.NavHostController
-import androidx.navigation.NavOptionsBuilder
+import androidx.navigation.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.screens.DevSettingsScreen
+import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
 import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
-import to.bitkit.ui.settings.BackupSettingsScreen
-import to.bitkit.ui.settings.BlocktankRegtestScreen
-import to.bitkit.ui.settings.BlocktankRegtestViewModel
-import to.bitkit.ui.settings.DefaultUnitSettingsScreen
-import to.bitkit.ui.settings.GeneralSettingsScreen
-import to.bitkit.ui.settings.LightningSettingsScreen
-import to.bitkit.ui.settings.LocalCurrencySettingsScreen
-import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.*
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.viewmodels.BlocktankViewModel
@@ -97,6 +84,7 @@ fun ContentView(
                 transfer(navController)
                 allActivity(walletViewModel, navController)
                 activityItem(walletViewModel, navController)
+                qrScanner(appViewModel, navController)
             }
         }
     }
@@ -109,7 +97,11 @@ private fun NavGraphBuilder.home(
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
-        HomeScreen(viewModel, appViewModel, navController)
+        HomeScreen(
+            walletViewModel = viewModel,
+            appViewModel = appViewModel,
+            rootNavController = navController
+        )
     }
 }
 
@@ -240,6 +232,34 @@ private fun NavGraphBuilder.activityItem(
         )
     }
 }
+
+private fun NavGraphBuilder.qrScanner(
+    appViewModel: AppViewModel,
+    navController: NavHostController,
+) {
+    composable<Routes.QrScanner>(
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = tween(durationMillis = 300)
+            )
+        },
+        exitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(durationMillis = 300)
+            )
+        },
+    ) {
+        QrScanningScreen(navController = navController) { qrCode ->
+            navController.popBackStack()
+            appViewModel.onScanSuccess(
+                data = qrCode,
+                onResultDelay = 650 // slight delay to for home navigation before showing send sheet
+            )
+        }
+    }
+}
 // endregion
 
 // region events
@@ -298,6 +318,10 @@ fun NavController.navigateToAllActivity() = navigate(
 fun NavController.navigateToActivityItem(id: String) = navigate(
     route = Routes.ActivityItem(id),
 )
+
+fun NavController.navigateToQrScanner() = navigate(
+    route = Routes.QrScanner,
+)
 // endregion
 
 private fun NavOptionsBuilder.clearBackStack() = popUpTo(id = 0)
@@ -347,4 +371,7 @@ object Routes {
 
     @Serializable
     data class ActivityItem(val id: String)
+
+    @Serializable
+    data object QrScanner
 }

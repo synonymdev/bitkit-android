@@ -25,6 +25,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.SendEvent
+import to.bitkit.ui.SendMethod
+import to.bitkit.ui.SendUiState
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
