@@ -49,15 +49,16 @@ private object ColorPalette {
 
     @Stable
     val Dark = darkColorScheme(
-        primary = Brand500,
-        secondary = Purple700,
-        background = Color.Black,
-        surface = Color.Black,
+        primary = Colors.White,
+        secondary = Colors.White64,
+        background = Colors.Black,
+        surface = Colors.Black, // Color(0xFF101010),
+        onBackground = Colors.White,
+        onSurface = Colors.White, // Colors.Gray6,
         surfaceVariant = gray900,
-        onPrimary = Color.White,
-        onSecondary = Color.White,
-        onBackground = Color.White,
-        onSurface = Color.White,
+        onPrimary = Colors.White,
+        onSecondary = Colors.White,
+        outlineVariant = Colors.White10, // divider default
     )
 }
 
@@ -65,7 +66,8 @@ private object ColorPalette {
 internal fun AppThemeSurface(
     content: @Composable () -> Unit,
 ) {
-    AppTheme {
+    val isSystemInDarkTheme = true // isSystemInDarkTheme() // use computed value for dark theme
+    AppTheme(inDarkTheme = isSystemInDarkTheme) {
         Surface(content = content)
     }
 }
