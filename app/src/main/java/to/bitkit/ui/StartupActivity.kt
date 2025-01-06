@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -16,6 +15,7 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WelcomeScreen
 import to.bitkit.ui.onboarding.WelcomeViewModel
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.enableAppEdgeToEdge
 
 @AndroidEntryPoint
 class StartupActivity : ComponentActivity() {
@@ -24,7 +24,7 @@ class StartupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installSplashScreen()
-        enableEdgeToEdge()
+        enableAppEdgeToEdge()
         setContent {
             if (viewModel.uiState.hasWallet) {
                 launchMainActivity()

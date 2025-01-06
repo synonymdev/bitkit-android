@@ -9,12 +9,10 @@
         <item name="colorSecondary">@color/teal_200</item>
         <item name="colorSecondaryVariant">@color/teal_700</item>
         <item name="colorOnSecondary">@color/black</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
         <!-- Customize your theme here. -->
     </style>
 
-    <style name="Theme.App.NoActionBar">
+    <style name="Theme.App.NoActionBar" parent="Theme.App">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>
@@ -27,6 +25,6 @@
     <style name="Theme.App.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#FF4400</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_orange</item>
-        <item name="postSplashScreenTheme">@style/Theme.App</item>
+        <item name="postSplashScreenTheme">@style/Theme.App.NoActionBar</item>
     </style>
 </resources>

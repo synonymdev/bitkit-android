@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
@@ -17,6 +16,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 
@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
         walletViewModel.initNodeLifecycleState(isInitializingWallet)
         walletViewModel.setOnEvent(::onLdkEvent)
 
-        enableEdgeToEdge()
+        enableAppEdgeToEdge()
         setContent {
             AppThemeSurface {
                 ContentView(
