@@ -29,7 +29,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun Payments(

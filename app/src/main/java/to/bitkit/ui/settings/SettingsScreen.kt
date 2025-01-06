@@ -13,7 +13,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToBackupSettings

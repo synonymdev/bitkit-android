@@ -26,8 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.MainUiState
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar

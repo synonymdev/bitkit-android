@@ -17,7 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.R
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.scaffold.AppTopBar

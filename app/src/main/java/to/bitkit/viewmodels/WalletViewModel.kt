@@ -1,4 +1,4 @@
-package to.bitkit.ui
+package to.bitkit.viewmodels
 
 import android.content.Context
 import android.util.Log

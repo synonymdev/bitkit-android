@@ -36,6 +36,7 @@ import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.shared.moneyString
+import to.bitkit.viewmodels.WalletViewModel
 import java.time.Instant
 
 @Composable

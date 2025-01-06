@@ -45,7 +45,7 @@ import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn

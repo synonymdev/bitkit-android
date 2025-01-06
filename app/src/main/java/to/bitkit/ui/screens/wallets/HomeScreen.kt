@@ -38,9 +38,9 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
-import to.bitkit.ui.AppViewModel
+import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.LocalBalances
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.SheetHost

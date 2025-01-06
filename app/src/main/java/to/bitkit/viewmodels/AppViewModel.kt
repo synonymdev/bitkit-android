@@ -1,4 +1,4 @@
-package to.bitkit.ui
+package to.bitkit.viewmodels
 
 import android.util.Log
 import androidx.compose.runtime.getValue

@@ -33,9 +33,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.ui.AppViewModel
-import to.bitkit.ui.SendEffect
-import to.bitkit.ui.SendEvent
+import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SendEffect
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen

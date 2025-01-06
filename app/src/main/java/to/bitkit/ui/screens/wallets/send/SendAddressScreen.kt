@@ -19,8 +19,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.SendEvent
-import to.bitkit.ui.SendUiState
+import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendUiState
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
