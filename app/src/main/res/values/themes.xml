@@ -22,4 +22,11 @@
     <style name="Theme.App.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
 
     <style name="Theme.App.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
+
+    <!-- Splash Screen Theme -->
+    <style name="Theme.App.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF4400</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_orange</item>
+        <item name="postSplashScreenTheme">@style/Theme.App</item>
+    </style>
 </resources>
