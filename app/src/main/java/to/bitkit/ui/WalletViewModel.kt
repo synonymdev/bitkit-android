@@ -2,7 +2,9 @@ package to.bitkit.ui
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -70,7 +72,14 @@ class WalletViewModel @Inject constructor(
 
     private var _nodeLifecycleState = NodeLifecycleState.Stopped
 
-    fun initNodeLifecycleState(isInitializingWallet: Boolean) {
+    var walletExists by mutableStateOf(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name))
+        private set
+
+    fun setWalletExistsState() {
+        walletExists = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+    }
+
+    fun setInitNodeLifecycleState(isInitializingWallet: Boolean) {
         if (isInitializingWallet) {
             _nodeLifecycleState = NodeLifecycleState.Initializing
             _uiState.update { it.copy(nodeLifecycleState = _nodeLifecycleState) }
@@ -91,8 +100,6 @@ class WalletViewModel @Inject constructor(
 
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
         private set
-
-    private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
     private var onLdkEvent: ((Event) -> Unit)? = null
 
@@ -393,6 +400,7 @@ class WalletViewModel @Inject constructor(
                 lightningService.wipeStorage(0)
                 appStorage.clear()
                 keychain.wipe()
+                setWalletExistsState()
             }.onFailure {
                 ToastEventBus.send(it)
             }

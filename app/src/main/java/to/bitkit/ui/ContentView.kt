@@ -3,16 +3,27 @@ package to.bitkit.ui
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.flowWithLifecycle
-import androidx.navigation.*
+import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.flow.filter
+import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
+import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -21,7 +32,14 @@ import to.bitkit.ui.screens.transfer.TransferViewModel
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
-import to.bitkit.ui.settings.*
+import to.bitkit.ui.settings.BackupSettingsScreen
+import to.bitkit.ui.settings.BlocktankRegtestScreen
+import to.bitkit.ui.settings.BlocktankRegtestViewModel
+import to.bitkit.ui.settings.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.GeneralSettingsScreen
+import to.bitkit.ui.settings.LightningSettingsScreen
+import to.bitkit.ui.settings.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.viewmodels.BlocktankViewModel
@@ -33,23 +51,40 @@ fun ContentView(
     walletViewModel: WalletViewModel,
     blocktankViewModel: BlocktankViewModel,
     currencyViewModel: CurrencyViewModel,
-    onWalletWiped: () -> Unit,
 ) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    walletViewModel.start()
+
+                    val pendingTransaction = NewTransactionSheetDetails.load(context)
+                    if (pendingTransaction != null) {
+                        appViewModel.showNewTransactionSheet(pendingTransaction)
+                        NewTransactionSheetDetails.clear(context)
+                    }
+                }
+
+                Lifecycle.Event.ON_STOP -> {
+                    walletViewModel.stopIfNeeded()
+                }
+
+                else -> Unit
+            }
+        }
+
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
         walletViewModel.observeLdkWallet()
-    }
-
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val currentOnWalletWiped by rememberUpdatedState(onWalletWiped)
-    LaunchedEffect(appViewModel, lifecycle) {
-        snapshotFlow { appViewModel.uiState }
-            .filter { it.walletExists == false }
-            .flowWithLifecycle(lifecycle)
-            .collect {
-                currentOnWalletWiped()
-            }
     }
 
     val walletUiState by walletViewModel.uiState.collectAsState()

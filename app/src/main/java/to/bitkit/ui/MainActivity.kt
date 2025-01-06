@@ -1,11 +1,15 @@
 package to.bitkit.ui
 
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
@@ -14,6 +18,10 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.onboarding.TermsOfUseScreen
+import to.bitkit.ui.onboarding.WelcomeScreen
+import to.bitkit.ui.onboarding.WelcomeViewModel
+import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.enableAppEdgeToEdge
@@ -31,21 +39,36 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
-
-        val isInitializingWallet = intent.getBooleanExtra(EXTRA_INIT_WALLET, false)
-        walletViewModel.initNodeLifecycleState(isInitializingWallet)
-        walletViewModel.setOnEvent(::onLdkEvent)
-
+        installSplashScreen()
         enableAppEdgeToEdge()
+        walletViewModel.setOnEvent(::onLdkEvent)
         setContent {
             AppThemeSurface {
-                ContentView(
-                    appViewModel = appViewModel,
-                    walletViewModel = walletViewModel,
-                    blocktankViewModel = blocktankViewModel,
-                    currencyViewModel = currencyViewModel,
-                ) {
-                    launchStartupActivity()
+                if (!walletViewModel.walletExists) {
+                    val startupNavController = rememberNavController()
+                    NavHost(navController = startupNavController, startDestination = StartupRoutes.TERMS) {
+                        composable(StartupRoutes.TERMS) {
+                            TermsOfUseScreen(
+                                onNavigateToIntro = {
+                                    startupNavController.navigate(StartupRoutes.INTRO)
+                                }
+                            )
+                        }
+                        composable(StartupRoutes.INTRO) {
+                            val viewModel = hiltViewModel<WelcomeViewModel>()
+                            WelcomeScreen(viewModel) {
+                                walletViewModel.setWalletExistsState()
+                                walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                            }
+                        }
+                    }
+                } else {
+                    ContentView(
+                        appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
+                        blocktankViewModel = blocktankViewModel,
+                        currencyViewModel = currencyViewModel,
+                    )
                 }
 
                 ToastOverlay(
@@ -54,19 +77,14 @@ class MainActivity : ComponentActivity() {
                         appViewModel.hideToast()
                     }
                 )
-            }
 
-            if (appViewModel.showNewTransaction) {
-                NewTransactionSheet(appViewModel)
+                if (appViewModel.showNewTransaction) {
+                    NewTransactionSheet(appViewModel)
+                }
+
+                SplashScreen(appViewModel.splashVisible)
             }
         }
-    }
-
-    private fun launchStartupActivity() {
-        startActivity(Intent(this, StartupActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
-        })
-        finish()
     }
 
     private fun onLdkEvent(event: Event) = runOnUiThread {
@@ -137,25 +155,9 @@ class MainActivity : ComponentActivity() {
             Log.e(LDK, "Ldk event handler error", e)
         }
     }
+}
 
-    override fun onStart() {
-        super.onStart()
-
-        walletViewModel.start()
-
-        val pendingTransaction = NewTransactionSheetDetails.load(this)
-        if (pendingTransaction != null) {
-            appViewModel.showNewTransactionSheet(pendingTransaction)
-            NewTransactionSheetDetails.clear(this)
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        walletViewModel.stopIfNeeded()
-    }
-
-    companion object {
-        const val EXTRA_INIT_WALLET = "EXTRA_INIT_WALLET"
-    }
+private object StartupRoutes {
+    const val TERMS = "terms"
+    const val INTRO = "intro"
 }
