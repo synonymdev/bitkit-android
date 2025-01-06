@@ -49,13 +49,14 @@ import to.bitkit.ui.theme.BodyMSB
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Display
 
+private val horizontalPadding = 32.dp
+
 @Composable
 fun TermsOfUseScreen(
     onNavigateToIntro: () -> Unit,
 ) {
     var termsAccepted by rememberSaveable { mutableStateOf(false) }
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }
-
     Scaffold { contentPadding ->
         Column(
             modifier = Modifier
@@ -71,7 +72,7 @@ fun TermsOfUseScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = horizontalPadding)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -110,13 +111,15 @@ fun TermsOfUseScreen(
                     title = stringResource(R.string.tos_checkbox),
                     htmlText = stringResource(R.string.tos_checkbox_value),
                     isChecked = termsAccepted,
-                    onCheckedChange = { termsAccepted = it }
+                    onCheckedChange = { termsAccepted = it },
+                    modifier = Modifier.padding(horizontal = horizontalPadding)
                 )
                 CheckButton(
                     title = stringResource(R.string.pp_checkbox),
                     htmlText = stringResource(R.string.pp_checkbox_value),
                     isChecked = privacyAccepted,
-                    onCheckedChange = { privacyAccepted = it }
+                    onCheckedChange = { privacyAccepted = it },
+                    modifier = Modifier.padding(horizontal = horizontalPadding)
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -125,7 +128,7 @@ fun TermsOfUseScreen(
                     text = "Continue",
                     onClick = onNavigateToIntro,
                     enabled = termsAccepted && privacyAccepted,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = horizontalPadding)
                 )
             }
         }
@@ -138,12 +141,13 @@ private fun CheckButton(
     htmlText: String,
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!isChecked) }
-            .padding(horizontal = 16.dp)
+            .then(modifier)
     ) {
         Spacer(modifier = Modifier.height(14.dp))
         Row(

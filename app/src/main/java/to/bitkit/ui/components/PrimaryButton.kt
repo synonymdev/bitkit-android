@@ -2,6 +2,7 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,9 @@ fun PrimaryButton(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
         contentPadding = PaddingValues(vertical = 16.dp),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
     ) {
         Text(text = text)
     }

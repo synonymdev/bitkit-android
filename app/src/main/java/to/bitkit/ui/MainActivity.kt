@@ -10,7 +10,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
@@ -18,12 +20,15 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.onboarding.IntroScreen
+import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WelcomeScreen
 import to.bitkit.ui.onboarding.WelcomeViewModel
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.clearBackStack
 import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
@@ -48,15 +53,37 @@ class MainActivity : ComponentActivity() {
             AppThemeSurface {
                 if (!walletViewModel.walletExists) {
                     val startupNavController = rememberNavController()
-                    NavHost(navController = startupNavController, startDestination = StartupRoutes.TERMS) {
-                        composable(StartupRoutes.TERMS) {
+                    NavHost(
+                        navController = startupNavController,
+                        startDestination = StartupRoutes.Terms,
+                    ) {
+                        composable<StartupRoutes.Terms> {
                             TermsOfUseScreen(
                                 onNavigateToIntro = {
-                                    startupNavController.navigate(StartupRoutes.INTRO)
+                                    startupNavController.navigate(StartupRoutes.Intro) { clearBackStack() }
                                 }
                             )
                         }
-                        composable(StartupRoutes.INTRO) {
+                        composable<StartupRoutes.Intro> {
+                            IntroScreen(
+                                onStartClick = {
+                                    startupNavController.navigate(StartupRoutes.Slides()) { clearBackStack() }
+                                },
+                                onSkipClick = {
+                                    startupNavController.navigate(StartupRoutes.Slides(4)) { clearBackStack() }
+                                },
+                            )
+                        }
+                        composable<StartupRoutes.Slides> { navBackEntry ->
+                            val route = navBackEntry.toRoute<StartupRoutes.Slides>()
+                            OnboardingSlidesScreen(
+                                currentTab = route.tab,
+                                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Welcome) },
+                                onCreateClick = { startupNavController.navigate(StartupRoutes.Welcome) },
+                                onRestoreClick = { startupNavController.navigate(StartupRoutes.Welcome) },
+                            )
+                        }
+                        composable<StartupRoutes.Welcome> {
                             val viewModel = hiltViewModel<WelcomeViewModel>()
                             WelcomeScreen(viewModel) {
                                 walletViewModel.setWalletExistsState()
@@ -160,6 +187,15 @@ class MainActivity : ComponentActivity() {
 }
 
 private object StartupRoutes {
-    const val TERMS = "terms"
-    const val INTRO = "intro"
+    @Serializable
+    data object Terms
+
+    @Serializable
+    data object Intro
+
+    @Serializable
+    data class Slides(val tab: Int = 0)
+
+    @Serializable
+    data object Welcome
 }

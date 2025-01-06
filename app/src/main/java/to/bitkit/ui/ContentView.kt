@@ -362,8 +362,6 @@ fun NavController.navigateToQrScanner() = navigate(
 )
 // endregion
 
-private fun NavOptionsBuilder.clearBackStack() = popUpTo(id = 0)
-
 object Routes {
     @Serializable
     data object Home
