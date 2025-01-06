@@ -42,7 +42,7 @@ internal object Env {
         }
     val vssStoreId
         get() = when (network) {
-            Network.REGTEST -> "bitkit_android_regtest_2"
+            Network.REGTEST -> "bitkit_regtest"
             else -> TODO("${network.name} network not implemented")
         }
     val esploraServerUrl
