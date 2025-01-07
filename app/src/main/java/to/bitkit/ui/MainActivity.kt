@@ -24,7 +24,6 @@ import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WelcomeScreen
-import to.bitkit.ui.onboarding.WelcomeViewModel
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -84,8 +83,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable<StartupRoutes.Welcome> {
-                            val viewModel = hiltViewModel<WelcomeViewModel>()
-                            WelcomeScreen(viewModel) {
+                            WelcomeScreen(walletViewModel) {
                                 walletViewModel.setWalletExistsState()
                                 walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
                             }

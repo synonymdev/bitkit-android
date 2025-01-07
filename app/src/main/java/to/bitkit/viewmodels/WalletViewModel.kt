@@ -30,6 +30,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.entities.OrderEntity
@@ -404,6 +405,21 @@ class WalletViewModel @Inject constructor(
             }.onFailure {
                 ToastEventBus.send(it)
             }
+        }
+    }
+
+    suspend fun createWallet(bip39Passphrase: String) {
+        val mnemonic = generateEntropyMnemonic()
+        keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+        if (bip39Passphrase.isNotBlank()) {
+            keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+        }
+    }
+
+    suspend fun restoreWallet(bip39Passphrase: String, bip39Mnemonic: String) {
+        keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, bip39Mnemonic)
+        if (bip39Passphrase.isNotBlank()) {
+            keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
         }
     }
 

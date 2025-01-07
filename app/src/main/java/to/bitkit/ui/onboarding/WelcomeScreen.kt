@@ -18,40 +18,27 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.flowWithLifecycle
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppShapes
+import to.bitkit.viewmodels.WalletViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WelcomeScreen(
-    viewModel: WelcomeViewModel,
+    viewModel: WalletViewModel,
     onWalletSubmitted: () -> Unit,
 ) {
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val currentOnWalletSubmitted by rememberUpdatedState(onWalletSubmitted)
-    LaunchedEffect(viewModel, lifecycle)  {
-        snapshotFlow { viewModel.uiState }
-            .filter { it.isWalletSubmitted }
-            .flowWithLifecycle(lifecycle)
-            .collect {
-                currentOnWalletSubmitted()
-            }
-    }
-
+    val scope = rememberCoroutineScope()
     var showRestore by remember { mutableStateOf(false) }
     if (showRestore) {
         ModalBottomSheet(
@@ -65,7 +52,10 @@ fun WelcomeScreen(
         ) {
             RestoreView(
                 onRestoreClick = { bip39Passphrase, bip39Mnemonic ->
-                    viewModel.restoreWallet(bip39Passphrase, bip39Mnemonic)
+                    scope.launch {
+                        viewModel.restoreWallet(bip39Passphrase, bip39Mnemonic)
+                        onWalletSubmitted()
+                    }
                 },
             )
         }
@@ -100,7 +90,10 @@ fun WelcomeScreen(
         FullWidthTextButton(
             onClick = {
                 isCreating = true
-                viewModel.createWallet(bip39Passphrase)
+                scope.launch {
+                    viewModel.createWallet(bip39Passphrase)
+                    onWalletSubmitted()
+                }
             },
             horizontalArrangement = Arrangement.Center,
             loading = isCreating,
