@@ -53,7 +53,7 @@ fun WelcomeScreen(
             RestoreView(
                 onRestoreClick = { bip39Passphrase, bip39Mnemonic ->
                     scope.launch {
-                        viewModel.restoreWallet(bip39Passphrase, bip39Mnemonic)
+                        viewModel.restoreWallet(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotBlank() })
                         onWalletSubmitted()
                     }
                 },
@@ -91,7 +91,7 @@ fun WelcomeScreen(
             onClick = {
                 isCreating = true
                 scope.launch {
-                    viewModel.createWallet(bip39Passphrase)
+                    viewModel.createWallet(bip39Passphrase.takeIf { it.isNotBlank() })
                     onWalletSubmitted()
                 }
             },

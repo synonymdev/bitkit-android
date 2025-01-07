@@ -148,6 +148,7 @@ fun BodyMB(
 fun BodyS(
     text: String,
     color: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier,
 ) {
     Text(
         text = text,
@@ -157,9 +158,10 @@ fun BodyS(
             lineHeight = 20.sp,
             letterSpacing = 0.4.sp,
             fontFamily = FontFamily.Default,
-            color = color
+            color = color,
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
 

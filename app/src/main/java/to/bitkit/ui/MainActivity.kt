@@ -5,13 +5,14 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.env.Tag.LDK
@@ -22,6 +23,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
+import to.bitkit.ui.onboarding.RestoreWalletView
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WelcomeScreen
 import to.bitkit.ui.screens.SplashScreen
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         walletViewModel.setOnEvent(::onLdkEvent)
         setContent {
             AppThemeSurface {
+                val scope = rememberCoroutineScope()
                 if (!walletViewModel.walletExists) {
                     val startupNavController = rememberNavController()
                     NavHost(
@@ -78,8 +81,34 @@ class MainActivity : ComponentActivity() {
                             OnboardingSlidesScreen(
                                 currentTab = route.tab,
                                 onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Welcome) },
-                                onCreateClick = { startupNavController.navigate(StartupRoutes.Welcome) },
-                                onRestoreClick = { startupNavController.navigate(StartupRoutes.Welcome) },
+                                onCreateClick = {
+                                    scope.launch {
+                                        try {
+                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.createWallet(bip39Passphrase = null)
+                                            walletViewModel.setWalletExistsState()
+                                        } catch (e: Exception) {
+                                            appViewModel.toast(e)
+                                        }
+                                    }
+                                },
+                                onRestoreClick = { startupNavController.navigate(StartupRoutes.Restore) },
+                            )
+                        }
+                        composable<StartupRoutes.Restore> {
+                            RestoreWalletView(
+                                onBackClick = { startupNavController.popBackStack() },
+                                onRestoreClick = { mnemonic, passphrase ->
+                                    scope.launch {
+                                        try {
+                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.restoreWallet(mnemonic, passphrase)
+                                            walletViewModel.setWalletExistsState()
+                                        } catch (e: Exception) {
+                                            appViewModel.toast(e)
+                                        }
+                                    }
+                                }
                             )
                         }
                         composable<StartupRoutes.Welcome> {
@@ -193,6 +222,9 @@ private object StartupRoutes {
 
     @Serializable
     data class Slides(val tab: Int = 0)
+
+    @Serializable
+    data object Restore
 
     @Serializable
     data object Welcome

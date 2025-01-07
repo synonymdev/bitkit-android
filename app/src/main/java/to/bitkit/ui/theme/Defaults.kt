@@ -25,4 +25,12 @@ object AppTextFieldDefaults {
             focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
+    val semiTransparent: TextFieldColors
+        @Composable
+        get() = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            focusedContainerColor = Colors.White10,
+            unfocusedContainerColor = Colors.White10,
+        )
 }
