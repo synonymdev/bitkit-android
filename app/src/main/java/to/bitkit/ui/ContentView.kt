@@ -93,7 +93,12 @@ fun ContentView(
     val walletUiState by walletViewModel.uiState.collectAsState()
 
     if (walletUiState.nodeLifecycleState == NodeLifecycleState.Initializing) {
-        InitializingWalletView()
+        InitializingWalletView(
+            shouldFinish = true, // TODO finish using state var binding
+            onComplete = {
+                // TODO hide using state var
+            }
+        )
     } else {
         val balance by walletViewModel.balanceState.collectAsState()
         val currencies by currencyViewModel.uiState.collectAsState()
