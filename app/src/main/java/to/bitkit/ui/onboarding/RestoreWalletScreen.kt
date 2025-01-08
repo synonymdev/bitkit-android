@@ -91,156 +91,154 @@ fun RestoreWalletView(
                     }
                 },
             )
-        },
-        content = { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 32.dp)
-                    .verticalScroll(rememberScrollState())
-                    .imePadding()
-            ) {
-                Display("RESTORE", color = Colors.Blue)
-                Display("YOUR WALLET", modifier = Modifier.offset(y = (-8).dp))
-                Text(
-                    text = "Please type in your recovery phrase from any (paper) backup.",
-                    fontSize = 17.sp,
-                    color = Colors.White80,
-                )
-                Spacer(modifier = Modifier.height(32.dp))
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+        ) {
+            Display("RESTORE", color = Colors.Blue)
+            Display("YOUR WALLET", modifier = Modifier.offset(y = (-8).dp))
+            Text(
+                text = "Please type in your recovery phrase from any (paper) backup.",
+                fontSize = 17.sp,
+                color = Colors.White80,
+            )
+            Spacer(modifier = Modifier.height(32.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // First column (1-6 or 1-12)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        for (index in 0 until wordsPerColumn) {
-                            MnemonicInputField(
-                                label = "${index + 1}.",
-                                value = if (index == 0) firstFieldText else words[index],
-                                onValueChanged = { newValue ->
-                                    if (index == 0) {
-                                        if (newValue.contains(" ")) {
-                                            handlePastedWords(
-                                                newValue,
-                                                words,
-                                                onWordCountChanged = { is24Words = it },
-                                                onFirstWordChanged = { firstFieldText = it }
-                                            )
-                                        } else {
-                                            words[index] = newValue
-                                            firstFieldText = newValue
-                                        }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // First column (1-6 or 1-12)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    for (index in 0 until wordsPerColumn) {
+                        MnemonicInputField(
+                            label = "${index + 1}.",
+                            value = if (index == 0) firstFieldText else words[index],
+                            onValueChanged = { newValue ->
+                                if (index == 0) {
+                                    if (newValue.contains(" ")) {
+                                        handlePastedWords(
+                                            newValue,
+                                            words,
+                                            onWordCountChanged = { is24Words = it },
+                                            onFirstWordChanged = { firstFieldText = it }
+                                        )
                                     } else {
                                         words[index] = newValue
+                                        firstFieldText = newValue
                                     }
-                                }
-                            )
-                        }
-                    }
-                    // Second column (7-12 or 13-24)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        for (index in wordsPerColumn until (wordsPerColumn * 2)) {
-                            MnemonicInputField(
-                                label = "${index + 1}.",
-                                value = words[index],
-                                onValueChanged = { newValue ->
+                                } else {
                                     words[index] = newValue
                                 }
-                            )
-                        }
-                    }
-                }
-                // Passphrase
-                if (showingPassphrase) {
-                    OutlinedTextField(
-                        value = bip39Passphrase,
-                        onValueChange = { bip39Passphrase = it },
-                        placeholder = { Text("Passphrase*") },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = AppTextFieldDefaults.semiTransparent,
-                        maxLines = 1,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            autoCorrectEnabled = false,
-                            imeAction = ImeAction.Next,
-                            capitalization = KeyboardCapitalization.None,
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                    )
-                    BodyS(
-                        text = "*Optional, enter only if you’ve set up one.",
-                        color = Colors.White64,
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Footer with buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(vertical = 16.dp)
-                        .fillMaxWidth(),
-                ) {
-                    val areButtonsEnabled by remember {
-                        derivedStateOf {
-                            val wordCount = if (is24Words) 24 else 12
-                            words.subList(0, wordCount).none { it.isBlank() }
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            showingPassphrase = !showingPassphrase
-                            bip39Passphrase = ""
-                        },
-                        shape = RoundedCornerShape(30.dp),
-                        border = BorderStroke(1.dp, if (areButtonsEnabled) Colors.White16 else Color.Transparent),
-                        enabled = areButtonsEnabled,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                    ) {
-                        Text(
-                            text = "Advanced",
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                            color = if (areButtonsEnabled) Colors.White80 else Colors.White32,
+                            }
                         )
                     }
-                    Button(
-                        onClick = {
-                            onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Colors.White16,
-                            disabledContainerColor = Color.Transparent,
-                            contentColor = Colors.White,
-                            disabledContentColor = Colors.White32,
-                        ),
-                        shape = RoundedCornerShape(30.dp),
-                        enabled = areButtonsEnabled,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                    ) {
-                        Text(
-                            text = "Restore",
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                }
+                // Second column (7-12 or 13-24)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    for (index in wordsPerColumn until (wordsPerColumn * 2)) {
+                        MnemonicInputField(
+                            label = "${index + 1}.",
+                            value = words[index],
+                            onValueChanged = { newValue ->
+                                words[index] = newValue
+                            }
                         )
                     }
                 }
             }
+            // Passphrase
+            if (showingPassphrase) {
+                OutlinedTextField(
+                    value = bip39Passphrase,
+                    onValueChange = { bip39Passphrase = it },
+                    placeholder = { Text("Passphrase*") },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = AppTextFieldDefaults.semiTransparent,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Next,
+                        capitalization = KeyboardCapitalization.None,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+                BodyS(
+                    text = "*Optional, enter only if you’ve set up one.",
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Footer with buttons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .fillMaxWidth(),
+            ) {
+                val areButtonsEnabled by remember {
+                    derivedStateOf {
+                        val wordCount = if (is24Words) 24 else 12
+                        words.subList(0, wordCount).none { it.isBlank() }
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        showingPassphrase = !showingPassphrase
+                        bip39Passphrase = ""
+                    },
+                    shape = RoundedCornerShape(30.dp),
+                    border = BorderStroke(1.dp, if (areButtonsEnabled) Colors.White16 else Color.Transparent),
+                    enabled = areButtonsEnabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                        color = if (areButtonsEnabled) Colors.White80 else Colors.White32,
+                    )
+                }
+                Button(
+                    onClick = {
+                        onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Colors.White16,
+                        disabledContainerColor = Color.Transparent,
+                        contentColor = Colors.White,
+                        disabledContentColor = Colors.White32,
+                    ),
+                    shape = RoundedCornerShape(30.dp),
+                    enabled = areButtonsEnabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) {
+                    Text(
+                        text = "Restore",
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                }
+            }
         }
-    )
+    }
 }
 
 @Composable
@@ -258,7 +256,6 @@ fun MnemonicInputField(label: String, value: String, onValueChanged: (String) ->
         },
         shape = RoundedCornerShape(8.dp),
         colors = AppTextFieldDefaults.semiTransparent,
-        maxLines = 1,
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             autoCorrectEnabled = false,

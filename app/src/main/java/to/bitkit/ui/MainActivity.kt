@@ -21,11 +21,11 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletView
 import to.bitkit.ui.onboarding.TermsOfUseScreen
-import to.bitkit.ui.onboarding.WelcomeScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
                             val route = navBackEntry.toRoute<StartupRoutes.Slides>()
                             OnboardingSlidesScreen(
                                 currentTab = route.tab,
-                                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Welcome) },
+                                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Advanced) },
                                 onCreateClick = {
                                     scope.launch {
                                         try {
@@ -111,11 +111,21 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-                        composable<StartupRoutes.Welcome> {
-                            WelcomeScreen(walletViewModel) {
-                                walletViewModel.setWalletExistsState()
-                                walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
-                            }
+                        composable<StartupRoutes.Advanced> {
+                            CreateWalletWithPassphraseScreen(
+                                onBackClick = { startupNavController.popBackStack() },
+                                onCreateClick = { passphrase ->
+                                    scope.launch {
+                                        try {
+                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.createWallet(bip39Passphrase = passphrase)
+                                            walletViewModel.setWalletExistsState()
+                                        } catch (e: Exception) {
+                                            appViewModel.toast(e)
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 } else {
@@ -227,5 +237,5 @@ private object StartupRoutes {
     data object Restore
 
     @Serializable
-    data object Welcome
+    data object Advanced
 }
