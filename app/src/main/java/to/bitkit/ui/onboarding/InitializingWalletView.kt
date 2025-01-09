@@ -35,6 +35,8 @@ fun InitializingWalletView(
         contentAlignment = Alignment.Center,
     ) {
         val percentage = remember { Animatable(0f) }
+
+        // Progress to 100%
         LaunchedEffect(Unit) {
             percentage.animateTo(
                 targetValue = 100f,
@@ -42,6 +44,7 @@ fun InitializingWalletView(
             )
         }
 
+        // Completion callback
         LaunchedEffect(shouldFinish, percentage.value) {
             if (shouldFinish && percentage.value >= 99.9) {
                 delay(500)

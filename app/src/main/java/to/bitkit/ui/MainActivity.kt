@@ -62,17 +62,17 @@ class MainActivity : ComponentActivity() {
                         composable<StartupRoutes.Terms> {
                             TermsOfUseScreen(
                                 onNavigateToIntro = {
-                                    startupNavController.navigate(StartupRoutes.Intro) { clearBackStack() }
+                                    startupNavController.navigate(StartupRoutes.Intro)
                                 }
                             )
                         }
                         composable<StartupRoutes.Intro> {
                             IntroScreen(
                                 onStartClick = {
-                                    startupNavController.navigate(StartupRoutes.Slides()) { clearBackStack() }
+                                    startupNavController.navigate(StartupRoutes.Slides())
                                 },
                                 onSkipClick = {
-                                    startupNavController.navigate(StartupRoutes.Slides(4)) { clearBackStack() }
+                                    startupNavController.navigate(StartupRoutes.Slides(4))
                                 },
                             )
                         }
@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
                                     scope.launch {
                                         try {
                                             walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.isRestoringWallet = true
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                             walletViewModel.setWalletExistsState()
                                         } catch (e: Exception) {

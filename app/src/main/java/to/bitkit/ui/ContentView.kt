@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.util.Log
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -9,6 +10,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -17,14 +22,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.env.Tag.APP
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.onboarding.InitializingWalletView
+import to.bitkit.ui.onboarding.WalletInitResult
+import to.bitkit.ui.onboarding.WalletInitResultView
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
@@ -45,7 +54,6 @@ import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.NodeLifecycleState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -58,12 +66,18 @@ fun ContentView(
     val navController = rememberNavController()
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val scope = rememberCoroutineScope()
 
+    // Node start/stop on app fg/bg
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
-                    walletViewModel.start()
+                    try {
+                        walletViewModel.start()
+                    } catch (e: Throwable) {
+                        Log.e(APP, "Failed to start wallet", e)
+                    }
 
                     val pendingTransaction = NewTransactionSheetDetails.load(context)
                     if (pendingTransaction != null) {
@@ -91,14 +105,59 @@ fun ContentView(
     }
 
     val walletUiState by walletViewModel.uiState.collectAsState()
+    val nodeLifecycleState = walletUiState.nodeLifecycleState
 
-    if (walletUiState.nodeLifecycleState == NodeLifecycleState.Initializing) {
-        InitializingWalletView(
-            shouldFinish = true, // TODO finish using state var binding
-            onComplete = {
-                // TODO hide using state var
+    var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
+    var walletInitShouldFinish by remember { mutableStateOf(false) }
+
+    // React to nodeLifecycleState changes
+    LaunchedEffect(nodeLifecycleState) {
+        when (nodeLifecycleState) {
+            NodeLifecycleState.Initializing -> {
+                walletIsInitializing = true
             }
-        )
+
+            NodeLifecycleState.Running -> {
+                walletInitShouldFinish = true
+            }
+
+            is NodeLifecycleState.ErrorStarting -> {
+                walletInitShouldFinish = true
+            }
+
+            else -> Unit
+        }
+    }
+
+    if (walletIsInitializing) {
+        if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
+            WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
+                scope.launch {
+                    try {
+                        walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                        walletViewModel.start()
+                        walletViewModel.setWalletExistsState()
+                    } catch (e: Exception) {
+                        Log.e(APP, "Failed to start wallet on retry", e)
+                    }
+                }
+            }
+        } else {
+            InitializingWalletView(
+                shouldFinish = walletInitShouldFinish,
+                onComplete = {
+                    Log.d(APP, "Wallet finished initializing but node state is $nodeLifecycleState")
+
+                    if (nodeLifecycleState == NodeLifecycleState.Running) {
+                        walletIsInitializing = false
+                    }
+                }
+            )
+        }
+    } else if (walletViewModel.isRestoringWallet) {
+        WalletInitResultView(result = WalletInitResult.Restored) {
+            walletViewModel.isRestoringWallet = false
+        }
     } else {
         val balance by walletViewModel.balanceState.collectAsState()
         val currencies by currencyViewModel.uiState.collectAsState()

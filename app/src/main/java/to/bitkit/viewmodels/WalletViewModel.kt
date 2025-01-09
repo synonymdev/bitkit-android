@@ -46,6 +46,7 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
@@ -71,10 +72,12 @@ class WalletViewModel @Inject constructor(
     private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
 
-    private var _nodeLifecycleState = NodeLifecycleState.Stopped
+    private var _nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
 
     var walletExists by mutableStateOf(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name))
         private set
+
+    var isRestoringWallet by mutableStateOf(false)
 
     fun setWalletExistsState() {
         walletExists = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
@@ -117,9 +120,9 @@ class WalletViewModel @Inject constructor(
                 // Initializing means it's a wallet restore or create so we need to show the loading view
                 _nodeLifecycleState = NodeLifecycleState.Starting
             }
-            syncState()
 
-            runCatching {
+            syncState()
+            try {
                 lightningService.let {
                     it.setup(walletIndex)
                     it.start { event ->
@@ -127,7 +130,11 @@ class WalletViewModel @Inject constructor(
                         onLdkEvent?.invoke(event)
                     }
                 }
-            }.onFailure { Log.e(APP, "Init error", it) }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
+                Log.e(APP, "Node startup error", error)
+                throw error
+            }
 
             _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
@@ -352,13 +359,6 @@ class WalletViewModel @Inject constructor(
 
     fun createInvoice(amountSats: ULong, description: String = "Bitkit", expirySeconds: UInt = 7200u): String {
         return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
-    }
-
-    fun onScanSuccess(data: String) {
-        viewModelScope.launch {
-            // TODO: handle
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Success", description = "Not implemented:\n$data")
-        }
     }
 
     fun openChannel() {
@@ -611,14 +611,4 @@ data class MainUiState(
     val orders: List<BtOrder> = emptyList(),
 )
 
-enum class NodeLifecycleState {
-    Stopped,
-    Starting,
-    Running,
-    Stopping,
-    Initializing;
-
-    fun isStoppedOrStopping() = this == Stopped || this == Stopping
-    fun isRunningOrStarting() = this == Running || this == Starting
-}
 // endregion

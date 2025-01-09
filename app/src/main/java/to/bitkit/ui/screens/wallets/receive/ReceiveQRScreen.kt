@@ -37,7 +37,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.viewmodels.MainUiState
-import to.bitkit.viewmodels.NodeLifecycleState
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.QrCodeImage

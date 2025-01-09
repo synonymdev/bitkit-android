@@ -17,7 +17,6 @@ import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-
 @Composable
 fun SplashScreen(isVisible: Boolean = true) {
     AnimatedVisibility(

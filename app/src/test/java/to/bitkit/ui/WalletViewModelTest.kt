@@ -23,7 +23,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.MainUiState
-import to.bitkit.viewmodels.NodeLifecycleState
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 

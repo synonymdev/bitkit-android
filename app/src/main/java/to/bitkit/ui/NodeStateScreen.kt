@@ -75,7 +75,7 @@ fun NodeStateScreen(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = uiState.nodeLifecycleState.name,
+                            text = uiState.nodeLifecycleState.displayState,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
