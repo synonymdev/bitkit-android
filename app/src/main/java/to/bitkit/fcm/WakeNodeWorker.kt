@@ -65,10 +65,9 @@ class WakeNodeWorker @AssistedInject constructor(
         try {
             withPerformanceLogging {
                 // TODO: Only start node if it's not running or implement & use StateLocker
-                lightningService.let {
-                    it.setup(walletIndex = 0)
-                    it.start(timeout) { event -> handleLdkEvent(event) }
-                }
+                lightningService.setup(walletIndex = 0)
+                lightningService.start(timeout) { event -> handleLdkEvent(event) }
+                lightningService.connectToTrustedPeers()
 
                 // Once node is started, handle the manual channel opening if needed
                 if (self.notificationType == orderPaymentConfirmed) {

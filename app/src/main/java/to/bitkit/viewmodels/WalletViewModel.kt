@@ -123,12 +123,10 @@ class WalletViewModel @Inject constructor(
 
             syncState()
             try {
-                lightningService.let {
-                    it.setup(walletIndex)
-                    it.start { event ->
-                        syncState()
-                        onLdkEvent?.invoke(event)
-                    }
+                lightningService.setup(walletIndex)
+                lightningService.start { event ->
+                    syncState()
+                    onLdkEvent?.invoke(event)
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
@@ -138,6 +136,12 @@ class WalletViewModel @Inject constructor(
 
             _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
+
+            try {
+                lightningService.connectToTrustedPeers()
+            } catch (e: Throwable) {
+                Log.e(APP, "Failed to connect to trusted peers", e)
+            }
 
             launch(bgDispatcher) { refreshBip21() }
 
@@ -398,7 +402,7 @@ class WalletViewModel @Inject constructor(
                 if (_nodeLifecycleState.isRunningOrStarting()) {
                     stopLightningNode()
                 }
-                lightningService.wipeStorage(0)
+                lightningService.wipeStorage(walletIndex = 0)
                 appStorage.clear()
                 keychain.wipe()
                 setWalletExistsState()
