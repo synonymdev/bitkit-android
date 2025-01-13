@@ -178,7 +178,8 @@ private fun SendAndReviewPreview() {
                 bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = LightningInvoice(
-                    ByteArray(0),
+                    bolt11 = "bcrt123",
+                    paymentHash = ByteArray(0),
                     amountSatoshis = 0uL,
                     timestampSeconds = 0uL,
                     expirySeconds = 3600uL,

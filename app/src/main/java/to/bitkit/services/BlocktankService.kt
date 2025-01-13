@@ -25,7 +25,9 @@ import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
     private val client: BlocktankClient,

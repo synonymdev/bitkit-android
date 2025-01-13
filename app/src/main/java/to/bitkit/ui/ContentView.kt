@@ -51,6 +51,7 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
@@ -62,6 +63,7 @@ fun ContentView(
     walletViewModel: WalletViewModel,
     blocktankViewModel: BlocktankViewModel,
     currencyViewModel: CurrencyViewModel,
+    activityListViewModel: ActivityListViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -167,6 +169,7 @@ fun ContentView(
             LocalWalletViewModel provides walletViewModel,
             LocalBlocktankViewModel provides blocktankViewModel,
             LocalCurrencyViewModel provides currencyViewModel,
+            LocalActivityListViewModel provides activityListViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {

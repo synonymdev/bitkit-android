@@ -29,8 +29,8 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.utils.clearBackStack
 import to.bitkit.ui.utils.enableAppEdgeToEdge
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
     private val currencyViewModel by viewModels<CurrencyViewModel>()
+    private val activityListViewModel by viewModels<ActivityListViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,6 +136,7 @@ class MainActivity : ComponentActivity() {
                         walletViewModel = walletViewModel,
                         blocktankViewModel = blocktankViewModel,
                         currencyViewModel = currencyViewModel,
+                        activityListViewModel = activityListViewModel,
                     )
                 }
 
