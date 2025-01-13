@@ -187,7 +187,7 @@ fun ContentView(
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
                 transfer(navController)
-                allActivity(walletViewModel, navController)
+                allActivity(activityListViewModel, navController)
                 activityItem(walletViewModel, navController)
                 qrScanner(appViewModel, navController)
             }
@@ -313,7 +313,7 @@ private fun NavGraphBuilder.transfer(
 }
 
 private fun NavGraphBuilder.allActivity(
-    viewModel: WalletViewModel,
+    viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.AllActivity> {

@@ -51,7 +51,6 @@ import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -551,18 +550,6 @@ class WalletViewModel @Inject constructor(
                     )
                 }
                 .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugActivityItems() {
-        viewModelScope.launch {
-            val testItems = testActivityItems.toList().sortedByDescending { it.latestUpdateTimestamp }
-            activityItems.value = testItems
-            // ToastEventBus.send(
-            //     type = Toast.ToastType.INFO,
-            //     title = "Success",
-            //     description = "Test activity items added"
-            // )
         }
     }
 

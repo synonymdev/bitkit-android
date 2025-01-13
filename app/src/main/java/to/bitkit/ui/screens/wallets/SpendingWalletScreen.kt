@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.scaffold.AppTopBar
@@ -33,8 +36,10 @@ fun SpendingWalletScreen(
         ) {
             BalanceHeaderView(sats = balances.totalLightningSats.toLong(), modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(24.dp))
+            val activity = activityListViewModel ?: return@Column
+            val lightningActivities by activity.lightningActivities.collectAsState()
             ActivityListWithHeaders(
-                items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Bolt11 },
+                items = lightningActivities,
                 showFooter = true,
                 onAllActivityButtonClick = onAllActivityButtonClick,
                 onActivityItemClick = onActivityItemClick,

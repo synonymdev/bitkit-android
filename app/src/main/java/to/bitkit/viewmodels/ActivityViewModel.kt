@@ -44,12 +44,6 @@ class ActivityListViewModel @Inject constructor(
     private val _latestActivities = MutableStateFlow<List<Activity>?>(null)
     val latestActivities: StateFlow<List<Activity>?> = _latestActivities.asStateFlow()
 
-    private val _latestLightningActivities = MutableStateFlow<List<Activity>?>(null)
-    val latestLightningActivities: StateFlow<List<Activity>?> = _latestLightningActivities.asStateFlow()
-
-    private val _latestOnchainActivities = MutableStateFlow<List<Activity>?>(null)
-    val latestOnchainActivities: StateFlow<List<Activity>?> = _latestOnchainActivities.asStateFlow()
-
     private val _availableTags = MutableStateFlow<List<String>>(emptyList())
     val availableTags: StateFlow<List<String>> = _availableTags.asStateFlow()
 
@@ -95,10 +89,6 @@ class ActivityListViewModel @Inject constructor(
                 // Fetch latest activities for the home screen
                 val limitLatest: UInt = 3u
                 _latestActivities.value = activityService.get(filter = ActivityFilter.ALL, limit = limitLatest)
-                _latestLightningActivities.value =
-                    activityService.get(filter = ActivityFilter.LIGHTNING, limit = limitLatest)
-                _latestOnchainActivities.value =
-                    activityService.get(filter = ActivityFilter.ONCHAIN, limit = limitLatest)
 
                 // Fetch lightning and onchain activities
                 _lightningActivities.value = activityService.get(filter = ActivityFilter.LIGHTNING)
@@ -200,12 +190,14 @@ class ActivityListViewModel @Inject constructor(
     fun generateRandomTestData() {
         viewModelScope.launch {
             activityService.generateRandomTestData()
+            syncState()
         }
     }
 
     fun removeAllActivities() {
         viewModelScope.launch {
             activityService.removeAll()
+            syncState()
         }
     }
 }

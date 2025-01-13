@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,6 +41,7 @@ import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
@@ -173,8 +175,10 @@ private fun HomeContentView(
             Spacer(modifier = Modifier.height(24.dp))
             Text("Activity", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(16.dp))
+            val activity = activityListViewModel ?: return@AppScaffold
+            val latestActivities by activity.latestActivities.collectAsState()
             ActivityList(
-                items = walletViewModel.activityItems.value?.take(3),
+                items = latestActivities,
                 onAllActivityClick = { rootNavController.navigateToAllActivity() },
                 onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
             )

@@ -37,6 +37,8 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.DarkModePreview
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -47,11 +49,12 @@ fun ActivityItemScreen(
     activityItem: Routes.ActivityItem,
     onBackClick: () -> Unit,
 ) {
-    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return
-    ScreenColumn {
-        AppTopBar("Activity Details", onBackClick = onBackClick)
-        ActivityItemView(item)
-    }
+    // TODO update to use bitkit-core activities
+//    val item = viewModel.activityItems.value?.find { it.id == activityItem.id } ?: return
+//    ScreenColumn {
+//        AppTopBar("Activity Details", onBackClick = onBackClick)
+//        ActivityItemView(item)
+//    }
 }
 
 @Composable
@@ -126,10 +129,10 @@ fun ActivityItemView(
     }
 }
 
-@Preview(showBackground = true)
+@DarkModePreview
 @Composable
 fun PreviewActivityItemView() {
-    MaterialTheme {
+    AppThemeSurface {
         val item = PaymentDetails(
             id = "id1",
             amountMsat = 134_432_000u,

@@ -2,16 +2,7 @@ package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -20,13 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,38 +23,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import org.lightningdevkit.ldknode.PaymentDetails
-import org.lightningdevkit.ldknode.PaymentDirection
-import org.lightningdevkit.ldknode.PaymentKind
-import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.R
-import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.Orange500
-import to.bitkit.ui.theme.Purple500
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.secondaryColor
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.PrimaryDisplay
-import java.util.Calendar
+import uniffi.bitkitcore.*
+import java.util.*
 
 @Composable
 fun AllActivityScreen(
-    viewModel: WalletViewModel,
+    viewModel: ActivityListViewModel,
     onBackCLick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(stringResource(R.string.all_activity), onBackCLick)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            val activities = viewModel.filteredActivities.collectAsState()
             ActivityListWithHeaders(
-                items = viewModel.activityItems.value,
+                items = activities.value,
                 onAllActivityButtonClick = { }, // Do Nothing - button is not shown
                 onActivityItemClick = onActivityItemClick,
             )
@@ -77,7 +61,7 @@ fun AllActivityScreen(
 
 @Composable
 fun ActivityListWithHeaders(
-    items: List<PaymentDetails>?,
+    items: List<Activity>?,
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
@@ -105,10 +89,10 @@ fun ActivityListWithHeaders(
                             )
                         }
 
-                        is PaymentDetails -> {
+                        is Activity -> {
                             ActivityRow(item, onActivityItemClick)
                             if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
-                                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+                                HorizontalDivider(color = Colors.White10)
                             }
                         }
                     }
@@ -136,7 +120,7 @@ fun ActivityListWithHeaders(
 
 @Composable
 fun ActivityList(
-    items: List<PaymentDetails>?,
+    items: List<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
@@ -145,9 +129,17 @@ fun ActivityList(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(items = items, key = { it.id }) { item ->
+            items(
+                items = items,
+                key = {
+                    when (it) {
+                        is Activity.Onchain -> it.v1.id
+                        is Activity.Lightning -> it.v1.id
+                    }
+                }
+            ) { item ->
                 ActivityRow(item, onActivityItemClick)
-                HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+                HorizontalDivider(color = Colors.White10)
             }
             item {
                 if (items.isEmpty()) {
@@ -174,46 +166,91 @@ fun ActivityList(
 
 @Composable
 private fun ActivityRow(
-    item: PaymentDetails,
+    item: Activity,
     onClick: (String) -> Unit,
 ) {
+    val id = when (item) {
+        is Activity.Onchain -> item.v1.id
+        is Activity.Lightning -> item.v1.id
+    }
+    val status: PaymentState? = when (item) {
+        is Activity.Lightning -> item.v1.status
+        is Activity.Onchain -> null
+    }
+    val isLightning = item is Activity.Lightning
+    val timestamp = when (item) {
+        is Activity.Lightning -> item.v1.timestamp
+        is Activity.Onchain -> item.v1.timestamp
+    }
+    val txType: PaymentType = when (item) {
+        is Activity.Lightning -> item.v1.txType
+        is Activity.Onchain -> item.v1.txType
+    }
+    val amountPrefix = when (item) {
+        is Activity.Lightning -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
+        is Activity.Onchain -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
+    }
+    val confirmed: Boolean? = when (item) {
+        is Activity.Lightning -> null
+        is Activity.Onchain -> item.v1.confirmed
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { onClick(item.id) })
+            .clickable(onClick = { onClick(id) })
             .padding(horizontal = 0.dp, vertical = 16.dp)
     ) {
-        PaymentStatusIcon(item)
+        TransactionIcon(item)
         Spacer(modifier = Modifier.width(12.dp))
-        val displayText = when {
-            item.direction == PaymentDirection.OUTBOUND -> when (item.status) {
-                PaymentStatus.FAILED -> "Sending Failed"
-                PaymentStatus.PENDING -> "Sending..."
-                PaymentStatus.SUCCEEDED -> "Sent"
+
+        val lightningStatus = when {
+            txType == PaymentType.SENT -> when (status) {
+                PaymentState.FAILED -> "Sending Failed"
+                PaymentState.PENDING -> "Sending..."
+                PaymentState.SUCCEEDED -> "Sent"
+                else -> ""
             }
 
-            else -> when (item.status) {
-                PaymentStatus.FAILED -> "Receive Failed"
-                PaymentStatus.PENDING -> "Receiving..."
-                PaymentStatus.SUCCEEDED -> "Received"
+            else -> when (status) {
+                PaymentState.FAILED -> "Receive Failed"
+                PaymentState.PENDING -> "Receiving..."
+                PaymentState.SUCCEEDED -> "Received"
+                else -> ""
             }
         }
+        val onchainStatus = when {
+            txType == PaymentType.SENT -> if (confirmed == true) "Sent" else "Sending..."
+            else -> if (confirmed == true) "Received" else "Receiving..."
+        }
+
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = displayText,
-                fontWeight = FontWeight.Bold
+                text = if (isLightning) lightningStatus else onchainStatus,
+                fontWeight = FontWeight.Bold,
             )
+            val subtitleText = when (item) {
+                is Activity.Lightning -> {
+                    val message = item.v1.message
+                    if (message.isNotEmpty()) message else timestamp.toActivityItemDate()
+                }
+
+                else -> timestamp.toActivityItemDate()
+            }
             Text(
-                text = item.latestUpdateTimestamp.toActivityItemDate(),
+                text = subtitleText,
+                color = Colors.White64,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        val amountPrefix = if (item.direction == PaymentDirection.OUTBOUND) "-" else "+"
-        item.amountSats?.let { sats ->
+        val amount: ULong = when (item) {
+            is Activity.Lightning -> item.v1.value
+            is Activity.Onchain -> item.v1.value
+        }
+        amount.let { sats ->
             val currency = currencyViewModel ?: return
             val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
             val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
@@ -266,26 +303,40 @@ private fun ActivityRow(
 }
 
 @Composable
-private fun PaymentStatusIcon(item: PaymentDetails) {
-    when {
-        item.status == PaymentStatus.FAILED -> {
+private fun TransactionIcon(item: Activity) {
+    val isLightning = item is Activity.Lightning
+    val status: PaymentState? = when (item) {
+        is Activity.Lightning -> item.v1.status
+        is Activity.Onchain -> null
+    }
+    val confirmed: Boolean? = when (item) {
+        is Activity.Lightning -> null
+        is Activity.Onchain -> item.v1.confirmed
+    }
+    val txType: PaymentType = when (item) {
+        is Activity.Lightning -> item.v1.txType
+        is Activity.Onchain -> item.v1.txType
+    }
+
+    if (isLightning) {
+        if (status == PaymentState.FAILED) {
             IconInCircle(
                 icon = Icons.Default.Close,
-                tint = Color.Red,
+                tint = Colors.Red,
             )
-        }
-
-        else -> {
-            val icon = when (item.direction) {
-                PaymentDirection.OUTBOUND -> Icons.Default.ArrowUpward
-                else -> Icons.Default.ArrowDownward
-            }
-            val color = if (item.kind == PaymentKind.Onchain) Orange500 else Purple500
+        } else {
+            val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
             IconInCircle(
                 icon = icon,
-                tint = color,
+                tint = Colors.Purple,
             )
         }
+    } else {
+        val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
+        IconInCircle(
+            icon = icon,
+            tint = if (confirmed == true) Colors.Brand else Colors.Brand50,
+        )
     }
 }
 
@@ -312,7 +363,7 @@ private fun IconInCircle(
 }
 
 // region utils
-private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
+private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val date = Calendar.getInstance()
 
     val beginningOfDay = date.apply {
@@ -351,21 +402,24 @@ private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    val today = mutableListOf<PaymentDetails>()
-    val yesterday = mutableListOf<PaymentDetails>()
-    val week = mutableListOf<PaymentDetails>()
-    val month = mutableListOf<PaymentDetails>()
-    val year = mutableListOf<PaymentDetails>()
-    val earlier = mutableListOf<PaymentDetails>()
+    val today = mutableListOf<Activity>()
+    val yesterday = mutableListOf<Activity>()
+    val week = mutableListOf<Activity>()
+    val month = mutableListOf<Activity>()
+    val year = mutableListOf<Activity>()
+    val earlier = mutableListOf<Activity>()
 
     for (item in activityItems) {
-        val itemTimestampMillis = item.latestUpdateTimestamp.toLong() * 1000L
+        val timestamp = when (item) {
+            is Activity.Lightning -> item.v1.timestamp.toLong()
+            is Activity.Onchain -> item.v1.timestamp.toLong()
+        }
         when {
-            itemTimestampMillis >= beginningOfDay -> today.add(item)
-            itemTimestampMillis >= beginningOfYesterday -> yesterday.add(item)
-            itemTimestampMillis >= beginningOfWeek -> week.add(item)
-            itemTimestampMillis >= beginningOfMonth -> month.add(item)
-            itemTimestampMillis >= beginningOfYear -> year.add(item)
+            timestamp >= beginningOfDay -> today.add(item)
+            timestamp >= beginningOfYesterday -> yesterday.add(item)
+            timestamp >= beginningOfWeek -> week.add(item)
+            timestamp >= beginningOfMonth -> month.add(item)
+            timestamp >= beginningOfYear -> year.add(item)
             else -> earlier.add(item)
         }
     }
@@ -398,11 +452,10 @@ private fun groupActivityItems(activityItems: List<PaymentDetails>): List<Any> {
 
     return result
 }
-
 // endregion
 
 // region preview
-@LightModePreview
+@DarkModePreview
 @Composable
 fun PreviewActivityListWithHeadersView() {
     AppThemeSurface {
@@ -413,7 +466,7 @@ fun PreviewActivityListWithHeadersView() {
     }
 }
 
-@LightModePreview
+@DarkModePreview
 @Composable
 fun PreviewActivityListItems() {
     AppThemeSurface {
@@ -426,82 +479,134 @@ fun PreviewActivityListItems() {
     }
 }
 
-@LightModePreview
+@DarkModePreview
 @Composable
 fun PreviewActivityListEmpty() {
-    ActivityList(
-        items = emptyList(),
-        onAllActivityClick = { },
-        onActivityItemClick = { },
-    )
+    AppThemeSurface {
+        ActivityList(
+            items = emptyList(),
+            onAllActivityClick = { },
+            onActivityItemClick = { },
+        )
+    }
 }
 
-@LightModePreview
+@DarkModePreview
 @Composable
 fun PreviewActivityListNull() {
-    ActivityList(
-        items = null,
-        onAllActivityClick = { },
-        onActivityItemClick = { },
-    )
+    AppThemeSurface {
+        ActivityList(
+            items = null,
+            onAllActivityClick = { },
+            onActivityItemClick = { },
+        )
+    }
 }
 
-val testActivityItems: Sequence<PaymentDetails> = sequenceOf(
+private val today: Calendar = Calendar.getInstance()
+private val yesteday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
+private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
+private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
+private val earlier: Calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -2) }
+
+val testActivityItems: Sequence<Activity> = sequenceOf(
     // Today
-    PaymentDetails(
-        id = "1",
-        kind = PaymentKind.Bolt11("bolt11", null, null),
-        amountMsat = 10_000u,
-        direction = PaymentDirection.INBOUND,
-        status = PaymentStatus.SUCCEEDED,
-        latestUpdateTimestamp = (Calendar.getInstance().timeInMillis / 1000).toULong()
+    Activity.Onchain(
+        OnchainActivity(
+            id = "1",
+            txType = PaymentType.RECEIVED,
+            txId = "01",
+            value = 42_000_000_u,
+            fee = 200_u,
+            feeRate = 1_u,
+            address = "bcrt1",
+            confirmed = true,
+            timestamp = today.timeInMillis.toULong(),
+            isBoosted = false,
+            isTransfer = true,
+            doesExist = true,
+            confirmTimestamp = today.timeInMillis.toULong(),
+            channelId = "channelId",
+            transferTxId = "transferTxId",
+            createdAt = today.timeInMillis.toULong(),
+            updatedAt = today.timeInMillis.toULong(),
+        )
     ),
     // Yesterday
-    PaymentDetails(
-        id = "2",
-        kind = PaymentKind.Onchain,
-        amountMsat = 2000_000u,
-        direction = PaymentDirection.OUTBOUND,
-        status = PaymentStatus.PENDING,
-        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -1) }.timeInMillis / 1000).toULong()
+    Activity.Lightning(
+        LightningActivity(
+            id = "2",
+            txType = PaymentType.SENT,
+            status = PaymentState.SUCCEEDED,
+            value = 30_000_u,
+            fee = 15_u,
+            invoice = "lnbcrt2",
+            message = "Custom message",
+            timestamp = yesteday.timeInMillis.toULong(),
+            preimage = "preimage1",
+            createdAt = yesteday.timeInMillis.toULong(),
+            updatedAt = yesteday.timeInMillis.toULong(),
+        )
     ),
     // This Week
-    PaymentDetails(
-        id = "3",
-        kind = PaymentKind.Bolt11("bolt11", null, null),
-        amountMsat = 30_000u,
-        direction = PaymentDirection.INBOUND,
-        status = PaymentStatus.FAILED,
-        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -3) }.timeInMillis / 1000).toULong()
+    Activity.Lightning(
+        LightningActivity(
+            id = "3",
+            txType = PaymentType.RECEIVED,
+            status = PaymentState.FAILED,
+            value = 217_000_u,
+            fee = 17_u,
+            invoice = "lnbcrt3",
+            message = "",
+            timestamp = thisWeek.timeInMillis.toULong(),
+            preimage = "preimage2",
+            createdAt = thisWeek.timeInMillis.toULong(),
+            updatedAt = thisWeek.timeInMillis.toULong(),
+        )
     ),
     // This Month
-    PaymentDetails(
-        id = "4",
-        kind = PaymentKind.Onchain,
-        amountMsat = 4000_000u,
-        direction = PaymentDirection.OUTBOUND,
-        status = PaymentStatus.SUCCEEDED,
-        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.DATE, -15) }.timeInMillis / 1000).toULong()
+    Activity.Onchain(
+        OnchainActivity(
+            id = "4",
+            txType = PaymentType.RECEIVED,
+            txId = "04",
+            value = 950_000_u,
+            fee = 110_u,
+            feeRate = 1_u,
+            address = "bcrt1",
+            confirmed = false,
+            timestamp = thisMonth.timeInMillis.toULong(),
+            isBoosted = false,
+            isTransfer = true,
+            doesExist = true,
+            confirmTimestamp = (today.timeInMillis + 3600_000).toULong(),
+            channelId = "channelId",
+            transferTxId = "transferTxId",
+            createdAt = thisMonth.timeInMillis.toULong(),
+            updatedAt = thisMonth.timeInMillis.toULong(),
+        )
     ),
-    // Earlier
-    PaymentDetails(
-        id = "5",
-        kind = PaymentKind.Onchain,
-        amountMsat = 5000_000u,
-        direction = PaymentDirection.INBOUND,
-        status = PaymentStatus.PENDING,
-        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.timeInMillis / 1000).toULong()
-    ),
+    //    // Earlier
+    //    PaymentDetails(
+    //        id = "5",
+    //        kind = PaymentKind.Onchain,
+    //        amountMsat = 5000_000u,
+    //        direction = PaymentDirection.INBOUND,
+    //        status = PaymentStatus.PENDING,
+    //        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.timeInMillis / 1000).toULong()
+    //    ),
 )
 
-private class PaymentDetailsPreviewProvider : PreviewParameterProvider<PaymentDetails> {
-    override val values: Sequence<PaymentDetails>
+private class PaymentDetailsPreviewProvider : PreviewParameterProvider<Activity> {
+    override val values: Sequence<Activity>
         get() = testActivityItems
 }
 
 @LightModePreview
 @Composable
-private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::class) item: PaymentDetails) {
-    ActivityRow(item, onClick = { })
+private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::class) item: Activity) {
+    AppThemeSurface {
+        ActivityRow(item, onClick = { })
+    }
 }
 // endregion
