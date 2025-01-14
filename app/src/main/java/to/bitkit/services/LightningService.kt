@@ -216,24 +216,18 @@ class LightningService @Inject constructor(
     }
 
     // region peers
-    private suspend fun connectToTrustedPeers() {
-        for (peer in Env.trustedLnPeers) {
-            connectPeer(peer)
-        }
-    }
-
-    suspend fun connectPeer(peer: LnPeer) {
+    suspend fun connectToTrustedPeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Log.d(LDK, "Connecting peer: $peer")
-
-        try {
-            ServiceQueue.LDK.background {
-                node.connect(peer.nodeId, peer.address, persist = true)
+        ServiceQueue.LDK.background {
+            for (peer in Env.trustedLnPeers) {
+                try {
+                    node.connect(peer.nodeId, peer.address, persist = true)
+                    Log.i(LDK, "Connected to trusted peer: $peer")
+                } catch (e: NodeException) {
+                    Log.e(LDK, "Peer connect error: $peer", LdkError(e))
+                }
             }
-            Log.i(LDK, "Peer connected: $peer")
-        } catch (e: NodeException) {
-            Log.w(LDK, "Peer connect error: $peer", LdkError(e))
         }
     }
 

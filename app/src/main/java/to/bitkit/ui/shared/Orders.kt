@@ -35,7 +35,7 @@ import to.bitkit.R
 import to.bitkit.ext.first
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.BtOrderState2
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 internal fun Orders(

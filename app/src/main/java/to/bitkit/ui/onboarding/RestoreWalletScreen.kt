@@ -1,0 +1,296 @@
+package to.bitkit.ui.onboarding
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import to.bitkit.R
+import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.BodyS
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Display
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RestoreWalletView(
+    onBackClick: () -> Unit,
+    onRestoreClick: (mnemonic: String, passphrase: String?) -> Unit,
+) {
+    val words = remember { mutableStateListOf(*Array(24) { "" }) }
+    var bip39Passphrase by remember { mutableStateOf("") }
+    var showingPassphrase by remember { mutableStateOf(false) }
+    var firstFieldText by remember { mutableStateOf("") }
+    var is24Words by remember { mutableStateOf(false) }
+
+    val wordsPerColumn = if (is24Words) 12 else 6
+
+    val bip39Mnemonic by remember {
+        derivedStateOf {
+            val wordCount = if (is24Words) 24 else 12
+            words.subList(0, wordCount)
+                .joinToString(separator = " ")
+                .trim()
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+        ) {
+            Display("RESTORE", color = Colors.Blue)
+            Display("YOUR WALLET", modifier = Modifier.offset(y = (-8).dp))
+            Text(
+                text = "Please type in your recovery phrase from any (paper) backup.",
+                fontSize = 17.sp,
+                color = Colors.White80,
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // First column (1-6 or 1-12)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    for (index in 0 until wordsPerColumn) {
+                        MnemonicInputField(
+                            label = "${index + 1}.",
+                            value = if (index == 0) firstFieldText else words[index],
+                            onValueChanged = { newValue ->
+                                if (index == 0) {
+                                    if (newValue.contains(" ")) {
+                                        handlePastedWords(
+                                            newValue,
+                                            words,
+                                            onWordCountChanged = { is24Words = it },
+                                            onFirstWordChanged = { firstFieldText = it }
+                                        )
+                                    } else {
+                                        words[index] = newValue
+                                        firstFieldText = newValue
+                                    }
+                                } else {
+                                    words[index] = newValue
+                                }
+                            }
+                        )
+                    }
+                }
+                // Second column (7-12 or 13-24)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    for (index in wordsPerColumn until (wordsPerColumn * 2)) {
+                        MnemonicInputField(
+                            label = "${index + 1}.",
+                            value = words[index],
+                            onValueChanged = { newValue ->
+                                words[index] = newValue
+                            }
+                        )
+                    }
+                }
+            }
+            // Passphrase
+            if (showingPassphrase) {
+                OutlinedTextField(
+                    value = bip39Passphrase,
+                    onValueChange = { bip39Passphrase = it },
+                    placeholder = { Text("Passphrase*") },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = AppTextFieldDefaults.semiTransparent,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Next,
+                        capitalization = KeyboardCapitalization.None,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+                BodyS(
+                    text = "*Optional, enter only if you’ve set up one.",
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Footer with buttons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .fillMaxWidth(),
+            ) {
+                val areButtonsEnabled by remember {
+                    derivedStateOf {
+                        val wordCount = if (is24Words) 24 else 12
+                        words.subList(0, wordCount).none { it.isBlank() }
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        showingPassphrase = !showingPassphrase
+                        bip39Passphrase = ""
+                    },
+                    shape = RoundedCornerShape(30.dp),
+                    border = BorderStroke(1.dp, if (areButtonsEnabled) Colors.White16 else Color.Transparent),
+                    enabled = areButtonsEnabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                        color = if (areButtonsEnabled) Colors.White80 else Colors.White32,
+                    )
+                }
+                Button(
+                    onClick = {
+                        onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Colors.White16,
+                        disabledContainerColor = Color.Transparent,
+                        contentColor = Colors.White,
+                        disabledContentColor = Colors.White32,
+                    ),
+                    shape = RoundedCornerShape(30.dp),
+                    enabled = areButtonsEnabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                ) {
+                    Text(
+                        text = "Restore",
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MnemonicInputField(label: String, value: String, onValueChanged: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChanged,
+        prefix = {
+            Text(
+                text = label,
+                color = Colors.White64,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 4.dp)
+            )
+        },
+        shape = RoundedCornerShape(8.dp),
+        colors = AppTextFieldDefaults.semiTransparent,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            autoCorrectEnabled = false,
+            imeAction = ImeAction.Next,
+            capitalization = KeyboardCapitalization.None,
+        ),
+    )
+}
+
+private fun handlePastedWords(
+    pastedText: String,
+    words: SnapshotStateList<String>,
+    onWordCountChanged: (Boolean) -> Unit,
+    onFirstWordChanged: (String) -> Unit,
+) {
+    val pastedWords = pastedText.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
+    if (pastedWords.size == 12 || pastedWords.size == 24) {
+        onWordCountChanged(pastedWords.size == 24)
+        for (index in pastedWords.indices) {
+            words[index] = pastedWords[index]
+        }
+        for (index in pastedWords.size until words.size) {
+            words[index] = ""
+        }
+        onFirstWordChanged(pastedWords.first())
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+fun RestoreWalletViewPreview() {
+    AppThemeSurface {
+        RestoreWalletView(
+            onBackClick = {},
+            onRestoreClick = { _, _ -> },
+        )
+    }
+}

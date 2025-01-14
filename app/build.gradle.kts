@@ -12,7 +12,7 @@ plugins {
 }
 android {
     namespace = "to.bitkit"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.jna) { artifact { type = "aar" } }
     implementation(platform(libs.kotlin.bom))
     implementation(libs.core.ktx)
+    implementation(libs.core.splashscreen)
     implementation(libs.appcompat)
     implementation(libs.activity.compose)
     implementation(libs.material)
@@ -119,6 +120,8 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     implementation("com.google.accompanist:accompanist-pager-indicators:0.36.0")
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.0")
+
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)

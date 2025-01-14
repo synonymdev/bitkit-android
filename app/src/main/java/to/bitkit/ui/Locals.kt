@@ -4,9 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import to.bitkit.models.BalanceState
+import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyUiState
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.WalletViewModel
 
 // Locals
 val LocalBalances = compositionLocalOf { BalanceState() }

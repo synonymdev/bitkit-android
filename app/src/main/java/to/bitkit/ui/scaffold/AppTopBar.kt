@@ -27,7 +27,7 @@ fun AppTopBar(
 ) {
     CenterAlignedTopAppBar(
         navigationIcon = navigationIcon,
-        title =  {
+        title = {
             Text(
                 text = titleText,
                 style = MaterialTheme.typography.titleLarge,

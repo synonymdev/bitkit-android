@@ -9,20 +9,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 
 @Composable
 fun Display(
     text: String,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
+    fontWeight: FontWeight = FontWeight.Black,
     lineHeight: Float = 44f,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
         text = text,
         style = TextStyle(
-            fontSize = 44.sp,
-            fontWeight = FontWeight.Black,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
             letterSpacing = (-1).sp,
             lineHeight = lineHeight.sp,
             fontFamily = FontFamily.Default,
@@ -148,6 +151,7 @@ fun BodyMB(
 fun BodyS(
     text: String,
     color: Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier,
 ) {
     Text(
         text = text,
@@ -157,9 +161,10 @@ fun BodyS(
             lineHeight = 20.sp,
             letterSpacing = 0.4.sp,
             fontFamily = FontFamily.Default,
-            color = color
+            color = color,
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
 

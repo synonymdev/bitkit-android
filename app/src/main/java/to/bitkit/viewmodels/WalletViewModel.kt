@@ -1,8 +1,10 @@
-package to.bitkit.ui
+package to.bitkit.viewmodels
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -28,6 +30,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.entities.OrderEntity
@@ -43,6 +46,7 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
@@ -68,9 +72,18 @@ class WalletViewModel @Inject constructor(
     private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
 
-    private var _nodeLifecycleState = NodeLifecycleState.Stopped
+    private var _nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
 
-    fun initNodeLifecycleState(isInitializingWallet: Boolean) {
+    var walletExists by mutableStateOf(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name))
+        private set
+
+    var isRestoringWallet by mutableStateOf(false)
+
+    fun setWalletExistsState() {
+        walletExists = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+    }
+
+    fun setInitNodeLifecycleState(isInitializingWallet: Boolean) {
         if (isInitializingWallet) {
             _nodeLifecycleState = NodeLifecycleState.Initializing
             _uiState.update { it.copy(nodeLifecycleState = _nodeLifecycleState) }
@@ -92,8 +105,6 @@ class WalletViewModel @Inject constructor(
     var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
         private set
 
-    private val walletExists: Boolean get() = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
-
     private var onLdkEvent: ((Event) -> Unit)? = null
 
     fun setOnEvent(onEvent: (Event) -> Unit) {
@@ -109,20 +120,28 @@ class WalletViewModel @Inject constructor(
                 // Initializing means it's a wallet restore or create so we need to show the loading view
                 _nodeLifecycleState = NodeLifecycleState.Starting
             }
-            syncState()
 
-            runCatching {
-                lightningService.let {
-                    it.setup(walletIndex)
-                    it.start { event ->
-                        syncState()
-                        onLdkEvent?.invoke(event)
-                    }
+            syncState()
+            try {
+                lightningService.setup(walletIndex)
+                lightningService.start { event ->
+                    syncState()
+                    onLdkEvent?.invoke(event)
                 }
-            }.onFailure { Log.e(APP, "Init error", it) }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
+                Log.e(APP, "Node startup error", error)
+                throw error
+            }
 
             _nodeLifecycleState = NodeLifecycleState.Running
             syncState()
+
+            try {
+                lightningService.connectToTrustedPeers()
+            } catch (e: Throwable) {
+                Log.e(APP, "Failed to connect to trusted peers", e)
+            }
 
             launch(bgDispatcher) { refreshBip21() }
 
@@ -346,13 +365,6 @@ class WalletViewModel @Inject constructor(
         return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
     }
 
-    fun onScanSuccess(data: String) {
-        viewModelScope.launch {
-            // TODO: handle
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Success", description = "Not implemented:\n$data")
-        }
-    }
-
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
             val peer = lightningService.peers?.first ?: error("No peer connected to open channel.")
@@ -390,12 +402,28 @@ class WalletViewModel @Inject constructor(
                 if (_nodeLifecycleState.isRunningOrStarting()) {
                     stopLightningNode()
                 }
-                lightningService.wipeStorage(0)
+                lightningService.wipeStorage(walletIndex = 0)
                 appStorage.clear()
                 keychain.wipe()
+                setWalletExistsState()
             }.onFailure {
                 ToastEventBus.send(it)
             }
+        }
+    }
+
+    suspend fun createWallet(bip39Passphrase: String?) {
+        val mnemonic = generateEntropyMnemonic()
+        keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+        if (bip39Passphrase != null) {
+            keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
+        }
+    }
+
+    suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
+        keychain.saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
+        if (bip39Passphrase != null) {
+            keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
         }
     }
 
@@ -587,14 +615,4 @@ data class MainUiState(
     val orders: List<BtOrder> = emptyList(),
 )
 
-enum class NodeLifecycleState {
-    Stopped,
-    Starting,
-    Running,
-    Stopping,
-    Initializing;
-
-    fun isStoppedOrStopping() = this == Stopped || this == Stopping
-    fun isRunningOrStarting() = this == Running || this == Starting
-}
 // endregion

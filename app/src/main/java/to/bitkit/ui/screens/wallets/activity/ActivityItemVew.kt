@@ -32,7 +32,7 @@ import to.bitkit.R
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ui.Routes
-import to.bitkit.ui.WalletViewModel
+import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.scaffold.AppTopBar

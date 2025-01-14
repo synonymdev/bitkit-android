@@ -34,7 +34,7 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.ui.AppViewModel
+import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface

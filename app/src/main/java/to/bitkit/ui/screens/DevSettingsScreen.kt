@@ -26,8 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.MainUiState
-import to.bitkit.ui.WalletViewModel
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar
@@ -39,6 +37,8 @@ import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Orders
 import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
+import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun DevSettingsScreen(
@@ -126,7 +126,7 @@ fun NodeDetails(contentState: MainUiState) {
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = contentState.nodeLifecycleState.name,
+                text = contentState.nodeLifecycleState.displayState,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }

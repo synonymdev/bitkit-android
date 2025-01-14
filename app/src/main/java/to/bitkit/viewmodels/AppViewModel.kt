@@ -1,4 +1,4 @@
-package to.bitkit.ui
+package to.bitkit.viewmodels
 
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -36,7 +36,7 @@ class AppViewModel @Inject constructor(
     private val scannerService: ScannerService,
     private val lightningService: LightningService,
 ) : ViewModel() {
-    var uiState by mutableStateOf(AppUiState())
+    var splashVisible by mutableStateOf(true)
         private set
 
     private val _sendUiState = MutableStateFlow(SendUiState())
@@ -53,15 +53,13 @@ class AppViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            keychain.observeExists(Keychain.Key.BIP39_MNEMONIC).collect { walletExists ->
-                uiState = uiState.copy(walletExists = walletExists)
-            }
-        }
-
-        viewModelScope.launch {
             ToastEventBus.events.collect {
                 toast(it.type, it.title, it.description, it.autoHide, it.visibilityTime)
             }
+        }
+        viewModelScope.launch {
+            delay(1500)
+            splashVisible = false
         }
 
         observeSendEvents()
@@ -468,10 +466,6 @@ class AppViewModel @Inject constructor(
         return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
     }
 }
-
-data class AppUiState(
-    val walletExists: Boolean? = null,
-)
 
 // region send contract
 data class SendUiState(
