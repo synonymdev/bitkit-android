@@ -101,9 +101,6 @@ class WalletViewModel @Inject constructor(
         get() = appStorage.bip21
         set(value) = let { appStorage.bip21 = value }
 
-    var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
-        private set
-
     private var onLdkEvent: ((Event) -> Unit)? = null
 
     fun setOnEvent(onEvent: (Event) -> Unit) {
@@ -219,11 +216,7 @@ class WalletViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
-            launch(bgDispatcher) { syncBalances() }
-            launch(bgDispatcher) { syncActivityItems() }
-            // debugActivityItems()
-        }
+        viewModelScope.launch(bgDispatcher) { syncBalances() }
     }
 
     private fun syncBalances() {
@@ -236,40 +229,6 @@ class WalletViewModel @Inject constructor(
                     totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats,
                 )
             }
-        }
-    }
-
-    private fun syncActivityItems() {
-        lightningService.payments?.let { payments ->
-            val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
-
-            // TODO: eventually load other activity types from storage
-            val allActivity = mutableListOf<PaymentDetails>()
-
-            sorted.forEach { details ->
-                when (details.kind) {
-                    is PaymentKind.Onchain -> {
-                        allActivity.add(details)
-                    }
-
-                    is PaymentKind.Bolt11 -> {
-                        if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
-                            allActivity.add(details)
-                        }
-                    }
-
-                    is PaymentKind.Spontaneous -> {
-                        allActivity.add(details)
-                    }
-
-                    is PaymentKind.Bolt11Jit -> Unit
-                    is PaymentKind.Bolt12Offer -> Unit
-                    is PaymentKind.Bolt12Refund -> Unit
-                }
-            }
-
-            // TODO: append activity items from lightning balances
-            activityItems.value = allActivity
         }
     }
 

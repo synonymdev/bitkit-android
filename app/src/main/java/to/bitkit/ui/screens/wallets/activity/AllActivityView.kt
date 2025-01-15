@@ -1,35 +1,41 @@
 package to.bitkit.ui.screens.wallets.activity
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
@@ -40,6 +46,7 @@ import to.bitkit.viewmodels.PrimaryDisplay
 import uniffi.bitkitcore.*
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
@@ -48,13 +55,169 @@ fun AllActivityScreen(
 ) {
     ScreenColumn {
         AppTopBar(stringResource(R.string.all_activity), onBackCLick)
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            val activities = viewModel.filteredActivities.collectAsState()
-            ActivityListWithHeaders(
-                items = activities.value,
-                onAllActivityButtonClick = { }, // Do Nothing - button is not shown
-                onActivityItemClick = onActivityItemClick,
-            )
+        val dateRangeState = rememberDateRangePickerState()
+        var currentSheet by remember { mutableStateOf<ActivityFilterSheet?>(null) }
+
+        SheetHost(
+            shouldExpand = currentSheet != null,
+            onDismiss = { currentSheet = null },
+            sheets = {
+                when (currentSheet) {
+                    is ActivityFilterSheet.DateRangeSelector -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(.875f)
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            DateRangePicker(
+                                state = dateRangeState,
+                                modifier = Modifier.weight(1f),
+                                showModeToggle = false,
+                                colors = DatePickerDefaults.colors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    selectedDayContainerColor = Colors.Brand,
+                                    dayInSelectionRangeContainerColor = Colors.Brand16,
+                                ),
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier
+                                    .padding(vertical = 16.dp)
+                                    .fillMaxWidth(),
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        dateRangeState.setSelection(null, null)
+                                        viewModel.clearDateRange()
+                                        currentSheet = null
+                                    },
+                                    shape = RoundedCornerShape(30.dp),
+                                    border = BorderStroke(1.dp, Colors.White16),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                ) {
+                                    Text(
+                                        text = "Clear",
+                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Colors.White80,
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.setDateRange(
+                                            startDate = dateRangeState.selectedStartDateMillis,
+                                            endDate = dateRangeState.selectedEndDateMillis,
+                                        )
+                                        currentSheet = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Colors.White16),
+                                    shape = RoundedCornerShape(30.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                ) {
+                                    Text(
+                                        text = "Apply",
+                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Colors.White,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is ActivityFilterSheet.TagSelector -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(.875f)
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            SheetTopBar("Select Tag")
+
+                            FlowRow(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight(align = Alignment.Top),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                val availableTags by viewModel.availableTags.collectAsState()
+                                val selectedTags by viewModel.selectedTags.collectAsState()
+
+                                availableTags.forEach { tag ->
+                                    TagButton(
+                                        text = tag,
+                                        isSelected = selectedTags.contains(tag),
+                                        onClick = { viewModel.toggleTag(tag) }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.weight(1f))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier
+                                    .padding(vertical = 16.dp)
+                                    .fillMaxWidth(),
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.clearTags()
+                                        currentSheet = null
+                                    },
+                                    shape = RoundedCornerShape(30.dp),
+                                    border = BorderStroke(1.dp, Colors.White16),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                ) {
+                                    Text(
+                                        text = "Clear",
+                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Colors.White80,
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        currentSheet = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Colors.White16),
+                                    shape = RoundedCornerShape(30.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                ) {
+                                    Text(
+                                        text = "Apply",
+                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Colors.White,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    null -> Unit
+                }
+            }
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                ActivityListFilter(
+                    viewModel = viewModel,
+                    onTagClick = { currentSheet = ActivityFilterSheet.TagSelector },
+                    onDateRangeClick = { currentSheet = ActivityFilterSheet.DateRangeSelector },
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                val filteredActivities by viewModel.filteredActivities.collectAsState()
+                ActivityListWithHeaders(
+                    items = filteredActivities,
+                    onActivityItemClick = onActivityItemClick,
+                )
+            }
         }
     }
 }
@@ -63,7 +226,7 @@ fun AllActivityScreen(
 fun ActivityListWithHeaders(
     items: List<Activity>?,
     showFooter: Boolean = false,
-    onAllActivityButtonClick: () -> Unit,
+    onAllActivityButtonClick: () -> Unit = { },
     onActivityItemClick: (String) -> Unit,
 ) {
     Column(
@@ -231,6 +394,7 @@ private fun ActivityRow(
                 text = if (isLightning) lightningStatus else onchainStatus,
                 fontWeight = FontWeight.Bold,
             )
+            // TODO timestamp: if today - only hour
             val subtitleText = when (item) {
                 is Activity.Lightning -> {
                     val message = item.v1.message
@@ -340,6 +504,8 @@ private fun TransactionIcon(item: Activity) {
     }
 }
 
+// region components
+
 @Composable
 private fun IconInCircle(
     icon: ImageVector,
@@ -361,6 +527,34 @@ private fun IconInCircle(
         )
     }
 }
+
+@Composable
+fun TagButton(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (isSelected) Colors.Brand else Colors.White16
+    val textColor = if (isSelected) Colors.Brand else MaterialTheme.colorScheme.onSurface
+
+    Text(
+        text = text,
+        color = textColor,
+        fontWeight = FontWeight.Medium,
+        modifier = modifier
+            .wrapContentWidth()
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    )
+}
+
+// endregion
 
 // region utils
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
@@ -504,7 +698,7 @@ fun PreviewActivityListNull() {
 }
 
 private val today: Calendar = Calendar.getInstance()
-private val yesteday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
+private val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
 private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
 private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
 private val earlier: Calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -2) }
@@ -542,10 +736,10 @@ val testActivityItems: Sequence<Activity> = sequenceOf(
             fee = 15_u,
             invoice = "lnbcrt2",
             message = "Custom message",
-            timestamp = yesteday.timeInMillis.toULong(),
+            timestamp = yesterday.timeInMillis.toULong(),
             preimage = "preimage1",
-            createdAt = yesteday.timeInMillis.toULong(),
-            updatedAt = yesteday.timeInMillis.toULong(),
+            createdAt = yesterday.timeInMillis.toULong(),
+            updatedAt = yesterday.timeInMillis.toULong(),
         )
     ),
     // This Week
@@ -610,3 +804,8 @@ private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::
     }
 }
 // endregion
+
+sealed class ActivityFilterSheet {
+    data object DateRangeSelector : ActivityFilterSheet()
+    data object TagSelector : ActivityFilterSheet()
+}

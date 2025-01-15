@@ -31,15 +31,25 @@ class ActivityListViewModel @Inject constructor(
 
     private val _searchText = MutableStateFlow("")
     val searchText: StateFlow<String> = _searchText.asStateFlow()
+    fun setSearchText(text: String) {
+        _searchText.value = text
+    }
 
-    private val _startDate = MutableStateFlow<Long?>(null) // Representing dates as epoch timestamps
+    private val _startDate = MutableStateFlow<Long?>(null)
     val startDate: StateFlow<Long?> = _startDate.asStateFlow()
 
     private val _endDate = MutableStateFlow<Long?>(null)
     val endDate: StateFlow<Long?> = _endDate.asStateFlow()
 
-    private val _selectedTags = MutableStateFlow<Set<String>>(emptySet())
-    val selectedTags: StateFlow<Set<String>> = _selectedTags.asStateFlow()
+    private val _selectedTags = MutableStateFlow<MutableSet<String>>(mutableSetOf())
+    val selectedTags = _selectedTags.asStateFlow()
+    fun toggleTag(tag: String) {
+        _selectedTags.value = (if (_selectedTags.value.contains(tag)) {
+            _selectedTags.value - tag
+        } else {
+            _selectedTags.value + tag
+        }) as MutableSet<String>
+    }
 
     private val _latestActivities = MutableStateFlow<List<Activity>?>(null)
     val latestActivities: StateFlow<List<Activity>?> = _latestActivities.asStateFlow()
@@ -87,7 +97,7 @@ class ActivityListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Fetch latest activities for the home screen
-                val limitLatest: UInt = 3u
+                val limitLatest = 3u
                 _latestActivities.value = activityService.get(filter = ActivityFilter.ALL, limit = limitLatest)
 
                 // Fetch lightning and onchain activities
@@ -105,16 +115,12 @@ class ActivityListViewModel @Inject constructor(
 
     private suspend fun updateFilteredActivities() {
         try {
-            // TODO convert dates to timestamps if they exist, ensuring start date is start of day and end date is end of day
-            val minDate = startDate.value
-            val maxDate = endDate.value
-
             _filteredActivities.value = activityService.get(
                 filter = ActivityFilter.ALL,
-                tags = if (selectedTags.value.isEmpty()) null else selectedTags.value.toList(),
-                search = if (searchText.value.isEmpty()) null else searchText.value,
-                minDate = minDate?.toULong(),
-                maxDate = maxDate?.toULong()
+                tags = if (_selectedTags.value.isEmpty()) null else _selectedTags.value.toList(),
+                search = if (_searchText.value.isEmpty()) null else _searchText.value,
+                minDate = _startDate.value?.toULong(),
+                maxDate = _endDate.value?.toULong()
             )
         } catch (e: Exception) {
             Log.e(APP, "Failed to filter activities", e)
@@ -133,15 +139,19 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
+    fun setDateRange(startDate: Long?, endDate: Long?) {
+        _startDate.value = startDate
+        _endDate.value = endDate
+    }
+
     fun clearDateRange() {
         _startDate.value = null
         _endDate.value = null
     }
 
     fun clearTags() {
-        _selectedTags.value = emptySet()
+        _selectedTags.value = mutableSetOf()
     }
-
 
     fun syncLdkNodePayments() {
         viewModelScope.launch {

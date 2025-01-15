@@ -122,7 +122,7 @@ class ActivityListService @Inject constructor(
                 // TODO: handle onchain activity when it comes in ldk-node
             }
 
-            Log.i("Synced LDK payments - Added: $addedCount, Updated: $updatedCount", "ActivityListService")
+            Log.i(APP, "Synced LDK payments - Added: $addedCount, Updated: $updatedCount")
         }
     }
 

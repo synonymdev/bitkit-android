@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -67,11 +66,12 @@ fun HomeScreen(
     rootNavController: NavController,
 ) {
     val uiState by walletViewModel.uiState.collectAsState()
-    val currentSheet = appViewModel.currentSheet
+    val currentSheet by appViewModel.currentSheet
     SheetHost(
-        appViewModel,
+        shouldExpand = currentSheet != null,
+        onDismiss = { appViewModel.hideSheet() },
         sheets = {
-            when (val sheet = currentSheet.value) {
+            when (val sheet = currentSheet) {
                 is BottomSheetType.Send -> {
                     SendOptionsView(
                         appViewModel = appViewModel,
