@@ -5,13 +5,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import to.bitkit.env.Tag.APP
 import to.bitkit.services.ActivityListService
 import to.bitkit.services.LightningService
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.PaymentType
 import javax.inject.Inject
 
 @HiltViewModel
@@ -21,41 +25,43 @@ class ActivityListViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
-    val filteredActivities: StateFlow<List<Activity>?> = _filteredActivities.asStateFlow()
+    val filteredActivities = _filteredActivities.asStateFlow()
 
     private val _lightningActivities = MutableStateFlow<List<Activity>?>(null)
-    val lightningActivities: StateFlow<List<Activity>?> = _lightningActivities.asStateFlow()
+    val lightningActivities = _lightningActivities.asStateFlow()
 
     private val _onchainActivities = MutableStateFlow<List<Activity>?>(null)
-    val onchainActivities: StateFlow<List<Activity>?> = _onchainActivities.asStateFlow()
+    val onchainActivities = _onchainActivities.asStateFlow()
 
     private val _searchText = MutableStateFlow("")
-    val searchText: StateFlow<String> = _searchText.asStateFlow()
+    val searchText = _searchText.asStateFlow()
+
     fun setSearchText(text: String) {
         _searchText.value = text
     }
 
     private val _startDate = MutableStateFlow<Long?>(null)
-    val startDate: StateFlow<Long?> = _startDate.asStateFlow()
+    val startDate = _startDate.asStateFlow()
 
     private val _endDate = MutableStateFlow<Long?>(null)
-    val endDate: StateFlow<Long?> = _endDate.asStateFlow()
+    // val endDate = _endDate.asStateFlow()
 
-    private val _selectedTags = MutableStateFlow<MutableSet<String>>(mutableSetOf())
+    private val _selectedTags = MutableStateFlow<Set<String>>(emptySet())
     val selectedTags = _selectedTags.asStateFlow()
+
     fun toggleTag(tag: String) {
-        _selectedTags.value = (if (_selectedTags.value.contains(tag)) {
+        _selectedTags.value = if (_selectedTags.value.contains(tag)) {
             _selectedTags.value - tag
         } else {
             _selectedTags.value + tag
-        }) as MutableSet<String>
+        }
     }
 
     private val _latestActivities = MutableStateFlow<List<Activity>?>(null)
-    val latestActivities: StateFlow<List<Activity>?> = _latestActivities.asStateFlow()
+    val latestActivities = _latestActivities.asStateFlow()
 
     private val _availableTags = MutableStateFlow<List<String>>(emptyList())
-    val availableTags: StateFlow<List<String>> = _availableTags.asStateFlow()
+    val availableTags = _availableTags.asStateFlow()
 
     init {
         observeSearchText()
@@ -120,7 +126,7 @@ class ActivityListViewModel @Inject constructor(
                 tags = if (_selectedTags.value.isEmpty()) null else _selectedTags.value.toList(),
                 search = if (_searchText.value.isEmpty()) null else _searchText.value,
                 minDate = _startDate.value?.toULong(),
-                maxDate = _endDate.value?.toULong()
+                maxDate = _endDate.value?.toULong(),
             )
         } catch (e: Exception) {
             Log.e(APP, "Failed to filter activities", e)

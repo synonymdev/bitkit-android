@@ -1,52 +1,48 @@
 package to.bitkit.ui.screens.wallets.activity
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
-import to.bitkit.ext.toActivityItemDate
-import to.bitkit.models.ConvertedAmount
-import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.SheetHost
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.secondaryColor
 import to.bitkit.viewmodels.ActivityListViewModel
-import to.bitkit.viewmodels.PrimaryDisplay
-import uniffi.bitkitcore.*
-import java.util.*
+import uniffi.bitkitcore.Activity
+import uniffi.bitkitcore.LightningActivity
+import uniffi.bitkitcore.OnchainActivity
+import uniffi.bitkitcore.PaymentState
+import uniffi.bitkitcore.PaymentType
+import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
@@ -64,141 +60,34 @@ fun AllActivityScreen(
             sheets = {
                 when (currentSheet) {
                     is ActivityFilterSheet.DateRangeSelector -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(.875f)
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            DateRangePicker(
-                                state = dateRangeState,
-                                modifier = Modifier.weight(1f),
-                                showModeToggle = false,
-                                colors = DatePickerDefaults.colors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    selectedDayContainerColor = Colors.Brand,
-                                    dayInSelectionRangeContainerColor = Colors.Brand16,
-                                ),
-                            )
-                            Spacer(modifier = Modifier.height(32.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier
-                                    .padding(vertical = 16.dp)
-                                    .fillMaxWidth(),
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        dateRangeState.setSelection(null, null)
-                                        viewModel.clearDateRange()
-                                        currentSheet = null
-                                    },
-                                    shape = RoundedCornerShape(30.dp),
-                                    border = BorderStroke(1.dp, Colors.White16),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                ) {
-                                    Text(
-                                        text = "Clear",
-                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                                        color = Colors.White80,
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        viewModel.setDateRange(
-                                            startDate = dateRangeState.selectedStartDateMillis,
-                                            endDate = dateRangeState.selectedEndDateMillis,
-                                        )
-                                        currentSheet = null
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Colors.White16),
-                                    shape = RoundedCornerShape(30.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                ) {
-                                    Text(
-                                        text = "Apply",
-                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                                        color = Colors.White,
-                                    )
-                                }
-                            }
-                        }
+                        DateRangeSelectorSheet(
+                            dateRangeState = dateRangeState,
+                            onClearClick = {
+                                dateRangeState.setSelection(null, null)
+                                viewModel.clearDateRange()
+                                currentSheet = null
+                            },
+                            onApplyClick = {
+                                viewModel.setDateRange(
+                                    startDate = dateRangeState.selectedStartDateMillis,
+                                    endDate = dateRangeState.selectedEndDateMillis,
+                                )
+                                currentSheet = null
+                            },
+                        )
                     }
 
                     is ActivityFilterSheet.TagSelector -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(.875f)
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            SheetTopBar("Select Tag")
-
-                            FlowRow(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight(align = Alignment.Top),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                val availableTags by viewModel.availableTags.collectAsState()
-                                val selectedTags by viewModel.selectedTags.collectAsState()
-
-                                availableTags.forEach { tag ->
-                                    TagButton(
-                                        text = tag,
-                                        isSelected = selectedTags.contains(tag),
-                                        onClick = { viewModel.toggleTag(tag) }
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.weight(1f))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier
-                                    .padding(vertical = 16.dp)
-                                    .fillMaxWidth(),
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        viewModel.clearTags()
-                                        currentSheet = null
-                                    },
-                                    shape = RoundedCornerShape(30.dp),
-                                    border = BorderStroke(1.dp, Colors.White16),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                ) {
-                                    Text(
-                                        text = "Clear",
-                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                                        color = Colors.White80,
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        currentSheet = null
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Colors.White16),
-                                    shape = RoundedCornerShape(30.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                ) {
-                                    Text(
-                                        text = "Apply",
-                                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                                        color = Colors.White,
-                                    )
-                                }
-                            }
-                        }
+                        TagSelectorSheet(
+                            viewModel = viewModel,
+                            onClearClick = {
+                                viewModel.clearTags()
+                                currentSheet = null
+                            },
+                            onApplyClick = {
+                                currentSheet = null
+                            },
+                        )
                     }
 
                     null -> Unit
@@ -327,235 +216,6 @@ fun ActivityList(
     }
 }
 
-@Composable
-private fun ActivityRow(
-    item: Activity,
-    onClick: (String) -> Unit,
-) {
-    val id = when (item) {
-        is Activity.Onchain -> item.v1.id
-        is Activity.Lightning -> item.v1.id
-    }
-    val status: PaymentState? = when (item) {
-        is Activity.Lightning -> item.v1.status
-        is Activity.Onchain -> null
-    }
-    val isLightning = item is Activity.Lightning
-    val timestamp = when (item) {
-        is Activity.Lightning -> item.v1.timestamp
-        is Activity.Onchain -> item.v1.timestamp
-    }
-    val txType: PaymentType = when (item) {
-        is Activity.Lightning -> item.v1.txType
-        is Activity.Onchain -> item.v1.txType
-    }
-    val amountPrefix = when (item) {
-        is Activity.Lightning -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
-        is Activity.Onchain -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
-    }
-    val confirmed: Boolean? = when (item) {
-        is Activity.Lightning -> null
-        is Activity.Onchain -> item.v1.confirmed
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = { onClick(id) })
-            .padding(horizontal = 0.dp, vertical = 16.dp)
-    ) {
-        TransactionIcon(item)
-        Spacer(modifier = Modifier.width(12.dp))
-
-        val lightningStatus = when {
-            txType == PaymentType.SENT -> when (status) {
-                PaymentState.FAILED -> "Sending Failed"
-                PaymentState.PENDING -> "Sending..."
-                PaymentState.SUCCEEDED -> "Sent"
-                else -> ""
-            }
-
-            else -> when (status) {
-                PaymentState.FAILED -> "Receive Failed"
-                PaymentState.PENDING -> "Receiving..."
-                PaymentState.SUCCEEDED -> "Received"
-                else -> ""
-            }
-        }
-        val onchainStatus = when {
-            txType == PaymentType.SENT -> if (confirmed == true) "Sent" else "Sending..."
-            else -> if (confirmed == true) "Received" else "Receiving..."
-        }
-
-        Column(
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = if (isLightning) lightningStatus else onchainStatus,
-                fontWeight = FontWeight.Bold,
-            )
-            // TODO timestamp: if today - only hour
-            val subtitleText = when (item) {
-                is Activity.Lightning -> {
-                    val message = item.v1.message
-                    if (message.isNotEmpty()) message else timestamp.toActivityItemDate()
-                }
-
-                else -> timestamp.toActivityItemDate()
-            }
-            Text(
-                text = subtitleText,
-                color = Colors.White64,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        val amount: ULong = when (item) {
-            is Activity.Lightning -> item.v1.value
-            is Activity.Onchain -> item.v1.value
-        }
-        amount.let { sats ->
-            val currency = currencyViewModel ?: return
-            val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
-            val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
-
-            converted?.let { converted ->
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                        val btcComponents = converted.bitcoinDisplay(displayUnit)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Text(
-                                text = amountPrefix,
-                                color = secondaryColor,
-                            )
-                            Text(text = btcComponents.value)
-                        }
-                        Text(
-                            text = "${converted.symbol} ${converted.formatted}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryColor,
-                        )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Text(
-                                text = amountPrefix,
-                                color = secondaryColor,
-                            )
-                            Text(text = "${converted.symbol} ${converted.formatted}")
-                        }
-
-                        val btcComponents = converted.bitcoinDisplay(displayUnit)
-                        Text(
-                            text = btcComponents.value,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryColor,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TransactionIcon(item: Activity) {
-    val isLightning = item is Activity.Lightning
-    val status: PaymentState? = when (item) {
-        is Activity.Lightning -> item.v1.status
-        is Activity.Onchain -> null
-    }
-    val confirmed: Boolean? = when (item) {
-        is Activity.Lightning -> null
-        is Activity.Onchain -> item.v1.confirmed
-    }
-    val txType: PaymentType = when (item) {
-        is Activity.Lightning -> item.v1.txType
-        is Activity.Onchain -> item.v1.txType
-    }
-
-    if (isLightning) {
-        if (status == PaymentState.FAILED) {
-            IconInCircle(
-                icon = Icons.Default.Close,
-                tint = Colors.Red,
-            )
-        } else {
-            val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
-            IconInCircle(
-                icon = icon,
-                tint = Colors.Purple,
-            )
-        }
-    } else {
-        val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
-        IconInCircle(
-            icon = icon,
-            tint = if (confirmed == true) Colors.Brand else Colors.Brand50,
-        )
-    }
-}
-
-// region components
-
-@Composable
-private fun IconInCircle(
-    icon: ImageVector,
-    tint: Color,
-    modifier: Modifier = Modifier,
-    contentDescription: String? = null,
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(32.dp)
-            .background(color = tint.copy(alpha = 0.16f), shape = CircleShape)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
-@Composable
-fun TagButton(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val borderColor = if (isSelected) Colors.Brand else Colors.White16
-    val textColor = if (isSelected) Colors.Brand else MaterialTheme.colorScheme.onSurface
-
-    Text(
-        text = text,
-        color = textColor,
-        fontWeight = FontWeight.Medium,
-        modifier = modifier
-            .wrapContentWidth()
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    )
-}
-
-// endregion
-
 // region utils
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val date = Calendar.getInstance()
@@ -651,22 +311,24 @@ private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
 // region preview
 @DarkModePreview
 @Composable
-fun PreviewActivityListWithHeadersView() {
+private fun PreviewActivityListWithHeadersView() {
     AppThemeSurface {
-        val sampleItems = PaymentDetailsPreviewProvider().values.toList()
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            ActivityListWithHeaders(sampleItems, onAllActivityButtonClick = { }, onActivityItemClick = { })
+            ActivityListWithHeaders(
+                testActivityItems,
+                onAllActivityButtonClick = { },
+                onActivityItemClick = { },
+            )
         }
     }
 }
 
 @DarkModePreview
 @Composable
-fun PreviewActivityListItems() {
+private fun PreviewActivityListItems() {
     AppThemeSurface {
-        val sampleItems = PaymentDetailsPreviewProvider().values.toList()
         ActivityList(
-            sampleItems,
+            testActivityItems,
             onAllActivityClick = { },
             onActivityItemClick = { },
         )
@@ -675,7 +337,7 @@ fun PreviewActivityListItems() {
 
 @DarkModePreview
 @Composable
-fun PreviewActivityListEmpty() {
+private fun PreviewActivityListEmpty() {
     AppThemeSurface {
         ActivityList(
             items = emptyList(),
@@ -687,7 +349,7 @@ fun PreviewActivityListEmpty() {
 
 @DarkModePreview
 @Composable
-fun PreviewActivityListNull() {
+private fun PreviewActivityListNull() {
     AppThemeSurface {
         ActivityList(
             items = null,
@@ -701,9 +363,8 @@ private val today: Calendar = Calendar.getInstance()
 private val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
 private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
 private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
-private val earlier: Calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -2) }
 
-val testActivityItems: Sequence<Activity> = sequenceOf(
+val testActivityItems: List<Activity> = listOf(
     // Today
     Activity.Onchain(
         OnchainActivity(
@@ -780,29 +441,7 @@ val testActivityItems: Sequence<Activity> = sequenceOf(
             updatedAt = thisMonth.timeInMillis.toULong(),
         )
     ),
-    //    // Earlier
-    //    PaymentDetails(
-    //        id = "5",
-    //        kind = PaymentKind.Onchain,
-    //        amountMsat = 5000_000u,
-    //        direction = PaymentDirection.INBOUND,
-    //        status = PaymentStatus.PENDING,
-    //        latestUpdateTimestamp = (Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.timeInMillis / 1000).toULong()
-    //    ),
 )
-
-private class PaymentDetailsPreviewProvider : PreviewParameterProvider<Activity> {
-    override val values: Sequence<Activity>
-        get() = testActivityItems
-}
-
-@LightModePreview
-@Composable
-private fun ActivityRowPreview(@PreviewParameter(PaymentDetailsPreviewProvider::class) item: Activity) {
-    AppThemeSurface {
-        ActivityRow(item, onClick = { })
-    }
-}
 // endregion
 
 sealed class ActivityFilterSheet {

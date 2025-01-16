@@ -2,14 +2,29 @@ package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tag
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -78,16 +93,16 @@ fun ActivityListFilter(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Column {
-            var selectedTab by remember { mutableStateOf(0) }
-            val tabs = listOf("All", "Sent", "Received", "Other")
-            TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, title ->
+            var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
+
+            TabRow(selectedTabIndex = ActivityTab.entries.indexOf(selectedTab)) {
+                ActivityTab.entries.forEach { tab ->
                     Tab(
-                        text = { Text(title) },
-                        selected = selectedTab == index,
+                        text = { Text(tab.title) },
+                        selected = selectedTab == tab,
                         onClick = {
-                            selectedTab = index
-                            // TODO on tab change
+                            selectedTab = tab
+                            // TODO on tab change: update filtered activities
                         }
                     )
                 }
@@ -95,3 +110,16 @@ fun ActivityListFilter(
         }
     }
 }
+
+enum class ActivityTab {
+    ALL, SENT, RECEIVED, OTHER;
+}
+
+val ActivityTab.title: String
+    @Composable
+    get() = when (this) {
+        ActivityTab.ALL -> "All"
+        ActivityTab.SENT -> "Sent"
+        ActivityTab.RECEIVED -> "Received"
+        ActivityTab.OTHER -> "Other"
+    }
