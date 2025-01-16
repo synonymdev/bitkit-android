@@ -188,7 +188,7 @@ fun ContentView(
                 regtestSettings(navController)
                 transfer(navController)
                 allActivity(activityListViewModel, navController)
-                activityItem(walletViewModel, navController)
+                activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
             }
         }
@@ -326,7 +326,7 @@ private fun NavGraphBuilder.allActivity(
 }
 
 private fun NavGraphBuilder.activityItem(
-    viewModel: WalletViewModel,
+    viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.ActivityItem> { navBackEntry ->

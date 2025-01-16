@@ -78,6 +78,7 @@ fun BalanceHeaderView(
                                 fontSize = 46.sp,
                                 fontWeight = FontWeight.Black,
                                 modifier = Modifier.alpha(0.6f)
+                                    .padding(end = 8.dp)
                             )
                         }
                         if (showBitcoinSymbol) {
@@ -115,7 +116,9 @@ fun BalanceHeaderView(
                                 text = prefix,
                                 fontSize = 46.sp,
                                 fontWeight = FontWeight.Black,
-                                modifier = Modifier.alpha(0.6f)
+                                modifier = Modifier
+                                    .alpha(0.6f)
+                                    .padding(end = 8.dp)
                             )
                         }
                         Text(

@@ -44,6 +44,7 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
+import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
@@ -173,7 +174,7 @@ private fun HomeContentView(
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Activity", style = MaterialTheme.typography.titleMedium)
+            LabelText("ACTIVITY")
             Spacer(modifier = Modifier.height(16.dp))
             val activity = activityListViewModel ?: return@AppScaffold
             val latestActivities by activity.latestActivities.collectAsState()

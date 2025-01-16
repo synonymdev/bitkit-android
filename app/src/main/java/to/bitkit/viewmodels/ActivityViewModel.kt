@@ -15,7 +15,6 @@ import to.bitkit.services.ActivityListService
 import to.bitkit.services.LightningService
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.PaymentType
 import javax.inject.Inject
 
 @HiltViewModel
@@ -23,7 +22,6 @@ class ActivityListViewModel @Inject constructor(
     private val activityService: ActivityListService,
     private val lightningService: LightningService,
 ) : ViewModel() {
-
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
 
@@ -132,7 +130,6 @@ class ActivityListViewModel @Inject constructor(
             Log.e(APP, "Failed to filter activities", e)
         }
     }
-
 
     private fun updateAvailableTags() {
         viewModelScope.launch {
