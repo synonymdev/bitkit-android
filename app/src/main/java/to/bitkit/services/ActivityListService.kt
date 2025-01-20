@@ -190,7 +190,7 @@ class ActivityListService @Inject constructor(
             throw AppError(message = "Regtest only")
         }
         ServiceQueue.ACTIVITY.background {
-            val timestamp = System.currentTimeMillis().toULong()
+            val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
                 listOf("coffee", "food", "shopping", "transport", "entertainment", "work", "friends", "family")
             val possibleMessages = listOf(
@@ -201,7 +201,7 @@ class ActivityListService @Inject constructor(
             repeat(count) { i ->
                 val isLightning = nextBoolean()
                 val value = (1000..1_000_000).random().toULong()
-                val txTimestamp = (timestamp.toLong() - (0..30L * 24 * 60 * 60 * 1000).random()).toULong() // Random time in last 30 days
+                val txTimestamp = (timestamp.toLong() - (0..30L * 24 * 60 * 60).random()).toULong() // Random time in last 30 days
                 val txType = if (nextBoolean()) PaymentType.SENT else PaymentType.RECEIVED
                 val status = when ((0..10).random()) {
                     in 0..7 -> PaymentState.SUCCEEDED // 80% chance
