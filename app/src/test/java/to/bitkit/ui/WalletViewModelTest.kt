@@ -24,6 +24,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 
@@ -36,6 +37,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var blocktankService: BlocktankService = mock()
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
+    private val ldkNodeEventBus: LdkNodeEventBus = mock()
 
     private lateinit var sut: WalletViewModel
 
@@ -68,6 +70,7 @@ class WalletViewModelTest : BaseUnitTest() {
             blocktankService = blocktankService,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
+            ldkNodeEventBus = ldkNodeEventBus,
         )
     }
 

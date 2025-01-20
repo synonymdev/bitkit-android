@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import to.bitkit.env.Tag.APP
 import to.bitkit.services.ActivityListService
+import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
@@ -21,6 +22,7 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     private val activityService: ActivityListService,
     private val lightningService: LightningService,
+    private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -62,6 +64,13 @@ class ActivityListViewModel @Inject constructor(
     val availableTags = _availableTags.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            ldkNodeEventBus.events.collect {
+                // TODO: sync only on specific events for better performance
+                syncLdkNodePayments()
+            }
+        }
+
         observeSearchText()
         observeDateRange()
         observeSelectedTags()
@@ -156,7 +165,7 @@ class ActivityListViewModel @Inject constructor(
         _selectedTags.value = mutableSetOf()
     }
 
-    fun syncLdkNodePayments() {
+    private fun syncLdkNodePayments() {
         viewModelScope.launch {
             try {
                 lightningService.payments?.let {

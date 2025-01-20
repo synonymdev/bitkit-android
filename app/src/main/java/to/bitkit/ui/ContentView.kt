@@ -136,7 +136,7 @@ fun ContentView(
             WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
                 scope.launch {
                     try {
-                        walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                        walletViewModel.setInitNodeLifecycleState()
                         walletViewModel.start()
                         walletViewModel.setWalletExistsState()
                     } catch (e: Exception) {

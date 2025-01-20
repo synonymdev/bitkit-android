@@ -10,14 +10,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Tag.APP
+import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
@@ -35,6 +38,7 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningService,
+    private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -62,7 +66,73 @@ class AppViewModel @Inject constructor(
             splashVisible = false
         }
 
+        observeLdkNodeEvents()
         observeSendEvents()
+    }
+
+    private fun observeLdkNodeEvents() {
+        viewModelScope.launch {
+            ldkNodeEventBus.events.collect { event ->
+                try {
+                    when (event) {
+                        is Event.PaymentReceived -> {
+                            showNewTransactionSheet(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.LIGHTNING,
+                                    direction = NewTransactionSheetDirection.RECEIVED,
+                                    sats = (event.amountMsat / 1000u).toLong(),
+                                )
+                            )
+                        }
+
+                        is Event.ChannelPending -> Unit // Only relevant for channels to external nodes
+
+                        is Event.ChannelReady -> {
+                            // TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.
+                            val channel = lightningService.channels?.find { it.channelId == event.channelId }
+                            if (channel != null) {
+                                showNewTransactionSheet(
+                                    NewTransactionSheetDetails(
+                                        type = NewTransactionSheetType.LIGHTNING,
+                                        direction = NewTransactionSheetDirection.RECEIVED,
+                                        sats = (channel.inboundCapacityMsat / 1000u).toLong(),
+                                    )
+                                )
+                            } else {
+                                toast(
+                                    type = Toast.ToastType.ERROR,
+                                    title = "Channel opened",
+                                    description = "Ready to send"
+                                )
+                            }
+                        }
+
+                        is Event.ChannelClosed -> {
+                            toast(
+                                type = Toast.ToastType.LIGHTNING,
+                                title = "Channel closed",
+                                description = "Balance moved from spending to savings"
+                            )
+                        }
+
+                        is Event.PaymentSuccessful -> {
+                            showNewTransactionSheet(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.LIGHTNING,
+                                    direction = NewTransactionSheetDirection.SENT,
+                                    sats = ((event.feePaidMsat ?: 0u) / 1000u).toLong(),
+                                )
+                            )
+                        }
+
+                        is Event.PaymentClaimable -> Unit
+                        is Event.PaymentFailed -> Unit
+                    }
+                } catch (e: Exception) {
+                    Log.e(LDK, "Ldk event handler error", e)
+                }
+            }
+        }
     }
 
     // region send
@@ -389,6 +459,7 @@ class AppViewModel @Inject constructor(
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
+        scan = null
     }
     // endregion
 
