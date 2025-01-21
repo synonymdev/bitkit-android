@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -441,15 +442,49 @@ class AppViewModel @Inject constructor(
             }
     }
 
-    private suspend fun sendLightning(bolt11: String, amount: ULong? = null): Result<PaymentId> {
-        return runCatching { lightningService.send(bolt11 = bolt11, amount) }
-            .onFailure {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = "Error Sending",
-                    description = it.message ?: "Unknown error"
-                )
-            }
+    private suspend fun sendLightning(
+        bolt11: String,
+        amount: ULong? = null,
+    ): Result<PaymentId> {
+        return try {
+            val hash = lightningService.send(bolt11 = bolt11, amount)
+            val result = CompletableDeferred<Result<PaymentId>>()
+
+            ldkNodeEventBus.events
+                .takeWhile { event ->
+                    when (event) {
+                        is Event.PaymentSuccessful -> {
+                            if (event.paymentHash == hash) {
+                                result.complete(Result.success(hash))
+                                false // Stop collecting
+                            } else {
+                                true // Keep listening for other events
+                            }
+                        }
+                        is Event.PaymentFailed -> {
+                            if (event.paymentHash == hash) {
+                                result.complete(
+                                    Result.failure(Exception(event.reason?.name ?: "Unknown payment failure reason"))
+                                )
+                                false // Stop collecting
+                            } else {
+                                true // Keep listening for other events
+                            }
+                        }
+                        else -> true // Continue collecting
+                    }
+                }
+                .collect()
+
+            result.await()
+        } catch (e: Exception) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = "Error Sending",
+                description = e.message ?: "Unknown error"
+            )
+            Result.failure(e)
+        }
     }
 
     private fun getMinOnchainTx(): ULong {
