@@ -42,12 +42,12 @@ import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.BodyMSB
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Display
 
 private val horizontalPadding = 32.dp
 

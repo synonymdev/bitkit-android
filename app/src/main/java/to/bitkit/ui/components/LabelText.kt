@@ -16,7 +16,7 @@ fun LabelText(
     modifier: Modifier = Modifier,
 ) {
     Text(
-        text = text,
+        text = text.uppercase(),
         style = LocalTextStyle.current.copy(
             fontSize = 13.sp,
             color = Colors.White64,
