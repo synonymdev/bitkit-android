@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -19,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -29,9 +29,9 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 sealed class WalletInitResult {
-    data object Created : WalletInitResult()
     data object Restored : WalletInitResult()
     data class Failed(val error: Throwable) : WalletInitResult()
 }
@@ -41,35 +41,28 @@ fun WalletInitResultView(
     result: WalletInitResult,
     onButtonClick: () -> Unit,
 ) {
-    val titleText1 = when (result) {
-        is WalletInitResult.Created, is WalletInitResult.Restored -> "WALLET"
-        is WalletInitResult.Failed -> "SPENDING BALANCE"
+    val titleText = when (result) {
+        is WalletInitResult.Restored -> stringResource(R.string.onboarding__restore_success_header)
+        is WalletInitResult.Failed -> stringResource(R.string.onboarding__restore_failed_header)
     }
 
-    val titleText2 = when (result) {
-        is WalletInitResult.Created -> "CREATED"
-        is WalletInitResult.Restored -> "RESTORED"
-        is WalletInitResult.Failed -> "ERROR"
-    }
-
-    val titleColor = when (result) {
-        is WalletInitResult.Created, is WalletInitResult.Restored -> Colors.Green
+    val titleAccentColor = when (result) {
+        is WalletInitResult.Restored -> Colors.Green
         is WalletInitResult.Failed -> Colors.Red
     }
 
     val description = when (result) {
-        is WalletInitResult.Created -> "Your new wallet is ready to use."
-        is WalletInitResult.Restored -> "You have successfully restored your wallet from backup. Enjoy Bitkit!"
-        is WalletInitResult.Failed -> "Bitkit restored your savings, but failed to restore your current spending balance (Lightning state) and wallet data."
+        is WalletInitResult.Restored -> stringResource(R.string.onboarding__restore_success_text)
+        is WalletInitResult.Failed -> stringResource(R.string.onboarding__restore_failed_text)
     }
 
     val buttonText = when (result) {
-        is WalletInitResult.Created, is WalletInitResult.Restored -> "Get Started"
-        is WalletInitResult.Failed -> "Try Again"
+        is WalletInitResult.Restored -> stringResource(R.string.onboarding__get_started)
+        is WalletInitResult.Failed -> stringResource(R.string.common__try_again)
     }
 
     val imageResource = when (result) {
-        is WalletInitResult.Created, is WalletInitResult.Restored -> R.drawable.check
+        is WalletInitResult.Restored -> R.drawable.check
         is WalletInitResult.Failed -> R.drawable.cross
     }
 
@@ -82,12 +75,8 @@ fun WalletInitResultView(
         Spacer(modifier = Modifier.height(24.dp))
 
         Column {
-            Display(titleText1)
-            Display(
-                text = titleText2,
-                color = titleColor,
-                modifier = Modifier.offset(y = (-8).dp)
-            )
+            Display(titleText.withAccent(accent = titleAccentColor))
+            Spacer(modifier = Modifier.height(8.dp))
             BodyM(description, color = Colors.White80)
         }
 
@@ -128,7 +117,7 @@ fun WalletInitResultView(
 @Composable
 fun WalletInitResultViewRestoredPreview() {
     AppThemeSurface {
-        WalletInitResultView(result = WalletInitResult.Restored) {}
+        WalletInitResultView(result = WalletInitResult.Restored, onButtonClick = {})
     }
 }
 
@@ -136,6 +125,6 @@ fun WalletInitResultViewRestoredPreview() {
 @Composable
 fun WalletInitResultViewErrorPreview() {
     AppThemeSurface {
-        WalletInitResultView(result = WalletInitResult.Failed(Throwable("Something went wrong"))) {}
+        WalletInitResultView(result = WalletInitResult.Failed(Error("Something went wrong")), onButtonClick = {})
     }
 }

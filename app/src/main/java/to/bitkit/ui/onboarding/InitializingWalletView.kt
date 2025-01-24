@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -38,6 +39,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 import kotlin.math.roundToInt
 
 @Composable
@@ -159,12 +161,7 @@ fun InitializingWalletView(
                     }
                     .padding(top = 32.dp)
             ) {
-                Display(text = "SETTING UP")
-                Display(
-                    text = "YOUR WALLET",
-                    color = Colors.Brand,
-                    modifier = Modifier.offset(y = (-8).dp)
-                )
+                Display(text = stringResource(R.string.onboarding__loading_header).withAccent())
             }
         }
     }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,19 +33,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentLink
 
 private val horizontalPadding = 32.dp
 
@@ -76,12 +72,7 @@ fun TermsOfUseScreen(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Display("BITKIT")
-                    Display(
-                        text = stringResource(R.string.tos_header),
-                        color = Colors.Brand,
-                        modifier = Modifier.offset(y = (-8).dp)
-                    )
+                    Display(text = stringResource(R.string.onboarding__tos_header).withAccent())
                     Spacer(modifier = Modifier.height(12.dp))
                     TosContent()
                     Spacer(modifier = Modifier.height(20.dp))
@@ -93,10 +84,7 @@ fun TermsOfUseScreen(
                         .height(70.dp)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    MaterialTheme.colorScheme.background,
-                                ),
+                                colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background),
                             )
                         )
                 )
@@ -108,15 +96,17 @@ fun TermsOfUseScreen(
                     .padding(bottom = 24.dp)
             ) {
                 CheckButton(
-                    title = stringResource(R.string.tos_checkbox),
-                    htmlText = stringResource(R.string.tos_checkbox_value),
+                    title = stringResource(R.string.onboarding__tos_checkbox),
+                    htmlText = stringResource(R.string.onboarding__tos_checkbox_value)
+                        .withAccentLink("https://bitkit.to/terms-of-use"),
                     isChecked = termsAccepted,
                     onCheckedChange = { termsAccepted = it },
                     modifier = Modifier.padding(horizontal = horizontalPadding)
                 )
                 CheckButton(
-                    title = stringResource(R.string.pp_checkbox),
-                    htmlText = stringResource(R.string.pp_checkbox_value),
+                    title = stringResource(R.string.onboarding__pp_checkbox),
+                    htmlText = stringResource(R.string.onboarding__pp_checkbox_value)
+                        .withAccentLink("https://bitkit.to/privacy-policy"),
                     isChecked = privacyAccepted,
                     onCheckedChange = { privacyAccepted = it },
                     modifier = Modifier.padding(horizontal = horizontalPadding)
@@ -125,7 +115,7 @@ fun TermsOfUseScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 PrimaryButton(
-                    text = "Continue",
+                    text = stringResource(R.string.common__continue),
                     onClick = onNavigateToIntro,
                     enabled = termsAccepted && privacyAccepted,
                     modifier = Modifier.padding(horizontal = horizontalPadding)
@@ -138,7 +128,7 @@ fun TermsOfUseScreen(
 @Composable
 private fun CheckButton(
     title: String,
-    htmlText: String,
+    htmlText: AnnotatedString,
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -159,7 +149,7 @@ private fun CheckButton(
             ) {
                 BodyMSB(title)
                 Spacer(modifier = Modifier.height(4.dp))
-                HtmlTextWithLink(htmlText)
+                BodySSB(text = htmlText, color = Colors.White64)
             }
             Spacer(modifier = Modifier.width(8.dp))
             CheckmarkBox(isChecked)
@@ -167,20 +157,6 @@ private fun CheckButton(
         Spacer(modifier = Modifier.height(14.dp))
         HorizontalDivider()
     }
-}
-
-@Composable
-private fun HtmlTextWithLink(htmlText: String) {
-    Text(
-        text = AnnotatedString.fromHtml(
-            htmlString = htmlText,
-            linkStyles = TextLinkStyles(style = SpanStyle(color = Colors.Brand)),
-        ),
-        color = MaterialTheme.colorScheme.secondary,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
-    )
 }
 
 @Composable

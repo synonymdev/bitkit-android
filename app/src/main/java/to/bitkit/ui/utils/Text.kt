@@ -3,8 +3,10 @@ package to.bitkit.ui.utils
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import to.bitkit.ui.theme.Colors
 
@@ -47,6 +49,17 @@ fun String.withAccent(
     }
 }
 
+fun String.withAccentLink(url: String): AnnotatedString {
+    val htmlText = this
+        .replace("<accent>", "<a href=\"$url\">")
+        .replace("</accent>", "</a>")
+
+    return AnnotatedString.fromHtml(
+        htmlString = htmlText,
+        linkStyles = TextLinkStyles(style = SpanStyle(color = Colors.Brand)),
+    )
+}
+
 fun String.withBold(
     color: Color = Color.Unspecified,
     boldStyle: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold),
@@ -84,46 +97,4 @@ fun String.withBold(
             }
         }
     }
-}
-
-data class TranslationPart(
-    val text: String,
-    val isAccent: Boolean
-)
-
-fun String.splitIntoParts(): List<TranslationPart> {
-    val string = this
-    val parts = mutableListOf<TranslationPart>()
-    var currentIndex = 0
-    val (tagStart, tagEnd) = "<accent>" to "</accent>"
-
-    while (currentIndex < string.length) {
-        val startRange = string.indexOf(tagStart, currentIndex)
-
-        if (startRange != -1) {
-            // Add non-accented text before the tag if any
-            if (currentIndex < startRange) {
-                val text = string.substring(currentIndex, startRange)
-                parts.add(TranslationPart(text = text, isAccent = false))
-            }
-
-            // Find the end of the accented text
-            val endRange = string.indexOf(tagEnd, startIndex = startRange + tagStart.length)
-            if (endRange != -1) {
-                val text = string.substring(startIndex = startRange + tagStart.length, endRange)
-                parts.add(TranslationPart(text = text, isAccent = true))
-                currentIndex = endRange + tagEnd.length
-            } else {
-                // Malformed string, no closing tag
-                break
-            }
-        } else {
-            // No more accent tags, add remaining text
-            val text = string.substring(currentIndex)
-            parts.add(TranslationPart(text = text, isAccent = false))
-            break
-        }
-    }
-
-    return parts
 }

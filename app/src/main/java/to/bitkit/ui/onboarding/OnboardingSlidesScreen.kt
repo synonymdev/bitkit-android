@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -40,9 +42,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.Footnote
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,35 +74,31 @@ fun OnboardingSlidesScreen(
             when (page) {
                 0 -> OnboardingTab(
                     imageResId = R.drawable.keyring,
-                    titleFirstLine = "FREEDOM IN",
-                    titleSecondLine = "YOUR POCKET",
-                    secondLineColor = Colors.Blue,
-                    text = "Bitkit hands you the keys to manage your money. Spend now or save for later. The choice is yours."
+                    title = stringResource(R.string.onboarding__slide0_header),
+                    titleAccentColor = Colors.Blue,
+                    text = stringResource(R.string.onboarding__slide0_text),
                 )
 
                 1 -> OnboardingTab(
                     imageResId = R.drawable.lightning,
-                    titleFirstLine = "INSTANT",
-                    titleSecondLine = "PAYMENTS",
-                    secondLineColor = Colors.Purple,
-                    text = "Spend bitcoin faster than ever. Enjoy instant and cheap payments with friends, family, and merchants*.",
-                    disclaimerText = "*Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes." // TODO use GeoBlocking state
+                    title = stringResource(R.string.onboarding__slide1_header),
+                    titleAccentColor = Colors.Purple,
+                    text = stringResource(R.string.onboarding__slide1_text),
+                    disclaimerText = stringResource(R.string.onboarding__slide1_note), // TODO use GeoBlocking state
                 )
 
                 2 -> OnboardingTab(
                     imageResId = R.drawable.spark,
-                    titleFirstLine = "BITCOINERS,",
-                    titleSecondLine = "BORDERLESS",
-                    secondLineColor = Colors.Yellow,
-                    text = "Take charge of your digital life with portable profiles and payable contacts."
+                    title = stringResource(R.string.onboarding__slide2_header),
+                    titleAccentColor = Colors.Yellow,
+                    text = stringResource(R.string.onboarding__slide2_text),
                 )
 
                 3 -> OnboardingTab(
                     imageResId = R.drawable.shield,
-                    titleFirstLine = "PRIVACY IS",
-                    titleSecondLine = "NOT A CRIME",
-                    secondLineColor = Colors.Green,
-                    text = "Swipe to hide your balance, enjoy more private payments, and protect your wallet by enabling security features."
+                    title = stringResource(R.string.onboarding__slide3_header),
+                    titleAccentColor = Colors.Green,
+                    text = stringResource(R.string.onboarding__slide3_text),
                 )
 
                 4 -> CreateWalletScreen(
@@ -154,7 +155,7 @@ fun OnboardingSlidesScreen(
             if (pagerState.currentPage == 4) {
                 TextButton(onClick = onAdvancedSetupClick) {
                     Text(
-                        text = "Advanced Setup",
+                        text = stringResource(R.string.onboarding__advanced_setup),
                         fontSize = 17.sp,
                         color = Colors.White64,
                         fontWeight = FontWeight.SemiBold,
@@ -165,7 +166,7 @@ fun OnboardingSlidesScreen(
                     scope.launch { pagerState.animateScrollToPage(4) }
                 }) {
                     Text(
-                        text = "Skip",
+                        text = stringResource(R.string.onboarding__skip),
                         fontSize = 17.sp,
                         color = Colors.White64,
                         fontWeight = FontWeight.SemiBold,
@@ -179,16 +180,14 @@ fun OnboardingSlidesScreen(
 @Composable
 fun OnboardingTab(
     imageResId: Int,
-    titleFirstLine: String,
-    titleSecondLine: String,
-    secondLineColor: Color,
+    title: String,
+    titleAccentColor: Color,
     text: String,
     disclaimerText: String? = null,
 ) {
     Box(
         contentAlignment = Alignment.TopCenter,
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
         Image(
             painter = painterResource(id = imageResId),
@@ -204,29 +203,17 @@ fun OnboardingTab(
                 .fillMaxHeight(.325f)
                 .align(Alignment.BottomCenter),
         ) {
-            Display(text = titleFirstLine)
-            Display(
-                text = titleSecondLine,
-                color = secondLineColor,
-                modifier = Modifier.offset(y = (-8).dp)
-            )
-            Text(
+            Display(text = title.withAccent(accent = titleAccentColor))
+            Spacer(modifier = Modifier.height(8.dp))
+            BodyM(
                 text = text,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                letterSpacing = 0.4.sp,
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
             )
             disclaimerText?.let {
-                Text(
+                Spacer(modifier = Modifier.height(6.5.dp))
+                Footnote(
                     text = it,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
                     color = Colors.White32,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.5.dp)
                 )
             }
         }

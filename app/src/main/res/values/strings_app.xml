@@ -51,8 +51,6 @@
     <string name="pay">Pay</string>
     <string name="peers">Peers</string>
     <string name="pending">Pending</string>
-    <string name="pp_checkbox">Privacy Policy</string>
-    <string name="pp_checkbox_value"><![CDATA["I declare that I have read and<br>accept the <a href=\"https://bitkit.to/privacy-policy\">privacy policy</a>."]]></string>
     <string name="ready">Ready</string>
     <string name="receive">Receive</string>
     <string name="sat">sat</string>
@@ -73,9 +71,6 @@
     <string name="title_send">Send Bitcoin</string>
     <string name="title_send_amount">Bitcoin Amount</string>
     <string name="title_send_review">Review &amp; Send</string>
-    <string name="tos_checkbox">Terms of Use</string>
-    <string name="tos_checkbox_value"><![CDATA["I declare that I have read and<br>accept the <a href=\"https://bitkit.to/terms-of-use\">terms of use</a>."]]></string>
-    <string name="tos_header">TERMS OF USE</string>
     <string name="transfer_funds">Transfer Funds</string>
     <string name="wallet">Wallet</string>
 </resources>

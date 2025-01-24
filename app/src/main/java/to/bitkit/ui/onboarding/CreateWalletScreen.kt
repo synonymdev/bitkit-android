@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -23,16 +22,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Display
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun CreateWalletScreen(
@@ -58,26 +60,13 @@ fun CreateWalletScreen(
                 .fillMaxHeight(.325f)
                 .align(Alignment.BottomCenter),
         ) {
-            Display(text = "YOUR KEYS,")
-            Display(
-                text = "YOUR COINS",
-                color = Colors.Brand,
-                modifier = Modifier.offset(y = (-8).dp)
-            )
-            Text(
-                text = "Let's create your wallet. Please be aware that Bitkit is mobile software.",
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = "Don't store all your money in Bitkit.",
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                color = Colors.White,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth()
+            Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
+            Spacer(modifier = Modifier.height(8.dp))
+            BodyM(
+                text = stringResource(R.string.onboarding__slide4_text).withAccent(
+                    color = Colors.White64,
+                    accentStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Colors.White),
+                ),
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -94,7 +83,7 @@ fun CreateWalletScreen(
                         .height(56.dp),
                 ) {
                     Text(
-                        text = "New Wallet",
+                        text = stringResource(R.string.onboarding__new_wallet),
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                         color = Colors.White
                     )
@@ -108,7 +97,7 @@ fun CreateWalletScreen(
                         .height(56.dp),
                 ) {
                     Text(
-                        text = "Restore",
+                        text = stringResource(R.string.onboarding__restore),
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                         color = Colors.White80
                     )

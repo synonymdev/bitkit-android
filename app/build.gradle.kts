@@ -27,13 +27,11 @@ android {
             "de",        // German
             "el",        // Greek
             "es",        // Spanish (Spain)
-            "es-419",    // Spanish (Latin America)
             "fr",        // French
             "it",        // Italian
             "nl",        // Dutch
             "pl",        // Polish
             "pt",        // Portuguese (Portugal)
-            "pt-BR",     // Portuguese (Brazil)
             "ru",        // Russian
         )
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"

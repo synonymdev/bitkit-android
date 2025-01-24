@@ -118,17 +118,20 @@ fun Subtitle(
 @Composable
 fun BodyM(
     text: String,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     BodyM(
         text = AnnotatedString(text),
         color = color,
+        modifier = modifier,
     )
 }
 
 @Composable
 fun BodyM(
     text: AnnotatedString,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
@@ -141,7 +144,8 @@ fun BodyM(
             fontFamily = FontFamily.Default,
             color = color
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
 
@@ -186,6 +190,40 @@ fun BodyMB(
 @Composable
 fun BodyS(
     text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 20.sp,
+            letterSpacing = 0.4.sp,
+            fontFamily = FontFamily.Default,
+            color = color,
+        ),
+        textAlign = TextAlign.Start,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun BodySSB(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    BodySSB(
+        text = AnnotatedString(text),
+        color = color,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun BodySSB(
+    text: AnnotatedString,
     color: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier,
 ) {
@@ -193,7 +231,7 @@ fun BodyS(
         text = text,
         style = TextStyle(
             fontSize = 15.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.SemiBold,
             lineHeight = 20.sp,
             letterSpacing = 0.4.sp,
             fontFamily = FontFamily.Default,
@@ -243,6 +281,7 @@ fun Caption(
 @Composable
 fun Footnote(
     text: String,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     Text(
@@ -254,6 +293,7 @@ fun Footnote(
             fontFamily = FontFamily.Default,
             color = color
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
