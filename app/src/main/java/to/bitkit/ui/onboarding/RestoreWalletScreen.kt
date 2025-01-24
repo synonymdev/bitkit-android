@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -103,7 +102,7 @@ fun RestoreWalletView(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            Display(stringResource(R.string.onboarding__restore_header).withAccent(accent = Colors.Blue))
+            Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(
                 text = stringResource(R.string.onboarding__restore_phrase),

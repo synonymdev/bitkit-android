@@ -203,7 +203,7 @@ fun OnboardingTab(
                 .fillMaxHeight(.325f)
                 .align(Alignment.BottomCenter),
         ) {
-            Display(text = title.withAccent(accent = titleAccentColor))
+            Display(text = title.withAccent(accentColor = titleAccentColor))
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(
                 text = text,

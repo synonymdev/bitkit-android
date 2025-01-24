@@ -64,7 +64,7 @@ fun CreateWalletScreen(
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(
                 text = stringResource(R.string.onboarding__slide4_text).withAccent(
-                    color = Colors.White64,
+                    defaultColor = Colors.White64,
                     accentStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Colors.White),
                 ),
             )

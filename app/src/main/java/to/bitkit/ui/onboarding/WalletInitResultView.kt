@@ -75,7 +75,7 @@ fun WalletInitResultView(
         Spacer(modifier = Modifier.height(24.dp))
 
         Column {
-            Display(titleText.withAccent(accent = titleAccentColor))
+            Display(titleText.withAccent(accentColor = titleAccentColor))
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(description, color = Colors.White80)
         }

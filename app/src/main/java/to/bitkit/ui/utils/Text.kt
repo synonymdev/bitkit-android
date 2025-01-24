@@ -11,9 +11,9 @@ import androidx.compose.ui.text.withStyle
 import to.bitkit.ui.theme.Colors
 
 fun String.withAccent(
-    color: Color = Color.Unspecified,
-    accent: Color = Colors.Brand,
-    accentStyle: SpanStyle = SpanStyle(color = accent),
+    defaultColor: Color = Color.Unspecified,
+    accentColor: Color = Colors.Brand,
+    accentStyle: SpanStyle = SpanStyle(color = accentColor),
 ): AnnotatedString {
     val regex = Regex("<accent>(.*?)</accent>")
     val matches = regex.findAll(this)
@@ -27,7 +27,7 @@ fun String.withAccent(
 
             // Add text before the match with default color
             if (startIndex > lastIndex) {
-                withStyle(style = SpanStyle(color = color)) {
+                withStyle(style = SpanStyle(color = defaultColor)) {
                     append(this@withAccent.substring(lastIndex, startIndex))
                 }
             }
@@ -42,7 +42,7 @@ fun String.withAccent(
 
         // Add remaining text after the last match with default color
         if (lastIndex < this@withAccent.length) {
-            withStyle(style = SpanStyle(color = color)) {
+            withStyle(style = SpanStyle(color = defaultColor)) {
                 append(this@withAccent.substring(lastIndex))
             }
         }
@@ -61,9 +61,9 @@ fun String.withAccentLink(url: String): AnnotatedString {
 }
 
 fun String.withBold(
-    color: Color = Color.Unspecified,
+    defaultColor: Color = Color.Unspecified,
     boldStyle: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold),
-    defaultStyle: SpanStyle = SpanStyle(color = color),
+    defaultStyle: SpanStyle = SpanStyle(color = defaultColor),
 ): AnnotatedString {
     val regex = Regex("<bold>(.*?)</bold>")
     val matches = regex.findAll(this)
