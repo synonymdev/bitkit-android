@@ -19,6 +19,23 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+        resourceConfigurations += listOf(
+            "en",        // Default (English)
+            "ar",        // Arabic
+            "ca",        // Catalan
+            "cs",        // Czech
+            "de",        // German
+            "el",        // Greek
+            "es",        // Spanish (Spain)
+            "es-419",    // Spanish (Latin America)
+            "fr",        // French
+            "it",        // Italian
+            "nl",        // Dutch
+            "pl",        // Polish
+            "pt",        // Portuguese (Portugal)
+            "pt-BR",     // Portuguese (Brazil)
+            "ru",        // Russian
+        )
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true

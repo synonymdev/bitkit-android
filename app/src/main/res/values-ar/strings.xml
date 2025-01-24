@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common__delete_yes">نعم، احذف</string>
+    <string name="settings__backup__category_contacts">جهات الاتصال</string>
+    <string name="slashtags__your_name">اسمك</string>
+    <string name="slashtags__your_name_capital">اسمك</string>
+    <string name="slashtags__contact_name">اسم جهة الاتصال</string>
+    <string name="slashtags__contact">جهة الاتصال</string>
+    <string name="slashtags__contacts">جهات الاتصال</string>
+    <string name="slashtags__contact_add">أضف جهة اتصال</string>
+    <string name="slashtags__contact_add_capital">أضف جهة اتصال</string>
+    <string name="slashtags__contact_add_explain">أضف جهة اتصال بمسح رمز استجابتها السريع أو بلصق مفتاحها أدناه</string>
+    <string name="slashtags__contact_key_paste">الصق مفتاحًا</string>
+    <string name="slashtags__contact_error_yourself">ليس لك أن تضيف نفسك في جهات اتصالك.</string>
+    <string name="slashtags__contact_error_key">هذا ليس مفتاحًا صالحًا.</string>
+    <string name="slashtags__contact_edit_capital">تعديل جهة الاتصال</string>
+    <string name="slashtags__contacts_name">اسم جهة الاتصال</string>
+    <string name="slashtags__contact_your_name">اسم ملفك الشخصي العام</string>
+    <string name="slashtags__contact_retrieving">جلب معلومات جهة الاتصال...</string>
+    <string name="slashtags__contact_no_links">لم تُضَف أي روابط بعد...</string>
+    <string name="slashtags__contact_share">مشاركة مفتاح الملف الشخصي</string>
+    <string name="slashtags__contact_this">جهة الاتصال هذه</string>
+    <string name="slashtags__contact_copied">نُسخ مفتاح الملف الشخصي إلى الحافظة</string>
+    <string name="slashtags__contact_delete_title">حذف {name}؟</string>
+    <string name="slashtags__contact_delete_text">هل أنت متأكد من إرادتك حذف {name} من جهات اتصالك؟</string>
+    <string name="slashtags__contact_delete_yes">نعم، احذف</string>
+    <string name="slashtags__contact_select">اختر جهة اتصال</string>
+    <string name="slashtags__profile_delete_dialogue_yes">نعم، احذف</string>
+    <string name="slashtags__widget_delete_yes">نعم، احذف</string>
+    <string name="wallet__recipient_contact">جهة الاتصال</string>
+    <string name="wallet__activity_contact">جهة الاتصال</string>
+</resources>
