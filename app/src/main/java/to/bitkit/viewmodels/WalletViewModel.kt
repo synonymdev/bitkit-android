@@ -23,13 +23,8 @@ import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ChannelId
-import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
-import org.lightningdevkit.ldknode.PaymentDetails
-import org.lightningdevkit.ldknode.PaymentDirection
-import org.lightningdevkit.ldknode.PaymentKind
-import org.lightningdevkit.ldknode.PaymentStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
@@ -50,8 +45,8 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankService
+import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -65,6 +60,7 @@ class WalletViewModel @Inject constructor(
     private val blocktankService: BlocktankService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
+    private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
@@ -83,11 +79,9 @@ class WalletViewModel @Inject constructor(
         walletExists = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
     }
 
-    fun setInitNodeLifecycleState(isInitializingWallet: Boolean) {
-        if (isInitializingWallet) {
-            _nodeLifecycleState = NodeLifecycleState.Initializing
-            _uiState.update { it.copy(nodeLifecycleState = _nodeLifecycleState) }
-        }
+    fun setInitNodeLifecycleState() {
+        _nodeLifecycleState = NodeLifecycleState.Initializing
+        _uiState.update { it.copy(nodeLifecycleState = _nodeLifecycleState) }
     }
 
     private var _onchainAddress: String
@@ -101,15 +95,6 @@ class WalletViewModel @Inject constructor(
     private var _bip21: String
         get() = appStorage.bip21
         set(value) = let { appStorage.bip21 = value }
-
-    var activityItems = mutableStateOf<List<PaymentDetails>?>(null)
-        private set
-
-    private var onLdkEvent: ((Event) -> Unit)? = null
-
-    fun setOnEvent(onEvent: (Event) -> Unit) {
-        onLdkEvent = onEvent
-    }
 
     fun start(walletIndex: Int = 0) {
         if (!walletExists) return
@@ -126,7 +111,7 @@ class WalletViewModel @Inject constructor(
                 lightningService.setup(walletIndex)
                 lightningService.start { event ->
                     syncState()
-                    onLdkEvent?.invoke(event)
+                    ldkNodeEventBus.emit(event)
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
@@ -220,11 +205,7 @@ class WalletViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
-            launch(bgDispatcher) { syncBalances() }
-            launch(bgDispatcher) { syncActivityItems() }
-            // debugActivityItems()
-        }
+        viewModelScope.launch(bgDispatcher) { syncBalances() }
     }
 
     private fun syncBalances() {
@@ -237,40 +218,6 @@ class WalletViewModel @Inject constructor(
                     totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats,
                 )
             }
-        }
-    }
-
-    private fun syncActivityItems() {
-        lightningService.payments?.let { payments ->
-            val sorted = payments.sortedByDescending { it.latestUpdateTimestamp }
-
-            // TODO: eventually load other activity types from storage
-            val allActivity = mutableListOf<PaymentDetails>()
-
-            sorted.forEach { details ->
-                when (details.kind) {
-                    is PaymentKind.Onchain -> {
-                        allActivity.add(details)
-                    }
-
-                    is PaymentKind.Bolt11 -> {
-                        if (!(details.status == PaymentStatus.PENDING && details.direction == PaymentDirection.INBOUND)) {
-                            allActivity.add(details)
-                        }
-                    }
-
-                    is PaymentKind.Spontaneous -> {
-                        allActivity.add(details)
-                    }
-
-                    is PaymentKind.Bolt11Jit -> Unit
-                    is PaymentKind.Bolt12Offer -> Unit
-                    is PaymentKind.Bolt12Refund -> Unit
-                }
-            }
-
-            // TODO: append activity items from lightning balances
-            activityItems.value = allActivity
         }
     }
 
@@ -551,18 +498,6 @@ class WalletViewModel @Inject constructor(
                     )
                 }
                 .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugActivityItems() {
-        viewModelScope.launch {
-            val testItems = testActivityItems.toList().sortedByDescending { it.latestUpdateTimestamp }
-            activityItems.value = testItems
-            // ToastEventBus.send(
-            //     type = Toast.ToastType.INFO,
-            //     title = "Success",
-            //     description = "Test activity items added"
-            // )
         }
     }
 

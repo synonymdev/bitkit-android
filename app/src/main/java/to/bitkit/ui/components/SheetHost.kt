@@ -21,9 +21,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.theme.AppShapes
+import to.bitkit.ui.theme.Colors
 
 sealed class BottomSheetType {
     data class Send(val route: SendRoute = SendRoute.Options) : BottomSheetType()
@@ -33,7 +33,8 @@ sealed class BottomSheetType {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SheetHost(
-    appViewModel: AppViewModel,
+    shouldExpand: Boolean,
+    onDismiss: () -> Unit = {},
     sheets: @Composable ColumnScope.() -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -41,21 +42,20 @@ fun SheetHost(
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     )
-    val currentSheet by appViewModel.currentSheet
 
-    // Automatically expand or hide the bottom sheet based on currentSheet
-    LaunchedEffect(currentSheet) {
-        if (currentSheet != null) {
+    // Automatically expand or hide the bottom sheet based on bool flag
+    LaunchedEffect(shouldExpand) {
+        if (shouldExpand) {
             scaffoldState.bottomSheetState.expand()
         } else {
             scaffoldState.bottomSheetState.hide()
         }
     }
 
-    // Observe the state of the bottom sheet and update ViewModel when it is dismissed
+    // Observe the state of the bottom sheet to invoke onDismiss callback
     LaunchedEffect(scaffoldState.bottomSheetState.isVisible) {
         if (!scaffoldState.bottomSheetState.isVisible) {
-            appViewModel.hideSheet()
+            onDismiss()
         }
     }
 
@@ -73,7 +73,7 @@ fun SheetHost(
             Scrim(scaffoldState.bottomSheetState) {
                 scope.launch {
                     scaffoldState.bottomSheetState.hide()
-                    appViewModel.hideSheet()
+                    onDismiss()
                 }
             }
         }
@@ -96,7 +96,7 @@ private fun Scrim(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = scrimAlpha))
+                .background(Colors.Black.copy(alpha = scrimAlpha))
                 .clickable(
                     interactionSource = null,
                     indication = null,

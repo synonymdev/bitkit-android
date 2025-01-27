@@ -57,7 +57,7 @@ private object ColorPalette {
         onSurface = Colors.White, // Colors.Gray6,
         surfaceVariant = gray900,
         surfaceContainer = Colors.White16,
-        onPrimary = Colors.White,
+        onPrimary = Colors.Black,
         onSecondary = Colors.White,
         outlineVariant = Colors.White10, // divider default
     )

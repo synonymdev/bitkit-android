@@ -14,12 +14,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.scaffold.AppTopBar
@@ -60,8 +63,10 @@ fun SavingsWalletScreen(
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
+            val activity = activityListViewModel ?: return@Column
+            val onchainActivities by activity.onchainActivities.collectAsState()
             ActivityListWithHeaders(
-                items = viewModel.activityItems.value?.filter { it.kind is PaymentKind.Onchain },
+                items = onchainActivities,
                 showFooter = true,
                 onAllActivityButtonClick = onAllActivityButtonClick,
                 onActivityItemClick = onActivityItemClick,

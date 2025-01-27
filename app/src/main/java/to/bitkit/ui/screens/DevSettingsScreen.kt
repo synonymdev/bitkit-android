@@ -87,7 +87,6 @@ fun DevSettingsScreen(
                 FullWidthTextButton(viewModel::debugFcmToken) { Text("Print FCM Token") }
                 FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
                 FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
-                FullWidthTextButton(viewModel::debugActivityItems) { Text("Activity Items") }
                 FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
                 FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
                 HorizontalDivider()

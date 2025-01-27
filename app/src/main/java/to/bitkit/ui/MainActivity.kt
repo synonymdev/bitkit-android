@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -14,12 +13,6 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import org.lightningdevkit.ldknode.Event
-import to.bitkit.env.Tag.LDK
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.Toast
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -29,8 +22,8 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.utils.clearBackStack
 import to.bitkit.ui.utils.enableAppEdgeToEdge
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
@@ -42,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
     private val currencyViewModel by viewModels<CurrencyViewModel>()
+    private val activityListViewModel by viewModels<ActivityListViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +43,6 @@ class MainActivity : ComponentActivity() {
         initNotificationChannel()
         installSplashScreen()
         enableAppEdgeToEdge()
-        walletViewModel.setOnEvent(::onLdkEvent)
         setContent {
             AppThemeSurface {
                 val scope = rememberCoroutineScope()
@@ -84,7 +77,7 @@ class MainActivity : ComponentActivity() {
                                 onCreateClick = {
                                     scope.launch {
                                         try {
-                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
                                             walletViewModel.setWalletExistsState()
                                         } catch (e: Exception) {
@@ -101,7 +94,7 @@ class MainActivity : ComponentActivity() {
                                 onRestoreClick = { mnemonic, passphrase ->
                                     scope.launch {
                                         try {
-                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.isRestoringWallet = true
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                             walletViewModel.setWalletExistsState()
@@ -118,7 +111,7 @@ class MainActivity : ComponentActivity() {
                                 onCreateClick = { passphrase ->
                                     scope.launch {
                                         try {
-                                            walletViewModel.setInitNodeLifecycleState(isInitializingWallet = true)
+                                            walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                                             walletViewModel.setWalletExistsState()
                                         } catch (e: Exception) {
@@ -135,6 +128,7 @@ class MainActivity : ComponentActivity() {
                         walletViewModel = walletViewModel,
                         blocktankViewModel = blocktankViewModel,
                         currencyViewModel = currencyViewModel,
+                        activityListViewModel = activityListViewModel,
                     )
                 }
 
@@ -151,75 +145,6 @@ class MainActivity : ComponentActivity() {
 
                 SplashScreen(appViewModel.splashVisible)
             }
-        }
-    }
-
-    private fun onLdkEvent(event: Event) = runOnUiThread {
-        try {
-            when (event) {
-                is Event.PaymentReceived -> {
-                    appViewModel.showNewTransactionSheet(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.RECEIVED,
-                            sats = (event.amountMsat / 1000u).toLong(),
-                        )
-                    )
-                }
-
-                is Event.ChannelPending -> {
-                    // Only relevant for channels to external nodes
-                }
-
-                is Event.ChannelReady -> {
-                    // TODO: handle cjit as payment received
-                    val channel = walletViewModel.findChannelById(event.channelId)
-                    if (channel != null) {
-                        appViewModel.showNewTransactionSheet(
-                            NewTransactionSheetDetails(
-                                type = NewTransactionSheetType.LIGHTNING,
-                                direction = NewTransactionSheetDirection.RECEIVED,
-                                sats = (channel.inboundCapacityMsat / 1000u).toLong(),
-                            )
-                        )
-                    } else {
-                        appViewModel.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = "Channel opened",
-                            description = "Ready to send"
-                        )
-                    }
-                }
-
-                is Event.ChannelClosed -> {
-                    appViewModel.toast(
-                        type = Toast.ToastType.LIGHTNING,
-                        title = "Channel closed",
-                        description = "Balance moved from spending to savings"
-                    )
-                }
-
-                is Event.PaymentSuccessful -> {
-                    appViewModel.showNewTransactionSheet(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.SENT,
-                            sats = ((event.feePaidMsat ?: 0u) / 1000u).toLong(),
-                        )
-                    )
-                }
-
-                is Event.PaymentClaimable -> Unit
-                is Event.PaymentFailed -> {
-                    appViewModel.toast(
-                        type = Toast.ToastType.ERROR,
-                        title = "Payment failed",
-                        description = event.reason?.name ?: "Unknown error"
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(LDK, "Ldk event handler error", e)
         }
     }
 }

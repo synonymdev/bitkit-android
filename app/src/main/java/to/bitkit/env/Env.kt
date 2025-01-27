@@ -81,6 +81,7 @@ internal object Env {
     }
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+    fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
         require(::appStoragePath.isInitialized) { "App storage path should be init as context.filesDir.absolutePath." }

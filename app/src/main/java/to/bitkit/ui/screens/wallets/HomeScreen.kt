@@ -40,9 +40,11 @@ import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
+import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
@@ -65,11 +67,12 @@ fun HomeScreen(
     rootNavController: NavController,
 ) {
     val uiState by walletViewModel.uiState.collectAsState()
-    val currentSheet = appViewModel.currentSheet
+    val currentSheet by appViewModel.currentSheet
     SheetHost(
-        appViewModel,
+        shouldExpand = currentSheet != null,
+        onDismiss = { appViewModel.hideSheet() },
         sheets = {
-            when (val sheet = currentSheet.value) {
+            when (val sheet = currentSheet) {
                 is BottomSheetType.Send -> {
                     SendOptionsView(
                         appViewModel = appViewModel,
@@ -171,10 +174,12 @@ private fun HomeContentView(
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Activity", style = MaterialTheme.typography.titleMedium)
+            LabelText("ACTIVITY")
             Spacer(modifier = Modifier.height(16.dp))
+            val activity = activityListViewModel ?: return@AppScaffold
+            val latestActivities by activity.latestActivities.collectAsState()
             ActivityList(
-                items = walletViewModel.activityItems.value?.take(3),
+                items = latestActivities,
                 onAllActivityClick = { rootNavController.navigateToAllActivity() },
                 onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
             )

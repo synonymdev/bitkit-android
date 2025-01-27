@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun LabelText(
@@ -17,8 +18,8 @@ fun LabelText(
     Text(
         text = text,
         style = LocalTextStyle.current.copy(
-            fontSize = 12.sp,
-            color = LocalContentColor.current.copy(alpha = 0.64f),
+            fontSize = 13.sp,
+            color = Colors.White64,
         ),
         modifier = modifier.padding(vertical = 4.dp),
     )

@@ -13,6 +13,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.NavButton
@@ -29,6 +30,7 @@ fun SettingsScreen(
     viewModel: WalletViewModel,
     navController: NavController,
 ) {
+    val activity = activityListViewModel ?: return
     ScreenColumn {
         AppTopBar(stringResource(R.string.settings), onBackClick = { navController.popBackStack() })
         Column(
@@ -44,6 +46,8 @@ fun SettingsScreen(
                 LabelText("REGTEST ONLY")
                 NavButton("Dev Settings") { navController.navigateToDevSettings() }
                 NavButton("Blocktank Regtest") { navController.navigateToRegtestSettings() }
+                NavButton("Reset All Activities", showIcon = false) { activity.removeAllActivities() }
+                NavButton("Generate Test Activities", showIcon = false) { activity.generateRandomTestData() }
                 NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
             }
         }
