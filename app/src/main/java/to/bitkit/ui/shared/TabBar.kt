@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -25,12 +24,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun TabBar(
@@ -40,7 +41,7 @@ fun TabBar(
     modifier: Modifier = Modifier,
 ) {
     val buttonColors = ButtonDefaults.buttonColors(
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+        containerColor = Color(40, 40, 40, (0.95f * 255).toInt()),
         contentColor = MaterialTheme.colorScheme.onSurface,
     )
     val contentPadding = PaddingValues(0.dp, 18.dp)
@@ -64,15 +65,11 @@ fun TabBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowUpward,
-                    contentDescription = stringResource(R.string.send),
+                    contentDescription = stringResource(R.string.wallet__send),
                     modifier = Modifier.size(iconSize)
                 )
                 Spacer(Modifier.width(iconToTextSpace))
-                Text(
-                    text = stringResource(R.string.send),
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Text(text = stringResource(R.string.wallet__send))
             }
             Button(
                 onClick = onReceiveClick,
@@ -84,15 +81,11 @@ fun TabBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowDownward,
-                    contentDescription = stringResource(R.string.receive),
+                    contentDescription = stringResource(R.string.wallet__receive),
                     modifier = Modifier.size(iconSize)
                 )
                 Spacer(Modifier.width(iconToTextSpace))
-                Text(
-                    text = stringResource(R.string.receive),
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Text(text = stringResource(R.string.wallet__receive))
             }
         }
         IconButton(
@@ -100,14 +93,15 @@ fun TabBar(
             modifier = Modifier
                 .size(80.dp)
                 .border(2.dp, buttonColors.containerColor, MaterialTheme.shapes.extraLarge)
+                .background(Colors.Gray6, MaterialTheme.shapes.extraLarge)
         ) {
             Icon(
-                imageVector = Icons.Default.CenterFocusWeak,
-                contentDescription = stringResource(R.string.scan),
+                painter = painterResource(R.drawable.ic_scan),
+                contentDescription = stringResource(R.string.wallet__recipient_scan),
+                tint = Colors.Gray2,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
-                    .padding(16.dp)
+                    .padding(24.dp)
             )
         }
     }

@@ -123,8 +123,6 @@ fun IntroScreen(
 @Composable
 private fun IntroViewPreview() {
     AppThemeSurface {
-        IntroScreen(
-            onStartClick = {},
-            onSkipClick = {})
+        IntroScreen(onStartClick = {}, onSkipClick = {})
     }
 }
