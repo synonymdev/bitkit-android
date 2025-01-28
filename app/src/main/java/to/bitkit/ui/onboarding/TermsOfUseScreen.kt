@@ -151,7 +151,7 @@ private fun CheckButton(
                 Spacer(modifier = Modifier.height(4.dp))
                 BodySSB(text = htmlText, color = Colors.White64)
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(48.dp))
             CheckmarkBox(isChecked)
         }
         Spacer(modifier = Modifier.height(14.dp))

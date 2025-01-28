@@ -1,6 +1,5 @@
 package to.bitkit.ui.onboarding
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,12 +16,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,19 +32,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -181,10 +176,11 @@ fun RestoreWalletView(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Footer with buttons
+            Spacer(
+                modifier = Modifier
+                    .height(16.dp)
+                    .weight(1f)
+            )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -197,48 +193,23 @@ fun RestoreWalletView(
                         words.subList(0, wordCount).none { it.isBlank() }
                     }
                 }
-                OutlinedButton(
+                SecondaryButton(
+                    text = stringResource(R.string.onboarding__advanced),
                     onClick = {
                         showingPassphrase = !showingPassphrase
                         bip39Passphrase = ""
                     },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Colors.White80,
-                        disabledContentColor = Colors.White32,
-                    ),
-                    shape = RoundedCornerShape(30.dp),
-                    border = BorderStroke(1.dp, if (areButtonsEnabled) Colors.White16 else Color.Transparent),
                     enabled = areButtonsEnabled,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding__advanced),
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                }
-                Button(
+                    modifier = Modifier.weight(1f)
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.onboarding__restore),
                     onClick = {
                         onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Colors.White16,
-                        disabledContainerColor = Color.Transparent,
-                        contentColor = Colors.White,
-                        disabledContentColor = Colors.White32,
-                    ),
-                    shape = RoundedCornerShape(30.dp),
                     enabled = areButtonsEnabled,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding__restore),
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                }
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }

@@ -4,29 +4,21 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -91,25 +83,11 @@ fun WalletInitResultView(
         )
 
         Spacer(modifier = Modifier.weight(1f))
-
-        Button(
+        PrimaryButton(
+            text = buttonText,
             onClick = onButtonClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Colors.White16,
-                disabledContainerColor = Color.Transparent,
-                contentColor = Colors.White,
-                disabledContentColor = Colors.White32,
-            ),
-            shape = RoundedCornerShape(30.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        ) {
-            Text(
-                text = buttonText,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            )
-        }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
