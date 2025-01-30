@@ -11,7 +11,7 @@ object ToastEventBus {
     suspend fun send(
         type: Toast.ToastType,
         title: String,
-        description: String,
+        description: String? = null,
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
     ) {

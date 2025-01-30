@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,13 +32,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush.Companion.verticalGradient
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Blue500
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Green500
 import to.bitkit.ui.theme.Orange500
 import to.bitkit.ui.theme.Purple500
@@ -49,11 +53,19 @@ fun ToastView(
     onDismiss: () -> Unit,
 ) {
     val tintColor = when (toast.type) {
-        Toast.ToastType.SUCCESS -> Green500
-        Toast.ToastType.INFO -> Blue500
-        Toast.ToastType.LIGHTNING -> Purple500
-        Toast.ToastType.WARNING -> Orange500
-        Toast.ToastType.ERROR -> Red500
+        Toast.ToastType.SUCCESS -> Colors.Green
+        Toast.ToastType.INFO -> Colors.Blue
+        Toast.ToastType.LIGHTNING -> Colors.Purple
+        Toast.ToastType.WARNING -> Colors.Brand
+        Toast.ToastType.ERROR -> Colors.Red
+    }
+
+    val gradientColor = when (toast.type) {
+        Toast.ToastType.SUCCESS -> Color(0XFF1D2F1C)
+        Toast.ToastType.INFO -> Color(0XFF032E56)
+        Toast.ToastType.LIGHTNING -> Color(0XFF2B1637)
+        Toast.ToastType.WARNING -> Color(0XFF3C1001)
+        Toast.ToastType.ERROR -> Color(0XFF491F25)
     }
 
     Box(
@@ -62,7 +74,7 @@ fun ToastView(
             .fillMaxWidth()
             .systemBarsPadding()
             .padding(horizontal = 16.dp)
-            .background(verticalGradient(listOf(tintColor, Color.Black), startY = -100f), RoundedCornerShape(8.dp))
+            .background(verticalGradient(listOf(gradientColor, Color.Black), startY = 0f), RoundedCornerShape(8.dp))
             .border(1.dp, tintColor, RoundedCornerShape(8.dp))
             .padding(16.dp)
     ) {
@@ -71,22 +83,14 @@ fun ToastView(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                BodyMSB(
                     text = toast.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        color = tintColor,
-                    )
+                    color = tintColor,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = toast.description,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White,
-                        fontSize = 14.sp,
-                    )
-                )
+                toast.description?.let { description ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Caption(text = description)
+                }
             }
             if (!toast.autoHide) {
                 IconButton(
@@ -95,7 +99,7 @@ fun ToastView(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Dismiss",
+                        contentDescription = stringResource(R.string.common__close),
                         tint = Color.White,
                     )
                 }
@@ -139,19 +143,56 @@ fun ToastOverlay(
     }
 }
 
-@Preview
+@Preview(showBackground = true)
 @Composable
 private fun ToastViewPreview() {
     AppThemeSurface {
-        ToastView(
-            toast = Toast(
-                type = Toast.ToastType.INFO,
-                title = "Info Toast",
-                description = "This is a toast message.",
-                autoHide = true,
-                visibilityTime = 3000L
-            ),
-            onDismiss = {}
-        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = "Success Toast",
+                    description = "This is a toast message.",
+                    autoHide = true,
+                ),
+                onDismiss = {}
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.INFO,
+                    title = "Info Toast",
+                    description = "This is a toast message.",
+                    autoHide = false,
+                ),
+                onDismiss = {}
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.LIGHTNING,
+                    title = "Lightning Toast",
+                    autoHide = true,
+                ),
+                onDismiss = {}
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.WARNING,
+                    title = "Warning Toast",
+                    autoHide = false,
+                ),
+                onDismiss = {}
+            )
+            ToastView(
+                toast = Toast(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error Toast",
+                    description = "This is a toast message.",
+                    autoHide = true,
+                ),
+                onDismiss = {}
+            )
+        }
     }
 }
