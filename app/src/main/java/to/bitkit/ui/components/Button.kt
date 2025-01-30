@@ -17,6 +17,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -124,6 +125,47 @@ fun SecondaryButton(
     }
 }
 
+@Composable
+fun TertiaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
+    isLoading: Boolean = false,
+    size: ButtonSize = ButtonSize.Large,
+    enabled: Boolean = true,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled && !isLoading,
+        colors = AppButtonDefaults.tertiaryColors,
+        contentPadding = PaddingValues(horizontal = size.horizontalPadding),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(size.height)
+            .then(modifier)
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Colors.White32,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(size.height / 2)
+            )
+        } else {
+            if (icon != null) {
+                icon()
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+
 @Preview(showBackground = true)
 @Composable
 private fun PrimaryButtonPreview() {
@@ -227,6 +269,60 @@ private fun SecondaryButtonPreview() {
                 size = ButtonSize.Small,
                 onClick = {},
                 enabled = false,
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TertiaryButtonPreview() {
+    AppThemeSurface {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(16.dp)
+        ) {
+            TertiaryButton(
+                text = "Tertiary",
+                onClick = {}
+            )
+            TertiaryButton(
+                text = "Tertiary With Icon",
+                onClick = {},
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = "",
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+            )
+            TertiaryButton(
+                text = "Tertiary Loading",
+                isLoading = true,
+                onClick = {}
+            )
+            TertiaryButton(
+                text = "Tertiary Disabled",
+                enabled = false,
+                onClick = {}
+            )
+            TertiaryButton(
+                text = "Tertiary Small",
+                size = ButtonSize.Small,
+                onClick = {}
+            )
+            TertiaryButton(
+                text = "Tertiary Small Loading",
+                size = ButtonSize.Small,
+                isLoading = true,
+                onClick = {}
+            )
+            TertiaryButton(
+                text = "Tertiary Small Disabled",
+                size = ButtonSize.Small,
+                enabled = false,
+                onClick = {}
             )
         }
     }

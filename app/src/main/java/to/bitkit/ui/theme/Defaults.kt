@@ -60,4 +60,12 @@ object AppButtonDefaults {
             contentColor = Colors.White80,
             disabledContentColor = Colors.White32,
         )
+
+    @Stable
+    val tertiaryColors: ButtonColors
+        @Composable
+        get() = ButtonDefaults.textButtonColors(
+            contentColor = Colors.White80,
+            disabledContentColor = Colors.White32,
+        )
 }
