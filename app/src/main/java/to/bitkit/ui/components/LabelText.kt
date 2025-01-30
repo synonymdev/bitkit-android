@@ -15,12 +15,8 @@ fun LabelText(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    Text(
-        text = text.uppercase(),
-        style = LocalTextStyle.current.copy(
-            fontSize = 13.sp,
-            color = Colors.White64,
-        ),
+    Caption13Up(
+        text = text,
         modifier = modifier.padding(vertical = 4.dp),
     )
 }

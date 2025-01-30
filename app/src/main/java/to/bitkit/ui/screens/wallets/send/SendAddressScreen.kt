@@ -48,7 +48,7 @@ fun SendAddressScreen(
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
             Text(
-                text = stringResource(R.string.label_to),
+                text = stringResource(R.string.wallet__send_to),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Normal,
             )

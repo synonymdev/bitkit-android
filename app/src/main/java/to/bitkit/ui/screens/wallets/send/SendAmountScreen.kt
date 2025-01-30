@@ -24,9 +24,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
-import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
@@ -75,7 +75,11 @@ fun SendAmountScreen(
             ) {
                 Column {
                     val balances = LocalBalances.current
-                    LabelText(text = stringResource(R.string.label_available))
+                    Text13Up(
+                        text = stringResource(R.string.wallet__send_available),
+                        color = Colors.White64,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = when (uiState.payMethod) {
                             SendMethod.ONCHAIN -> moneyString(balances.totalOnchainSats.toLong())
