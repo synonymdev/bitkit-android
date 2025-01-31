@@ -23,15 +23,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Display
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun IntroScreen(
@@ -71,24 +74,12 @@ fun IntroScreen(
                     .padding(bottom = 16.dp)
                     .align(Alignment.BottomCenter)
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Display("YOU CAN ₿")
-                    Display(
-                        text = "THE CHANGE",
-                        color = Colors.Brand,
-                        modifier = Modifier.offset(y = (-8).dp)
-                    )
-                    Text(
-                        text = "Use Bitkit to pay anyone, anywhere, any time, and spend your bitcoin on the things you value in life.",
-                        style = TextStyle(
-                            fontSize = 17.sp,
-                            lineHeight = 22.sp,
-                            letterSpacing = 0.4.sp,
-                            color = Colors.White64,
-                        ),
-                    )
-                }
-
+                Display(text = stringResource(R.string.onboarding__welcome_title).withAccent())
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(
+                    text = stringResource(R.string.onboarding__welcome_text),
+                    color = Colors.White64,
+                )
                 Spacer(modifier = Modifier.height(32.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -103,7 +94,7 @@ fun IntroScreen(
                             .height(56.dp)
                     ) {
                         Text(
-                            text = "Get Started",
+                            text = stringResource(R.string.onboarding__get_started),
                             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                             color = Colors.White
                         )
@@ -117,7 +108,7 @@ fun IntroScreen(
                             .height(56.dp)
                     ) {
                         Text(
-                            text = "Skip Intro",
+                            text = stringResource(R.string.onboarding__skip_intro),
                             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                             color = Colors.White80
                         )

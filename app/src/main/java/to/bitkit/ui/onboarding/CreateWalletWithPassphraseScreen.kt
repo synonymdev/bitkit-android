@@ -44,10 +44,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Display
+import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,24 +89,17 @@ fun CreateWalletWithPassphraseScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = "SECURE WITH")
-            Display(
-                text = "PASSPHRASE",
-                color = Colors.Brand,
-                modifier = Modifier.offset(y = (-8).dp)
-            )
-            Text(
-                text = "You can add a secret passphrase to the 12-word recovery phrase. If you do, make sure you don’t forget.",
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
+            Display(text = stringResource(R.string.onboarding__passphrase_header).withAccent())
+            Spacer(modifier = Modifier.height(8.dp))
+            BodyM(
+                text = stringResource(R.string.onboarding__passphrase_text),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(32.dp))
             OutlinedTextField(
                 value = bip39Passphrase,
                 onValueChange = { bip39Passphrase = it },
-                placeholder = { Text("Passphrase") },
+                placeholder = { Text(text = stringResource(R.string.onboarding__passphrase)) },
                 shape = RoundedCornerShape(8.dp),
                 colors = AppTextFieldDefaults.semiTransparent,
                 singleLine = true,
@@ -133,7 +128,7 @@ fun CreateWalletWithPassphraseScreen(
                     .height(56.dp),
             ) {
                 Text(
-                    text = "Create New Wallet",
+                    text = stringResource(R.string.onboarding__create_new_wallet),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )
             }

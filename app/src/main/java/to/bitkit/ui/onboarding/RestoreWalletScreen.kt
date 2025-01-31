@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -47,11 +46,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.BodyS
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Display
+import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,11 +102,10 @@ fun RestoreWalletView(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            Display("RESTORE", color = Colors.Blue)
-            Display("YOUR WALLET", modifier = Modifier.offset(y = (-8).dp))
-            Text(
-                text = "Please type in your recovery phrase from any (paper) backup.",
-                fontSize = 17.sp,
+            Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
+            Spacer(modifier = Modifier.height(8.dp))
+            BodyM(
+                text = stringResource(R.string.onboarding__restore_phrase),
                 color = Colors.White80,
             )
             Spacer(modifier = Modifier.height(32.dp))
@@ -161,7 +161,7 @@ fun RestoreWalletView(
                 OutlinedTextField(
                     value = bip39Passphrase,
                     onValueChange = { bip39Passphrase = it },
-                    placeholder = { Text("Passphrase*") },
+                    placeholder = { Text(text = stringResource(R.string.onboarding__restore_passphrase_placeholder)) },
                     shape = RoundedCornerShape(8.dp),
                     colors = AppTextFieldDefaults.semiTransparent,
                     singleLine = true,
@@ -174,10 +174,10 @@ fun RestoreWalletView(
                         .fillMaxWidth()
                         .padding(top = 4.dp)
                 )
+                Spacer(modifier = Modifier.height(16.dp))
                 BodyS(
-                    text = "*Optional, enter only if you’ve set up one.",
+                    text = stringResource(R.string.onboarding__restore_passphrase_meaning),
                     color = Colors.White64,
-                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
 
@@ -202,6 +202,10 @@ fun RestoreWalletView(
                         showingPassphrase = !showingPassphrase
                         bip39Passphrase = ""
                     },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Colors.White80,
+                        disabledContentColor = Colors.White32,
+                    ),
                     shape = RoundedCornerShape(30.dp),
                     border = BorderStroke(1.dp, if (areButtonsEnabled) Colors.White16 else Color.Transparent),
                     enabled = areButtonsEnabled,
@@ -210,9 +214,8 @@ fun RestoreWalletView(
                         .height(56.dp),
                 ) {
                     Text(
-                        text = "Advanced",
+                        text = stringResource(R.string.onboarding__advanced),
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                        color = if (areButtonsEnabled) Colors.White80 else Colors.White32,
                     )
                 }
                 Button(
@@ -232,7 +235,7 @@ fun RestoreWalletView(
                         .height(56.dp),
                 ) {
                     Text(
-                        text = "Restore",
+                        text = stringResource(R.string.onboarding__restore),
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     )
                 }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -25,18 +24,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
-import to.bitkit.viewmodels.SendEvent
-import to.bitkit.viewmodels.SendMethod
-import to.bitkit.viewmodels.SendUiState
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendMethod
+import to.bitkit.viewmodels.SendUiState
 
 @Composable
 fun SendAmountScreen(
@@ -89,8 +88,8 @@ fun SendAmountScreen(
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     enabled = uiState.isUnified,
                     color = when (uiState.payMethod) {
-                        SendMethod.ONCHAIN -> colorScheme.primary
-                        SendMethod.LIGHTNING -> colorScheme.secondary
+                        SendMethod.ONCHAIN -> Colors.Brand
+                        SendMethod.LIGHTNING -> Colors.Purple
                     }
                 ) {
                     Text(
@@ -115,7 +114,6 @@ fun SendAmountScreen(
     }
 }
 
-@LightModePreview
 @DarkModePreview
 @Composable
 private fun SendAmountViewPreview() {

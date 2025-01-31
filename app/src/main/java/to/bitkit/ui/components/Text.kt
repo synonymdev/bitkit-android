@@ -1,14 +1,16 @@
-package to.bitkit.ui.theme
+package to.bitkit.ui.components
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 
@@ -22,12 +24,35 @@ fun Display(
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
-        text = text,
+        text = text.uppercase(),
         style = TextStyle(
             fontSize = fontSize,
             fontWeight = fontWeight,
             letterSpacing = (-1).sp,
             lineHeight = lineHeight.sp,
+            fontFamily = FontFamily.Default,
+            color = color
+        ),
+        modifier = modifier
+    )
+}
+
+@Composable
+fun Display(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
+    fontWeight: FontWeight = FontWeight.Black,
+    lineHeight: Float = 44f,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = text.toUpperCase(),
+        style = TextStyle(
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            lineHeight = lineHeight.sp,
+            letterSpacing = (-1).sp,
             fontFamily = FontFamily.Default,
             color = color
         ),
@@ -93,6 +118,20 @@ fun Subtitle(
 @Composable
 fun BodyM(
     text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    BodyM(
+        text = AnnotatedString(text),
+        color = color,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun BodyM(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
@@ -105,7 +144,8 @@ fun BodyM(
             fontFamily = FontFamily.Default,
             color = color
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
 
@@ -150,6 +190,40 @@ fun BodyMB(
 @Composable
 fun BodyS(
     text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Normal,
+            lineHeight = 20.sp,
+            letterSpacing = 0.4.sp,
+            fontFamily = FontFamily.Default,
+            color = color,
+        ),
+        textAlign = TextAlign.Start,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun BodySSB(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    BodySSB(
+        text = AnnotatedString(text),
+        color = color,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun BodySSB(
+    text: AnnotatedString,
     color: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier,
 ) {
@@ -157,7 +231,7 @@ fun BodyS(
         text = text,
         style = TextStyle(
             fontSize = 15.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.SemiBold,
             lineHeight = 20.sp,
             letterSpacing = 0.4.sp,
             fontFamily = FontFamily.Default,
@@ -207,6 +281,7 @@ fun Caption(
 @Composable
 fun Footnote(
     text: String,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     Text(
@@ -218,6 +293,7 @@ fun Footnote(
             fontFamily = FontFamily.Default,
             color = color
         ),
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        modifier = modifier,
     )
 }
