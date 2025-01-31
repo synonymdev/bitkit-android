@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -61,6 +62,7 @@ class WalletViewModel @Inject constructor(
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
@@ -211,12 +213,18 @@ class WalletViewModel @Inject constructor(
     private fun syncBalances() {
         lightningService.balances?.let { balance ->
             _uiState.update { it.copy(balanceDetails = balance) }
+            val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
             _balanceState.update {
                 it.copy(
                     totalOnchainSats = balance.totalOnchainBalanceSats,
                     totalLightningSats = balance.totalLightningBalanceSats,
-                    totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats,
+                    totalSats = totalSats,
                 )
+            }
+            if (totalSats > 0u) {
+                viewModelScope.launch {
+                    settingsStore.setShowEmptyState(false)
+                }
             }
         }
     }

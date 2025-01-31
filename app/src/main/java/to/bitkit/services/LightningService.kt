@@ -146,8 +146,6 @@ class LightningService @Inject constructor(
             node.start()
         }
         Log.i(LDK, "Node started")
-
-        connectToTrustedPeers()
     }
 
     suspend fun stop() {

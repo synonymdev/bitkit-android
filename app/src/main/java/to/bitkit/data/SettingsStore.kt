@@ -1,6 +1,7 @@
 package to.bitkit.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -54,9 +55,21 @@ class SettingsStore @Inject constructor(
         }
     }
 
+    val showEmptyState: Flow<Boolean> = store.data
+        .map {
+            it[SHOW_EMPTY_STATE] ?: false
+        }
+
+    suspend fun setShowEmptyState(show: Boolean) {
+        store.edit {
+            it[SHOW_EMPTY_STATE] = show
+        }
+    }
+
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
         private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
         private val SELECTED_CURRENCY_KEY = stringPreferencesKey("selected_currency")
+        private val SHOW_EMPTY_STATE  = booleanPreferencesKey("show_empty_state")
     }
 }

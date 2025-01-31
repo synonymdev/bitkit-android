@@ -15,7 +15,7 @@ fun String.withAccent(
     accentColor: Color = Colors.Brand,
     accentStyle: SpanStyle = SpanStyle(color = accentColor),
 ): AnnotatedString {
-    val regex = Regex("<accent>(.*?)</accent>")
+    val regex = Regex("<accent>(.*?)</accent>", RegexOption.DOT_MATCHES_ALL)
     val matches = regex.findAll(this)
 
     return buildAnnotatedString {
@@ -65,7 +65,7 @@ fun String.withBold(
     boldStyle: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold),
     defaultStyle: SpanStyle = SpanStyle(color = defaultColor),
 ): AnnotatedString {
-    val regex = Regex("<bold>(.*?)</bold>")
+    val regex = Regex("<bold>(.*?)</bold>", RegexOption.DOT_MATCHES_ALL)
     val matches = regex.findAll(this)
 
     return buildAnnotatedString {
