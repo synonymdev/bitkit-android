@@ -1,49 +1,85 @@
 package to.bitkit.ui.screens.wallets
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.lightningdevkit.ldknode.PaymentKind
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.activityListViewModel
-import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun SpendingWalletScreen(
-    viewModel: WalletViewModel,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onBackCLick: () -> Unit,
 ) {
     val balances = LocalBalances.current
-    ScreenColumn {
-        AppTopBar(stringResource(R.string.spending), onBackCLick)
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            BalanceHeaderView(sats = balances.totalLightningSats.toLong(), modifier = Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(24.dp))
-            val activity = activityListViewModel ?: return@Column
-            val lightningActivities by activity.lightningActivities.collectAsState()
-            ActivityListWithHeaders(
-                items = lightningActivities,
-                showFooter = true,
-                onAllActivityButtonClick = onAllActivityButtonClick,
-                onActivityItemClick = onActivityItemClick,
+    val showEmptyState by remember(balances.totalLightningSats) {
+        // TODO use && hasLnActivity + LN spendingSats
+        mutableStateOf(balances.totalLightningSats == 0uL)
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        ScreenColumn {
+            AppTopBar(stringResource(R.string.spending), onBackCLick)
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                BalanceHeaderView(sats = balances.totalLightningSats.toLong(), modifier = Modifier.fillMaxWidth())
+                if (!showEmptyState) {
+                    Spacer(modifier = Modifier.height(32.dp))
+                    val activity = activityListViewModel ?: return@Column
+                    val lightningActivities by activity.lightningActivities.collectAsState()
+                    ActivityListWithHeaders(
+                        items = lightningActivities,
+                        showFooter = true,
+                        onAllActivityButtonClick = onAllActivityButtonClick,
+                        onActivityItemClick = onActivityItemClick,
+                    )
+                }
+            }
+        }
+        if (showEmptyState) {
+            EmptyStateView(
+                text = stringResource(R.string.wallet__spending__onboarding).withAccent(accentColor = Colors.Purple),
+                modifier = Modifier
+                    .systemBarsPadding()
+                    .align(Alignment.BottomCenter)
             )
         }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun SpendingWalletScreenPreview() {
+    AppThemeSurface {
+        SpendingWalletScreen(
+            onAllActivityButtonClick = {},
+            onActivityItemClick = {},
+            onBackCLick = {},
+        )
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -31,6 +32,7 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun EmptyStateView(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
 ) {
@@ -47,8 +49,8 @@ fun EmptyStateView(
                     .padding(horizontal = 16.dp),
             ) {
                 Display(
-                    text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
-                    modifier = Modifier.width(210.dp)
+                    text = text,
+                    modifier = Modifier.width(220.dp)
                 )
                 Image(
                     painter = painterResource(id = R.drawable.empty_state_arrow),
@@ -85,6 +87,9 @@ fun EmptyStateView(
 @Composable
 fun EmptyStateViewPreview() {
     AppThemeSurface {
-        EmptyStateView(onClose = {})
+        EmptyStateView(
+            text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+            onClose = {},
+        )
     }
 }

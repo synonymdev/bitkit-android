@@ -57,6 +57,7 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -107,7 +108,6 @@ fun HomeScreen(
                 }
                 composable<HomeRoutes.Savings> {
                     SavingsWalletScreen(
-                        viewModel = walletViewModel,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferClick = { rootNavController.navigateToTransfer() },
@@ -116,7 +116,6 @@ fun HomeScreen(
                 }
                 composable<HomeRoutes.Spending> {
                     SpendingWalletScreen(
-                        viewModel = walletViewModel,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onBackCLick = { walletNavController.popBackStack() }
@@ -203,6 +202,7 @@ private fun HomeContentView(
             }
             if (showEmptyState) {
                 EmptyStateView(
+                    text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
                     onClose = { app.setShowEmptyState(false) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
