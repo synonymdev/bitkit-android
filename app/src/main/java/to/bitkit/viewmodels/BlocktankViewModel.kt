@@ -8,12 +8,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import to.bitkit.models.blocktank.BtInfo
 import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.models.blocktank.CJitEntry
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import javax.inject.Inject
 
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
-    private val blocktankService: BlocktankService,
+    private val blocktankServiceOld: BlocktankServiceOld,
 ) : ViewModel() {
     var orders = mutableListOf<BtOrder>() // TODO cache orders
         private set
@@ -23,11 +23,11 @@ class BlocktankViewModel @Inject constructor(
         private set
 
     suspend fun refreshInfo() {
-        info = blocktankService.getInfo()
+        info = blocktankServiceOld.getInfo()
     }
 
     suspend fun createCjit(amountSats: Int, description: String): CJitEntry {
-        val entry = blocktankService.createCjit(amountSats, description)
+        val entry = blocktankServiceOld.createCjit(amountSats, description)
         cjitEntries.add(entry)
         return entry
     }

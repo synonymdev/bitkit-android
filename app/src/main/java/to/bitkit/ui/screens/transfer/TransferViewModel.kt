@@ -11,7 +11,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.entities.OrderEntity
 import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
@@ -19,14 +19,14 @@ import javax.inject.Inject
 @HiltViewModel
 class TransferViewModel @Inject constructor(
     private val db: AppDb,
-    private val blocktankService: BlocktankService,
+    private val blocktankServiceOld: BlocktankServiceOld,
     private val lightningService: LightningService,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Create)
     val uiState = _uiState.asStateFlow()
 
     suspend fun createOrder(sats: Int) {
-        runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
+        runCatching { blocktankServiceOld.createOrder(spendingBalanceSats = sats, 6) }
             .onSuccess { order ->
                 viewModelScope.launch { db.ordersDao().upsert(OrderEntity(order.id)) }
                 _uiState.value = TransferUiState.Confirm(
@@ -55,7 +55,7 @@ class TransferViewModel @Inject constructor(
 
     fun manualOpenChannel(order: BtOrder) {
         viewModelScope.launch {
-            runCatching { blocktankService.openChannel(order.id) }
+            runCatching { blocktankServiceOld.openChannel(order.id) }
                 .onSuccess {
                     ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Manual open success")
                 }

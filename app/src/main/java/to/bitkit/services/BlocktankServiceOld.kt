@@ -31,7 +31,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BlocktankService @Inject constructor(
+class BlocktankServiceOld @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
     private val blocktankHttpClient: BlocktankHttpClient,
     private val lightningService: LightningService,

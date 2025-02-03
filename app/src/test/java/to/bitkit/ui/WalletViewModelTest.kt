@@ -19,7 +19,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
@@ -35,7 +35,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var db: AppDb = mock()
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
-    private var blocktankService: BlocktankService = mock()
+    private var blocktankServiceOld: BlocktankServiceOld = mock()
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
@@ -69,7 +69,7 @@ class WalletViewModelTest : BaseUnitTest() {
             appStorage = appStorage,
             db = db,
             keychain = keychain,
-            blocktankService = blocktankService,
+            blocktankServiceOld = blocktankServiceOld,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
@@ -114,7 +114,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankService).registerDevice("newToken")
+        verify(blocktankServiceOld).registerDevice("newToken")
     }
 
     @Test
@@ -124,14 +124,14 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankService, never()).registerDevice(anyString())
+        verify(blocktankServiceOld, never()).registerDevice(anyString())
     }
 
     @Test
     fun `manualRegisterForNotifications should register device with FCM token`() = test {
         sut.manualRegisterForNotifications()
 
-        verify(blocktankService).registerDevice("cachedToken")
+        verify(blocktankServiceOld).registerDevice("cachedToken")
     }
 
     private fun setupExistingWalletMocks() {

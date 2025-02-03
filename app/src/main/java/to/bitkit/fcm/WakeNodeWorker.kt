@@ -26,7 +26,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
 import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import to.bitkit.services.LightningService
 import to.bitkit.shared.withPerformanceLogging
 import to.bitkit.ui.pushNotification
@@ -36,7 +36,7 @@ import kotlin.time.Duration.Companion.minutes
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
-    private val blocktankService: BlocktankService,
+    private val blocktankServiceOld: BlocktankServiceOld,
     private val lightningService: LightningService,
 ) : CoroutineWorker(appContext, workerParams) {
     private val self = this
@@ -78,7 +78,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     } else {
                         try {
                             Log.i(LDK, "Open channel request for order $orderId")
-                            blocktankService.openChannel(orderId)
+                            blocktankServiceOld.openChannel(orderId)
                         } catch (e: Exception) {
                             Log.e(LDK, "failed to open channel", e)
                             self.bestAttemptContent?.title = "Channel open failed"

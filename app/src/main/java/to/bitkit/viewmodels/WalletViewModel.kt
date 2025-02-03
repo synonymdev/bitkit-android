@@ -45,7 +45,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -58,7 +58,7 @@ class WalletViewModel @Inject constructor(
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
-    private val blocktankService: BlocktankService,
+    private val blocktankServiceOld: BlocktankServiceOld,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -158,7 +158,7 @@ class WalletViewModel @Inject constructor(
         db.ordersDao().getAll().filter { it.isNotEmpty() }.collect { dbOrders ->
             Log.d(APP, "Database orders sync: $dbOrders")
 
-            runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+            runCatching { blocktankServiceOld.getOrders(dbOrders.map { it.id }) }
                 .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
                 .onSuccess { btOrders ->
                     _uiState.update { it.copy(orders = btOrders) }
@@ -234,7 +234,7 @@ class WalletViewModel @Inject constructor(
             sync()
             launch(bgDispatcher) {
                 db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
-                    runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
+                    runCatching { blocktankServiceOld.getOrders(dbOrders.map { it.id }) }
                         .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
                         .onSuccess { btOrders ->
                             _uiState.update { it.copy(orders = btOrders) }
@@ -253,7 +253,7 @@ class WalletViewModel @Inject constructor(
             return
         }
 
-        runCatching { blocktankService.registerDevice(token) }
+        runCatching { blocktankServiceOld.registerDevice(token) }
             .onFailure { Log.e(LSP, "Failed to register device for notifications", it) }
     }
 
@@ -386,7 +386,7 @@ class WalletViewModel @Inject constructor(
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-            runCatching { blocktankService.registerDevice(token) }
+            runCatching { blocktankServiceOld.registerDevice(token) }
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -442,18 +442,18 @@ class WalletViewModel @Inject constructor(
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = FirebaseMessaging.getInstance().token.await()
-            blocktankService.testNotification(token)
+            blocktankServiceOld.testNotification(token)
         }
     }
 
     fun debugBlocktankInfo() {
-        viewModelScope.launch(bgDispatcher) { blocktankService.getInfoCore() }
+        viewModelScope.launch(bgDispatcher) { blocktankServiceOld.getInfoCore() }
     }
 
     fun debugBtOrdersSync() {
         val orderIds = _uiState.value.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
         viewModelScope.launch {
-            runCatching { blocktankService.getOrders(orderIds) }
+            runCatching { blocktankServiceOld.getOrders(orderIds) }
                 .onSuccess { orders ->
                     _uiState.update { it.copy(orders = orders) }
                 }
@@ -463,7 +463,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugBtCreateOrder(sats: Int) {
         viewModelScope.launch {
-            runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
+            runCatching { blocktankServiceOld.createOrder(spendingBalanceSats = sats, 6) }
                 .onSuccess { order ->
                     launch {
                         db.ordersDao().upsert(OrderEntity(order.id))
@@ -497,7 +497,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugBtManualOpenChannel(order: BtOrder) {
         viewModelScope.launch {
-            runCatching { blocktankService.openChannel(order.id) }
+            runCatching { blocktankServiceOld.openChannel(order.id) }
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
