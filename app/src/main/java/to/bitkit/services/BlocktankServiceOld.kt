@@ -40,7 +40,7 @@ class BlocktankServiceOld @Inject constructor(
 ) : BaseCoroutineScope(bgDispatcher) {
 
     suspend fun getInfoCore() {
-        ServiceQueue.LSP.background {
+        ServiceQueue.CORE.background {
             try {
                 // Initialize database
                 val dbPath = Env.bitkitCoreStoragePath(walletIndex = 0)
@@ -61,7 +61,7 @@ class BlocktankServiceOld @Inject constructor(
         }
     }
 
-    suspend fun getInfo() = ServiceQueue.LSP.background { blocktankHttpClient.getInfo() }
+    suspend fun getInfo() = ServiceQueue.CORE.background { blocktankHttpClient.getInfo() }
 
     // region orders
     suspend fun createOrder(spendingBalanceSats: Int, channelExpiryWeeks: Int = 6): BtOrder {
@@ -82,7 +82,7 @@ class BlocktankServiceOld @Inject constructor(
             zeroConfPayment = false,
         )
 
-        val order = ServiceQueue.LSP.background {
+        val order = ServiceQueue.CORE.background {
             blocktankHttpClient.createOrder(receivingBalanceSats, channelExpiryWeeks, options)
         }
 
@@ -90,7 +90,7 @@ class BlocktankServiceOld @Inject constructor(
     }
 
     suspend fun getOrders(orderIds: List<String>): List<BtOrder> {
-        return ServiceQueue.LSP.background {
+        return ServiceQueue.CORE.background {
             if (orderIds.size == 1) {
                 listOfNotNull(
                     orderIds.first?.let { blocktankHttpClient.getOrder(it) }
@@ -106,7 +106,7 @@ class BlocktankServiceOld @Inject constructor(
     suspend fun createCjit(amountSats: Int, description: String): CJitEntry {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        val entry = ServiceQueue.LSP.background {
+        val entry = ServiceQueue.CORE.background {
             blocktankHttpClient.createCJitEntry(
                 channelSizeSat = amountSats * 2, // TODO: confirm default from RN app
                 invoiceSat = amountSats,
@@ -125,7 +125,7 @@ class BlocktankServiceOld @Inject constructor(
     suspend fun openChannel(orderId: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        ServiceQueue.LSP.background {
+        ServiceQueue.CORE.background {
             blocktankHttpClient.openChannel(orderId, nodeId)
             Log.i(LSP, "Opened channel for order $orderId")
         }
@@ -162,7 +162,7 @@ class BlocktankServiceOld @Inject constructor(
             signature = signature,
         )
 
-        ServiceQueue.LSP.background {
+        ServiceQueue.CORE.background {
             blocktankHttpClient.registerDevice(payload)
         }
 
@@ -190,7 +190,7 @@ class BlocktankServiceOld @Inject constructor(
             )
         )
 
-        ServiceQueue.LSP.background {
+        ServiceQueue.CORE.background {
             blocktankHttpClient.testNotification(deviceToken, payload)
         }
     }

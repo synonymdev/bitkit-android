@@ -1,51 +1,76 @@
 package to.bitkit.services
 
 import android.util.Log
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentStatus
-import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.amountSats
 import to.bitkit.shared.AppError
-import uniffi.bitkitcore.*
+import uniffi.bitkitcore.Activity
+import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.LightningActivity
+import uniffi.bitkitcore.OnchainActivity
+import uniffi.bitkitcore.PaymentState
+import uniffi.bitkitcore.PaymentType
+import uniffi.bitkitcore.SortDirection
+import uniffi.bitkitcore.addTags
+import uniffi.bitkitcore.deleteActivityById
+import uniffi.bitkitcore.getActivities
+import uniffi.bitkitcore.getActivityById
+import uniffi.bitkitcore.getAllUniqueTags
+import uniffi.bitkitcore.getTags
+import uniffi.bitkitcore.initDb
+import uniffi.bitkitcore.insertActivity
+import uniffi.bitkitcore.removeTags
+import uniffi.bitkitcore.updateActivity
+import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.random.Random.Default.nextBoolean
+import kotlin.random.Random
 
 @Singleton
-class ActivityListService @Inject constructor(
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-) : BaseCoroutineScope(bgDispatcher) {
-    private val walletIndex: Int = 0
+class CoreService @Inject constructor(
+) {
+    private var walletIndex: Int = 0
+
+    val activity: ActivityService by lazy { ActivityService(coreService = this) }
+    // val blocktank: BlocktankService by lazy { BlocktankService(coreService = this) }
 
     init {
-        launch {
+        init()
+    }
+
+    fun init(walletIndex: Int = 0) {
+        this.walletIndex = walletIndex
+
+        // Block queue until the init completes forcing any additional calls to wait for it
+        ServiceQueue.CORE.blocking {
             try {
-                initializeDatabase()
+                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex))
+                Log.i(APP, "bitkit-core database init: $result")
             } catch (e: Exception) {
-                Log.e(APP, "Failed to initialize bitkit-core db", e)
+                Log.e(APP, "bitkit-core database init failed", e)
+            }
+
+            try {
+                updateBlocktankUrl(newUrl = Env.blocktankClientServer)
+                Log.i(APP, "Blocktank URL updated to ${Env.blocktankClientServer}")
+            } catch (e: Exception) {
+                Log.e(APP, "Failed to update Blocktank URL", e)
             }
         }
     }
+}
 
-    private suspend fun initializeDatabase() {
-        val dbPath = Env.bitkitCoreStoragePath(walletIndex)
-        ServiceQueue.ACTIVITY.background {
-            initDb(basePath = dbPath)
-        }
-    }
-
-    // MARK: - Database Management
-
+class ActivityService(
+    private val coreService: CoreService,
+) {
     suspend fun removeAll() {
-        ServiceQueue.ACTIVITY.background {
+        ServiceQueue.CORE.background {
             // Only allow removing on regtest for now
             if (Env.network != Network.REGTEST) {
                 throw AppError(message = "Regtest only")
@@ -72,16 +97,14 @@ class ActivityListService @Inject constructor(
         }
     }
 
-    // MARK: - Activity Methods
-
     suspend fun insert(activity: Activity) {
-        ServiceQueue.ACTIVITY.background {
+        ServiceQueue.CORE.background {
             insertActivity(activity)
         }
     }
 
     suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
-        ServiceQueue.ACTIVITY.background {
+        ServiceQueue.CORE.background {
             var addedCount = 0
             var updatedCount = 0
 
@@ -127,7 +150,7 @@ class ActivityListService @Inject constructor(
     }
 
     suspend fun getActivity(id: String): Activity? {
-        return ServiceQueue.ACTIVITY.background {
+        return ServiceQueue.CORE.background {
             getActivityById(id)
         }
     }
@@ -142,46 +165,46 @@ class ActivityListService @Inject constructor(
         limit: UInt? = null,
         sortDirection: SortDirection? = null,
     ): List<Activity> {
-        return ServiceQueue.ACTIVITY.background {
+        return ServiceQueue.CORE.background {
             getActivities(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
         }
     }
 
     suspend fun update(id: String, activity: Activity) {
-        ServiceQueue.ACTIVITY.background {
+        ServiceQueue.CORE.background {
             updateActivity(id, activity)
         }
     }
 
     suspend fun delete(id: String): Boolean {
-        return ServiceQueue.ACTIVITY.background {
+        return ServiceQueue.CORE.background {
             deleteActivityById(id)
         }
     }
 
     // MARK: - Tag Methods
 
-    suspend fun addTags(toActivityId: String, tags: List<String>) {
-        ServiceQueue.ACTIVITY.background {
-            uniffi.bitkitcore.addTags(toActivityId, tags)
+    suspend fun appendTags(toActivityId: String, tags: List<String>) {
+        ServiceQueue.CORE.background {
+            addTags(toActivityId, tags)
         }
     }
 
-    suspend fun removeTags(fromActivityId: String, tags: List<String>) {
-        ServiceQueue.ACTIVITY.background {
-            uniffi.bitkitcore.removeTags(fromActivityId, tags)
+    suspend fun dropTags(fromActivityId: String, tags: List<String>) {
+        ServiceQueue.CORE.background {
+            removeTags(fromActivityId, tags)
         }
     }
 
-    suspend fun getTags(forActivityId: String): List<String> {
-        return ServiceQueue.ACTIVITY.background {
-            uniffi.bitkitcore.getTags(forActivityId)
+    suspend fun tags(forActivityId: String): List<String> {
+        return ServiceQueue.CORE.background {
+            getTags(forActivityId)
         }
     }
 
-    suspend fun getAllUniqueTags(): List<String> {
-        return ServiceQueue.ACTIVITY.background {
-            uniffi.bitkitcore.getAllUniqueTags()
+    suspend fun allPossibleTags(): List<String> {
+        return ServiceQueue.CORE.background {
+            getAllUniqueTags()
         }
     }
 
@@ -189,7 +212,7 @@ class ActivityListService @Inject constructor(
         if (Env.network != Network.REGTEST) {
             throw AppError(message = "Regtest only")
         }
-        ServiceQueue.ACTIVITY.background {
+        ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
                 listOf("coffee", "food", "shopping", "transport", "entertainment", "work", "friends", "family")
@@ -199,10 +222,10 @@ class ActivityListService @Inject constructor(
             )
 
             repeat(count) { i ->
-                val isLightning = nextBoolean()
+                val isLightning = Random.Default.nextBoolean()
                 val value = (1000..1_000_000).random().toULong()
                 val txTimestamp = (timestamp.toLong() - (0..30L * 24 * 60 * 60).random()).toULong() // Random time in last 30 days
-                val txType = if (nextBoolean()) PaymentType.SENT else PaymentType.RECEIVED
+                val txType = if (Random.Default.nextBoolean()) PaymentType.SENT else PaymentType.RECEIVED
                 val status = when ((0..10).random()) {
                     in 0..7 -> PaymentState.SUCCEEDED // 80% chance
                     8 -> PaymentState.PENDING // 10% chance
@@ -224,7 +247,7 @@ class ActivityListService @Inject constructor(
                             invoice = "lnbc$value",
                             message = possibleMessages.random(),
                             timestamp = txTimestamp,
-                            preimage = if (nextBoolean()) "preimage$i" else null,
+                            preimage = if (Random.Default.nextBoolean()) "preimage$i" else null,
                             createdAt = txTimestamp,
                             updatedAt = txTimestamp
                         )
@@ -240,13 +263,13 @@ class ActivityListService @Inject constructor(
                             fee = (100..10_000).random().toULong(),
                             feeRate = (1..100).random().toULong(),
                             address = "bc1...$i",
-                            confirmed = nextBoolean(),
+                            confirmed = Random.Default.nextBoolean(),
                             timestamp = txTimestamp,
-                            isBoosted = nextBoolean(),
-                            isTransfer = nextBoolean(),
+                            isBoosted = Random.Default.nextBoolean(),
+                            isTransfer = Random.Default.nextBoolean(),
                             doesExist = true,
-                            confirmTimestamp = if (nextBoolean()) txTimestamp + 3600.toULong() else null,
-                            channelId = if (nextBoolean()) "channel$i" else null,
+                            confirmTimestamp = if (Random.Default.nextBoolean()) txTimestamp + 3600.toULong() else null,
+                            channelId = if (Random.Default.nextBoolean()) "channel$i" else null,
                             transferTxId = null,
                             createdAt = txTimestamp,
                             updatedAt = txTimestamp
@@ -261,7 +284,7 @@ class ActivityListService @Inject constructor(
                 val numTags = (0..3).random()
                 if (numTags > 0) {
                     val tags = (0 until numTags).map { possibleTags.random() }
-                    addTags(id, tags)
+                    appendTags(id, tags)
                 }
             }
         }

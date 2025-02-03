@@ -5,18 +5,37 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.callerName
+import to.bitkit.shared.AppError
 import to.bitkit.shared.measured
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import kotlin.coroutines.CoroutineContext
 
 enum class ServiceQueue {
-    LDK, LSP, FOREX, ACTIVITY, MIGRATION;
+    LDK, CORE, FOREX, MIGRATION;
 
     private val scope by lazy { CoroutineScope(dispatcher("$name-queue".lowercase()) + SupervisorJob()) }
+
+    fun <T> blocking(
+        coroutineContext: CoroutineContext = scope.coroutineContext,
+        functionName: String = Thread.currentThread().callerName,
+        block: suspend CoroutineScope.() -> T,
+    ): T {
+        return runBlocking(coroutineContext) {
+            try {
+                measured(functionName) {
+                    block()
+                }
+            } catch (e: Exception) {
+                Log.e(APP, "ServiceQueue.$name error", e)
+                throw AppError(e)
+            }
+        }
+    }
 
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
@@ -30,7 +49,7 @@ enum class ServiceQueue {
                 }
             } catch (e: Exception) {
                 Log.e(APP, "ServiceQueue.$name error", e)
-                throw e
+                throw AppError(e)
             }
         }
     }
