@@ -9,8 +9,8 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
-class BlocktankClientTest {
-    private val sut = BlocktankClient(HttpModule.provideHttpClient(json))
+class BlocktankHttpClientTest {
+    private val sut = BlocktankHttpClient(HttpModule.provideHttpClient(json))
 
     @Test
     fun `test getInfo`() = runTest {

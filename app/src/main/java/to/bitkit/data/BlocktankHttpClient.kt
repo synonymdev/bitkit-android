@@ -33,7 +33,7 @@ import javax.inject.Singleton
 private typealias IgnoreResponse = String
 
 @Singleton
-class BlocktankClient @Inject constructor(
+class BlocktankHttpClient @Inject constructor(
     private val client: HttpClient,
 ) {
     suspend fun getInfo(): BtInfo {

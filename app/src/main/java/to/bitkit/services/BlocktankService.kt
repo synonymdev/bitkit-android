@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.BlocktankClient
+import to.bitkit.data.BlocktankHttpClient
 import to.bitkit.data.RegisterDeviceRequest
 import to.bitkit.data.TestNotificationRequest
 import to.bitkit.data.keychain.Keychain
@@ -24,19 +24,44 @@ import to.bitkit.models.blocktank.CreateCjitOptions
 import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
+import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.initDb
+import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BlocktankService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    private val client: BlocktankClient,
+    private val blocktankHttpClient: BlocktankHttpClient,
     private val lightningService: LightningService,
     private val keychain: Keychain,
     private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
 
-    suspend fun getInfo() = ServiceQueue.LSP.background { client.getInfo() }
+    suspend fun getInfoCore() {
+        ServiceQueue.LSP.background {
+            try {
+                // Initialize database
+                val dbPath = Env.bitkitCoreStoragePath(walletIndex = 0)
+                initDb(basePath = dbPath)
+
+                // Update Blocktank URL
+                // updateBlocktankUrl("https://api1.blocktank.to/api")
+                updateBlocktankUrl(Env.blocktankClientServer)
+
+                uniffi.bitkitcore.getInfo(refresh = false)
+                uniffi.bitkitcore.getInfo(refresh = true)?.let { info: IBtInfo ->
+                    Log.d(LSP, "Blocktank info: $info")
+                }
+
+            } catch (e: Exception) {
+                Log.e(LSP, "Error getting Blocktank info:", e)
+            }
+        }
+    }
+
+    suspend fun getInfo() = ServiceQueue.LSP.background { blocktankHttpClient.getInfo() }
 
     // region orders
     suspend fun createOrder(spendingBalanceSats: Int, channelExpiryWeeks: Int = 6): BtOrder {
@@ -58,7 +83,7 @@ class BlocktankService @Inject constructor(
         )
 
         val order = ServiceQueue.LSP.background {
-            client.createOrder(receivingBalanceSats, channelExpiryWeeks, options)
+            blocktankHttpClient.createOrder(receivingBalanceSats, channelExpiryWeeks, options)
         }
 
         return order
@@ -68,10 +93,10 @@ class BlocktankService @Inject constructor(
         return ServiceQueue.LSP.background {
             if (orderIds.size == 1) {
                 listOfNotNull(
-                    orderIds.first?.let { client.getOrder(it) }
+                    orderIds.first?.let { blocktankHttpClient.getOrder(it) }
                 )
             } else {
-                client.getOrders(orderIds)
+                blocktankHttpClient.getOrders(orderIds)
             }
         }
     }
@@ -82,7 +107,7 @@ class BlocktankService @Inject constructor(
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         val entry = ServiceQueue.LSP.background {
-            client.createCJitEntry(
+            blocktankHttpClient.createCJitEntry(
                 channelSizeSat = amountSats * 2, // TODO: confirm default from RN app
                 invoiceSat = amountSats,
                 invoiceDescription = description,
@@ -101,7 +126,7 @@ class BlocktankService @Inject constructor(
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         ServiceQueue.LSP.background {
-            client.openChannel(orderId, nodeId)
+            blocktankHttpClient.openChannel(orderId, nodeId)
             Log.i(LSP, "Opened channel for order $orderId")
         }
     }
@@ -138,7 +163,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            client.registerDevice(payload)
+            blocktankHttpClient.registerDevice(payload)
         }
 
         // Cache token so we can avoid re-registering
@@ -166,7 +191,7 @@ class BlocktankService @Inject constructor(
         )
 
         ServiceQueue.LSP.background {
-            client.testNotification(deviceToken, payload)
+            blocktankHttpClient.testNotification(deviceToken, payload)
         }
     }
     // endregion

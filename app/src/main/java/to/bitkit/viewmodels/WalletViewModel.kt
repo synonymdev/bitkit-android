@@ -447,7 +447,7 @@ class WalletViewModel @Inject constructor(
     }
 
     fun debugBlocktankInfo() {
-        viewModelScope.launch(bgDispatcher) { blocktankService.getInfo() }
+        viewModelScope.launch(bgDispatcher) { blocktankService.getInfoCore() }
     }
 
     fun debugBtOrdersSync() {
