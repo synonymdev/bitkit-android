@@ -10,35 +10,27 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.amountSats
 import to.bitkit.shared.AppError
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
-import uniffi.bitkitcore.SortDirection
-import uniffi.bitkitcore.addTags
-import uniffi.bitkitcore.deleteActivityById
-import uniffi.bitkitcore.getActivities
-import uniffi.bitkitcore.getActivityById
-import uniffi.bitkitcore.getAllUniqueTags
-import uniffi.bitkitcore.getTags
-import uniffi.bitkitcore.initDb
-import uniffi.bitkitcore.insertActivity
-import uniffi.bitkitcore.removeTags
-import uniffi.bitkitcore.updateActivity
-import uniffi.bitkitcore.updateBlocktankUrl
+import to.bitkit.shared.ServiceError
+import uniffi.bitkitcore.*
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
+// MARK: - Core Service
+
 @Singleton
 class CoreService @Inject constructor(
+    private val lightningService: LightningService,
 ) {
     private var walletIndex: Int = 0
 
     val activity: ActivityService by lazy { ActivityService(coreService = this) }
-    // val blocktank: BlocktankService by lazy { BlocktankService(coreService = this) }
+    val blocktank: BlocktankService by lazy {
+        BlocktankService(
+            coreService = this,
+            lightningService = lightningService,
+        )
+    }
 
     init {
         init()
@@ -66,12 +58,13 @@ class CoreService @Inject constructor(
     }
 }
 
+// MARK: - Activity Service
+
 class ActivityService(
     private val coreService: CoreService,
 ) {
     suspend fun removeAll() {
-        ServiceQueue.CORE.background {
-            // Only allow removing on regtest for now
+        ServiceQueue.CORE.background { // Only allow removing on regtest for now
             if (Env.network != Network.REGTEST) {
                 throw AppError(message = "Regtest only")
             }
@@ -108,8 +101,7 @@ class ActivityService(
             var addedCount = 0
             var updatedCount = 0
 
-            for (payment in payments) {
-                // Skip pending inbound payments, just means they created an invoice
+            for (payment in payments) { // Skip pending inbound payments, just means they created an invoice
                 if (payment.status == PaymentStatus.PENDING && payment.direction == PaymentDirection.INBOUND) {
                     continue
                 }
@@ -217,14 +209,23 @@ class ActivityService(
             val possibleTags =
                 listOf("coffee", "food", "shopping", "transport", "entertainment", "work", "friends", "family")
             val possibleMessages = listOf(
-                "Coffee at Starbucks", "Lunch with friends", "Uber ride", "Movie tickets", "Groceries",
-                "Work payment", "Gift for mom", "Split dinner bill", "Monthly rent", "Gym membership"
+                "Coffee at Starbucks",
+                "Lunch with friends",
+                "Uber ride",
+                "Movie tickets",
+                "Groceries",
+                "Work payment",
+                "Gift for mom",
+                "Split dinner bill",
+                "Monthly rent",
+                "Gym membership"
             )
 
             repeat(count) { i ->
                 val isLightning = Random.Default.nextBoolean()
                 val value = (1000..1_000_000).random().toULong()
-                val txTimestamp = (timestamp.toLong() - (0..30L * 24 * 60 * 60).random()).toULong() // Random time in last 30 days
+                val txTimestamp =
+                    (timestamp.toLong() - (0..30L * 24 * 60 * 60).random()).toULong() // Random time in last 30 days
                 val txType = if (Random.Default.nextBoolean()) PaymentType.SENT else PaymentType.RECEIVED
                 val status = when ((0..10).random()) {
                     in 0..7 -> PaymentState.SUCCEEDED // 80% chance
@@ -287,6 +288,88 @@ class ActivityService(
                     appendTags(id, tags)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Blocktank Service
+class BlocktankService(
+    private val coreService: CoreService,
+    private val lightningService: LightningService,
+) {
+    suspend fun info(refresh: Boolean = false): IBtInfo? {
+        return ServiceQueue.CORE.background {
+            getInfo(refresh = refresh)
+        }
+    }
+
+    suspend fun createCjit(
+        channelSizeSat: ULong,
+        invoiceSat: ULong,
+        invoiceDescription: String,
+        nodeId: String,
+        channelExpiryWeeks: UInt,
+        options: CreateCjitOptions,
+    ): IcJitEntry {
+        return ServiceQueue.CORE.background {
+            createCjitEntry(
+                channelSizeSat = channelSizeSat,
+                invoiceSat = invoiceSat,
+                invoiceDescription = invoiceDescription,
+                nodeId = nodeId,
+                channelExpiryWeeks = channelExpiryWeeks,
+                options = options
+            )
+        }
+    }
+
+    suspend fun cjitOrders(
+        entryIds: List<String>? = null,
+        filter: CJitStateEnum? = null,
+        refresh: Boolean = true,
+    ): List<IcJitEntry> {
+        return ServiceQueue.CORE.background {
+            getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
+        }
+    }
+
+    suspend fun newOrder(
+        lspBalanceSat: ULong,
+        channelExpiryWeeks: UInt,
+        options: CreateOrderOptions,
+    ): IBtOrder {
+        return ServiceQueue.CORE.background {
+            createOrder(
+                lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options
+            )
+        }
+    }
+
+    suspend fun orders(
+        orderIds: List<String>? = null,
+        filter: BtOrderState2? = null,
+        refresh: Boolean = true,
+    ): List<IBtOrder> {
+        return ServiceQueue.CORE.background {
+            getOrders(orderIds = orderIds, filter = filter, refresh = refresh)
+        }
+    }
+
+    suspend fun open(orderId: String): IBtOrder {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
+        val latestOrder = ServiceQueue.CORE.background {
+            getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()
+        }
+
+        if (latestOrder?.state2 != BtOrderState2.PAID) {
+            throw AppError(
+                message = "Order not paid, Order state: ${latestOrder?.state2}"
+            )
+        }
+
+        return ServiceQueue.CORE.background {
+            openChannel(orderId = orderId, connectionString = nodeId)
         }
     }
 }

@@ -7,40 +7,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
-import to.bitkit.data.AppDb
-import to.bitkit.data.entities.OrderEntity
 import to.bitkit.models.Toast
-import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.services.BlocktankServiceOld
+import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import uniffi.bitkitcore.IBtOrder
 import javax.inject.Inject
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
-    private val db: AppDb,
-    private val blocktankServiceOld: BlocktankServiceOld,
+    private val coreService: CoreService,
     private val lightningService: LightningService,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Create)
     val uiState = _uiState.asStateFlow()
 
-    suspend fun createOrder(sats: Int) {
-        runCatching { blocktankServiceOld.createOrder(spendingBalanceSats = sats, 6) }
-            .onSuccess { order ->
-                viewModelScope.launch { db.ordersDao().upsert(OrderEntity(order.id)) }
-                _uiState.value = TransferUiState.Confirm(
-                    order = order,
-                    txId = null,
-                )
-            }
-            .onFailure {
-                ToastEventBus.send(it)
-                throw it
-            }
+    fun onOrderCreated(order: IBtOrder) {
+        _uiState.value = TransferUiState.Confirm(
+            order = order,
+            txId = null,
+        )
     }
 
-    fun payOrder(order: BtOrder) {
+    fun payOrder(order: IBtOrder) {
         viewModelScope.launch {
             runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
                 .onSuccess { txId ->
@@ -53,13 +42,14 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    fun manualOpenChannel(order: BtOrder) {
+    fun manualOpenChannel(order: IBtOrder) {
         viewModelScope.launch {
-            runCatching { blocktankServiceOld.openChannel(order.id) }
-                .onSuccess {
-                    ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Manual open success")
-                }
-                .onFailure { ToastEventBus.send(it) }
+            try {
+                coreService.blocktank.open(order.id)
+                ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Manual open success")
+            } catch (e: Throwable) {
+                ToastEventBus.send(e)
+            }
         }
     }
 }
@@ -68,7 +58,7 @@ class TransferViewModel @Inject constructor(
 sealed class TransferUiState {
     data object Create : TransferUiState()
     data class Confirm(
-        val order: BtOrder,
+        val order: IBtOrder,
         val txId: Txid?,
     ) : TransferUiState()
 }

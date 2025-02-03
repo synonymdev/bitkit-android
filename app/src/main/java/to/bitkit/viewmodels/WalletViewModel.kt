@@ -15,28 +15,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.ChannelId
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.DEV
 import to.bitkit.env.Tag.LSP
-import to.bitkit.ext.first
 import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
@@ -44,8 +40,8 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.models.blocktank.BtOrder
 import to.bitkit.services.BlocktankServiceOld
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -58,6 +54,7 @@ class WalletViewModel @Inject constructor(
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
+    private val coreService: CoreService,
     private val blocktankServiceOld: BlocktankServiceOld,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
@@ -137,7 +134,6 @@ class WalletViewModel @Inject constructor(
 
             launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
-            launch(bgDispatcher) { syncDbOrders() }
         }
     }
 
@@ -152,18 +148,6 @@ class WalletViewModel @Inject constructor(
 
     private suspend fun observeDbConfig() {
         db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") }
-    }
-
-    private suspend fun syncDbOrders() {
-        db.ordersDao().getAll().filter { it.isNotEmpty() }.collect { dbOrders ->
-            Log.d(APP, "Database orders sync: $dbOrders")
-
-            runCatching { blocktankServiceOld.getOrders(dbOrders.map { it.id }) }
-                .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                .onSuccess { btOrders ->
-                    _uiState.update { it.copy(orders = btOrders) }
-                }
-        }
     }
 
     private var isSyncingWallet = false
@@ -232,15 +216,6 @@ class WalletViewModel @Inject constructor(
     fun refreshState() {
         viewModelScope.launch {
             sync()
-            launch(bgDispatcher) {
-                db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
-                    runCatching { blocktankServiceOld.getOrders(dbOrders.map { it.id }) }
-                        .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                        .onSuccess { btOrders ->
-                            _uiState.update { it.copy(orders = btOrders) }
-                        }
-                }
-            }
         }
     }
 
@@ -300,8 +275,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun findChannelById(id: ChannelId): ChannelDetails? = lightningService.channels?.find { it.channelId == id }
-
     fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {
             runCatching { lightningService.send(bolt11) }
@@ -322,7 +295,7 @@ class WalletViewModel @Inject constructor(
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
-            val peer = lightningService.peers?.first ?: error("No peer connected to open channel.")
+            val peer = lightningService.peers?.firstOrNull() ?: error("No peer connected to open channel.")
             runCatching { lightningService.openChannel(peer, 50000u, 10000u) }
                 .onSuccess {
                     ToastEventBus.send(
@@ -447,65 +420,14 @@ class WalletViewModel @Inject constructor(
     }
 
     fun debugBlocktankInfo() {
-        viewModelScope.launch(bgDispatcher) { blocktankServiceOld.getInfoCore() }
-    }
-
-    fun debugBtOrdersSync() {
-        val orderIds = _uiState.value.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
-        viewModelScope.launch {
-            runCatching { blocktankServiceOld.getOrders(orderIds) }
-                .onSuccess { orders ->
-                    _uiState.update { it.copy(orders = orders) }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtCreateOrder(sats: Int) {
-        viewModelScope.launch {
-            runCatching { blocktankServiceOld.createOrder(spendingBalanceSats = sats, 6) }
-                .onSuccess { order ->
-                    launch {
-                        db.ordersDao().upsert(OrderEntity(order.id))
-                        Log.d(APP, "Order ID saved to DB: ${order.id}")
-                    }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtPayOrder(order: BtOrder) {
-        viewModelScope.launch {
-            runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
-                .onSuccess { txId ->
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Order paid",
-                        description = "Tx ID: $txId"
-                    )
-                    // TODO: watch this order for updates
-                    launch {
-                        Log.d(DEV, "Syncing orders")
-                        delay(1500)
-                        syncState()
-                        debugBtOrdersSync()
-                    }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtManualOpenChannel(order: BtOrder) {
-        viewModelScope.launch {
-            runCatching { blocktankServiceOld.openChannel(order.id) }
-                .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Success",
-                        description = "Opened channel manually"
-                    )
-                }
-                .onFailure { ToastEventBus.send(it) }
+        viewModelScope.launch(bgDispatcher) {
+            try {
+                val info = coreService.blocktank.info()
+                Log.d(APP, "Blocktank info: $info")
+            } catch (e: Throwable) {
+                Log.e(APP, "Error getting Blocktank info:", e)
+                ToastEventBus.send(e)
+            }
         }
     }
 
@@ -555,7 +477,6 @@ data class MainUiState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
-    val orders: List<BtOrder> = emptyList(),
 )
 
 // endregion

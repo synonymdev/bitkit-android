@@ -34,7 +34,6 @@ import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.InfoField
-import to.bitkit.ui.shared.Orders
 import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
 import to.bitkit.viewmodels.MainUiState
@@ -97,7 +96,6 @@ fun DevSettingsScreen(
                 val currency = currencyViewModel
                 FullWidthTextButton({ currency?.triggerRefresh() }) { Text("Refresh Currency Rates") }
             }
-            Orders(uiState.orders, viewModel)
         }
     }
 }

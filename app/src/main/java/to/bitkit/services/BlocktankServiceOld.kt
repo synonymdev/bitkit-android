@@ -15,18 +15,10 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
-import to.bitkit.ext.first
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
-import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.models.blocktank.CJitEntry
-import to.bitkit.models.blocktank.CreateCjitOptions
-import to.bitkit.models.blocktank.CreateOrderOptions
 import to.bitkit.shared.Crypto
 import to.bitkit.shared.ServiceError
-import uniffi.bitkitcore.IBtInfo
-import uniffi.bitkitcore.initDb
-import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,99 +30,6 @@ class BlocktankServiceOld @Inject constructor(
     private val keychain: Keychain,
     private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
-
-    suspend fun getInfoCore() {
-        ServiceQueue.CORE.background {
-            try {
-                // Initialize database
-                val dbPath = Env.bitkitCoreStoragePath(walletIndex = 0)
-                initDb(basePath = dbPath)
-
-                // Update Blocktank URL
-                // updateBlocktankUrl("https://api1.blocktank.to/api")
-                updateBlocktankUrl(Env.blocktankClientServer)
-
-                uniffi.bitkitcore.getInfo(refresh = false)
-                uniffi.bitkitcore.getInfo(refresh = true)?.let { info: IBtInfo ->
-                    Log.d(LSP, "Blocktank info: $info")
-                }
-
-            } catch (e: Exception) {
-                Log.e(LSP, "Error getting Blocktank info:", e)
-            }
-        }
-    }
-
-    suspend fun getInfo() = ServiceQueue.CORE.background { blocktankHttpClient.getInfo() }
-
-    // region orders
-    suspend fun createOrder(spendingBalanceSats: Int, channelExpiryWeeks: Int = 6): BtOrder {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
-
-        val receivingBalanceSats = spendingBalanceSats * 2 // TODO: confirm
-        val timestamp = nowTimestamp()
-        val signature = lightningService.sign("channelOpen-$timestamp")
-        val options = CreateOrderOptions.initWithDefaults().copy(
-            wakeToOpen = CreateOrderOptions.WakeToOpen(
-                nodeId = nodeId,
-                timestamp = "$timestamp",
-                signature = signature,
-            ),
-            clientBalanceSat = spendingBalanceSats,
-            zeroConf = true,
-            zeroReserve = true,
-            zeroConfPayment = false,
-        )
-
-        val order = ServiceQueue.CORE.background {
-            blocktankHttpClient.createOrder(receivingBalanceSats, channelExpiryWeeks, options)
-        }
-
-        return order
-    }
-
-    suspend fun getOrders(orderIds: List<String>): List<BtOrder> {
-        return ServiceQueue.CORE.background {
-            if (orderIds.size == 1) {
-                listOfNotNull(
-                    orderIds.first?.let { blocktankHttpClient.getOrder(it) }
-                )
-            } else {
-                blocktankHttpClient.getOrders(orderIds)
-            }
-        }
-    }
-    // endregion
-
-    // region cjit
-    suspend fun createCjit(amountSats: Int, description: String): CJitEntry {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
-
-        val entry = ServiceQueue.CORE.background {
-            blocktankHttpClient.createCJitEntry(
-                channelSizeSat = amountSats * 2, // TODO: confirm default from RN app
-                invoiceSat = amountSats,
-                invoiceDescription = description,
-                nodeId = nodeId,
-                channelExpiryWeeks = 2, // TODO: check default value in RN app
-                options = CreateCjitOptions(),
-            )
-        }
-
-        return entry
-    }
-    // endregion
-
-    // region channels
-    suspend fun openChannel(orderId: String) {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
-
-        ServiceQueue.CORE.background {
-            blocktankHttpClient.openChannel(orderId, nodeId)
-            Log.i(LSP, "Opened channel for order $orderId")
-        }
-    }
-    // endregion
 
     // region notifications
     suspend fun registerDevice(deviceToken: String) {

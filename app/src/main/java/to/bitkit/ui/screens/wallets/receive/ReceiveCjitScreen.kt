@@ -87,7 +87,7 @@ fun ReceiveCjitScreen(
                 Column(
                     modifier = Modifier
                         .clickable {
-                            amount = (info.options.minChannelSizeSat / 2).toString()
+                            amount = (info.options.minChannelSizeSat / 2u).toString()
                         }
                 ) {
                     Text(
@@ -96,7 +96,7 @@ fun ReceiveCjitScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                     Text(
-                        text = (info.options.minChannelSizeSat / 2).formatWithDotSeparator(),
+                        text = (info.options.minChannelSizeSat / 2u).formatWithDotSeparator(),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -105,7 +105,7 @@ fun ReceiveCjitScreen(
                 Column(
                     modifier = Modifier
                         .clickable {
-                            amount = (info.options.maxChannelSizeSat / 2).toString()
+                            amount = (info.options.maxChannelSizeSat / 2u).toString()
                         }
                 ) {
                     Text(
@@ -114,7 +114,7 @@ fun ReceiveCjitScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                     Text(
-                        text = (info.options.maxChannelSizeSat / 2).formatWithDotSeparator(),
+                        text = (info.options.maxChannelSizeSat / 2u).formatWithDotSeparator(),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -127,7 +127,7 @@ fun ReceiveCjitScreen(
         FullWidthTextButton(
             onClick = {
                 if (walletUiState.nodeId.isEmpty()) return@FullWidthTextButton
-                amount.toIntOrNull()?.let { amountValue ->
+                amount.toULongOrNull()?.let { amountValue ->
                     scope.launch {
                         isCreatingInvoice = true
                         try {

@@ -25,6 +25,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
@@ -35,6 +36,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var db: AppDb = mock()
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
+    private var coreService: CoreService = mock()
     private var blocktankServiceOld: BlocktankServiceOld = mock()
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
@@ -69,6 +71,7 @@ class WalletViewModelTest : BaseUnitTest() {
             appStorage = appStorage,
             db = db,
             keychain = keychain,
+            coreService = coreService,
             blocktankServiceOld = blocktankServiceOld,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
@@ -85,7 +88,6 @@ class WalletViewModelTest : BaseUnitTest() {
             onchainAddress = "onchainAddress",
             peers = emptyList(),
             channels = emptyList(),
-            orders = emptyList(),
             balanceDetails = balanceDetails,
             bolt11 = "bolt11",
             bip21 = "bitcoin:onchainAddress",
