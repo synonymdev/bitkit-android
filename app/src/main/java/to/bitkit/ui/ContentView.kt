@@ -44,10 +44,13 @@ import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
+import to.bitkit.ui.settings.CJitDetailScreen
+import to.bitkit.ui.settings.ChannelOrdersScreen
 import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
@@ -183,6 +186,9 @@ fun ContentView(
                 backupSettings(navController)
                 backupWalletSettings(navController)
                 restoreWalletSettings(navController)
+                channelOrdersSettings(navController)
+                orderDetailSettings(navController)
+                cjitDetailSettings(navController)
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
@@ -273,6 +279,40 @@ private fun NavGraphBuilder.restoreWalletSettings(
 ) {
     composable<Routes.RestoreWalletSettings> {
         RestoreWalletScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.channelOrdersSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.ChannelOrdersSettings> {
+        ChannelOrdersScreen(
+            onBackClick = { navController.popBackStack() },
+            onOrderItemClick = { navController.navigateToOrderDetail(it) },
+            onCjitItemClick = { navController.navigateToCjitDetail(it) },
+        )
+    }
+}
+
+private fun NavGraphBuilder.orderDetailSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.OrderDetail> { navBackEntry ->
+        OrderDetailScreen(
+            orderItem = navBackEntry.toRoute(),
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+}
+
+private fun NavGraphBuilder.cjitDetailSettings(
+    navController: NavHostController,
+) {
+    composable<Routes.CjitDetail> { navBackEntry ->
+        CJitDetailScreen(
+            cjitItem = navBackEntry.toRoute(),
+            onBackClick = { navController.popBackStack() },
+        )
     }
 }
 
@@ -400,6 +440,18 @@ fun NavController.navigateToRestoreWalletSettings() = navigate(
     route = Routes.RestoreWalletSettings,
 )
 
+fun NavController.navigateToChannelOrdersSettings() = navigate(
+    route = Routes.ChannelOrdersSettings,
+)
+
+fun NavController.navigateToOrderDetail(id: String) = navigate(
+    route = Routes.OrderDetail(id),
+)
+
+fun NavController.navigateToCjitDetail(id: String) = navigate(
+    route = Routes.CjitDetail(id),
+)
+
 fun NavController.navigateToLightning() = navigate(
     route = Routes.Lightning,
 )
@@ -456,6 +508,15 @@ object Routes {
 
     @Serializable
     data object RestoreWalletSettings
+
+    @Serializable
+    data object ChannelOrdersSettings
+
+    @Serializable
+    data class OrderDetail(val id: String)
+
+    @Serializable
+    data class CjitDetail(val id: String)
 
     @Serializable
     data object Lightning

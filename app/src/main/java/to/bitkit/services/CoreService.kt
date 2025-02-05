@@ -16,7 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
-// MARK: - Core Service
+// region Core
 
 @Singleton
 class CoreService @Inject constructor(
@@ -36,7 +36,7 @@ class CoreService @Inject constructor(
         init()
     }
 
-    fun init(walletIndex: Int = 0) {
+    private fun init(walletIndex: Int = 0) {
         this.walletIndex = walletIndex
 
         // Block queue until the init completes forcing any additional calls to wait for it
@@ -58,7 +58,9 @@ class CoreService @Inject constructor(
     }
 }
 
-// MARK: - Activity Service
+// endregion
+
+// region Activity
 
 class ActivityService(
     private val coreService: CoreService,
@@ -292,7 +294,10 @@ class ActivityService(
     }
 }
 
-// MARK: - Blocktank Service
+// endregion
+
+// region Blocktank
+
 class BlocktankService(
     private val coreService: CoreService,
     private val lightningService: LightningService,
@@ -373,3 +378,5 @@ class BlocktankService(
         }
     }
 }
+
+// endregion

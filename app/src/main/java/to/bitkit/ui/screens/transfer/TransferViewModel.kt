@@ -16,7 +16,6 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
-    private val coreService: CoreService,
     private val lightningService: LightningService,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Create)
@@ -31,22 +30,15 @@ class TransferViewModel @Inject constructor(
 
     fun payOrder(order: IBtOrder) {
         viewModelScope.launch {
-            runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
-                .onSuccess { txId ->
-                    (_uiState.value as? TransferUiState.Confirm)?.let {
-                        _uiState.value = it.copy(txId = txId)
-                    }
-                    ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Payment sent $txId")
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun manualOpenChannel(order: IBtOrder) {
-        viewModelScope.launch {
             try {
-                coreService.blocktank.open(order.id)
-                ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Manual open success")
+                val txId = lightningService.send(
+                    address = order.payment.onchain.address,
+                    sats = order.feeSat,
+                )
+                (_uiState.value as? TransferUiState.Confirm)?.let {
+                    _uiState.value = it.copy(txId = txId)
+                }
+                ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Payment sent $txId")
             } catch (e: Throwable) {
                 ToastEventBus.send(e)
             }

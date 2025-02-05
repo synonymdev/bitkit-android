@@ -25,7 +25,7 @@ class BlocktankViewModel @Inject constructor(
 ) : ViewModel() {
     var orders = mutableListOf<IBtOrder>()
         private set
-    var cjitEntries = mutableListOf<IcJitEntry>()
+    var cJitEntries = mutableListOf<IcJitEntry>()
         private set
     var info by mutableStateOf<IBtInfo?>(null)
         private set
@@ -45,10 +45,10 @@ class BlocktankViewModel @Inject constructor(
     suspend fun refreshOrders() {
         // Sync instantly from cache
         orders = coreService.blocktank.orders(refresh = false).toMutableList()
-        cjitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableList()
+        cJitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableList()
         // Update from server
         orders = coreService.blocktank.orders(refresh = true).toMutableList()
-        cjitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableList()
+        cJitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableList()
     }
 
     suspend fun createCjit(amountSats: ULong, description: String): IcJitEntry {
@@ -92,5 +92,9 @@ class BlocktankViewModel @Inject constructor(
             channelExpiryWeeks = channelExpiryWeeks,
             options = options,
         )
+    }
+
+    suspend fun open(orderId: String): IBtOrder {
+        return coreService.blocktank.open(orderId)
     }
 }
