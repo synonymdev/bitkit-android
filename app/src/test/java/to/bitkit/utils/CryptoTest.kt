@@ -1,4 +1,4 @@
-package to.bitkit.shared
+package to.bitkit.utils
 
 import org.junit.Before
 import org.junit.Test

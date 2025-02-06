@@ -41,8 +41,8 @@ import to.bitkit.ext.toSha256
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
-import to.bitkit.shared.LdkError
-import to.bitkit.shared.ServiceError
+import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.io.path.Path

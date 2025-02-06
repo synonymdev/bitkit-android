@@ -28,7 +28,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirme
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
-import to.bitkit.shared.withPerformanceLogging
+import to.bitkit.utils.withPerformanceLogging
 import to.bitkit.ui.pushNotification
 import kotlin.time.Duration.Companion.minutes
 

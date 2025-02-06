@@ -9,8 +9,8 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.amountSats
-import to.bitkit.shared.AppError
-import to.bitkit.shared.ServiceError
+import to.bitkit.utils.AppError
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.*
 import javax.inject.Inject
 import javax.inject.Singleton

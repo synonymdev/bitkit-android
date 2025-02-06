@@ -10,7 +10,7 @@ import org.ldk.structs.KeysManager
 import to.bitkit.env.Env
 import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.toHex
-import to.bitkit.shared.ServiceError
+import to.bitkit.utils.ServiceError
 import java.io.File
 import javax.inject.Inject
 import kotlin.io.path.Path

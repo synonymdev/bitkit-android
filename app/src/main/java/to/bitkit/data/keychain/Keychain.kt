@@ -19,7 +19,7 @@ import to.bitkit.env.Env
 import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
-import to.bitkit.shared.KeychainError
+import to.bitkit.utils.KeychainError
 import javax.inject.Inject
 import javax.inject.Singleton
 

@@ -1,4 +1,4 @@
-package to.bitkit.shared
+package to.bitkit.utils
 
 import android.util.Log
 import to.bitkit.env.Tag.PERF

@@ -17,8 +17,8 @@ import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
-import to.bitkit.shared.Crypto
-import to.bitkit.shared.ServiceError
+import to.bitkit.utils.Crypto
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 

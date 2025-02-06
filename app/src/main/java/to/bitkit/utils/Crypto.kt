@@ -1,4 +1,4 @@
-package to.bitkit.shared
+package to.bitkit.utils
 
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey

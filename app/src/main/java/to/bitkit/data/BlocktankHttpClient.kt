@@ -17,7 +17,7 @@ import to.bitkit.models.blocktank.RegtestCloseChannelRequest
 import to.bitkit.models.blocktank.RegtestDepositRequest
 import to.bitkit.models.blocktank.RegtestMineRequest
 import to.bitkit.models.blocktank.RegtestPayRequest
-import to.bitkit.shared.AppError
+import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
 

@@ -1,6 +1,6 @@
 // @file:Suppress("unused")
 
-package to.bitkit.shared
+package to.bitkit.utils
 
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException

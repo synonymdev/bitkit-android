@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
-import to.bitkit.shared.ServiceError
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
 import uniffi.bitkitcore.IBtInfo

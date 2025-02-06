@@ -1,3 +1,3 @@
-package to.bitkit.shared
+package to.bitkit.utils
 
 fun nameof(t: Any): String = "${t::class.simpleName}"

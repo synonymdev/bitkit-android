@@ -5,7 +5,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.BlocktankHttpClient
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
-import to.bitkit.shared.AppError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
