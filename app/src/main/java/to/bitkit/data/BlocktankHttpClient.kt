@@ -1,6 +1,5 @@
 package to.bitkit.data
 
-import android.util.Log
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -11,13 +10,13 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.FxRateResponse
 import to.bitkit.models.blocktank.RegtestCloseChannelRequest
 import to.bitkit.models.blocktank.RegtestDepositRequest
 import to.bitkit.models.blocktank.RegtestMineRequest
 import to.bitkit.models.blocktank.RegtestPayRequest
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,7 +48,7 @@ class BlocktankHttpClient @Inject constructor(
      * @param count Number of blocks to mine. Default is 1.
      */
     suspend fun regtestMine(count: Int = 1) {
-         val payload = RegtestMineRequest(count)
+        val payload = RegtestMineRequest(count)
         post<IgnoreResponse>("${Env.blocktankClientServer}/regtest/chain/mine", payload)
     }
 
@@ -95,7 +94,7 @@ class BlocktankHttpClient @Inject constructor(
     // region utils
     private suspend inline fun <reified T> post(url: String, payload: Any? = null): T {
         val response = client.post(url) { payload?.let { setBody(it) } }
-        Log.d(APP, "Http call: $response")
+        Logger.debug("Http call: $response")
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
@@ -114,7 +113,7 @@ class BlocktankHttpClient @Inject constructor(
                 queryParams?.forEach { parameters.appendAll(it.key, it.value) }
             }
         }
-        Log.d(APP, "Http call: $response")
+        Logger.debug("Http call: $response")
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {

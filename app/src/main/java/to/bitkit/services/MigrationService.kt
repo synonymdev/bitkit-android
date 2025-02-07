@@ -4,12 +4,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.ldk.structs.KeysManager
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.LDK
 import to.bitkit.ext.toHex
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
 import javax.inject.Inject
@@ -21,7 +20,7 @@ class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
-        Log.d(LDK, "Migrating LDK backup…")
+        Logger.debug("Migrating LDK backup…")
 
         val file = Path(Env.ldkStoragePath(0), LDK_DB_NAME).toFile()
 
@@ -31,8 +30,8 @@ class MigrationService @Inject constructor(
         }
 
         val path = file.path
-        Log.d(LDK, "Creating ldk-node db at: $path")
-        Log.d(LDK, "Seeding ldk-node db with LDK backup data…")
+        Logger.debug("Creating ldk-node db at: $path")
+        Logger.debug("Seeding ldk-node db with LDK backup data…")
 
         LdkNodeDataDbHelper(context, path).writableDatabase.use {
             it.beginTransaction()
@@ -49,7 +48,7 @@ class MigrationService @Inject constructor(
 
         File("$path-journal").delete()
 
-        Log.i(LDK, "Migrated LDK backup to ldk-node db at: $path")
+        Logger.info("Migrated LDK backup to ldk-node db at: $path")
     }
 
     private fun SQLiteDatabase.insertManager(manager: ByteArray) {
@@ -86,7 +85,7 @@ class MigrationService @Inject constructor(
             }
             insert(LDK_NODE_DATA, null, values)
 
-            Log.d(LDK, "Inserted monitor: $key")
+            Logger.debug("Inserted monitor: $key")
         }
     }
 

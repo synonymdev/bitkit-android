@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import android.util.Log
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -28,7 +27,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.onboarding.InitializingWalletView
@@ -54,6 +52,7 @@ import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
@@ -81,7 +80,7 @@ fun ContentView(
                     try {
                         walletViewModel.start()
                     } catch (e: Throwable) {
-                        Log.e(APP, "Failed to start wallet", e)
+                        Logger.error("Failed to start wallet", e)
                     }
 
                     val pendingTransaction = NewTransactionSheetDetails.load(context)
@@ -143,7 +142,7 @@ fun ContentView(
                         walletViewModel.start()
                         walletViewModel.setWalletExistsState()
                     } catch (e: Exception) {
-                        Log.e(APP, "Failed to start wallet on retry", e)
+                        Logger.error("Failed to start wallet on retry", e)
                     }
                 }
             }
@@ -151,7 +150,7 @@ fun ContentView(
             InitializingWalletView(
                 shouldFinish = walletInitShouldFinish,
                 onComplete = {
-                    Log.d(APP, "Wallet finished initializing but node state is $nodeLifecycleState")
+                    Logger.debug("Wallet finished initializing but node state is $nodeLifecycleState")
 
                     if (nodeLifecycleState == NodeLifecycleState.Running) {
                         walletIsInitializing = false

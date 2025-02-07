@@ -1,6 +1,5 @@
 package to.bitkit.viewmodels
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,13 +19,13 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import java.util.Date
 import javax.inject.Inject
 
@@ -101,7 +100,7 @@ class CurrencyViewModel @Inject constructor(
             lastSuccessfulRefresh = Date()
         } catch (e: Exception) {
             _uiState.update { it.copy(error = e) }
-            Log.e(APP, "Currency rates refresh failed", e)
+            Logger.error("Currency rates refresh failed", e)
 
             lastSuccessfulRefresh?.let { last ->
                 _uiState.update { it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold) }

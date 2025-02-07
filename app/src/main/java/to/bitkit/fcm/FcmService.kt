@@ -1,7 +1,6 @@
 package to.bitkit.fcm
 
 import android.os.Bundle
-import android.util.Log
 import androidx.core.os.toPersistableBundle
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -16,12 +15,12 @@ import kotlinx.serialization.json.JsonObject
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
 import to.bitkit.env.Env.DERIVATION_NAME
-import to.bitkit.env.Tag.FCM
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.models.blocktank.BlocktankNotificationType
-import to.bitkit.utils.Crypto
 import to.bitkit.ui.pushNotification
+import to.bitkit.utils.Crypto
+import to.bitkit.utils.Logger
 import java.util.Date
 import javax.inject.Inject
 
@@ -40,16 +39,16 @@ internal class FcmService : FirebaseMessagingService() {
      * Act on received messages. [Debug](https://goo.gl/39bRNJ)
      */
     override fun onMessageReceived(message: RemoteMessage) {
-        Log.d(FCM, "New FCM at: ${Date(message.sentTime)}")
+        Logger.debug("New FCM at: ${Date(message.sentTime)}")
 
         message.notification?.run {
-            Log.d(FCM, "FCM title: $title")
-            Log.d(FCM, "FCM body: $body")
+            Logger.debug("FCM title: $title")
+            Logger.debug("FCM body: $body")
             sendNotification(title, body, Bundle(message.data.toPersistableBundle()))
         }
 
         if (message.data.isNotEmpty()) {
-            Log.d(FCM, "FCM data: ${message.data}")
+            Logger.debug("FCM data: ${message.data}")
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
@@ -57,7 +56,7 @@ internal class FcmService : FirebaseMessagingService() {
                 }
                 isEncryptedNotification
             }.getOrElse {
-                Log.e(FCM, "Failed to read encrypted notification payload", it)
+                Logger.error("Failed to read encrypted notification payload", it)
                 // Let the node to spin up and handle incoming events
                 true
             }
@@ -84,21 +83,21 @@ internal class FcmService : FirebaseMessagingService() {
     }
 
     private fun handleNow(data: Map<String, String>) {
-        Log.w(FCM, "FCM handler not implemented for: $data")
+        Logger.warn("FCM handler not implemented for: $data")
     }
 
     private fun decryptPayload(response: EncryptedNotification) {
         val ciphertext = runCatching { response.cipher.fromBase64() }.getOrElse {
-            Log.e(FCM, ("Failed to decode cipher"), it)
+            Logger.error("Failed to decode cipher", it)
             return
         }
         val privateKey = runCatching { keychain.load(Keychain.Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)!! }.getOrElse {
-            Log.e(FCM, "Missing PUSH_NOTIFICATION_PRIVATE_KEY", it)
+            Logger.error("Missing PUSH_NOTIFICATION_PRIVATE_KEY", it)
             return
         }
         val password =
             runCatching { crypto.generateSharedSecret(privateKey, response.publicKey, DERIVATION_NAME) }.getOrElse {
-                Log.e(FCM, "Failed to generate shared secret", it)
+                Logger.error("Failed to generate shared secret", it)
                 return
             }
 
@@ -108,20 +107,20 @@ internal class FcmService : FirebaseMessagingService() {
         )
 
         val decoded = decrypted.decodeToString()
-        Log.d(FCM, "Decrypted payload: $decoded")
+        Logger.debug("Decrypted payload: $decoded")
 
         val (payload, type) = runCatching { json.decodeFromString<DecryptedNotification>(decoded) }.getOrElse {
-            Log.e(FCM, "Failed to decode decrypted data", it)
+            Logger.error("Failed to decode decrypted data", it)
             return
         }
 
         if (payload == null) {
-            Log.e(FCM, "Missing payload")
+            Logger.error("Missing payload")
             return
         }
 
         if (type == null) {
-            Log.e(FCM, "Missing type")
+            Logger.error("Missing type")
             return
         }
 

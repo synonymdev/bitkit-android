@@ -1,17 +1,46 @@
 package to.bitkit.services
 
-import android.util.Log
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.amountSats
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.*
+import uniffi.bitkitcore.Activity
+import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.BtOrderState2
+import uniffi.bitkitcore.CJitStateEnum
+import uniffi.bitkitcore.CreateCjitOptions
+import uniffi.bitkitcore.CreateOrderOptions
+import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.IBtOrder
+import uniffi.bitkitcore.IcJitEntry
+import uniffi.bitkitcore.LightningActivity
+import uniffi.bitkitcore.OnchainActivity
+import uniffi.bitkitcore.PaymentState
+import uniffi.bitkitcore.PaymentType
+import uniffi.bitkitcore.SortDirection
+import uniffi.bitkitcore.addTags
+import uniffi.bitkitcore.createCjitEntry
+import uniffi.bitkitcore.createOrder
+import uniffi.bitkitcore.deleteActivityById
+import uniffi.bitkitcore.getActivities
+import uniffi.bitkitcore.getActivityById
+import uniffi.bitkitcore.getAllUniqueTags
+import uniffi.bitkitcore.getCjitEntries
+import uniffi.bitkitcore.getInfo
+import uniffi.bitkitcore.getOrders
+import uniffi.bitkitcore.getTags
+import uniffi.bitkitcore.initDb
+import uniffi.bitkitcore.insertActivity
+import uniffi.bitkitcore.openChannel
+import uniffi.bitkitcore.removeTags
+import uniffi.bitkitcore.updateActivity
+import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -43,16 +72,16 @@ class CoreService @Inject constructor(
         ServiceQueue.CORE.blocking {
             try {
                 val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex))
-                Log.i(APP, "bitkit-core database init: $result")
+                Logger.info("bitkit-core database init: $result")
             } catch (e: Exception) {
-                Log.e(APP, "bitkit-core database init failed", e)
+                Logger.error("bitkit-core database init failed", e)
             }
 
             try {
                 updateBlocktankUrl(newUrl = Env.blocktankClientServer)
-                Log.i(APP, "Blocktank URL updated to ${Env.blocktankClientServer}")
+                Logger.info("Blocktank URL updated to ${Env.blocktankClientServer}")
             } catch (e: Exception) {
-                Log.e(APP, "Failed to update Blocktank URL", e)
+                Logger.error("Failed to update Blocktank URL", e)
             }
         }
     }
@@ -139,7 +168,7 @@ class ActivityService(
                 // TODO: handle onchain activity when it comes in ldk-node
             }
 
-            Log.i(APP, "Synced LDK payments - Added: $addedCount, Updated: $updatedCount")
+            Logger.info("Synced LDK payments - Added: $addedCount, Updated: $updatedCount")
         }
     }
 

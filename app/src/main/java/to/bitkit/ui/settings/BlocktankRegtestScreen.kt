@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings
 
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,7 +30,6 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.LabelText
@@ -39,6 +37,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.walletViewModel
+import to.bitkit.utils.Logger
 
 @Composable
 fun BlocktankRegtestScreen(
@@ -105,19 +104,19 @@ fun BlocktankRegtestScreen(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        Log.d(APP, "Initiating regtest deposit with address: $depositAddress, amount: $depositAmount")
+                        Logger.debug("Initiating regtest deposit with address: $depositAddress, amount: $depositAmount")
                         isDepositing = true
                         try {
                             val amount = depositAmount.toIntOrNull() ?: error("Invalid deposit amount: $depositAmount")
                             val txId = viewModel.regtestDeposit(depositAddress, amount)
-                            Log.d(APP, "Deposit successful with txId: $txId")
+                            Logger.debug("Deposit successful with txId: $txId")
                             app.toast(
                                 type = Toast.ToastType.SUCCESS,
                                 title = "Success",
                                 description = "Deposit successful. TxID: $txId",
                             )
                         } catch (e: Exception) {
-                            Log.e(APP, "Deposit failed", e)
+                            Logger.error("Deposit failed", e)
                             app.toast(
                                 type = Toast.ToastType.ERROR,
                                 title = "Failed to deposit",
@@ -152,20 +151,20 @@ fun BlocktankRegtestScreen(
                 TextButton(
                     onClick = {
                         coroutineScope.launch {
-                            Log.d(APP, "Starting regtest mining with block count: $mineBlockCount")
+                            Logger.debug("Starting regtest mining with block count: $mineBlockCount")
                             isMining = true
                             try {
                                 val count =
                                     mineBlockCount.toIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
-                                Log.d(APP, "Successfully mined $count blocks")
+                                Logger.debug("Successfully mined $count blocks")
                                 app.toast(
                                     type = Toast.ToastType.SUCCESS,
                                     title = "Success",
                                     description = "Successfully mined $count blocks",
                                 )
                             } catch (e: Exception) {
-                                Log.e(APP, "Mining failed", e)
+                                Logger.error("Mining failed", e)
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
                                     title = "Failed to mine",
@@ -204,11 +203,11 @@ fun BlocktankRegtestScreen(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        Log.d(APP, "Initiating regtest payment with invoice: $paymentInvoice, amount: $paymentAmount")
+                        Logger.debug("Initiating regtest payment with invoice: $paymentInvoice, amount: $paymentAmount")
                         try {
                             val amount = if (paymentAmount.isEmpty()) null else paymentAmount.toIntOrNull()
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
-                            Log.d(APP, "Payment successful with ID: $paymentId")
+                            Logger.debug("Payment successful with ID: $paymentId")
                             app.toast(
                                 type = Toast.ToastType.SUCCESS,
                                 title = "Success",
@@ -216,7 +215,7 @@ fun BlocktankRegtestScreen(
                             )
 
                         } catch (e: Exception) {
-                            Log.e(APP, "Payment failed", e)
+                            Logger.error("Payment failed", e)
                             app.toast(
                                 type = Toast.ToastType.ERROR,
                                 title = "Failed to pay invoice from LND",
@@ -262,10 +261,7 @@ fun BlocktankRegtestScreen(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        Log.d(
-                            APP,
-                            "Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter"
-                        )
+                        Logger.debug("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")
                         try {
                             val voutNum = vout.toIntOrNull() ?: error("Invalid Vout: $vout")
                             val closeAfter = forceCloseAfter.toIntOrNull()
@@ -275,14 +271,14 @@ fun BlocktankRegtestScreen(
                                 vout = voutNum,
                                 forceCloseAfterS = closeAfter,
                             )
-                            Log.d(APP, "Channel closed successfully with txId: $closingTxId")
+                            Logger.debug("Channel closed successfully with txId: $closingTxId")
                             app.toast(
                                 type = Toast.ToastType.SUCCESS,
                                 title = "Success",
                                 description = "Channel closed. Closing TxID: $closingTxId"
                             )
                         } catch (e: Exception) {
-                            Log.e(APP, "Channel close failed", e)
+                            Logger.error("Channel close failed", e)
                             app.toast(e)
                         }
                     }

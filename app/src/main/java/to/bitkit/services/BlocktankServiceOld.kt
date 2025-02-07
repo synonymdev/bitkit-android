@@ -1,6 +1,5 @@
 package to.bitkit.services
 
-import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -14,10 +13,10 @@ import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.env.Env.DERIVATION_NAME
-import to.bitkit.env.Tag.LSP
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.utils.Crypto
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,7 +34,7 @@ class BlocktankServiceOld @Inject constructor(
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        Log.d(LSP, "Registering device for notifications…")
+        Logger.debug("Registering device for notifications…")
 
         val timestamp = nowTimestamp()
         val messageToSign = "$DERIVATION_NAME$deviceToken$timestamp"
@@ -44,7 +43,7 @@ class BlocktankServiceOld @Inject constructor(
 
         val keypair = crypto.generateKeyPair()
         val publicKey = keypair.publicKey.toHex()
-        Log.d(LSP, "Notification encryption public key: $publicKey")
+        Logger.debug("Notification encryption public key: $publicKey")
 
         // New keypair for each token registration
         if (keychain.exists(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)) {
@@ -71,11 +70,11 @@ class BlocktankServiceOld @Inject constructor(
         }
         keychain.saveString(Key.PUSH_NOTIFICATION_TOKEN.name, deviceToken)
 
-        Log.i(LSP, "Device registered for notifications")
+        Logger.info("Device registered for notifications")
     }
 
     suspend fun testNotification(deviceToken: String) {
-        Log.d(LSP, "Sending test notification to self…")
+        Logger.debug("Sending test notification to self…")
 
         val payload = TestNotificationRequest(
             data = TestNotificationRequest.Data(

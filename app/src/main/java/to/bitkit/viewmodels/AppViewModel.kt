@@ -1,6 +1,5 @@
 package to.bitkit.viewmodels
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,15 +8,19 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -30,6 +33,7 @@ import to.bitkit.services.lightningParam
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.Scanner
@@ -149,7 +153,7 @@ class AppViewModel @Inject constructor(
                         is Event.PaymentFailed -> Unit
                     }
                 } catch (e: Exception) {
-                    Log.e(LDK, "Ldk event handler error", e)
+                    Logger.error("LDK event handler error", e)
                 }
             }
         }
@@ -260,7 +264,7 @@ class AppViewModel @Inject constructor(
 
     private fun onPasteInvoice(data: String) {
         if (data.isBlank()) {
-            Log.e(APP, "No data in clipboard")
+            Logger.error("No data in clipboard")
             return
         }
         viewModelScope.launch {
@@ -281,7 +285,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Log.e(APP, "Failed to decode input data", it) }
+            .onFailure { Logger.error("Failed to decode input data", it) }
             .getOrNull()
         this.scan = scan
 
@@ -305,7 +309,7 @@ class AppViewModel @Inject constructor(
                 }
                 val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } != null
                 if (isLnInvoiceWithAmount) {
-                    Log.i(APP, "Found amount in invoice, proceeding with payment")
+                    Logger.info("Found amount in invoice, proceeding with payment")
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -314,7 +318,7 @@ class AppViewModel @Inject constructor(
                     }
                     return
                 }
-                Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
+                Logger.info("No amount found in invoice, proceeding entering amount manually")
                 resetAmountInput()
 
                 if (isMainScanner) {
@@ -353,7 +357,7 @@ class AppViewModel @Inject constructor(
                     )
                 }
                 if (invoice.amountSatoshis > 0uL) {
-                    Log.i(APP, "Found amount in invoice, proceeding with payment")
+                    Logger.info("Found amount in invoice, proceeding with payment")
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -361,7 +365,7 @@ class AppViewModel @Inject constructor(
                         setSendEffect(SendEffect.NavigateToReview)
                     }
                 } else {
-                    Log.i(APP, "No amount found in invoice, proceeding entering amount manually")
+                    Logger.info("No amount found in invoice, proceeding entering amount manually")
                     resetAmountInput()
 
                     if (isMainScanner) {
@@ -381,7 +385,7 @@ class AppViewModel @Inject constructor(
             }
 
             else -> {
-                Log.w(APP, "Unhandled invoice type: $scan")
+                Logger.warn("Unhandled invoice type: $scan")
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = "Unsupported",
@@ -412,7 +416,7 @@ class AppViewModel @Inject constructor(
                     val result = sendOnchain(validatedAddress.address, amount)
                     if (result.isSuccess) {
                         val txId = result.getOrNull()
-                        Log.i(APP, "Onchain send result txid: $txId")
+                        Logger.info("Onchain send result txid: $txId")
                         setSendEffect(
                             SendEffect.PaymentSuccess(
                                 NewTransactionSheetDetails(
@@ -425,7 +429,7 @@ class AppViewModel @Inject constructor(
                         resetSendState()
                     } else {
                         // TODO error UI
-                        Log.e(APP, "Error sending onchain payment", result.exceptionOrNull())
+                        Logger.error("Error sending onchain payment", result.exceptionOrNull())
                     }
                 }
 
@@ -438,12 +442,12 @@ class AppViewModel @Inject constructor(
                     val result = sendLightning(bolt11, paymentAmount)
                     if (result.isSuccess) {
                         val paymentHash = result.getOrNull()
-                        Log.i(APP, "Lightning send result payment hash: $paymentHash")
+                        Logger.info("Lightning send result payment hash: $paymentHash")
                         setSendEffect(SendEffect.PaymentSuccess())
                         resetSendState()
                     } else {
                         // TODO error UI
-                        Log.e(APP, "Error sending lightning payment", result.exceptionOrNull())
+                        Logger.error("Error sending lightning payment", result.exceptionOrNull())
                     }
                 }
             }

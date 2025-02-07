@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.transfer
 
-import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -32,7 +31,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -41,6 +39,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.onLongPress
+import to.bitkit.utils.Logger
 import uniffi.bitkitcore.IBtOrder
 
 @Composable
@@ -155,10 +154,10 @@ private fun ConfirmView(
                 scope.launch {
                     try {
                         blocktank.open(orderId = state.order.id)
-                        Log.i(APP, "Channel opened for order ${state.order.id}")
+                        Logger.info("Channel opened for order ${state.order.id}")
                         app.toast(Toast.ToastType.SUCCESS, "Success", "Manual open success")
                     } catch (e: Throwable) {
-                        Log.e(APP, "Error opening channel for order ${state.order.id}", e)
+                        Logger.error("Error opening channel for order ${state.order.id}", e)
                         app.toast(e)
                     }
                 }

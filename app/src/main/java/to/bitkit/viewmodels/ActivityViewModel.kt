@@ -1,6 +1,5 @@
 package to.bitkit.viewmodels
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,10 +9,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import to.bitkit.env.Tag.APP
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
+import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import javax.inject.Inject
@@ -121,7 +120,7 @@ class ActivityListViewModel @Inject constructor(
                 updateFilteredActivities()
                 updateAvailableTags()
             } catch (e: Exception) {
-                Log.e(APP, "Failed to sync activities", e)
+                Logger.error("Failed to sync activities", e)
             }
         }
     }
@@ -136,7 +135,7 @@ class ActivityListViewModel @Inject constructor(
                 maxDate = _endDate.value?.toULong(),
             )
         } catch (e: Exception) {
-            Log.e(APP, "Failed to filter activities", e)
+            Logger.error("Failed to filter activities", e)
         }
     }
 
@@ -145,7 +144,7 @@ class ActivityListViewModel @Inject constructor(
             try {
                 _availableTags.value = coreService.activity.allPossibleTags()
             } catch (e: Exception) {
-                Log.e(APP, "Failed to get available tags", e)
+                Logger.error("Failed to get available tags", e)
                 _availableTags.value = emptyList()
             }
         }
@@ -173,7 +172,7 @@ class ActivityListViewModel @Inject constructor(
                     syncState()
                 }
             } catch (e: Exception) {
-                Log.e(APP, "Failed to sync ldk-node payments", e)
+                Logger.error("Failed to sync ldk-node payments", e)
             }
         }
     }
@@ -184,7 +183,7 @@ class ActivityListViewModel @Inject constructor(
                 coreService.activity.appendTags(toActivityId = activityId, tags = tags)
                 syncState()
             } catch (e: Exception) {
-                Log.e(APP, "Failed to add tags to activity", e)
+                Logger.error("Failed to add tags to activity", e)
             }
         }
     }
@@ -195,7 +194,7 @@ class ActivityListViewModel @Inject constructor(
                 coreService.activity.dropTags(fromActivityId = activityId, tags = tags)
                 syncState()
             } catch (e: Exception) {
-                Log.e(APP, "Failed to remove tags from activity", e)
+                Logger.error("Failed to remove tags from activity", e)
             }
         }
     }
@@ -204,7 +203,7 @@ class ActivityListViewModel @Inject constructor(
         return try {
             coreService.activity.get(tags = listOf(tag))
         } catch (e: Exception) {
-            Log.e(APP, "Failed get activities by tag", e)
+            Logger.error("Failed get activities by tag", e)
             emptyList()
         }
     }

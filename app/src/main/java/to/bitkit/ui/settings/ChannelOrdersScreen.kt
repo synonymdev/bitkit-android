@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings
 
-import android.util.Log
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
@@ -43,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.formatWithDotSeparator
 import to.bitkit.ui.Routes
 import to.bitkit.ui.blocktankViewModel
@@ -52,6 +49,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.utils.Logger
 import uniffi.bitkitcore.BtBolt11InvoiceState
 import uniffi.bitkitcore.BtOrderState
 import uniffi.bitkitcore.BtOrderState2
@@ -335,12 +333,12 @@ private fun OrderDetailView(
                         text = "Open Channel",
                         onClick = {
                             coroutineScope.launch {
-                                Log.i(APP, "Opening channel for order ${order.id}")
+                                Logger.info("Opening channel for order ${order.id}")
                                 try {
                                     blocktank.open(orderId = order.id)
-                                    Log.i(APP, "Channel opened for order ${order.id}")
+                                    Logger.info("Channel opened for order ${order.id}")
                                 } catch (e: Throwable) {
-                                    Log.e(APP, "Error opening channel for order ${order.id}", e)
+                                    Logger.error("Error opening channel for order ${order.id}", e)
                                 }
                             }
                         },

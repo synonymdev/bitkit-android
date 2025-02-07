@@ -1,7 +1,6 @@
 package to.bitkit.fcm
 
 import android.content.Context
-import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -16,7 +15,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.di.json
-import to.bitkit.env.Tag.LDK
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -28,8 +26,9 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirme
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
-import to.bitkit.utils.withPerformanceLogging
 import to.bitkit.ui.pushNotification
+import to.bitkit.utils.Logger
+import to.bitkit.utils.withPerformanceLogging
 import kotlin.time.Duration.Companion.minutes
 
 @HiltWorker
@@ -52,15 +51,15 @@ class WakeNodeWorker @AssistedInject constructor(
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
-        Log.d(LDK, "Node wakeup from notification…")
+        Logger.debug("Node wakeup from notification…")
 
         notificationType = workerParams.inputData.getString("type")?.let { BlocktankNotificationType.valueOf(it) }
         notificationPayload = workerParams.inputData.getString("payload")?.let {
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Log.d(LDK, "${this::class.simpleName} notification type: $notificationType")
-        Log.d(LDK, "${this::class.simpleName} notification payload: $notificationPayload")
+        Logger.debug("${this::class.simpleName} notification type: $notificationType")
+        Logger.debug("${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
             withPerformanceLogging {
@@ -74,13 +73,13 @@ class WakeNodeWorker @AssistedInject constructor(
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
                     if (orderId == null) {
-                        Log.e(LDK, "Missing orderId")
+                        Logger.error("Missing orderId")
                     } else {
                         try {
-                            Log.i(LDK, "Open channel request for order $orderId")
+                            Logger.info("Open channel request for order $orderId")
                             coreService.blocktank.open(orderId = orderId)
                         } catch (e: Exception) {
-                            Log.e(LDK, "failed to open channel", e)
+                            Logger.error("failed to open channel", e)
                             self.bestAttemptContent?.title = "Channel open failed"
                             self.bestAttemptContent?.body = e.message ?: "Unknown error"
                             self.deliver()
@@ -95,7 +94,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
             self.bestAttemptContent?.title = "Lightning error"
             self.bestAttemptContent?.body = reason
-            Log.e(LDK, "Lightning error", e)
+            Logger.error("Lightning error", e)
             self.deliver()
 
             return Result.failure(workDataOf("Reason" to reason))
@@ -190,7 +189,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
         bestAttemptContent?.run {
             pushNotification(title, body, context = appContext)
-            Log.i(LDK, "Delivered notification")
+            Logger.info("Delivered notification")
         }
 
         deliverSignal.complete(Unit)

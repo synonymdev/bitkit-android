@@ -1,15 +1,14 @@
 package to.bitkit.async
 
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.callerName
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
@@ -31,7 +30,7 @@ enum class ServiceQueue {
                     block()
                 }
             } catch (e: Exception) {
-                Log.e(APP, "ServiceQueue.$name error", e)
+                Logger.error("ServiceQueue.$name error", e)
                 throw AppError(e)
             }
         }
@@ -48,14 +47,14 @@ enum class ServiceQueue {
                     block()
                 }
             } catch (e: Exception) {
-                Log.e(APP, "ServiceQueue.$name error", e)
+                Logger.error("ServiceQueue.$name error", e)
                 throw AppError(e)
             }
         }
     }
 
     companion object {
-        private fun dispatcher(name: String): ExecutorCoroutineDispatcher {
+        fun dispatcher(name: String): ExecutorCoroutineDispatcher {
             val threadFactory = ThreadFactory { Thread(it, name).apply { priority = Thread.NORM_PRIORITY - 1 } }
             return Executors.newSingleThreadExecutor(threadFactory).asCoroutineDispatcher()
         }

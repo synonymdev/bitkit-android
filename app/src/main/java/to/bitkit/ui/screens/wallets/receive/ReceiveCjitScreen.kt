@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,13 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.formatWithDotSeparator
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.walletViewModel
+import to.bitkit.utils.Logger
 
 @Composable
 fun ReceiveCjitScreen(
@@ -134,8 +133,8 @@ fun ReceiveCjitScreen(
                             val entry = blocktank.createCjit(amountSats = amountValue, description = "Bitkit")
                             onCjitCreated(entry.invoice.request)
                         } catch (e: Exception) {
+                            Logger.error("Failed to create cjit", e)
                             app.toast(e)
-                            Log.e(APP, "Failed to create cjit", e)
                         } finally {
                             isCreatingInvoice = false
                         }

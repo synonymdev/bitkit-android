@@ -1,7 +1,6 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -30,9 +29,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.DEV
-import to.bitkit.env.Tag.LSP
 import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
@@ -45,6 +41,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -114,7 +111,7 @@ class WalletViewModel @Inject constructor(
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
-                Log.e(APP, "Node startup error", error)
+                Logger.error("Node startup error", error)
                 throw error
             }
 
@@ -124,7 +121,7 @@ class WalletViewModel @Inject constructor(
             try {
                 lightningService.connectToTrustedPeers()
             } catch (e: Throwable) {
-                Log.e(APP, "Failed to connect to trusted peers", e)
+                Logger.error("Failed to connect to trusted peers", e)
             }
 
             launch(bgDispatcher) { refreshBip21() }
@@ -142,12 +139,12 @@ class WalletViewModel @Inject constructor(
             .filter { _nodeLifecycleState == NodeLifecycleState.Running }
             .collect {
                 runCatching { sync() }
-                Log.v(APP, "App state synced with ldk-node.")
+                Logger.verbose("App state synced with ldk-node.")
             }
     }
 
     private suspend fun observeDbConfig() {
-        db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") }
+        db.configDao().getAll().collect { Logger.info("Database config sync: $it") }
     }
 
     private var isSyncingWallet = false
@@ -156,7 +153,7 @@ class WalletViewModel @Inject constructor(
         syncState()
 
         if (isSyncingWallet) {
-            Log.w(APP, "Sync already in progress, waiting for existing sync.")
+            Logger.warn("Sync already in progress, waiting for existing sync.")
             while (isSyncingWallet) {
                 delay(500)
             }
@@ -224,12 +221,15 @@ class WalletViewModel @Inject constructor(
         val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
         if (cachedToken == token) {
-            Log.d(LSP, "Skipped registering for notifications, current device token already registered")
+            Logger.debug("Skipped registering for notifications, current device token already registered")
             return
         }
 
-        runCatching { blocktankServiceOld.registerDevice(token) }
-            .onFailure { Log.e(LSP, "Failed to register device for notifications", it) }
+        try {
+            blocktankServiceOld.registerDevice(token)
+        } catch (e: Throwable) {
+            Logger.error("Failed to register device for notifications", e)
+        }
     }
 
     private val incomingLightningCapacitySats: ULong?
@@ -381,7 +381,7 @@ class WalletViewModel @Inject constructor(
     fun debugDb() {
         viewModelScope.launch {
             db.configDao().getAll().collect {
-                Log.d(DEV, "${it.count()} entities in DB: $it")
+                Logger.debug("${it.count()} entities in DB: $it")
             }
         }
     }
@@ -389,7 +389,7 @@ class WalletViewModel @Inject constructor(
     fun debugFcmToken() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-            Log.d(DEV, "FCM registration token: $token")
+            Logger.debug("FCM registration token: $token")
         }
     }
 
@@ -398,7 +398,7 @@ class WalletViewModel @Inject constructor(
             val key = "test"
             if (keychain.exists(key)) {
                 val value = keychain.loadString(key)
-                Log.d(DEV, "Keychain entry: $key = $value")
+                Logger.debug("Keychain entry: $key = $value")
                 keychain.delete(key)
             }
             keychain.saveString(key, "testValue")
@@ -408,7 +408,7 @@ class WalletViewModel @Inject constructor(
     fun debugMnemonic() {
         viewModelScope.launch {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-            Log.d(DEV, "Mnemonic: \n$mnemonic")
+            Logger.debug(mnemonic)
         }
     }
 
@@ -423,9 +423,9 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             try {
                 val info = coreService.blocktank.info()
-                Log.d(APP, "Blocktank info: $info")
+                Logger.debug("Blocktank info: $info")
             } catch (e: Throwable) {
-                Log.e(APP, "Error getting Blocktank info:", e)
+                Logger.error("Error getting Blocktank info:", e)
                 ToastEventBus.send(e)
             }
         }
