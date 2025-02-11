@@ -17,25 +17,25 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.secondaryColor
 import to.bitkit.viewmodels.PrimaryDisplay
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.PaymentState
@@ -97,17 +97,14 @@ fun ActivityRow(
             }
         }
         val onchainStatus = when {
-            txType == PaymentType.SENT -> if (confirmed == true) "Sent" else "Sending..."
-            else -> if (confirmed == true) "Received" else "Receiving..."
+            txType == PaymentType.SENT -> if (confirmed == true) stringResource(R.string.wallet__activity_sent) else "Sending..."
+            else -> if (confirmed == true) stringResource(R.string.wallet__activity_received) else "Receiving..."
         }
 
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(
-                text = if (isLightning) lightningStatus else onchainStatus,
-                fontWeight = FontWeight.Bold,
-            )
+            BodyMSB(text = if (isLightning) lightningStatus else onchainStatus)
             // TODO timestamp: if today - only hour
             val subtitleText = when (item) {
                 is Activity.Lightning -> {
@@ -116,10 +113,9 @@ fun ActivityRow(
 
                 else -> timestamp.toActivityItemDate()
             }
-            Text(
+            CaptionB(
                 text = subtitleText,
                 color = Colors.White64,
-                style = MaterialTheme.typography.bodySmall,
             )
         }
         Spacer(modifier = Modifier.weight(1f))
@@ -144,34 +140,32 @@ fun ActivityRow(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            Text(
+                            BodyMSB(
                                 text = amountPrefix,
-                                color = secondaryColor,
+                                color = Colors.White64,
                             )
-                            Text(text = btcComponents.value)
+                            BodyMSB(text = btcComponents.value)
                         }
-                        Text(
+                        CaptionB(
                             text = "${converted.symbol} ${converted.formatted}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryColor,
+                            color = Colors.White64,
                         )
                     } else {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            Text(
+                            BodyMSB(
                                 text = amountPrefix,
-                                color = secondaryColor,
+                                color = Colors.White64,
                             )
-                            Text(text = "${converted.symbol} ${converted.formatted}")
+                            BodyMSB(text = "${converted.symbol} ${converted.formatted}")
                         }
 
                         val btcComponents = converted.bitcoinDisplay(displayUnit)
-                        Text(
+                        CaptionB(
                             text = btcComponents.value,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryColor,
+                            color = Colors.White64,
                         )
                     }
                 }

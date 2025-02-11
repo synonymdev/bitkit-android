@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -68,7 +69,7 @@ fun CreateWalletWithPassphraseScreen(
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                        contentDescription = stringResource(R.string.back),
+                        contentDescription = stringResource(R.string.common__back),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -113,25 +114,11 @@ fun CreateWalletWithPassphraseScreen(
                     .padding(top = 4.dp)
             )
             Spacer(modifier = Modifier.height(32.dp))
-            Button(
+            PrimaryButton(
+                text = stringResource(R.string.onboarding__create_new_wallet),
                 onClick = { onCreateClick(bip39Passphrase) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Colors.White16,
-                    disabledContainerColor = Color.Transparent,
-                    contentColor = Colors.White,
-                    disabledContentColor = Colors.White32,
-                ),
                 enabled = bip39Passphrase.isNotBlank(),
-                shape = RoundedCornerShape(30.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.onboarding__create_new_wallet),
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                )
-            }
+            )
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

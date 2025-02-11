@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -63,12 +64,12 @@ fun OnboardingSlidesScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp)
             .systemBarsPadding()
     ) {
         HorizontalPager(
             state = pagerState,
             pageSpacing = 32.dp,
+            contentPadding = PaddingValues(horizontal = 32.dp),
             modifier = Modifier.fillMaxSize()
         ) { page ->
             when (page) {
@@ -211,10 +212,7 @@ fun OnboardingTab(
             )
             disclaimerText?.let {
                 Spacer(modifier = Modifier.height(6.5.dp))
-                Footnote(
-                    text = it,
-                    color = Colors.White32,
-                )
+                Footnote(text = it)
             }
         }
     }

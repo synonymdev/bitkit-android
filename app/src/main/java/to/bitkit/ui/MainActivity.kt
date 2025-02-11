@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
                                             walletViewModel.setWalletExistsState()
+                                            appViewModel.setShowEmptyState(true)
                                         } catch (e: Exception) {
                                             appViewModel.toast(e)
                                         }
@@ -98,6 +99,7 @@ class MainActivity : ComponentActivity() {
                                             walletViewModel.isRestoringWallet = true
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                             walletViewModel.setWalletExistsState()
+                                            appViewModel.setShowEmptyState(false)
                                         } catch (e: Exception) {
                                             appViewModel.toast(e)
                                         }
@@ -114,6 +116,7 @@ class MainActivity : ComponentActivity() {
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                                             walletViewModel.setWalletExistsState()
+                                            appViewModel.setShowEmptyState(true)
                                         } catch (e: Exception) {
                                             appViewModel.toast(e)
                                         }

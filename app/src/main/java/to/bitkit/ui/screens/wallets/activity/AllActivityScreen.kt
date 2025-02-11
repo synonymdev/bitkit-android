@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -13,7 +14,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.DarkModePreview
@@ -151,20 +153,19 @@ fun ActivityListWithHeaders(
                 if (showFooter) {
                     item {
                         if (items.isEmpty()) {
-                            Text("No activity", Modifier.padding(16.dp))
+                            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
                         } else {
-                            TextButton(
+                            TertiaryButton(
+                                text = stringResource(R.string.wallet__activity_show_all),
                                 onClick = onAllActivityButtonClick,
-                                modifier = Modifier.padding(8.dp)
-                            ) {
-                                Text("Show All Activity")
-                            }
+                                modifier = Modifier.wrapContentWidth().padding(top = 8.dp)
+                            )
                         }
                     }
                 }
             }
         } else {
-            Text("No activity", Modifier.padding(16.dp))
+            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
         }
     }
 }
@@ -194,14 +195,13 @@ fun ActivityList(
             }
             item {
                 if (items.isEmpty()) {
-                    Text("No activity", Modifier.padding(16.dp))
+                    BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
                 } else {
-                    TextButton(
+                    TertiaryButton(
+                        text = stringResource(R.string.wallet__activity_show_all),
                         onClick = onAllActivityClick,
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        Text("Show All Activity")
-                    }
+                        modifier = Modifier.wrapContentWidth().padding(top = 8.dp)
+                    )
                 }
             }
         }
@@ -210,7 +210,7 @@ fun ActivityList(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("No activity available.", Modifier.padding(16.dp))
+            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
         }
     }
 }

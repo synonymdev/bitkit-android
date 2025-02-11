@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.bitkit.ui.components.BodySSB
 import kotlin.math.max
 
 @Composable
@@ -77,7 +78,7 @@ fun SwipeButton(
             )
 
             // Text in the middle
-            Text(
+            BodySSB(
                 text = "Swipe To Pay",
                 modifier = Modifier
                     .align(Alignment.Center)

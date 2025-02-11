@@ -11,25 +11,22 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.navigateToSettings
 
 @Composable
 fun AppScaffold(
     navController: NavController,
-    viewModel: WalletViewModel,
     titleText: String,
+    onRefresh: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Scaffold(
@@ -37,14 +34,10 @@ fun AppScaffold(
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
                 title = {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
+                    Title(text = titleText)
                 },
                 actions = {
-                    IconButton(viewModel::refreshState) {
+                    IconButton(onRefresh) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.sync),

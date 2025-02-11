@@ -17,6 +17,7 @@ import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
@@ -38,6 +39,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
+    private val settingsStore: SettingsStore = mock()
 
     private lateinit var sut: WalletViewModel
 
@@ -71,6 +73,7 @@ class WalletViewModelTest : BaseUnitTest() {
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
+            settingsStore = settingsStore,
         )
     }
 

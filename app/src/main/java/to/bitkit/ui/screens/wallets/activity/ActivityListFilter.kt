@@ -27,7 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import to.bitkit.R
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -60,7 +62,7 @@ fun ActivityListFilter(
             TextField(
                 value = searchText,
                 onValueChange = { viewModel.setSearchText(it) },
-                placeholder = { Text(text = "Search") },
+                placeholder = { Text(text = stringResource(R.string.common__search)) },
                 modifier = Modifier
                     .weight(1f)
                     .padding(0.dp),

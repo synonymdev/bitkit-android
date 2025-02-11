@@ -158,7 +158,7 @@ private fun SendOptionsContent(
         }
 
         SendButton(
-            label = stringResource(R.string.scan_qr),
+            label = stringResource(R.string.wallet__recipient_scan),
             icon = Icons.Default.CenterFocusWeak,
         ) {
             onEvent(SendEvent.Scan)

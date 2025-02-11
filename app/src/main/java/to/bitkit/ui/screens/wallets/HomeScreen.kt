@@ -13,15 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CurrencyBitcoin
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,7 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -38,14 +36,14 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
-import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.activityListViewModel
-import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
@@ -57,8 +55,11 @@ import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
-import to.bitkit.ui.theme.Orange500
-import to.bitkit.ui.theme.Purple500
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun HomeScreen(
@@ -99,11 +100,14 @@ fun HomeScreen(
                 startDestination = HomeRoutes.Home
             ) {
                 composable<HomeRoutes.Home> {
-                    HomeContentView(rootNavController, walletNavController, walletViewModel)
+                    HomeContentView(
+                        rootNavController = rootNavController,
+                        walletNavController = walletNavController,
+                        onRefresh = walletViewModel::refreshState,
+                    )
                 }
                 composable<HomeRoutes.Savings> {
                     SavingsWalletScreen(
-                        viewModel = walletViewModel,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferClick = { rootNavController.navigateToTransfer() },
@@ -112,7 +116,6 @@ fun HomeScreen(
                 }
                 composable<HomeRoutes.Spending> {
                     SpendingWalletScreen(
-                        viewModel = walletViewModel,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onBackCLick = { walletNavController.popBackStack() }
@@ -136,53 +139,75 @@ fun HomeScreen(
 private fun HomeContentView(
     rootNavController: NavController,
     walletNavController: NavController,
-    walletViewModel: WalletViewModel,
+    onRefresh: () -> Unit,
 ) {
-    AppScaffold(rootNavController, walletViewModel, stringResource(R.string.app_name)) {
+    AppScaffold(
+        navController = rootNavController,
+        titleText = "Your Name",
+        onRefresh = onRefresh,
+    ) {
         RequestNotificationPermissions()
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-        ) {
-            val balances = LocalBalances.current
-            BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(32.dp))
-            Row(
+        val balances = LocalBalances.current
+        val app = appViewModel ?: return@AppScaffold
+        val showEmptyStateSetting by app.showEmptyState.collectAsState()
+        val showEmptyState by remember(balances.totalSats, showEmptyStateSetting) {
+            derivedStateOf {
+                showEmptyStateSetting && balances.totalSats == 0uL
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
+                    .padding(horizontal = 16.dp)
+                    .fillMaxSize()
             ) {
-                WalletBalanceView(
-                    title = stringResource(R.string.label_savings),
-                    sats = balances.totalOnchainSats.toLong(),
-                    icon = Icons.Default.CurrencyBitcoin,
-                    iconColor = Orange500,
+                BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
+                if (!showEmptyState) {
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                    ) {
+                        WalletBalanceView(
+                            title = stringResource(R.string.wallet__savings__title),
+                            sats = balances.totalOnchainSats.toLong(),
+                            icon = painterResource(id = R.drawable.ic_btc_circle),
+                            modifier = Modifier
+                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Savings) })
+                                .padding(vertical = 4.dp)
+                        )
+                        VerticalDivider()
+                        WalletBalanceView(
+                            title = stringResource(R.string.wallet__spending__title),
+                            sats = balances.totalLightningSats.toLong(),
+                            icon = painterResource(id = R.drawable.ic_ln_circle),
+                            modifier = Modifier
+                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Spending) })
+                                .padding(vertical = 4.dp)
+                                .padding(start = 16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    val activity = activityListViewModel ?: return@Column
+                    val latestActivities by activity.latestActivities.collectAsState()
+                    ActivityList(
+                        items = latestActivities,
+                        onAllActivityClick = { rootNavController.navigateToAllActivity() },
+                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                    )
+                }
+            }
+            if (showEmptyState) {
+                EmptyStateView(
+                    text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
+                    onClose = { app.setShowEmptyState(false) },
                     modifier = Modifier
-                        .clickable(onClick = { walletNavController.navigate(HomeRoutes.Savings) })
-                        .padding(vertical = 4.dp),
-                )
-                VerticalDivider()
-                WalletBalanceView(
-                    title = stringResource(R.string.label_spending),
-                    sats = balances.totalLightningSats.toLong(),
-                    icon = Icons.Default.Bolt,
-                    iconColor = Purple500,
-                    modifier = Modifier
-                        .clickable(onClick = { walletNavController.navigate(HomeRoutes.Spending) })
-                        .padding(4.dp),
+                        .align(Alignment.BottomCenter)
                 )
             }
-            Spacer(modifier = Modifier.height(24.dp))
-            LabelText("ACTIVITY")
-            Spacer(modifier = Modifier.height(16.dp))
-            val activity = activityListViewModel ?: return@AppScaffold
-            val latestActivities by activity.latestActivities.collectAsState()
-            ActivityList(
-                items = latestActivities,
-                onAllActivityClick = { rootNavController.navigateToAllActivity() },
-                onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-            )
         }
     }
 }
@@ -211,5 +236,16 @@ object HomeRoutes {
 
     @Serializable
     data object Spending
+}
 
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun HomeContentViewPreview() {
+    AppThemeSurface {
+        HomeContentView(
+            rootNavController = rememberNavController(),
+            walletNavController = rememberNavController(),
+            onRefresh = {},
+        )
+    }
 }

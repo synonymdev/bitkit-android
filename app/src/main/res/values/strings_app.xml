@@ -35,9 +35,7 @@
     <string name="label_invoice">INVOICE</string>
     <string name="label_invoice_expiration">INVOICE EXPIRATION</string>
     <string name="label_note">NOTE</string>
-    <string name="label_savings">SAVINGS</string>
     <string name="label_speed">SPEED AND FEE</string>
-    <string name="label_spending">SPENDING</string>
     <string name="label_status">STATUS</string>
     <string name="label_tags">TAGS</string>
     <string name="label_to">TO</string>
@@ -52,12 +50,8 @@
     <string name="peers">Peers</string>
     <string name="pending">Pending</string>
     <string name="ready">Ready</string>
-    <string name="receive">Receive</string>
     <string name="sat">sat</string>
     <string name="savings">Savings</string>
-    <string name="scan">Scan</string>
-    <string name="scan_qr">Scan QR</string>
-    <string name="send">Send</string>
     <string name="settings">Settings</string>
     <string name="spending">Spending</string>
     <string name="status">Status</string>

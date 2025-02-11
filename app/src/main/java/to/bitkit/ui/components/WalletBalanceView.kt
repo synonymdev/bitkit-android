@@ -4,29 +4,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.PrimaryDisplay
 
 @Composable
 fun RowScope.WalletBalanceView(
     title: String,
     sats: Long,
-    icon: ImageVector,
-    iconColor: Color,
+    icon: Painter,
     modifier: Modifier,
 ) {
     val currency = currencyViewModel ?: return
@@ -38,10 +38,11 @@ fun RowScope.WalletBalanceView(
             .weight(1f)
             .then(modifier)
     ) {
-        LabelText(
+        Text13Up(
             text = title,
-            modifier = Modifier.padding(bottom = 4.dp)
+            color = Colors.White64,
         )
+        Spacer(modifier = Modifier.height(8.dp))
         converted?.let { converted ->
             if (primaryDisplay == PrimaryDisplay.BITCOIN) {
                 val btcComponents = converted.bitcoinDisplay(displayUnit)
@@ -50,16 +51,14 @@ fun RowScope.WalletBalanceView(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
-                        imageVector = icon,
+                        painter = icon,
                         contentDescription = title,
-                        tint = iconColor,
+                        tint = Color.Unspecified,
                         modifier = Modifier
-                            .size(20.dp)
+                            .padding(end = 4.dp)
+                            .size(24.dp)
                     )
-                    Text(
-                        text = btcComponents.value,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+                    BodyMSB(text = btcComponents.value)
                 }
             } else {
                 Row(
@@ -67,21 +66,18 @@ fun RowScope.WalletBalanceView(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
-                        imageVector = icon,
+                        painter = icon,
                         contentDescription = title,
-                        tint = iconColor,
+                        tint = Color.Unspecified,
                         modifier = Modifier
-                            .size(20.dp)
+                            .padding(end = 4.dp)
+                            .size(24.dp)
                     )
-                    Text(
+                    BodyMSB(
                         text = converted.symbol,
-                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.alpha(0.6f)
                     )
-                    Text(
-                        text = converted.formatted,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
+                    BodyMSB(text = converted.formatted)
                 }
             }
         }

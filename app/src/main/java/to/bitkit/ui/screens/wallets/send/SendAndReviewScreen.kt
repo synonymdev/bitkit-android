@@ -12,12 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
@@ -25,16 +22,18 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ext.truncate
-import to.bitkit.viewmodels.SendEvent
-import to.bitkit.viewmodels.SendMethod
-import to.bitkit.viewmodels.SendUiState
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.components.SwipeButton
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendMethod
+import to.bitkit.viewmodels.SendUiState
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.NetworkType
 import java.time.Instant
@@ -56,26 +55,25 @@ fun SendAndReviewScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
         ) {
-            LabelText(text = stringResource(R.string.label_amount))
-            Text(
+            Caption13Up(text = stringResource(R.string.label_amount), color = Colors.White64)
+            Display(
                 text = moneyString(uiState.amount.toLong()),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LabelText(
+            Caption13Up(
                 text = stringResource(
-                    if (uiState.payMethod == SendMethod.ONCHAIN) R.string.label_to else R.string.label_invoice
-                )
+                    if (uiState.payMethod == SendMethod.ONCHAIN) R.string.wallet__send_to else R.string.wallet__send_invoice
+                ),
+                color = Colors.White64,
             )
             val destination = when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
                 SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
             }
-            Text(text = destination)
-
+            Spacer(modifier = Modifier.height(8.dp))
+            BodySSB(text = destination)
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
             Row(
@@ -90,10 +88,11 @@ fun SendAndReviewScreen(
                             .clickable { onEvent(SendEvent.SpeedAndFee) }
                             .padding(top = 16.dp)
                     ) {
-                        LabelText(text = stringResource(R.string.label_speed))
-                        Text(text = "Todo Normal (₿ 210)")
+                        Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BodySSB(text = "Todo Normal (₿ 210)")
                         Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
                     Column(
                         modifier = Modifier
@@ -102,10 +101,11 @@ fun SendAndReviewScreen(
                             .clickable { onEvent(SendEvent.SpeedAndFee) }
                             .padding(top = 16.dp)
                     ) {
-                        LabelText(text = stringResource(R.string.label_confirms_in))
-                        Text(text = "Todo ± 20-60 minutes")
+                        Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BodySSB(text = "Todo ± 20-60 minutes")
                         Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
                 } else {
                     Column(
@@ -114,10 +114,11 @@ fun SendAndReviewScreen(
                             .weight(1f)
                             .padding(top = 16.dp)
                     ) {
-                        LabelText(text = stringResource(R.string.label_speed))
-                        Text(text = "Instant (±$0.01)")
+                        Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BodySSB(text = "Instant (±$0.01)")
                         Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
                     uiState.decodedInvoice?.expirySeconds?.let { expirySeconds ->
                         Column(
@@ -129,10 +130,14 @@ fun SendAndReviewScreen(
                             val invoiceExpiryTimestamp = expirySeconds.let {
                                 Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
                             }
-                            LabelText(text = stringResource(R.string.label_invoice_expiration))
-                            Text(text = invoiceExpiryTimestamp)
+                            Caption13Up(
+                                text = stringResource(R.string.label_invoice_expiration),
+                                color = Colors.White64
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            BodySSB(text = invoiceExpiryTimestamp)
                             Spacer(modifier = Modifier.weight(1f))
-                            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                         }
                     }
                 }
@@ -140,17 +145,18 @@ fun SendAndReviewScreen(
 
             uiState.decodedInvoice?.description?.let { description ->
                 Column {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LabelText(text = stringResource(R.string.label_note))
-                    Text(text = description)
+                    Caption13Up(text = stringResource(R.string.label_note), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = description)
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
             }
 
             Column {
                 Spacer(modifier = Modifier.height(16.dp))
-                LabelText(text = stringResource(R.string.label_tags))
-                Text(text = "Todo")
+                Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
+                Spacer(modifier = Modifier.height(8.dp))
+                BodySSB(text = "Todo")
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -166,7 +172,6 @@ fun SendAndReviewScreen(
 }
 
 @Suppress("SpellCheckingInspection")
-@LightModePreview
 @DarkModePreview
 @Composable
 private fun SendAndReviewPreview() {

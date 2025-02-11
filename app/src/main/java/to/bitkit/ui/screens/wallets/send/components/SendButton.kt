@@ -24,8 +24,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun SendButton(
@@ -48,7 +48,7 @@ fun SendButton(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = Colors.Brand,
             modifier = Modifier.size(28.dp),
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -57,7 +57,6 @@ fun SendButton(
     }
 }
 
-@LightModePreview
 @DarkModePreview
 @Composable
 private fun SendButtonPreview() {

@@ -25,7 +25,7 @@ val Purple500 = Color(0xFF9C27B0)
 val Purple700 = Color(0xFFB95CE8)
 
 val secondaryColor: Color
-    @Composable get() = MaterialTheme.colorScheme.onBackground.copy(alpha = ContentAlpha.medium)
+    @Composable get() = Colors.White64
 
 private object ColorPalette {
     @Stable

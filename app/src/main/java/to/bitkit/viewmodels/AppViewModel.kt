@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Tag.APP
 import to.bitkit.env.Tag.LDK
@@ -40,6 +41,7 @@ class AppViewModel @Inject constructor(
     private val scannerService: ScannerService,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -54,6 +56,14 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
+    private val _showEmptyState = MutableStateFlow(false)
+    val showEmptyState = _showEmptyState.asStateFlow()
+    fun setShowEmptyState(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setShowEmptyState(value)
+        }
+    }
+
     private var scan: Scanner? = null
 
     init {
@@ -67,8 +77,17 @@ class AppViewModel @Inject constructor(
             splashVisible = false
         }
 
+        observeSettings()
         observeLdkNodeEvents()
         observeSendEvents()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsStore.showEmptyState.collect {
+                _showEmptyState.value = it
+            }
+        }
     }
 
     private fun observeLdkNodeEvents() {
@@ -540,7 +559,7 @@ class AppViewModel @Inject constructor(
     fun toast(
         type: Toast.ToastType,
         title: String,
-        description: String,
+        description: String? = null,
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
     ) {
