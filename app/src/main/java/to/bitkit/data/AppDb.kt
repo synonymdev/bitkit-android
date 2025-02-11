@@ -16,19 +16,16 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
 import to.bitkit.data.entities.ConfigEntity
-import to.bitkit.data.entities.OrderEntity
 import to.bitkit.env.Env
 
 @Database(
     entities = [
         ConfigEntity::class,
-        OrderEntity::class,
     ],
     version = 1,
 )
 abstract class AppDb : RoomDatabase() {
     abstract fun configDao(): ConfigDao
-    abstract fun ordersDao(): OrdersDao
 
     companion object {
         private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.name.lowercase()}.sqlite"
@@ -47,6 +44,7 @@ abstract class AppDb : RoomDatabase() {
         private fun buildDatabase(context: Context): AppDb {
             return Room.databaseBuilder(context, AppDb::class.java, DB_NAME)
                 .setJournalMode(JournalMode.TRUNCATE)
+                .fallbackToDestructiveMigration() // TODO remove in prod
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -56,7 +54,6 @@ abstract class AppDb : RoomDatabase() {
                         } catch (_: Exception) {
                             // ignore - occurs in ui tests
                         }
-
                     }
                 })
                 .build()
@@ -87,13 +84,4 @@ interface ConfigDao {
 
     @Upsert
     suspend fun upsert(vararg entities: ConfigEntity)
-}
-
-@Dao
-interface OrdersDao {
-    @Query("SELECT * FROM orders")
-    fun getAll(): Flow<List<OrderEntity>>
-
-    @Upsert
-    suspend fun upsert(vararg entities: OrderEntity)
 }
