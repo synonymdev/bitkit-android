@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
@@ -38,8 +39,12 @@ class BlocktankViewModel @Inject constructor(
     }
 
     suspend fun refreshInfo() {
-        info = coreService.blocktank.info(refresh = false) // instantly load from cache first
-        info = coreService.blocktank.info(refresh = true)
+        try {
+            info = coreService.blocktank.info(refresh = false) // instantly load from cache first
+            info = coreService.blocktank.info(refresh = true)
+        } catch (e: Throwable) {
+            Logger.error("Failed to refresh Blocktank info", e)
+        }
     }
 
     suspend fun refreshOrders() {
