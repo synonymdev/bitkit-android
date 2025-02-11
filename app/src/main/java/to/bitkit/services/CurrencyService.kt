@@ -2,10 +2,10 @@ package to.bitkit.services
 
 import kotlinx.coroutines.delay
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.BlocktankClient
+import to.bitkit.data.BlocktankHttpClient
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
-import to.bitkit.shared.AppError
+import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -16,7 +16,7 @@ import kotlin.math.pow
 
 @Singleton
 class CurrencyService @Inject constructor(
-    val client: BlocktankClient,
+    private val blocktankHttpClient: BlocktankHttpClient,
 ) {
     private val maxRetries = 3
 
@@ -25,7 +25,7 @@ class CurrencyService @Inject constructor(
 
         for (attempt in 0 until maxRetries) {
             try {
-                val response = ServiceQueue.FOREX.background { client.fetchLatestRates() }
+                val response = ServiceQueue.FOREX.background { blocktankHttpClient.fetchLatestRates() }
                 return response.tickers
             } catch (e: Exception) {
                 lastError = e

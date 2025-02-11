@@ -19,12 +19,13 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
@@ -35,7 +36,8 @@ class WalletViewModelTest : BaseUnitTest() {
     private var db: AppDb = mock()
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
-    private var blocktankService: BlocktankService = mock()
+    private var coreService: CoreService = mock()
+    private var blocktankServiceOld: BlocktankServiceOld = mock()
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
@@ -69,7 +71,8 @@ class WalletViewModelTest : BaseUnitTest() {
             appStorage = appStorage,
             db = db,
             keychain = keychain,
-            blocktankService = blocktankService,
+            coreService = coreService,
+            blocktankServiceOld = blocktankServiceOld,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
@@ -85,7 +88,6 @@ class WalletViewModelTest : BaseUnitTest() {
             onchainAddress = "onchainAddress",
             peers = emptyList(),
             channels = emptyList(),
-            orders = emptyList(),
             balanceDetails = balanceDetails,
             bolt11 = "bolt11",
             bip21 = "bitcoin:onchainAddress",
@@ -114,7 +116,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankService).registerDevice("newToken")
+        verify(blocktankServiceOld).registerDevice("newToken")
     }
 
     @Test
@@ -124,14 +126,14 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankService, never()).registerDevice(anyString())
+        verify(blocktankServiceOld, never()).registerDevice(anyString())
     }
 
     @Test
     fun `manualRegisterForNotifications should register device with FCM token`() = test {
         sut.manualRegisterForNotifications()
 
-        verify(blocktankService).registerDevice("cachedToken")
+        verify(blocktankServiceOld).registerDevice("cachedToken")
     }
 
     private fun setupExistingWalletMocks() {

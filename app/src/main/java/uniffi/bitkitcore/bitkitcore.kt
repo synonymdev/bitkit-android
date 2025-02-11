@@ -727,6 +727,30 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -744,10 +768,18 @@ internal interface UniffiLib : Library {
 
     fun uniffi_bitkitcore_fn_func_add_tags(`activityId`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_bitkitcore_fn_func_create_cjit_entry(`channelSizeSat`: Long,`invoiceSat`: Long,`invoiceDescription`: RustBuffer.ByValue,`nodeId`: RustBuffer.ByValue,`channelExpiryWeeks`: Int,`options`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_create_order(`lspBalanceSat`: Long,`channelExpiryWeeks`: Int,`options`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_bitkitcore_fn_func_decode(`invoice`: RustBuffer.ByValue,
     ): Long
     fun uniffi_bitkitcore_fn_func_delete_activity_by_id(`activityId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    fun uniffi_bitkitcore_fn_func_estimate_order_fee(`lspBalanceSat`: Long,`channelExpiryWeeks`: Int,`options`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_estimate_order_fee_full(`lspBalanceSat`: Long,`channelExpiryWeeks`: Int,`options`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_bitkitcore_fn_func_get_activities(`filter`: RustBuffer.ByValue,`txType`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,`search`: RustBuffer.ByValue,`minDate`: RustBuffer.ByValue,`maxDate`: RustBuffer.ByValue,`limit`: RustBuffer.ByValue,`sortDirection`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_bitkitcore_fn_func_get_activities_by_tag(`tag`: RustBuffer.ByValue,`limit`: RustBuffer.ByValue,`sortDirection`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -756,7 +788,15 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_bitkitcore_fn_func_get_all_unique_tags(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_bitkitcore_fn_func_get_cjit_entries(`entryIds`: RustBuffer.ByValue,`filter`: RustBuffer.ByValue,`refresh`: Byte,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_get_info(`refresh`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_bitkitcore_fn_func_get_lnurl_invoice(`address`: RustBuffer.ByValue,`amountSatoshis`: Long,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_get_min_zero_conf_tx_fee(`orderId`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_get_orders(`orderIds`: RustBuffer.ByValue,`filter`: RustBuffer.ByValue,`refresh`: Byte,
     ): Long
     fun uniffi_bitkitcore_fn_func_get_tags(`activityId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -764,10 +804,18 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_bitkitcore_fn_func_insert_activity(`activity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_bitkitcore_fn_func_open_channel(`orderId`: RustBuffer.ByValue,`connectionString`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_bitkitcore_fn_func_refresh_active_cjit_entries(
+    ): Long
+    fun uniffi_bitkitcore_fn_func_refresh_active_orders(
+    ): Long
     fun uniffi_bitkitcore_fn_func_remove_tags(`activityId`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_bitkitcore_fn_func_update_activity(`activityId`: RustBuffer.ByValue,`activity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_bitkitcore_fn_func_update_blocktank_url(`newUrl`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_bitkitcore_fn_func_upsert_activity(`activity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_bitkitcore_fn_func_validate_bitcoin_address(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -886,9 +934,17 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_bitkitcore_checksum_func_add_tags(
     ): Short
+    fun uniffi_bitkitcore_checksum_func_create_cjit_entry(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_create_order(
+    ): Short
     fun uniffi_bitkitcore_checksum_func_decode(
     ): Short
     fun uniffi_bitkitcore_checksum_func_delete_activity_by_id(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_estimate_order_fee(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_estimate_order_fee_full(
     ): Short
     fun uniffi_bitkitcore_checksum_func_get_activities(
     ): Short
@@ -898,7 +954,15 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_bitkitcore_checksum_func_get_all_unique_tags(
     ): Short
+    fun uniffi_bitkitcore_checksum_func_get_cjit_entries(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_get_info(
+    ): Short
     fun uniffi_bitkitcore_checksum_func_get_lnurl_invoice(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_get_min_zero_conf_tx_fee(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_get_orders(
     ): Short
     fun uniffi_bitkitcore_checksum_func_get_tags(
     ): Short
@@ -906,9 +970,17 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_bitkitcore_checksum_func_insert_activity(
     ): Short
+    fun uniffi_bitkitcore_checksum_func_open_channel(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_refresh_active_cjit_entries(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_refresh_active_orders(
+    ): Short
     fun uniffi_bitkitcore_checksum_func_remove_tags(
     ): Short
     fun uniffi_bitkitcore_checksum_func_update_activity(
+    ): Short
+    fun uniffi_bitkitcore_checksum_func_update_blocktank_url(
     ): Short
     fun uniffi_bitkitcore_checksum_func_upsert_activity(
     ): Short
@@ -934,10 +1006,22 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_add_tags() != 63739.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_bitkitcore_checksum_func_create_cjit_entry() != 51504.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_create_order() != 33461.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_bitkitcore_checksum_func_decode() != 28437.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_delete_activity_by_id() != 29867.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_estimate_order_fee() != 9548.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_estimate_order_fee_full() != 13361.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_get_activities() != 21347.toShort()) {
@@ -952,7 +1036,19 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_get_all_unique_tags() != 25431.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_bitkitcore_checksum_func_get_cjit_entries() != 29342.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_get_info() != 43607.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_bitkitcore_checksum_func_get_lnurl_invoice() != 5475.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_get_min_zero_conf_tx_fee() != 6427.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_get_orders() != 47460.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_get_tags() != 11308.toShort()) {
@@ -964,10 +1060,22 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_insert_activity() != 1510.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_bitkitcore_checksum_func_open_channel() != 21402.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_refresh_active_cjit_entries() != 5324.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_refresh_active_orders() != 50661.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_bitkitcore_checksum_func_remove_tags() != 58873.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_update_activity() != 42510.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_bitkitcore_checksum_func_update_blocktank_url() != 52161.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_upsert_activity() != 32175.toShort()) {
@@ -1096,6 +1204,26 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
     }
 }
 
+public object FfiConverterDouble: FfiConverter<Double, Double> {
+    override fun lift(value: Double): Double {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Double {
+        return buf.getDouble()
+    }
+
+    override fun lower(value: Double): Double {
+        return value
+    }
+
+    override fun allocationSize(value: Double) = 8UL
+
+    override fun write(value: Double, buf: ByteBuffer) {
+        buf.putDouble(value)
+    }
+}
+
 public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
     override fun lift(value: Byte): Boolean {
         return value.toInt() != 0
@@ -1183,6 +1311,1041 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
     override fun write(value: ByteArray, buf: ByteBuffer) {
         buf.putInt(value.size)
         buf.put(value)
+    }
+}
+
+
+
+data class CreateCjitOptions (
+    var `source`: kotlin.String?, 
+    var `discountCode`: kotlin.String?
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeCreateCjitOptions: FfiConverterRustBuffer<CreateCjitOptions> {
+    override fun read(buf: ByteBuffer): CreateCjitOptions {
+        return CreateCjitOptions(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CreateCjitOptions) = (
+            FfiConverterOptionalString.allocationSize(value.`source`) +
+            FfiConverterOptionalString.allocationSize(value.`discountCode`)
+    )
+
+    override fun write(value: CreateCjitOptions, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`source`, buf)
+            FfiConverterOptionalString.write(value.`discountCode`, buf)
+    }
+}
+
+
+
+data class CreateOrderOptions (
+    var `clientBalanceSat`: kotlin.ULong, 
+    var `lspNodeId`: kotlin.String?, 
+    var `couponCode`: kotlin.String, 
+    var `source`: kotlin.String?, 
+    var `discountCode`: kotlin.String?, 
+    var `turboChannel`: kotlin.Boolean, 
+    var `zeroConfPayment`: kotlin.Boolean?, 
+    var `zeroReserve`: kotlin.Boolean, 
+    var `clientNodeId`: kotlin.String?, 
+    var `signature`: kotlin.String?, 
+    var `timestamp`: kotlin.String?, 
+    var `refundOnchainAddress`: kotlin.String?, 
+    var `announceChannel`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeCreateOrderOptions: FfiConverterRustBuffer<CreateOrderOptions> {
+    override fun read(buf: ByteBuffer): CreateOrderOptions {
+        return CreateOrderOptions(
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CreateOrderOptions) = (
+            FfiConverterULong.allocationSize(value.`clientBalanceSat`) +
+            FfiConverterOptionalString.allocationSize(value.`lspNodeId`) +
+            FfiConverterString.allocationSize(value.`couponCode`) +
+            FfiConverterOptionalString.allocationSize(value.`source`) +
+            FfiConverterOptionalString.allocationSize(value.`discountCode`) +
+            FfiConverterBoolean.allocationSize(value.`turboChannel`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`zeroConfPayment`) +
+            FfiConverterBoolean.allocationSize(value.`zeroReserve`) +
+            FfiConverterOptionalString.allocationSize(value.`clientNodeId`) +
+            FfiConverterOptionalString.allocationSize(value.`signature`) +
+            FfiConverterOptionalString.allocationSize(value.`timestamp`) +
+            FfiConverterOptionalString.allocationSize(value.`refundOnchainAddress`) +
+            FfiConverterBoolean.allocationSize(value.`announceChannel`)
+    )
+
+    override fun write(value: CreateOrderOptions, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`clientBalanceSat`, buf)
+            FfiConverterOptionalString.write(value.`lspNodeId`, buf)
+            FfiConverterString.write(value.`couponCode`, buf)
+            FfiConverterOptionalString.write(value.`source`, buf)
+            FfiConverterOptionalString.write(value.`discountCode`, buf)
+            FfiConverterBoolean.write(value.`turboChannel`, buf)
+            FfiConverterOptionalBoolean.write(value.`zeroConfPayment`, buf)
+            FfiConverterBoolean.write(value.`zeroReserve`, buf)
+            FfiConverterOptionalString.write(value.`clientNodeId`, buf)
+            FfiConverterOptionalString.write(value.`signature`, buf)
+            FfiConverterOptionalString.write(value.`timestamp`, buf)
+            FfiConverterOptionalString.write(value.`refundOnchainAddress`, buf)
+            FfiConverterBoolean.write(value.`announceChannel`, buf)
+    }
+}
+
+
+
+data class ErrorData (
+    var `errorDetails`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeErrorData: FfiConverterRustBuffer<ErrorData> {
+    override fun read(buf: ByteBuffer): ErrorData {
+        return ErrorData(
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ErrorData) = (
+            FfiConverterString.allocationSize(value.`errorDetails`)
+    )
+
+    override fun write(value: ErrorData, buf: ByteBuffer) {
+            FfiConverterString.write(value.`errorDetails`, buf)
+    }
+}
+
+
+
+data class FeeRates (
+    var `fast`: kotlin.UInt, 
+    var `mid`: kotlin.UInt, 
+    var `slow`: kotlin.UInt
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeFeeRates: FfiConverterRustBuffer<FeeRates> {
+    override fun read(buf: ByteBuffer): FeeRates {
+        return FeeRates(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeRates) = (
+            FfiConverterUInt.allocationSize(value.`fast`) +
+            FfiConverterUInt.allocationSize(value.`mid`) +
+            FfiConverterUInt.allocationSize(value.`slow`)
+    )
+
+    override fun write(value: FeeRates, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`fast`, buf)
+            FfiConverterUInt.write(value.`mid`, buf)
+            FfiConverterUInt.write(value.`slow`, buf)
+    }
+}
+
+
+
+data class FundingTx (
+    var `id`: kotlin.String, 
+    var `vout`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeFundingTx: FfiConverterRustBuffer<FundingTx> {
+    override fun read(buf: ByteBuffer): FundingTx {
+        return FundingTx(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FundingTx) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterULong.allocationSize(value.`vout`)
+    )
+
+    override fun write(value: FundingTx, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterULong.write(value.`vout`, buf)
+    }
+}
+
+
+
+data class IBt0ConfMinTxFeeWindow (
+    var `satPerVbyte`: kotlin.Double, 
+    var `validityEndsAt`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBt0ConfMinTxFeeWindow: FfiConverterRustBuffer<IBt0ConfMinTxFeeWindow> {
+    override fun read(buf: ByteBuffer): IBt0ConfMinTxFeeWindow {
+        return IBt0ConfMinTxFeeWindow(
+            FfiConverterDouble.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBt0ConfMinTxFeeWindow) = (
+            FfiConverterDouble.allocationSize(value.`satPerVbyte`) +
+            FfiConverterString.allocationSize(value.`validityEndsAt`)
+    )
+
+    override fun write(value: IBt0ConfMinTxFeeWindow, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`satPerVbyte`, buf)
+            FfiConverterString.write(value.`validityEndsAt`, buf)
+    }
+}
+
+
+
+data class IBtBolt11Invoice (
+    var `request`: kotlin.String, 
+    var `state`: BtBolt11InvoiceState, 
+    var `expiresAt`: kotlin.String, 
+    var `updatedAt`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtBolt11Invoice: FfiConverterRustBuffer<IBtBolt11Invoice> {
+    override fun read(buf: ByteBuffer): IBtBolt11Invoice {
+        return IBtBolt11Invoice(
+            FfiConverterString.read(buf),
+            FfiConverterTypeBtBolt11InvoiceState.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtBolt11Invoice) = (
+            FfiConverterString.allocationSize(value.`request`) +
+            FfiConverterTypeBtBolt11InvoiceState.allocationSize(value.`state`) +
+            FfiConverterString.allocationSize(value.`expiresAt`) +
+            FfiConverterString.allocationSize(value.`updatedAt`)
+    )
+
+    override fun write(value: IBtBolt11Invoice, buf: ByteBuffer) {
+            FfiConverterString.write(value.`request`, buf)
+            FfiConverterTypeBtBolt11InvoiceState.write(value.`state`, buf)
+            FfiConverterString.write(value.`expiresAt`, buf)
+            FfiConverterString.write(value.`updatedAt`, buf)
+    }
+}
+
+
+
+data class IBtChannel (
+    var `state`: BtOpenChannelState, 
+    var `lspNodePubkey`: kotlin.String, 
+    var `clientNodePubkey`: kotlin.String, 
+    var `announceChannel`: kotlin.Boolean, 
+    var `fundingTx`: FundingTx, 
+    var `closingTxId`: kotlin.String?, 
+    var `close`: IBtChannelClose?, 
+    var `shortChannelId`: kotlin.String?
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtChannel: FfiConverterRustBuffer<IBtChannel> {
+    override fun read(buf: ByteBuffer): IBtChannel {
+        return IBtChannel(
+            FfiConverterTypeBtOpenChannelState.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeFundingTx.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeIBtChannelClose.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtChannel) = (
+            FfiConverterTypeBtOpenChannelState.allocationSize(value.`state`) +
+            FfiConverterString.allocationSize(value.`lspNodePubkey`) +
+            FfiConverterString.allocationSize(value.`clientNodePubkey`) +
+            FfiConverterBoolean.allocationSize(value.`announceChannel`) +
+            FfiConverterTypeFundingTx.allocationSize(value.`fundingTx`) +
+            FfiConverterOptionalString.allocationSize(value.`closingTxId`) +
+            FfiConverterOptionalTypeIBtChannelClose.allocationSize(value.`close`) +
+            FfiConverterOptionalString.allocationSize(value.`shortChannelId`)
+    )
+
+    override fun write(value: IBtChannel, buf: ByteBuffer) {
+            FfiConverterTypeBtOpenChannelState.write(value.`state`, buf)
+            FfiConverterString.write(value.`lspNodePubkey`, buf)
+            FfiConverterString.write(value.`clientNodePubkey`, buf)
+            FfiConverterBoolean.write(value.`announceChannel`, buf)
+            FfiConverterTypeFundingTx.write(value.`fundingTx`, buf)
+            FfiConverterOptionalString.write(value.`closingTxId`, buf)
+            FfiConverterOptionalTypeIBtChannelClose.write(value.`close`, buf)
+            FfiConverterOptionalString.write(value.`shortChannelId`, buf)
+    }
+}
+
+
+
+data class IBtChannelClose (
+    var `txId`: kotlin.String, 
+    var `closeType`: kotlin.String, 
+    var `initiator`: kotlin.String, 
+    var `registeredAt`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtChannelClose: FfiConverterRustBuffer<IBtChannelClose> {
+    override fun read(buf: ByteBuffer): IBtChannelClose {
+        return IBtChannelClose(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtChannelClose) = (
+            FfiConverterString.allocationSize(value.`txId`) +
+            FfiConverterString.allocationSize(value.`closeType`) +
+            FfiConverterString.allocationSize(value.`initiator`) +
+            FfiConverterString.allocationSize(value.`registeredAt`)
+    )
+
+    override fun write(value: IBtChannelClose, buf: ByteBuffer) {
+            FfiConverterString.write(value.`txId`, buf)
+            FfiConverterString.write(value.`closeType`, buf)
+            FfiConverterString.write(value.`initiator`, buf)
+            FfiConverterString.write(value.`registeredAt`, buf)
+    }
+}
+
+
+
+data class IBtEstimateFeeResponse (
+    var `feeSat`: kotlin.ULong, 
+    var `min0ConfTxFee`: IBt0ConfMinTxFeeWindow
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtEstimateFeeResponse: FfiConverterRustBuffer<IBtEstimateFeeResponse> {
+    override fun read(buf: ByteBuffer): IBtEstimateFeeResponse {
+        return IBtEstimateFeeResponse(
+            FfiConverterULong.read(buf),
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtEstimateFeeResponse) = (
+            FfiConverterULong.allocationSize(value.`feeSat`) +
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.allocationSize(value.`min0ConfTxFee`)
+    )
+
+    override fun write(value: IBtEstimateFeeResponse, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`feeSat`, buf)
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.write(value.`min0ConfTxFee`, buf)
+    }
+}
+
+
+
+data class IBtEstimateFeeResponse2 (
+    var `feeSat`: kotlin.ULong, 
+    var `networkFeeSat`: kotlin.ULong, 
+    var `serviceFeeSat`: kotlin.ULong, 
+    var `min0ConfTxFee`: IBt0ConfMinTxFeeWindow
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtEstimateFeeResponse2: FfiConverterRustBuffer<IBtEstimateFeeResponse2> {
+    override fun read(buf: ByteBuffer): IBtEstimateFeeResponse2 {
+        return IBtEstimateFeeResponse2(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtEstimateFeeResponse2) = (
+            FfiConverterULong.allocationSize(value.`feeSat`) +
+            FfiConverterULong.allocationSize(value.`networkFeeSat`) +
+            FfiConverterULong.allocationSize(value.`serviceFeeSat`) +
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.allocationSize(value.`min0ConfTxFee`)
+    )
+
+    override fun write(value: IBtEstimateFeeResponse2, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`feeSat`, buf)
+            FfiConverterULong.write(value.`networkFeeSat`, buf)
+            FfiConverterULong.write(value.`serviceFeeSat`, buf)
+            FfiConverterTypeIBt0ConfMinTxFeeWindow.write(value.`min0ConfTxFee`, buf)
+    }
+}
+
+
+
+data class IBtInfo (
+    var `version`: kotlin.UInt, 
+    var `nodes`: List<ILspNode>, 
+    var `options`: IBtInfoOptions, 
+    var `versions`: IBtInfoVersions, 
+    var `onchain`: IBtInfoOnchain
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtInfo: FfiConverterRustBuffer<IBtInfo> {
+    override fun read(buf: ByteBuffer): IBtInfo {
+        return IBtInfo(
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeILspNode.read(buf),
+            FfiConverterTypeIBtInfoOptions.read(buf),
+            FfiConverterTypeIBtInfoVersions.read(buf),
+            FfiConverterTypeIBtInfoOnchain.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtInfo) = (
+            FfiConverterUInt.allocationSize(value.`version`) +
+            FfiConverterSequenceTypeILspNode.allocationSize(value.`nodes`) +
+            FfiConverterTypeIBtInfoOptions.allocationSize(value.`options`) +
+            FfiConverterTypeIBtInfoVersions.allocationSize(value.`versions`) +
+            FfiConverterTypeIBtInfoOnchain.allocationSize(value.`onchain`)
+    )
+
+    override fun write(value: IBtInfo, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`version`, buf)
+            FfiConverterSequenceTypeILspNode.write(value.`nodes`, buf)
+            FfiConverterTypeIBtInfoOptions.write(value.`options`, buf)
+            FfiConverterTypeIBtInfoVersions.write(value.`versions`, buf)
+            FfiConverterTypeIBtInfoOnchain.write(value.`onchain`, buf)
+    }
+}
+
+
+
+data class IBtInfoOnchain (
+    var `network`: BitcoinNetworkEnum, 
+    var `feeRates`: FeeRates
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtInfoOnchain: FfiConverterRustBuffer<IBtInfoOnchain> {
+    override fun read(buf: ByteBuffer): IBtInfoOnchain {
+        return IBtInfoOnchain(
+            FfiConverterTypeBitcoinNetworkEnum.read(buf),
+            FfiConverterTypeFeeRates.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtInfoOnchain) = (
+            FfiConverterTypeBitcoinNetworkEnum.allocationSize(value.`network`) +
+            FfiConverterTypeFeeRates.allocationSize(value.`feeRates`)
+    )
+
+    override fun write(value: IBtInfoOnchain, buf: ByteBuffer) {
+            FfiConverterTypeBitcoinNetworkEnum.write(value.`network`, buf)
+            FfiConverterTypeFeeRates.write(value.`feeRates`, buf)
+    }
+}
+
+
+
+data class IBtInfoOptions (
+    var `minChannelSizeSat`: kotlin.ULong, 
+    var `maxChannelSizeSat`: kotlin.ULong, 
+    var `minExpiryWeeks`: kotlin.UInt, 
+    var `maxExpiryWeeks`: kotlin.UInt, 
+    var `minPaymentConfirmations`: kotlin.UInt, 
+    var `minHighRiskPaymentConfirmations`: kotlin.UInt, 
+    var `max0ConfClientBalanceSat`: kotlin.ULong, 
+    var `maxClientBalanceSat`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtInfoOptions: FfiConverterRustBuffer<IBtInfoOptions> {
+    override fun read(buf: ByteBuffer): IBtInfoOptions {
+        return IBtInfoOptions(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtInfoOptions) = (
+            FfiConverterULong.allocationSize(value.`minChannelSizeSat`) +
+            FfiConverterULong.allocationSize(value.`maxChannelSizeSat`) +
+            FfiConverterUInt.allocationSize(value.`minExpiryWeeks`) +
+            FfiConverterUInt.allocationSize(value.`maxExpiryWeeks`) +
+            FfiConverterUInt.allocationSize(value.`minPaymentConfirmations`) +
+            FfiConverterUInt.allocationSize(value.`minHighRiskPaymentConfirmations`) +
+            FfiConverterULong.allocationSize(value.`max0ConfClientBalanceSat`) +
+            FfiConverterULong.allocationSize(value.`maxClientBalanceSat`)
+    )
+
+    override fun write(value: IBtInfoOptions, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`minChannelSizeSat`, buf)
+            FfiConverterULong.write(value.`maxChannelSizeSat`, buf)
+            FfiConverterUInt.write(value.`minExpiryWeeks`, buf)
+            FfiConverterUInt.write(value.`maxExpiryWeeks`, buf)
+            FfiConverterUInt.write(value.`minPaymentConfirmations`, buf)
+            FfiConverterUInt.write(value.`minHighRiskPaymentConfirmations`, buf)
+            FfiConverterULong.write(value.`max0ConfClientBalanceSat`, buf)
+            FfiConverterULong.write(value.`maxClientBalanceSat`, buf)
+    }
+}
+
+
+
+data class IBtInfoVersions (
+    var `http`: kotlin.String, 
+    var `btc`: kotlin.String, 
+    var `ln2`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtInfoVersions: FfiConverterRustBuffer<IBtInfoVersions> {
+    override fun read(buf: ByteBuffer): IBtInfoVersions {
+        return IBtInfoVersions(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtInfoVersions) = (
+            FfiConverterString.allocationSize(value.`http`) +
+            FfiConverterString.allocationSize(value.`btc`) +
+            FfiConverterString.allocationSize(value.`ln2`)
+    )
+
+    override fun write(value: IBtInfoVersions, buf: ByteBuffer) {
+            FfiConverterString.write(value.`http`, buf)
+            FfiConverterString.write(value.`btc`, buf)
+            FfiConverterString.write(value.`ln2`, buf)
+    }
+}
+
+
+
+data class IBtOnchainTransaction (
+    var `amountSat`: kotlin.ULong, 
+    var `txId`: kotlin.String, 
+    var `vout`: kotlin.UInt, 
+    var `blockHeight`: kotlin.UInt?, 
+    var `blockConfirmationCount`: kotlin.UInt, 
+    var `feeRateSatPerVbyte`: kotlin.Double, 
+    var `confirmed`: kotlin.Boolean, 
+    var `suspicious0ConfReason`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtOnchainTransaction: FfiConverterRustBuffer<IBtOnchainTransaction> {
+    override fun read(buf: ByteBuffer): IBtOnchainTransaction {
+        return IBtOnchainTransaction(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtOnchainTransaction) = (
+            FfiConverterULong.allocationSize(value.`amountSat`) +
+            FfiConverterString.allocationSize(value.`txId`) +
+            FfiConverterUInt.allocationSize(value.`vout`) +
+            FfiConverterOptionalUInt.allocationSize(value.`blockHeight`) +
+            FfiConverterUInt.allocationSize(value.`blockConfirmationCount`) +
+            FfiConverterDouble.allocationSize(value.`feeRateSatPerVbyte`) +
+            FfiConverterBoolean.allocationSize(value.`confirmed`) +
+            FfiConverterString.allocationSize(value.`suspicious0ConfReason`)
+    )
+
+    override fun write(value: IBtOnchainTransaction, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`amountSat`, buf)
+            FfiConverterString.write(value.`txId`, buf)
+            FfiConverterUInt.write(value.`vout`, buf)
+            FfiConverterOptionalUInt.write(value.`blockHeight`, buf)
+            FfiConverterUInt.write(value.`blockConfirmationCount`, buf)
+            FfiConverterDouble.write(value.`feeRateSatPerVbyte`, buf)
+            FfiConverterBoolean.write(value.`confirmed`, buf)
+            FfiConverterString.write(value.`suspicious0ConfReason`, buf)
+    }
+}
+
+
+
+data class IBtOnchainTransactions (
+    var `address`: kotlin.String, 
+    var `confirmedSat`: kotlin.ULong, 
+    var `requiredConfirmations`: kotlin.UInt, 
+    var `transactions`: List<IBtOnchainTransaction>
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtOnchainTransactions: FfiConverterRustBuffer<IBtOnchainTransactions> {
+    override fun read(buf: ByteBuffer): IBtOnchainTransactions {
+        return IBtOnchainTransactions(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeIBtOnchainTransaction.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtOnchainTransactions) = (
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterULong.allocationSize(value.`confirmedSat`) +
+            FfiConverterUInt.allocationSize(value.`requiredConfirmations`) +
+            FfiConverterSequenceTypeIBtOnchainTransaction.allocationSize(value.`transactions`)
+    )
+
+    override fun write(value: IBtOnchainTransactions, buf: ByteBuffer) {
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterULong.write(value.`confirmedSat`, buf)
+            FfiConverterUInt.write(value.`requiredConfirmations`, buf)
+            FfiConverterSequenceTypeIBtOnchainTransaction.write(value.`transactions`, buf)
+    }
+}
+
+
+
+data class IBtOrder (
+    var `id`: kotlin.String, 
+    var `state`: BtOrderState, 
+    var `state2`: BtOrderState2, 
+    var `feeSat`: kotlin.ULong, 
+    var `networkFeeSat`: kotlin.ULong, 
+    var `serviceFeeSat`: kotlin.ULong, 
+    var `lspBalanceSat`: kotlin.ULong, 
+    var `clientBalanceSat`: kotlin.ULong, 
+    var `zeroConf`: kotlin.Boolean, 
+    var `zeroReserve`: kotlin.Boolean, 
+    var `clientNodeId`: kotlin.String?, 
+    var `channelExpiryWeeks`: kotlin.UInt, 
+    var `channelExpiresAt`: kotlin.String, 
+    var `orderExpiresAt`: kotlin.String, 
+    var `channel`: IBtChannel?, 
+    var `lspNode`: ILspNode, 
+    var `lnurl`: kotlin.String?, 
+    var `payment`: IBtPayment, 
+    var `couponCode`: kotlin.String?, 
+    var `source`: kotlin.String?, 
+    var `discount`: IDiscount?, 
+    var `updatedAt`: kotlin.String, 
+    var `createdAt`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtOrder: FfiConverterRustBuffer<IBtOrder> {
+    override fun read(buf: ByteBuffer): IBtOrder {
+        return IBtOrder(
+            FfiConverterString.read(buf),
+            FfiConverterTypeBtOrderState.read(buf),
+            FfiConverterTypeBtOrderState2.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalTypeIBtChannel.read(buf),
+            FfiConverterTypeILspNode.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeIBtPayment.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeIDiscount.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtOrder) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterTypeBtOrderState.allocationSize(value.`state`) +
+            FfiConverterTypeBtOrderState2.allocationSize(value.`state2`) +
+            FfiConverterULong.allocationSize(value.`feeSat`) +
+            FfiConverterULong.allocationSize(value.`networkFeeSat`) +
+            FfiConverterULong.allocationSize(value.`serviceFeeSat`) +
+            FfiConverterULong.allocationSize(value.`lspBalanceSat`) +
+            FfiConverterULong.allocationSize(value.`clientBalanceSat`) +
+            FfiConverterBoolean.allocationSize(value.`zeroConf`) +
+            FfiConverterBoolean.allocationSize(value.`zeroReserve`) +
+            FfiConverterOptionalString.allocationSize(value.`clientNodeId`) +
+            FfiConverterUInt.allocationSize(value.`channelExpiryWeeks`) +
+            FfiConverterString.allocationSize(value.`channelExpiresAt`) +
+            FfiConverterString.allocationSize(value.`orderExpiresAt`) +
+            FfiConverterOptionalTypeIBtChannel.allocationSize(value.`channel`) +
+            FfiConverterTypeILspNode.allocationSize(value.`lspNode`) +
+            FfiConverterOptionalString.allocationSize(value.`lnurl`) +
+            FfiConverterTypeIBtPayment.allocationSize(value.`payment`) +
+            FfiConverterOptionalString.allocationSize(value.`couponCode`) +
+            FfiConverterOptionalString.allocationSize(value.`source`) +
+            FfiConverterOptionalTypeIDiscount.allocationSize(value.`discount`) +
+            FfiConverterString.allocationSize(value.`updatedAt`) +
+            FfiConverterString.allocationSize(value.`createdAt`)
+    )
+
+    override fun write(value: IBtOrder, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterTypeBtOrderState.write(value.`state`, buf)
+            FfiConverterTypeBtOrderState2.write(value.`state2`, buf)
+            FfiConverterULong.write(value.`feeSat`, buf)
+            FfiConverterULong.write(value.`networkFeeSat`, buf)
+            FfiConverterULong.write(value.`serviceFeeSat`, buf)
+            FfiConverterULong.write(value.`lspBalanceSat`, buf)
+            FfiConverterULong.write(value.`clientBalanceSat`, buf)
+            FfiConverterBoolean.write(value.`zeroConf`, buf)
+            FfiConverterBoolean.write(value.`zeroReserve`, buf)
+            FfiConverterOptionalString.write(value.`clientNodeId`, buf)
+            FfiConverterUInt.write(value.`channelExpiryWeeks`, buf)
+            FfiConverterString.write(value.`channelExpiresAt`, buf)
+            FfiConverterString.write(value.`orderExpiresAt`, buf)
+            FfiConverterOptionalTypeIBtChannel.write(value.`channel`, buf)
+            FfiConverterTypeILspNode.write(value.`lspNode`, buf)
+            FfiConverterOptionalString.write(value.`lnurl`, buf)
+            FfiConverterTypeIBtPayment.write(value.`payment`, buf)
+            FfiConverterOptionalString.write(value.`couponCode`, buf)
+            FfiConverterOptionalString.write(value.`source`, buf)
+            FfiConverterOptionalTypeIDiscount.write(value.`discount`, buf)
+            FfiConverterString.write(value.`updatedAt`, buf)
+            FfiConverterString.write(value.`createdAt`, buf)
+    }
+}
+
+
+
+data class IBtPayment (
+    var `state`: BtPaymentState, 
+    var `state2`: BtPaymentState2, 
+    var `paidSat`: kotlin.ULong, 
+    var `bolt11Invoice`: IBtBolt11Invoice, 
+    var `onchain`: IBtOnchainTransactions, 
+    var `isManuallyPaid`: kotlin.Boolean?, 
+    var `manualRefunds`: List<IManualRefund>?
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIBtPayment: FfiConverterRustBuffer<IBtPayment> {
+    override fun read(buf: ByteBuffer): IBtPayment {
+        return IBtPayment(
+            FfiConverterTypeBtPaymentState.read(buf),
+            FfiConverterTypeBtPaymentState2.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeIBtBolt11Invoice.read(buf),
+            FfiConverterTypeIBtOnchainTransactions.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterOptionalSequenceTypeIManualRefund.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IBtPayment) = (
+            FfiConverterTypeBtPaymentState.allocationSize(value.`state`) +
+            FfiConverterTypeBtPaymentState2.allocationSize(value.`state2`) +
+            FfiConverterULong.allocationSize(value.`paidSat`) +
+            FfiConverterTypeIBtBolt11Invoice.allocationSize(value.`bolt11Invoice`) +
+            FfiConverterTypeIBtOnchainTransactions.allocationSize(value.`onchain`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`isManuallyPaid`) +
+            FfiConverterOptionalSequenceTypeIManualRefund.allocationSize(value.`manualRefunds`)
+    )
+
+    override fun write(value: IBtPayment, buf: ByteBuffer) {
+            FfiConverterTypeBtPaymentState.write(value.`state`, buf)
+            FfiConverterTypeBtPaymentState2.write(value.`state2`, buf)
+            FfiConverterULong.write(value.`paidSat`, buf)
+            FfiConverterTypeIBtBolt11Invoice.write(value.`bolt11Invoice`, buf)
+            FfiConverterTypeIBtOnchainTransactions.write(value.`onchain`, buf)
+            FfiConverterOptionalBoolean.write(value.`isManuallyPaid`, buf)
+            FfiConverterOptionalSequenceTypeIManualRefund.write(value.`manualRefunds`, buf)
+    }
+}
+
+
+
+data class IcJitEntry (
+    var `id`: kotlin.String, 
+    var `state`: CJitStateEnum, 
+    var `feeSat`: kotlin.ULong, 
+    var `networkFeeSat`: kotlin.ULong, 
+    var `serviceFeeSat`: kotlin.ULong, 
+    var `channelSizeSat`: kotlin.ULong, 
+    var `channelExpiryWeeks`: kotlin.UInt, 
+    var `channelOpenError`: kotlin.String?, 
+    var `nodeId`: kotlin.String, 
+    var `invoice`: IBtBolt11Invoice, 
+    var `channel`: IBtChannel?, 
+    var `lspNode`: ILspNode, 
+    var `couponCode`: kotlin.String, 
+    var `source`: kotlin.String?, 
+    var `discount`: IDiscount?, 
+    var `expiresAt`: kotlin.String, 
+    var `updatedAt`: kotlin.String, 
+    var `createdAt`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeICJitEntry: FfiConverterRustBuffer<IcJitEntry> {
+    override fun read(buf: ByteBuffer): IcJitEntry {
+        return IcJitEntry(
+            FfiConverterString.read(buf),
+            FfiConverterTypeCJitStateEnum.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeIBtBolt11Invoice.read(buf),
+            FfiConverterOptionalTypeIBtChannel.read(buf),
+            FfiConverterTypeILspNode.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeIDiscount.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IcJitEntry) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterTypeCJitStateEnum.allocationSize(value.`state`) +
+            FfiConverterULong.allocationSize(value.`feeSat`) +
+            FfiConverterULong.allocationSize(value.`networkFeeSat`) +
+            FfiConverterULong.allocationSize(value.`serviceFeeSat`) +
+            FfiConverterULong.allocationSize(value.`channelSizeSat`) +
+            FfiConverterUInt.allocationSize(value.`channelExpiryWeeks`) +
+            FfiConverterOptionalString.allocationSize(value.`channelOpenError`) +
+            FfiConverterString.allocationSize(value.`nodeId`) +
+            FfiConverterTypeIBtBolt11Invoice.allocationSize(value.`invoice`) +
+            FfiConverterOptionalTypeIBtChannel.allocationSize(value.`channel`) +
+            FfiConverterTypeILspNode.allocationSize(value.`lspNode`) +
+            FfiConverterString.allocationSize(value.`couponCode`) +
+            FfiConverterOptionalString.allocationSize(value.`source`) +
+            FfiConverterOptionalTypeIDiscount.allocationSize(value.`discount`) +
+            FfiConverterString.allocationSize(value.`expiresAt`) +
+            FfiConverterString.allocationSize(value.`updatedAt`) +
+            FfiConverterString.allocationSize(value.`createdAt`)
+    )
+
+    override fun write(value: IcJitEntry, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterTypeCJitStateEnum.write(value.`state`, buf)
+            FfiConverterULong.write(value.`feeSat`, buf)
+            FfiConverterULong.write(value.`networkFeeSat`, buf)
+            FfiConverterULong.write(value.`serviceFeeSat`, buf)
+            FfiConverterULong.write(value.`channelSizeSat`, buf)
+            FfiConverterUInt.write(value.`channelExpiryWeeks`, buf)
+            FfiConverterOptionalString.write(value.`channelOpenError`, buf)
+            FfiConverterString.write(value.`nodeId`, buf)
+            FfiConverterTypeIBtBolt11Invoice.write(value.`invoice`, buf)
+            FfiConverterOptionalTypeIBtChannel.write(value.`channel`, buf)
+            FfiConverterTypeILspNode.write(value.`lspNode`, buf)
+            FfiConverterString.write(value.`couponCode`, buf)
+            FfiConverterOptionalString.write(value.`source`, buf)
+            FfiConverterOptionalTypeIDiscount.write(value.`discount`, buf)
+            FfiConverterString.write(value.`expiresAt`, buf)
+            FfiConverterString.write(value.`updatedAt`, buf)
+            FfiConverterString.write(value.`createdAt`, buf)
+    }
+}
+
+
+
+data class IDiscount (
+    var `code`: kotlin.String, 
+    var `absoluteSat`: kotlin.ULong, 
+    var `relative`: kotlin.Double, 
+    var `overallSat`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIDiscount: FfiConverterRustBuffer<IDiscount> {
+    override fun read(buf: ByteBuffer): IDiscount {
+        return IDiscount(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IDiscount) = (
+            FfiConverterString.allocationSize(value.`code`) +
+            FfiConverterULong.allocationSize(value.`absoluteSat`) +
+            FfiConverterDouble.allocationSize(value.`relative`) +
+            FfiConverterULong.allocationSize(value.`overallSat`)
+    )
+
+    override fun write(value: IDiscount, buf: ByteBuffer) {
+            FfiConverterString.write(value.`code`, buf)
+            FfiConverterULong.write(value.`absoluteSat`, buf)
+            FfiConverterDouble.write(value.`relative`, buf)
+            FfiConverterULong.write(value.`overallSat`, buf)
+    }
+}
+
+
+
+data class ILspNode (
+    var `alias`: kotlin.String, 
+    var `pubkey`: kotlin.String, 
+    var `connectionStrings`: List<kotlin.String>, 
+    var `readonly`: kotlin.Boolean?
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeILspNode: FfiConverterRustBuffer<ILspNode> {
+    override fun read(buf: ByteBuffer): ILspNode {
+        return ILspNode(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ILspNode) = (
+            FfiConverterString.allocationSize(value.`alias`) +
+            FfiConverterString.allocationSize(value.`pubkey`) +
+            FfiConverterSequenceString.allocationSize(value.`connectionStrings`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`readonly`)
+    )
+
+    override fun write(value: ILspNode, buf: ByteBuffer) {
+            FfiConverterString.write(value.`alias`, buf)
+            FfiConverterString.write(value.`pubkey`, buf)
+            FfiConverterSequenceString.write(value.`connectionStrings`, buf)
+            FfiConverterOptionalBoolean.write(value.`readonly`, buf)
+    }
+}
+
+
+
+data class IManualRefund (
+    var `amountSat`: kotlin.ULong, 
+    var `target`: kotlin.String, 
+    var `state`: ManualRefundStateEnum, 
+    var `createdByName`: kotlin.String, 
+    var `votedByName`: kotlin.String?, 
+    var `reason`: kotlin.String?, 
+    var `targetType`: kotlin.String
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeIManualRefund: FfiConverterRustBuffer<IManualRefund> {
+    override fun read(buf: ByteBuffer): IManualRefund {
+        return IManualRefund(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeManualRefundStateEnum.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IManualRefund) = (
+            FfiConverterULong.allocationSize(value.`amountSat`) +
+            FfiConverterString.allocationSize(value.`target`) +
+            FfiConverterTypeManualRefundStateEnum.allocationSize(value.`state`) +
+            FfiConverterString.allocationSize(value.`createdByName`) +
+            FfiConverterOptionalString.allocationSize(value.`votedByName`) +
+            FfiConverterOptionalString.allocationSize(value.`reason`) +
+            FfiConverterString.allocationSize(value.`targetType`)
+    )
+
+    override fun write(value: IManualRefund, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`amountSat`, buf)
+            FfiConverterString.write(value.`target`, buf)
+            FfiConverterTypeManualRefundStateEnum.write(value.`state`, buf)
+            FfiConverterString.write(value.`createdByName`, buf)
+            FfiConverterOptionalString.write(value.`votedByName`, buf)
+            FfiConverterOptionalString.write(value.`reason`, buf)
+            FfiConverterString.write(value.`targetType`, buf)
     }
 }
 
@@ -2104,12 +3267,596 @@ public object FfiConverterTypeAddressType: FfiConverterRustBuffer<AddressType> {
 
 
 
+enum class BitcoinNetworkEnum {
+    
+    MAINNET,
+    TESTNET,
+    SIGNET,
+    REGTEST;
+    companion object
+}
+
+
+public object FfiConverterTypeBitcoinNetworkEnum: FfiConverterRustBuffer<BitcoinNetworkEnum> {
+    override fun read(buf: ByteBuffer) = try {
+        BitcoinNetworkEnum.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BitcoinNetworkEnum) = 4UL
+
+    override fun write(value: BitcoinNetworkEnum, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+
+sealed class BlocktankException: Exception() {
+    
+    class HttpClient(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class BlocktankClient(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class InvalidBlocktank(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class InitializationException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class InsertException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class RetrievalException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class DataException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class ConnectionException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class SerializationException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class ChannelOpen(
+        
+        val `errorType`: BtChannelOrderErrorType, 
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorType=${ `errorType` }, errorDetails=${ `errorDetails` }"
+    }
+    
+    class OrderState(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class InvalidParameter(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class DatabaseException(
+        
+        val `errorDetails`: kotlin.String
+        ) : BlocktankException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<BlocktankException> {
+        override fun lift(error_buf: RustBuffer.ByValue): BlocktankException = FfiConverterTypeBlocktankError.lift(error_buf)
+    }
+
+    
+}
+
+public object FfiConverterTypeBlocktankError : FfiConverterRustBuffer<BlocktankException> {
+    override fun read(buf: ByteBuffer): BlocktankException {
+        
+
+        return when(buf.getInt()) {
+            1 -> BlocktankException.HttpClient(
+                FfiConverterString.read(buf),
+                )
+            2 -> BlocktankException.BlocktankClient(
+                FfiConverterString.read(buf),
+                )
+            3 -> BlocktankException.InvalidBlocktank(
+                FfiConverterString.read(buf),
+                )
+            4 -> BlocktankException.InitializationException(
+                FfiConverterString.read(buf),
+                )
+            5 -> BlocktankException.InsertException(
+                FfiConverterString.read(buf),
+                )
+            6 -> BlocktankException.RetrievalException(
+                FfiConverterString.read(buf),
+                )
+            7 -> BlocktankException.DataException(
+                FfiConverterString.read(buf),
+                )
+            8 -> BlocktankException.ConnectionException(
+                FfiConverterString.read(buf),
+                )
+            9 -> BlocktankException.SerializationException(
+                FfiConverterString.read(buf),
+                )
+            10 -> BlocktankException.ChannelOpen(
+                FfiConverterTypeBtChannelOrderErrorType.read(buf),
+                FfiConverterString.read(buf),
+                )
+            11 -> BlocktankException.OrderState(
+                FfiConverterString.read(buf),
+                )
+            12 -> BlocktankException.InvalidParameter(
+                FfiConverterString.read(buf),
+                )
+            13 -> BlocktankException.DatabaseException(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: BlocktankException): ULong {
+        return when(value) {
+            is BlocktankException.HttpClient -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.BlocktankClient -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.InvalidBlocktank -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.InitializationException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.InsertException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.RetrievalException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.DataException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.ConnectionException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.SerializationException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.ChannelOpen -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeBtChannelOrderErrorType.allocationSize(value.`errorType`)
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.OrderState -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.InvalidParameter -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+            is BlocktankException.DatabaseException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`errorDetails`)
+            )
+        }
+    }
+
+    override fun write(value: BlocktankException, buf: ByteBuffer) {
+        when(value) {
+            is BlocktankException.HttpClient -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.BlocktankClient -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.InvalidBlocktank -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.InitializationException -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.InsertException -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.RetrievalException -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.DataException -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.ConnectionException -> {
+                buf.putInt(8)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.SerializationException -> {
+                buf.putInt(9)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.ChannelOpen -> {
+                buf.putInt(10)
+                FfiConverterTypeBtChannelOrderErrorType.write(value.`errorType`, buf)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.OrderState -> {
+                buf.putInt(11)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.InvalidParameter -> {
+                buf.putInt(12)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is BlocktankException.DatabaseException -> {
+                buf.putInt(13)
+                FfiConverterString.write(value.`errorDetails`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
+enum class BtBolt11InvoiceState {
+    
+    PENDING,
+    HOLDING,
+    PAID,
+    CANCELED;
+    companion object
+}
+
+
+public object FfiConverterTypeBtBolt11InvoiceState: FfiConverterRustBuffer<BtBolt11InvoiceState> {
+    override fun read(buf: ByteBuffer) = try {
+        BtBolt11InvoiceState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtBolt11InvoiceState) = 4UL
+
+    override fun write(value: BtBolt11InvoiceState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtChannelOrderErrorType {
+    
+    WRONG_ORDER_STATE,
+    PEER_NOT_REACHABLE,
+    CHANNEL_REJECTED_BY_DESTINATION,
+    CHANNEL_REJECTED_BY_LSP,
+    BLOCKTANK_NOT_READY;
+    companion object
+}
+
+
+public object FfiConverterTypeBtChannelOrderErrorType: FfiConverterRustBuffer<BtChannelOrderErrorType> {
+    override fun read(buf: ByteBuffer) = try {
+        BtChannelOrderErrorType.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtChannelOrderErrorType) = 4UL
+
+    override fun write(value: BtChannelOrderErrorType, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtOpenChannelState {
+    
+    OPENING,
+    OPEN,
+    CLOSED;
+    companion object
+}
+
+
+public object FfiConverterTypeBtOpenChannelState: FfiConverterRustBuffer<BtOpenChannelState> {
+    override fun read(buf: ByteBuffer) = try {
+        BtOpenChannelState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtOpenChannelState) = 4UL
+
+    override fun write(value: BtOpenChannelState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtOrderState {
+    
+    CREATED,
+    EXPIRED,
+    OPEN,
+    CLOSED;
+    companion object
+}
+
+
+public object FfiConverterTypeBtOrderState: FfiConverterRustBuffer<BtOrderState> {
+    override fun read(buf: ByteBuffer) = try {
+        BtOrderState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtOrderState) = 4UL
+
+    override fun write(value: BtOrderState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtOrderState2 {
+    
+    CREATED,
+    EXPIRED,
+    EXECUTED,
+    PAID;
+    companion object
+}
+
+
+public object FfiConverterTypeBtOrderState2: FfiConverterRustBuffer<BtOrderState2> {
+    override fun read(buf: ByteBuffer) = try {
+        BtOrderState2.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtOrderState2) = 4UL
+
+    override fun write(value: BtOrderState2, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtPaymentState {
+    
+    CREATED,
+    PARTIALLY_PAID,
+    PAID,
+    REFUNDED,
+    REFUND_AVAILABLE;
+    companion object
+}
+
+
+public object FfiConverterTypeBtPaymentState: FfiConverterRustBuffer<BtPaymentState> {
+    override fun read(buf: ByteBuffer) = try {
+        BtPaymentState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtPaymentState) = 4UL
+
+    override fun write(value: BtPaymentState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class BtPaymentState2 {
+    
+    CREATED,
+    PAID,
+    REFUNDED,
+    REFUND_AVAILABLE,
+    CANCELED;
+    companion object
+}
+
+
+public object FfiConverterTypeBtPaymentState2: FfiConverterRustBuffer<BtPaymentState2> {
+    override fun read(buf: ByteBuffer) = try {
+        BtPaymentState2.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BtPaymentState2) = 4UL
+
+    override fun write(value: BtPaymentState2, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CJitStateEnum {
+    
+    CREATED,
+    COMPLETED,
+    EXPIRED,
+    FAILED;
+    companion object
+}
+
+
+public object FfiConverterTypeCJitStateEnum: FfiConverterRustBuffer<CJitStateEnum> {
+    override fun read(buf: ByteBuffer) = try {
+        CJitStateEnum.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CJitStateEnum) = 4UL
+
+    override fun write(value: CJitStateEnum, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 
 sealed class DbException: Exception() {
     
     class DbActivityException(
         
         val `errorDetails`: ActivityException
+        ) : DbException() {
+        override val message
+            get() = "errorDetails=${ `errorDetails` }"
+    }
+    
+    class DbBlocktankException(
+        
+        val `errorDetails`: BlocktankException
         ) : DbException() {
         override val message
             get() = "errorDetails=${ `errorDetails` }"
@@ -2139,7 +3886,10 @@ public object FfiConverterTypeDbError : FfiConverterRustBuffer<DbException> {
             1 -> DbException.DbActivityException(
                 FfiConverterTypeActivityError.read(buf),
                 )
-            2 -> DbException.InitializationException(
+            2 -> DbException.DbBlocktankException(
+                FfiConverterTypeBlocktankError.read(buf),
+                )
+            3 -> DbException.InitializationException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -2152,6 +3902,11 @@ public object FfiConverterTypeDbError : FfiConverterRustBuffer<DbException> {
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeActivityError.allocationSize(value.`errorDetails`)
+            )
+            is DbException.DbBlocktankException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeBlocktankError.allocationSize(value.`errorDetails`)
             )
             is DbException.InitializationException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -2168,8 +3923,13 @@ public object FfiConverterTypeDbError : FfiConverterRustBuffer<DbException> {
                 FfiConverterTypeActivityError.write(value.`errorDetails`, buf)
                 Unit
             }
-            is DbException.InitializationException -> {
+            is DbException.DbBlocktankException -> {
                 buf.putInt(2)
+                FfiConverterTypeBlocktankError.write(value.`errorDetails`, buf)
+                Unit
+            }
+            is DbException.InitializationException -> {
+                buf.putInt(3)
                 FfiConverterString.write(value.`errorDetails`, buf)
                 Unit
             }
@@ -2561,6 +4321,35 @@ public object FfiConverterTypeLnurlError : FfiConverterRustBuffer<LnurlException
     }
 
 }
+
+
+
+
+enum class ManualRefundStateEnum {
+    
+    CREATED,
+    APPROVED,
+    REJECTED,
+    SENT;
+    companion object
+}
+
+
+public object FfiConverterTypeManualRefundStateEnum: FfiConverterRustBuffer<ManualRefundStateEnum> {
+    override fun read(buf: ByteBuffer) = try {
+        ManualRefundStateEnum.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ManualRefundStateEnum) = 4UL
+
+    override fun write(value: ManualRefundStateEnum, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -2985,6 +4774,35 @@ public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
 
 
 
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
+        }
+    }
+}
+
+
+
+
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -3043,6 +4861,180 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
 
 
 
+public object FfiConverterOptionalTypeCreateCjitOptions: FfiConverterRustBuffer<CreateCjitOptions?> {
+    override fun read(buf: ByteBuffer): CreateCjitOptions? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCreateCjitOptions.read(buf)
+    }
+
+    override fun allocationSize(value: CreateCjitOptions?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCreateCjitOptions.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CreateCjitOptions?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCreateCjitOptions.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeCreateOrderOptions: FfiConverterRustBuffer<CreateOrderOptions?> {
+    override fun read(buf: ByteBuffer): CreateOrderOptions? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCreateOrderOptions.read(buf)
+    }
+
+    override fun allocationSize(value: CreateOrderOptions?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCreateOrderOptions.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CreateOrderOptions?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCreateOrderOptions.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeIBtChannel: FfiConverterRustBuffer<IBtChannel?> {
+    override fun read(buf: ByteBuffer): IBtChannel? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeIBtChannel.read(buf)
+    }
+
+    override fun allocationSize(value: IBtChannel?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeIBtChannel.allocationSize(value)
+        }
+    }
+
+    override fun write(value: IBtChannel?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeIBtChannel.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeIBtChannelClose: FfiConverterRustBuffer<IBtChannelClose?> {
+    override fun read(buf: ByteBuffer): IBtChannelClose? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeIBtChannelClose.read(buf)
+    }
+
+    override fun allocationSize(value: IBtChannelClose?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeIBtChannelClose.allocationSize(value)
+        }
+    }
+
+    override fun write(value: IBtChannelClose?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeIBtChannelClose.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeIBtInfo: FfiConverterRustBuffer<IBtInfo?> {
+    override fun read(buf: ByteBuffer): IBtInfo? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeIBtInfo.read(buf)
+    }
+
+    override fun allocationSize(value: IBtInfo?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeIBtInfo.allocationSize(value)
+        }
+    }
+
+    override fun write(value: IBtInfo?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeIBtInfo.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeIDiscount: FfiConverterRustBuffer<IDiscount?> {
+    override fun read(buf: ByteBuffer): IDiscount? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeIDiscount.read(buf)
+    }
+
+    override fun allocationSize(value: IDiscount?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeIDiscount.allocationSize(value)
+        }
+    }
+
+    override fun write(value: IDiscount?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeIDiscount.write(value, buf)
+        }
+    }
+}
+
+
+
+
 public object FfiConverterOptionalTypeActivity: FfiConverterRustBuffer<Activity?> {
     override fun read(buf: ByteBuffer): Activity? {
         if (buf.get().toInt() == 0) {
@@ -3094,6 +5086,64 @@ public object FfiConverterOptionalTypeActivityFilter: FfiConverterRustBuffer<Act
         } else {
             buf.put(1)
             FfiConverterTypeActivityFilter.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeBtOrderState2: FfiConverterRustBuffer<BtOrderState2?> {
+    override fun read(buf: ByteBuffer): BtOrderState2? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBtOrderState2.read(buf)
+    }
+
+    override fun allocationSize(value: BtOrderState2?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBtOrderState2.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BtOrderState2?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBtOrderState2.write(value, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterOptionalTypeCJitStateEnum: FfiConverterRustBuffer<CJitStateEnum?> {
+    override fun read(buf: ByteBuffer): CJitStateEnum? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCJitStateEnum.read(buf)
+    }
+
+    override fun allocationSize(value: CJitStateEnum?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCJitStateEnum.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CJitStateEnum?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCJitStateEnum.write(value, buf)
         }
     }
 }
@@ -3188,6 +5238,35 @@ public object FfiConverterOptionalSequenceString: FfiConverterRustBuffer<List<ko
 
 
 
+public object FfiConverterOptionalSequenceTypeIManualRefund: FfiConverterRustBuffer<List<IManualRefund>?> {
+    override fun read(buf: ByteBuffer): List<IManualRefund>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterSequenceTypeIManualRefund.read(buf)
+    }
+
+    override fun allocationSize(value: List<IManualRefund>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterSequenceTypeIManualRefund.allocationSize(value)
+        }
+    }
+
+    override fun write(value: List<IManualRefund>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterSequenceTypeIManualRefund.write(value, buf)
+        }
+    }
+}
+
+
+
+
 public object FfiConverterOptionalMapStringString: FfiConverterRustBuffer<Map<kotlin.String, kotlin.String>?> {
     override fun read(buf: ByteBuffer): Map<kotlin.String, kotlin.String>? {
         if (buf.get().toInt() == 0) {
@@ -3235,6 +5314,131 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterSequenceTypeIBtOnchainTransaction: FfiConverterRustBuffer<List<IBtOnchainTransaction>> {
+    override fun read(buf: ByteBuffer): List<IBtOnchainTransaction> {
+        val len = buf.getInt()
+        return List<IBtOnchainTransaction>(len) {
+            FfiConverterTypeIBtOnchainTransaction.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IBtOnchainTransaction>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIBtOnchainTransaction.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IBtOnchainTransaction>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIBtOnchainTransaction.write(it, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterSequenceTypeIBtOrder: FfiConverterRustBuffer<List<IBtOrder>> {
+    override fun read(buf: ByteBuffer): List<IBtOrder> {
+        val len = buf.getInt()
+        return List<IBtOrder>(len) {
+            FfiConverterTypeIBtOrder.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IBtOrder>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIBtOrder.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IBtOrder>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIBtOrder.write(it, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterSequenceTypeICJitEntry: FfiConverterRustBuffer<List<IcJitEntry>> {
+    override fun read(buf: ByteBuffer): List<IcJitEntry> {
+        val len = buf.getInt()
+        return List<IcJitEntry>(len) {
+            FfiConverterTypeICJitEntry.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IcJitEntry>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeICJitEntry.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IcJitEntry>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeICJitEntry.write(it, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterSequenceTypeILspNode: FfiConverterRustBuffer<List<ILspNode>> {
+    override fun read(buf: ByteBuffer): List<ILspNode> {
+        val len = buf.getInt()
+        return List<ILspNode>(len) {
+            FfiConverterTypeILspNode.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ILspNode>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeILspNode.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ILspNode>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeILspNode.write(it, buf)
+        }
+    }
+}
+
+
+
+
+public object FfiConverterSequenceTypeIManualRefund: FfiConverterRustBuffer<List<IManualRefund>> {
+    override fun read(buf: ByteBuffer): List<IManualRefund> {
+        val len = buf.getInt()
+        return List<IManualRefund>(len) {
+            FfiConverterTypeIManualRefund.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IManualRefund>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIManualRefund.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IManualRefund>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIManualRefund.write(it, buf)
         }
     }
 }
@@ -3315,6 +5519,36 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
     
     
 
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `createCjitEntry`(`channelSizeSat`: kotlin.ULong, `invoiceSat`: kotlin.ULong, `invoiceDescription`: kotlin.String, `nodeId`: kotlin.String, `channelExpiryWeeks`: kotlin.UInt, `options`: CreateCjitOptions?) : IcJitEntry {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_create_cjit_entry(FfiConverterULong.lower(`channelSizeSat`),FfiConverterULong.lower(`invoiceSat`),FfiConverterString.lower(`invoiceDescription`),FfiConverterString.lower(`nodeId`),FfiConverterUInt.lower(`channelExpiryWeeks`),FfiConverterOptionalTypeCreateCjitOptions.lower(`options`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeICJitEntry.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `createOrder`(`lspBalanceSat`: kotlin.ULong, `channelExpiryWeeks`: kotlin.UInt, `options`: CreateOrderOptions?) : IBtOrder {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_create_order(FfiConverterULong.lower(`lspBalanceSat`),FfiConverterUInt.lower(`channelExpiryWeeks`),FfiConverterOptionalTypeCreateOrderOptions.lower(`options`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeIBtOrder.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
     @Throws(DecodingException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
      suspend fun `decode`(`invoice`: kotlin.String) : Scanner {
@@ -3339,6 +5573,36 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
     )
     }
     
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `estimateOrderFee`(`lspBalanceSat`: kotlin.ULong, `channelExpiryWeeks`: kotlin.UInt, `options`: CreateOrderOptions?) : IBtEstimateFeeResponse {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_estimate_order_fee(FfiConverterULong.lower(`lspBalanceSat`),FfiConverterUInt.lower(`channelExpiryWeeks`),FfiConverterOptionalTypeCreateOrderOptions.lower(`options`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeIBtEstimateFeeResponse.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `estimateOrderFeeFull`(`lspBalanceSat`: kotlin.ULong, `channelExpiryWeeks`: kotlin.UInt, `options`: CreateOrderOptions?) : IBtEstimateFeeResponse2 {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_estimate_order_fee_full(FfiConverterULong.lower(`lspBalanceSat`),FfiConverterUInt.lower(`channelExpiryWeeks`),FfiConverterOptionalTypeCreateOrderOptions.lower(`options`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeIBtEstimateFeeResponse2.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
 
     @Throws(ActivityException::class) fun `getActivities`(`filter`: ActivityFilter?, `txType`: PaymentType?, `tags`: List<kotlin.String>?, `search`: kotlin.String?, `minDate`: kotlin.ULong?, `maxDate`: kotlin.ULong?, `limit`: kotlin.UInt?, `sortDirection`: SortDirection?): List<Activity> {
             return FfiConverterSequenceTypeActivity.lift(
@@ -3380,6 +5644,36 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
     }
     
 
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `getCjitEntries`(`entryIds`: List<kotlin.String>?, `filter`: CJitStateEnum?, `refresh`: kotlin.Boolean) : List<IcJitEntry> {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_get_cjit_entries(FfiConverterOptionalSequenceString.lower(`entryIds`),FfiConverterOptionalTypeCJitStateEnum.lower(`filter`),FfiConverterBoolean.lower(`refresh`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeICJitEntry.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `getInfo`(`refresh`: kotlin.Boolean?) : IBtInfo? {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_get_info(FfiConverterOptionalBoolean.lower(`refresh`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalTypeIBtInfo.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
     @Throws(LnurlException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
      suspend fun `getLnurlInvoice`(`address`: kotlin.String, `amountSatoshis`: kotlin.ULong) : kotlin.String {
@@ -3392,6 +5686,36 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
         { FfiConverterString.lift(it) },
         // Error FFI converter
         LnurlException.ErrorHandler,
+    )
+    }
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `getMinZeroConfTxFee`(`orderId`: kotlin.String) : IBt0ConfMinTxFeeWindow {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_get_min_zero_conf_tx_fee(FfiConverterString.lower(`orderId`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeIBt0ConfMinTxFeeWindow.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `getOrders`(`orderIds`: List<kotlin.String>?, `filter`: BtOrderState2?, `refresh`: kotlin.Boolean) : List<IBtOrder> {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_get_orders(FfiConverterOptionalSequenceString.lower(`orderIds`),FfiConverterOptionalTypeBtOrderState2.lower(`filter`),FfiConverterBoolean.lower(`refresh`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeIBtOrder.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
     )
     }
 
@@ -3424,6 +5748,57 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
     
     
 
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `openChannel`(`orderId`: kotlin.String, `connectionString`: kotlin.String) : IBtOrder {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_open_channel(FfiConverterString.lower(`orderId`),FfiConverterString.lower(`connectionString`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeIBtOrder.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+        /**
+         * Refresh all active CJIT entries in the database with latest data from the LSP
+         */
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `refreshActiveCjitEntries`() : List<IcJitEntry> {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_refresh_active_cjit_entries(),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeICJitEntry.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
+        /**
+         * Refresh all active orders in the database with latest data from the LSP
+         */
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `refreshActiveOrders`() : List<IBtOrder> {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_refresh_active_orders(),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeIBtOrder.lift(it) },
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
+
     @Throws(ActivityException::class) fun `removeTags`(`activityId`: kotlin.String, `tags`: List<kotlin.String>)
         = 
     uniffiRustCallWithError(ActivityException) { _status ->
@@ -3441,6 +5816,22 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
 }
     
     
+
+    @Throws(BlocktankException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `updateBlocktankUrl`(`newUrl`: kotlin.String) {
+        return uniffiRustCallAsync(
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_update_blocktank_url(FfiConverterString.lower(`newUrl`),),
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        BlocktankException.ErrorHandler,
+    )
+    }
 
     @Throws(ActivityException::class) fun `upsertActivity`(`activity`: Activity)
         = 

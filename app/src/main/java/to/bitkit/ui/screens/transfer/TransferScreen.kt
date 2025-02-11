@@ -21,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -29,10 +31,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.Toast
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.FullWidthTextButton
-import to.bitkit.ui.shared.OrderSummary
+import to.bitkit.ui.shared.moneyString
+import to.bitkit.ui.shared.util.onLongPress
+import to.bitkit.utils.Logger
+import uniffi.bitkitcore.IBtOrder
 
 @Composable
 fun TransferScreen(
@@ -62,6 +70,8 @@ private fun CreateView(viewModel: TransferViewModel) {
     var isCreating by remember { mutableStateOf(false) }
     var spendingBalanceSats by remember { mutableIntStateOf(50_000) }
     val scope = rememberCoroutineScope()
+    val app = appViewModel ?: return
+    val blocktank = blocktankViewModel ?: return
 
     OutlinedTextField(
         label = { Text("Sats") },
@@ -76,8 +86,11 @@ private fun CreateView(viewModel: TransferViewModel) {
             isCreating = true
             scope.launch {
                 try {
-                    viewModel.createOrder(spendingBalanceSats)
-                } catch (e: Exception) {
+                    val order = blocktank.createOrder(spendingBalanceSats.toULong())
+                    viewModel.onOrderCreated(order)
+                } catch (e: Throwable) {
+                    app.toast(e)
+                } finally {
                     isCreating = false
                 }
             }
@@ -94,6 +107,9 @@ private fun ConfirmView(
     state: TransferUiState.Confirm,
     viewModel: TransferViewModel,
 ) {
+    val app = appViewModel ?: return
+    val blocktank = blocktankViewModel ?: return
+    val scope = rememberCoroutineScope()
     Text(
         text = "Confirm Order",
         style = MaterialTheme.typography.titleLarge,
@@ -134,9 +150,53 @@ private fun ConfirmView(
         }
         Spacer(modifier = Modifier.height(24.dp))
         FullWidthTextButton(
-            onClick = { viewModel.manualOpenChannel(state.order) },
+            onClick = {
+                scope.launch {
+                    try {
+                        blocktank.open(orderId = state.order.id)
+                        Logger.info("Channel opened for order ${state.order.id}")
+                        app.toast(Toast.ToastType.SUCCESS, "Success", "Manual open success")
+                    } catch (e: Throwable) {
+                        Logger.error("Error opening channel for order ${state.order.id}", e)
+                        app.toast(e)
+                    }
+                }
+            },
         ) {
             Text(text = "Try manual open")
         }
+    }
+}
+
+@Composable
+private fun OrderSummary(order: IBtOrder) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.padding(12.dp)
+    ) {
+        val clipboardManager = LocalClipboardManager.current
+        Text(
+            text = order.id,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier
+                .onLongPress { clipboardManager.setText(AnnotatedString(order.id)) }
+                .padding(bottom = 8.dp)
+        )
+        Text(
+            text = "Fees: " + moneyString(order.feeSat.toLong()),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = "Spending: " + moneyString(order.clientBalanceSat.toLong()),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = "Receiving: " + moneyString(order.lspBalanceSat.toLong()),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = "State: ${order.state2}",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }

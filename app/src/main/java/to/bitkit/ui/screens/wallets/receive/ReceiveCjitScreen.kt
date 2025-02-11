@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,13 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.formatWithDotSeparator
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.walletViewModel
+import to.bitkit.utils.Logger
 
 @Composable
 fun ReceiveCjitScreen(
@@ -87,7 +86,7 @@ fun ReceiveCjitScreen(
                 Column(
                     modifier = Modifier
                         .clickable {
-                            amount = (info.options.minChannelSizeSat / 2).toString()
+                            amount = (info.options.minChannelSizeSat / 2u).toString()
                         }
                 ) {
                     Text(
@@ -96,7 +95,7 @@ fun ReceiveCjitScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                     Text(
-                        text = (info.options.minChannelSizeSat / 2).formatWithDotSeparator(),
+                        text = (info.options.minChannelSizeSat / 2u).formatWithDotSeparator(),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -105,7 +104,7 @@ fun ReceiveCjitScreen(
                 Column(
                     modifier = Modifier
                         .clickable {
-                            amount = (info.options.maxChannelSizeSat / 2).toString()
+                            amount = (info.options.maxChannelSizeSat / 2u).toString()
                         }
                 ) {
                     Text(
@@ -114,7 +113,7 @@ fun ReceiveCjitScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                     Text(
-                        text = (info.options.maxChannelSizeSat / 2).formatWithDotSeparator(),
+                        text = (info.options.maxChannelSizeSat / 2u).formatWithDotSeparator(),
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
@@ -127,15 +126,15 @@ fun ReceiveCjitScreen(
         FullWidthTextButton(
             onClick = {
                 if (walletUiState.nodeId.isEmpty()) return@FullWidthTextButton
-                amount.toIntOrNull()?.let { amountValue ->
+                amount.toULongOrNull()?.let { amountValue ->
                     scope.launch {
                         isCreatingInvoice = true
                         try {
                             val entry = blocktank.createCjit(amountSats = amountValue, description = "Bitkit")
                             onCjitCreated(entry.invoice.request)
                         } catch (e: Exception) {
+                            Logger.error("Failed to create cjit", e)
                             app.toast(e)
-                            Log.e(APP, "Failed to create cjit", e)
                         } finally {
                             isCreatingInvoice = false
                         }

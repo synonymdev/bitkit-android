@@ -18,3 +18,11 @@ fun Number.formatWithDotSeparator(): String {
     val decimalFormat = DecimalFormat("#,###", symbols)
     return decimalFormat.format(this)
 }
+
+fun ULong.formatWithDotSeparator(): String {
+    return this.toLong().formatWithDotSeparator()
+}
+
+fun UInt.formatWithDotSeparator(): String {
+    return this.toInt().formatWithDotSeparator()
+}

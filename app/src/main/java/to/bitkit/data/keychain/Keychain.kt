@@ -1,7 +1,6 @@
 package to.bitkit.data.keychain
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -16,10 +15,10 @@ import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
-import to.bitkit.shared.KeychainError
+import to.bitkit.utils.KeychainError
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,7 +57,7 @@ class Keychain @Inject constructor(
         } catch (e: Exception) {
             throw KeychainError.FailedToSave(key)
         }
-        Log.i(APP, "Saved to keychain: $key")
+        Logger.info("Saved to keychain: $key")
     }
 
     suspend fun delete(key: String) {
@@ -67,7 +66,7 @@ class Keychain @Inject constructor(
         } catch (e: Exception) {
             throw KeychainError.FailedToDelete(key)
         }
-        Log.d(APP, "Deleted from keychain: $key")
+        Logger.debug("Deleted from keychain: $key")
     }
 
     fun exists(key: String): Boolean {
@@ -82,7 +81,7 @@ class Keychain @Inject constructor(
         val keys = snapshot.asMap().keys
         context.keychain.edit { it.clear() }
 
-        Log.i(APP, "Deleted all keychain entries: ${keys.joinToString()}")
+        Logger.info("Deleted all keychain entries: ${keys.joinToString()}")
     }
 
     private val String.indexed: Preferences.Key<String>

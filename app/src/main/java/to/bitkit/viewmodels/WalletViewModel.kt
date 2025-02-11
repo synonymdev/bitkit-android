@@ -1,7 +1,6 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,28 +14,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.ChannelId
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.OrderEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.env.Tag.APP
-import to.bitkit.env.Tag.DEV
-import to.bitkit.env.Tag.LSP
-import to.bitkit.ext.first
 import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
@@ -44,11 +36,12 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.models.blocktank.BtOrder
-import to.bitkit.services.BlocktankService
+import to.bitkit.services.BlocktankServiceOld
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -58,7 +51,8 @@ class WalletViewModel @Inject constructor(
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
-    private val blocktankService: BlocktankService,
+    private val coreService: CoreService,
+    private val blocktankServiceOld: BlocktankServiceOld,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -117,7 +111,7 @@ class WalletViewModel @Inject constructor(
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
-                Log.e(APP, "Node startup error", error)
+                Logger.error("Node startup error", error)
                 throw error
             }
 
@@ -127,7 +121,7 @@ class WalletViewModel @Inject constructor(
             try {
                 lightningService.connectToTrustedPeers()
             } catch (e: Throwable) {
-                Log.e(APP, "Failed to connect to trusted peers", e)
+                Logger.error("Failed to connect to trusted peers", e)
             }
 
             launch(bgDispatcher) { refreshBip21() }
@@ -137,7 +131,6 @@ class WalletViewModel @Inject constructor(
 
             launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
-            launch(bgDispatcher) { syncDbOrders() }
         }
     }
 
@@ -146,24 +139,12 @@ class WalletViewModel @Inject constructor(
             .filter { _nodeLifecycleState == NodeLifecycleState.Running }
             .collect {
                 runCatching { sync() }
-                Log.v(APP, "App state synced with ldk-node.")
+                Logger.verbose("App state synced with ldk-node.")
             }
     }
 
     private suspend fun observeDbConfig() {
-        db.configDao().getAll().collect { Log.i(APP, "Database config sync: $it") }
-    }
-
-    private suspend fun syncDbOrders() {
-        db.ordersDao().getAll().filter { it.isNotEmpty() }.collect { dbOrders ->
-            Log.d(APP, "Database orders sync: $dbOrders")
-
-            runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
-                .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                .onSuccess { btOrders ->
-                    _uiState.update { it.copy(orders = btOrders) }
-                }
-        }
+        db.configDao().getAll().collect { Logger.info("Database config sync: $it") }
     }
 
     private var isSyncingWallet = false
@@ -172,7 +153,7 @@ class WalletViewModel @Inject constructor(
         syncState()
 
         if (isSyncingWallet) {
-            Log.w(APP, "Sync already in progress, waiting for existing sync.")
+            Logger.warn("Sync already in progress, waiting for existing sync.")
             while (isSyncingWallet) {
                 delay(500)
             }
@@ -232,15 +213,6 @@ class WalletViewModel @Inject constructor(
     fun refreshState() {
         viewModelScope.launch {
             sync()
-            launch(bgDispatcher) {
-                db.ordersDao().getAll().filter { it.isNotEmpty() }.first().let { dbOrders ->
-                    runCatching { blocktankService.getOrders(dbOrders.map { it.id }) }
-                        .onFailure { Log.e(APP, "Failed to fetch orders from Blocktank.", it) }
-                        .onSuccess { btOrders ->
-                            _uiState.update { it.copy(orders = btOrders) }
-                        }
-                }
-            }
         }
     }
 
@@ -249,12 +221,15 @@ class WalletViewModel @Inject constructor(
         val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
         if (cachedToken == token) {
-            Log.d(LSP, "Skipped registering for notifications, current device token already registered")
+            Logger.debug("Skipped registering for notifications, current device token already registered")
             return
         }
 
-        runCatching { blocktankService.registerDevice(token) }
-            .onFailure { Log.e(LSP, "Failed to register device for notifications", it) }
+        try {
+            blocktankServiceOld.registerDevice(token)
+        } catch (e: Throwable) {
+            Logger.error("Failed to register device for notifications", e)
+        }
     }
 
     private val incomingLightningCapacitySats: ULong?
@@ -300,8 +275,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun findChannelById(id: ChannelId): ChannelDetails? = lightningService.channels?.find { it.channelId == id }
-
     fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {
             runCatching { lightningService.send(bolt11) }
@@ -322,7 +295,7 @@ class WalletViewModel @Inject constructor(
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
-            val peer = lightningService.peers?.first ?: error("No peer connected to open channel.")
+            val peer = lightningService.peers?.firstOrNull() ?: error("No peer connected to open channel.")
             runCatching { lightningService.openChannel(peer, 50000u, 10000u) }
                 .onSuccess {
                     ToastEventBus.send(
@@ -386,7 +359,7 @@ class WalletViewModel @Inject constructor(
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-            runCatching { blocktankService.registerDevice(token) }
+            runCatching { blocktankServiceOld.registerDevice(token) }
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -408,7 +381,7 @@ class WalletViewModel @Inject constructor(
     fun debugDb() {
         viewModelScope.launch {
             db.configDao().getAll().collect {
-                Log.d(DEV, "${it.count()} entities in DB: $it")
+                Logger.debug("${it.count()} entities in DB: $it")
             }
         }
     }
@@ -416,7 +389,7 @@ class WalletViewModel @Inject constructor(
     fun debugFcmToken() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-            Log.d(DEV, "FCM registration token: $token")
+            Logger.debug("FCM registration token: $token")
         }
     }
 
@@ -425,7 +398,7 @@ class WalletViewModel @Inject constructor(
             val key = "test"
             if (keychain.exists(key)) {
                 val value = keychain.loadString(key)
-                Log.d(DEV, "Keychain entry: $key = $value")
+                Logger.debug("Keychain entry: $key = $value")
                 keychain.delete(key)
             }
             keychain.saveString(key, "testValue")
@@ -435,77 +408,26 @@ class WalletViewModel @Inject constructor(
     fun debugMnemonic() {
         viewModelScope.launch {
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-            Log.d(DEV, "Mnemonic: \n$mnemonic")
+            Logger.debug(mnemonic)
         }
     }
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = FirebaseMessaging.getInstance().token.await()
-            blocktankService.testNotification(token)
+            blocktankServiceOld.testNotification(token)
         }
     }
 
     fun debugBlocktankInfo() {
-        viewModelScope.launch(bgDispatcher) { blocktankService.getInfo() }
-    }
-
-    fun debugBtOrdersSync() {
-        val orderIds = _uiState.value.orders.map { it.id }.takeIf { it.isNotEmpty() } ?: error("No orders to sync.")
-        viewModelScope.launch {
-            runCatching { blocktankService.getOrders(orderIds) }
-                .onSuccess { orders ->
-                    _uiState.update { it.copy(orders = orders) }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtCreateOrder(sats: Int) {
-        viewModelScope.launch {
-            runCatching { blocktankService.createOrder(spendingBalanceSats = sats, 6) }
-                .onSuccess { order ->
-                    launch {
-                        db.ordersDao().upsert(OrderEntity(order.id))
-                        Log.d(APP, "Order ID saved to DB: ${order.id}")
-                    }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtPayOrder(order: BtOrder) {
-        viewModelScope.launch {
-            runCatching { lightningService.send(order.payment.onchain.address, order.feeSat) }
-                .onSuccess { txId ->
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Order paid",
-                        description = "Tx ID: $txId"
-                    )
-                    // TODO: watch this order for updates
-                    launch {
-                        Log.d(DEV, "Syncing orders")
-                        delay(1500)
-                        syncState()
-                        debugBtOrdersSync()
-                    }
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugBtManualOpenChannel(order: BtOrder) {
-        viewModelScope.launch {
-            runCatching { blocktankService.openChannel(order.id) }
-                .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Success",
-                        description = "Opened channel manually"
-                    )
-                }
-                .onFailure { ToastEventBus.send(it) }
+        viewModelScope.launch(bgDispatcher) {
+            try {
+                val info = coreService.blocktank.info()
+                Logger.debug("Blocktank info: $info")
+            } catch (e: Throwable) {
+                Logger.error("Error getting Blocktank info:", e)
+                ToastEventBus.send(e)
+            }
         }
     }
 
@@ -555,7 +477,6 @@ data class MainUiState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
-    val orders: List<BtOrder> = emptyList(),
 )
 
 // endregion

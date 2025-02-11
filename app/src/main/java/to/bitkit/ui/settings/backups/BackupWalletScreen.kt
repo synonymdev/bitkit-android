@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings.backups
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,12 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.env.Tag.APP
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.secondaryColor
+import to.bitkit.utils.Logger
 
 @Composable
 fun BackupWalletScreen(
@@ -117,7 +116,7 @@ fun BackupWalletScreen(
                                     mnemonic = app.loadMnemonic()!!
                                     showMnemonic = true
                                 } catch (e: Exception) {
-                                    Log.e(APP, "Failed to load mnemonic", e)
+                                    Logger.error("Failed to load mnemonic", e)
                                     app.toast(
                                         type = Toast.ToastType.ERROR,
                                         title = "Error",

@@ -1,13 +1,12 @@
 package to.bitkit.ext
 
-import android.util.Log
 import kotlinx.coroutines.Job
-import to.bitkit.env.Tag.APP
+import to.bitkit.utils.Logger
 
-fun Job.logCompletion(name: String = "") = invokeOnCompletion {
-    if (it != null) {
-        Log.v(APP, "Coroutine '$name' error: ${it.message}", it)
+fun Job.logCompletion(name: String = "") = invokeOnCompletion { err ->
+    if (err != null) {
+        Logger.verbose("Coroutine '$name' error: ${err.message}")
     } else {
-        Log.v(APP, "Coroutine '$name' completed successfully")
+        Logger.verbose("Coroutine '$name' completed successfully")
     }
 }

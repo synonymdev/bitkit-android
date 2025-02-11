@@ -2,12 +2,11 @@ package to.bitkit.models
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import to.bitkit.data.APP_PREFS
 import to.bitkit.di.json
-import to.bitkit.env.Tag.APP
+import to.bitkit.utils.Logger
 
 @Serializable
 data class NewTransactionSheetDetails(
@@ -26,7 +25,7 @@ data class NewTransactionSheetDetails(
                 editor.putString(BACKGROUND_TRANSACTION_KEY, jsonData)
                 editor.apply()
             } catch (e: Exception) {
-                Log.e(APP, "Failed to cache transaction", e)
+                Logger.error("Failed to cache transaction", e)
             }
         }
 
@@ -37,7 +36,7 @@ data class NewTransactionSheetDetails(
             return try {
                 json.decodeFromString(jsonData)
             } catch (e: Exception) {
-                Log.e(APP, "Failed to load cached transaction", e)
+                Logger.error("Failed to load cached transaction", e)
                 null
             }
         }

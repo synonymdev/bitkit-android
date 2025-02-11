@@ -1,12 +1,11 @@
 package to.bitkit.env
 
-import android.util.Log
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.ensureDir
 import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BlocktankNotificationType
+import to.bitkit.utils.Logger
 import kotlin.io.path.Path
 
 @Suppress("ConstPropertyName")
@@ -76,7 +75,7 @@ internal object Env {
 
     fun initAppStoragePath(path: String) {
         require(path.isNotBlank()) { "App storage path cannot be empty." }
-        Log.i("APP", "App storage path: $path")
+        Logger.info("App storage path: $path")
         appStoragePath = path
     }
 
@@ -89,7 +88,7 @@ internal object Env {
             .toFile()
             .ensureDir()
             .absolutePath
-        Log.d(APP, "Using ${dir.uppercase()} storage path: $absolutePath")
+        Logger.debug("Using ${dir.uppercase()} storage path: $absolutePath")
         return absolutePath
     }
 

@@ -18,6 +18,7 @@ import to.bitkit.viewmodels.WalletViewModel
 import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToBackupSettings
+import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
 import to.bitkit.ui.navigateToLightning
@@ -42,6 +43,7 @@ fun SettingsScreen(
             NavButton(stringResource(R.string.general)) { navController.navigateToGeneralSettings() }
             NavButton(stringResource(R.string.button_backup_settings)) { navController.navigateToBackupSettings() }
             NavButton("Lightning") { navController.navigateToLightning() }
+            NavButton("Channel Orders") { navController.navigateToChannelOrdersSettings() }
             if (Env.network == Network.REGTEST) {
                 LabelText("REGTEST ONLY")
                 NavButton("Dev Settings") { navController.navigateToDevSettings() }

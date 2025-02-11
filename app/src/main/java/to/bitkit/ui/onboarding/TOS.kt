@@ -60,7 +60,7 @@ private fun TOSPreview() {
 }
 
 private val htmlPreface = """
-<P><B>Effective date: June 7, 2024</B></P>
+<P><B>Effective date: February 4, 2025</B></P>
 <br>
 <P><B>IMPORTANT: By purchasing, accessing or using any of the Bitkit Services (as defined below), you (“you”, “your”, “User”) acknowledge that you have read, understand, and completely agree to these Terms (as updated and amended from time to time, the “Terms”). If you do not agree to be bound by these Terms or with any subsequent amendments, changes or updates, you may not purchase, access or use any of the Bitkit Services, and if you do purchase, access or use any of the Bitkit Services, you will be bound by these Terms, as updated and amended from time to time. Your only recourse in the case of your unwillingness to continue to be bound by these Terms is to stop using all of the Bitkit Services, request the closure of all Connections (as defined below) and transfer all Supported Assets. These Terms apply to all users and others who access the Bitkit Services (“Users”).</B></P>
 <br>
@@ -68,7 +68,7 @@ private val htmlPreface = """
 <br>
 <P><B>SYNONYM IS ACTING AS A TECHNOLOGY PROVIDER ONLY. SYNONYM AND THE BITKIT SERVICES DO NOT PROVIDE YOU WITH ANY CUSTODIAL SERVICES FOR YOUR DIGITAL ASSETS OR FUNDS. YOU SHOULD ONLY UTILISE THE BITKIT SERVICES IF YOU ARE FAMILIAR WITH DIGITAL ASSETS AND THEIR ASSOCIATED RISKS, INCLUDING HOW TO CUSTODY THOSE DIGITAL ASSETS. SYNONYM DOES NOT STORE USERS’ PRIVATE KEYS OR RECOVERY PHRASES, AND IT IS VERY IMPORTANT THAT YOU RECORD THIS INFORMATION AND MAINTAIN IT SECURELY. IF YOU LOSE SUCH INFORMATION, YOU WILL LOSE ACCESS TO THE BITKIT WALLET AND ANY DIGITAL ASSETS THAT YOU HOLD THEREIN AND SYNONYM WILL NOT BE ABLE TO RECOVER ACCESS FOR YOU.</B></P>
 <br>
-<P><B>FUNDS TRANSFERRED USING CAVEMAN JUST-IN-TIME CHANNELS BY THIRD PARTIES MAY NOT BE DELIVERED TO YOU BY THE THIRD PARTY. YOU ARE REFERRED TO CLAUSE 9.3 OF THE TERMS AS TO SYNONYM’S LIABILITY FOR THIRD PARTY SERVICES.</B></P>
+<P><B>FUNDS TRANSFERRED USING JUST-IN-TIME CHANNELS BY THIRD PARTIES MAY NOT BE DELIVERED TO YOU BY THE THIRD PARTY. YOU ARE REFERRED TO CLAUSE 9.3 OF THE TERMS AS TO SYNONYM’S LIABILITY FOR THIRD PARTY SERVICES.</B></P>
 <br>
 <P><B>PLEASE REVIEW THE ARBITRATION PROVISION SET FORTH BELOW CAREFULLY, AS IT WILL REQUIRE ALL PERSONS TO RESOLVE DISPUTES ON AN INDIVIDUAL BASIS THROUGH FINAL AND BINDING ARBITRATION AND TO WAIVE ANY RIGHT TO PROCEED AS A REPRESENTATIVE OR CLASS MEMBER IN ANY CLASS OR REPRESENTATIVE PROCEEDING. BY USING THE BITKIT SERVICES, YOU EXPRESSLY ACKNOWLEDGE THAT YOU HAVE READ AND UNDERSTAND ALL OF THE TERMS OF THIS PROVISION AND HAVE TAKEN TIME TO CONSIDER THE CONSEQUENCES OF THIS IMPORTANT DECISION.</B></P>
 <br>

@@ -8,10 +8,9 @@ import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
 import android.content.ContextWrapper
 import android.content.pm.PackageManager.PERMISSION_GRANTED
-import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import to.bitkit.env.Tag.APP
+import to.bitkit.utils.Logger
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -49,7 +48,7 @@ fun Context.copyAssetToStorage(asset: String, dest: String) {
             }
         }
     } catch (e: IOException) {
-        Log.e(APP, "Failed to copy asset file: $asset", e)
+        Logger.error("Failed to copy asset file: $asset", e)
     }
 }
 

@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.scanner
 
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -10,7 +9,8 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import to.bitkit.env.Tag.APP
+import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 
 @OptIn(ExperimentalGetImage::class)
 class QrCodeAnalyzer(
@@ -45,8 +45,8 @@ class QrCodeAnalyzer(
                             }
                         }
                     } else {
-                        val error = it.exception ?: Exception("Scan failed")
-                        Log.e(APP, error.message.orEmpty(), error)
+                        val error = it.exception ?: AppError("Scan failed")
+                        Logger.error(error.message.orEmpty(), error)
                         onScanResult(Result.failure(error))
                     }
                     image.close()

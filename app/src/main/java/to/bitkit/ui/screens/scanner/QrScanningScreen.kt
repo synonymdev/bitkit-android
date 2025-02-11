@@ -3,7 +3,6 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
-import android.util.Log
 import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -49,10 +48,10 @@ import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.env.Tag.APP
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
 @Composable
@@ -97,11 +96,11 @@ fun QrScanningScreen(
             QrCodeAnalyzer { result ->
                 if (result.isSuccess) {
                     val qrCode = requireNotNull(result.getOrNull())
-                    Log.d(APP, "Scan success: $qrCode")
+                    Logger.debug("Scan success: $qrCode")
                     onScanSuccess(qrCode)
                 } else {
                     val error = requireNotNull(result.exceptionOrNull())
-                    Log.e(APP, "Failed to scan QR code", error)
+                    Logger.error("Failed to scan QR code", error)
                     app.toast(error)
                 }
             }

@@ -13,14 +13,13 @@ import android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import to.bitkit.R
 import to.bitkit.currentActivity
-import to.bitkit.env.Tag.APP
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
 import to.bitkit.ext.requiresPermission
+import to.bitkit.utils.Logger
 import kotlin.random.Random
 
 val Context.CHANNEL_MAIN get() = getString(R.string.app_notifications_channel_id)
@@ -64,7 +63,7 @@ internal fun pushNotification(
     id: Int = Random.nextInt(),
     context: Context? = currentActivity(),
 ): Int {
-    Log.d(APP, "Push notification: $title, $text")
+    Logger.debug("Push notification: $title, $text")
     context?.withPermission(postNotificationsPermission) {
         val builder = notificationBuilder(extras)
             .setContentTitle(title)
