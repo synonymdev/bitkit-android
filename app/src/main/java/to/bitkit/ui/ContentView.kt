@@ -23,19 +23,26 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
+import to.bitkit.ui.screens.transfer.FundingScreen
+import to.bitkit.ui.screens.transfer.TransferIntroScreen
 import to.bitkit.ui.screens.transfer.TransferScreen
 import to.bitkit.ui.screens.transfer.TransferViewModel
+import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -191,10 +198,52 @@ fun ContentView(
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
-                transfer(navController)
                 allActivity(activityListViewModel, navController)
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
+
+                // TODO extract transferNavigation
+                navigation<Routes.TransferRoot>(
+                    startDestination = Routes.TransferIntro,
+                ) {
+                    composable<Routes.TransferIntro> {
+                        TransferIntroScreen()
+                    }
+                    composable<Routes.SpendingAmount> {
+                        val viewModel = hiltViewModel<TransferViewModel>()
+                        TransferScreen(viewModel, navController)
+                    }
+                    composable<Routes.Funding> {
+                        FundingScreen(
+                            onTransfer = { navController.navigate(Routes.SpendingAmount) },
+                            onFund = {
+                                scope.launch {
+                                    // TODO show receive sheet -> ReceiveAmount
+                                    navController.popBackStack<Routes.Home>(inclusive = false)
+                                    delay(500) // Wait for nav to actually finish
+                                    appViewModel.showSheet(BottomSheetType.Receive)
+                                }
+                            },
+                            onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.navigateUp() },
+                        )
+                    }
+                    composable<Routes.FundingAdvanced> {
+                        FundingAdvancedScreen(
+                            onLnUrl = { navController.navigateToQrScanner() },
+                            onManual = { navController.navigate(Routes.ExternalConnection) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalConnection> {
+                        ExternalConnectionScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -342,15 +391,6 @@ private fun NavGraphBuilder.regtestSettings(
     }
 }
 
-private fun NavGraphBuilder.transfer(
-    navController: NavHostController,
-) {
-    composable<Routes.Transfer> {
-        val viewModel = hiltViewModel<TransferViewModel>()
-        TransferScreen(viewModel, navController)
-    }
-}
-
 private fun NavGraphBuilder.allActivity(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
@@ -463,8 +503,12 @@ fun NavController.navigateToRegtestSettings() = navigate(
     route = Routes.RegtestSettings,
 )
 
-fun NavController.navigateToTransfer() = navigate(
-    route = Routes.Transfer,
+fun NavController.navigateToTransferSpendingAmount() = navigate(
+    route = Routes.SpendingAmount,
+)
+
+fun NavController.navigateToTransferFunding() = navigate(
+    route = Routes.Funding,
 )
 
 fun NavController.navigateToAllActivity() = navigate(
@@ -527,7 +571,25 @@ object Routes {
     data object RegtestSettings
 
     @Serializable
-    data object Transfer
+    data object TransferRoot
+
+    @Serializable
+    data object TransferIntro
+
+    @Serializable
+    data object SpendingAmount
+
+    @Serializable
+    data object SpendingConfirm
+
+    @Serializable
+    data object Funding
+
+    @Serializable
+    data object FundingAdvanced
+
+    @Serializable
+    data object ExternalConnection
 
     @Serializable
     data object AllActivity

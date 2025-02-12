@@ -42,7 +42,7 @@ import to.bitkit.ui.utils.withAccent
 fun SavingsWalletScreen(
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
-    onTransferClick: () -> Unit,
+    onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
@@ -72,7 +72,7 @@ fun SavingsWalletScreen(
                 if (!showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))
                     SecondaryButton(
-                        onClick = onTransferClick,
+                        onClick = onTransferToSpendingClick,
                         text = "Transfer To Spending",
                         icon = {
                             Icon(
@@ -112,7 +112,7 @@ private fun SavingsWalletScreenPreview() {
         SavingsWalletScreen(
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
-            onTransferClick = {},
+            onTransferToSpendingClick = {},
             onBackClick = { },
         )
     }

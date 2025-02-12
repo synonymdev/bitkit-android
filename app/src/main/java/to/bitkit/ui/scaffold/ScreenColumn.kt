@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 
 @Composable
 fun ScreenColumn(
+    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -16,5 +17,6 @@ fun ScreenColumn(
         modifier = Modifier
             .systemBarsPadding()
             .fillMaxSize()
+            .then(modifier)
     )
 }

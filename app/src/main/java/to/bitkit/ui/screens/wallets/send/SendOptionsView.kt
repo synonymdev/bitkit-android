@@ -39,7 +39,7 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.wallets.send.components.SendButton
+import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
@@ -129,7 +129,7 @@ private fun SendOptionsContent(
         )
         Spacer(modifier = Modifier.height(4.dp))
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.contact),
             icon = Icons.Default.Person,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -140,7 +140,7 @@ private fun SendOptionsContent(
         }
 
         val clipboard = LocalClipboardManager.current
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.paste_invoice),
             icon = Icons.Default.ContentPaste,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -149,7 +149,7 @@ private fun SendOptionsContent(
             onEvent(SendEvent.Paste(uri))
         }
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.enter_manually),
             icon = Icons.Outlined.Edit,
             modifier = Modifier.padding(bottom = 4.dp)
@@ -157,7 +157,7 @@ private fun SendOptionsContent(
             onEvent(SendEvent.EnterManually)
         }
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.wallet__recipient_scan),
             icon = Icons.Default.CenterFocusWeak,
         ) {

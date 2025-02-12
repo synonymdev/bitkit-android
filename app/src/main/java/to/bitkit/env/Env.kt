@@ -71,6 +71,11 @@ internal object Env {
     )
     const val DERIVATION_NAME = "bitkit-notifications"
 
+    object TransactionDefaults {
+        val recommendedBaseFee = 256u // Total recommended tx base fee in sats
+        // val dustLimit = 546
+    }
+
     private lateinit var appStoragePath: String
 
     fun initAppStoragePath(path: String) {

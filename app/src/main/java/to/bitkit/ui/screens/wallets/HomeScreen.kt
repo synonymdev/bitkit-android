@@ -48,7 +48,7 @@ import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToQrScanner
-import to.bitkit.ui.navigateToTransfer
+import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
@@ -110,7 +110,7 @@ fun HomeScreen(
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onTransferClick = { rootNavController.navigateToTransfer() },
+                        onTransferToSpendingClick = { rootNavController.navigateToTransferSpendingAmount() },
                         onBackClick = { walletNavController.popBackStack() },
                     )
                 }

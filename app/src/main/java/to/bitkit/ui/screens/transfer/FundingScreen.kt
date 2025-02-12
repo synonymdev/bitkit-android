@@ -1,0 +1,114 @@
+package to.bitkit.ui.screens.transfer
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import to.bitkit.R
+import to.bitkit.env.Env
+import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
+
+@Composable
+fun FundingScreen(
+    onTransfer: () -> Unit = {},
+    onFund: () -> Unit = {},
+    onAdvanced: () -> Unit = {},
+    onBackClick: () -> Unit = {},
+    onCloseClick: () -> Unit = {},
+) {
+    ScreenColumn {
+        AppTopBar(
+            titleText = stringResource(R.string.lightning__funding__nav_title),
+            onBackClick = onBackClick,
+            actions = {
+                IconButton(onClick = onCloseClick) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.common__close),
+                    )
+                }
+            },
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(32.dp))
+            Display(text = stringResource(R.string.lightning__funding__title).withAccent(accentColor = Colors.Purple))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val balances = LocalBalances.current
+            val canTransfer = remember(balances.totalOnchainSats) {
+                balances.totalOnchainSats >= Env.TransactionDefaults.recommendedBaseFee
+            }
+
+            val isGeoBlocked = false // TODO use GeoBlocking state
+
+            val text = if (isGeoBlocked) {
+                stringResource(R.string.lightning__funding__text_blocked)
+            } else {
+                stringResource(R.string.lightning__funding__text)
+            }
+            BodyM(text = text, color = Colors.White64)
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RectangleButton(
+                    label = stringResource(R.string.lightning__funding__button1),
+                    icon = Icons.Default.SwapVert,
+                    iconColor = Colors.Purple,
+                    enabled = canTransfer && !isGeoBlocked,
+                    onClick = onTransfer,
+                )
+                RectangleButton(
+                    label = stringResource(R.string.lightning__funding__button2),
+                    icon = Icons.Default.QrCode,
+                    iconColor = Colors.Purple,
+                    enabled = !isGeoBlocked,
+                    onClick = onFund,
+                )
+                RectangleButton(
+                    label = stringResource(R.string.lightning__funding__button3),
+                    icon = Icons.Default.Share,
+                    iconColor = Colors.Purple,
+                    onClick = onAdvanced,
+                )
+            }
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun FundingScreenPreview() {
+    AppThemeSurface {
+        FundingScreen()
+    }
+}
