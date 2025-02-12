@@ -40,8 +40,7 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.TransferIntroScreen
-import to.bitkit.ui.screens.transfer.TransferScreen
-import to.bitkit.ui.screens.transfer.TransferViewModel
+import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
@@ -65,6 +64,8 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.ui.screens.transfer.SpendingAmountScreen
+import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
 
 @Composable
 fun ContentView(
@@ -73,6 +74,7 @@ fun ContentView(
     blocktankViewModel: BlocktankViewModel,
     currencyViewModel: CurrencyViewModel,
     activityListViewModel: ActivityListViewModel,
+    transferViewModel: TransferViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -179,6 +181,7 @@ fun ContentView(
             LocalBlocktankViewModel provides blocktankViewModel,
             LocalCurrencyViewModel provides currencyViewModel,
             LocalActivityListViewModel provides activityListViewModel,
+            LocalTransferViewModel provides transferViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {
@@ -210,8 +213,19 @@ fun ContentView(
                         TransferIntroScreen()
                     }
                     composable<Routes.SpendingAmount> {
-                        val viewModel = hiltViewModel<TransferViewModel>()
-                        TransferScreen(viewModel, navController)
+                        SpendingAmountScreen(
+                            viewModel = transferViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                        )
+                    }
+                    composable<Routes.SpendingConfirm> {
+                        SpendingConfirmScreen(
+                            viewModel = transferViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
                     }
                     composable<Routes.Funding> {
                         FundingScreen(

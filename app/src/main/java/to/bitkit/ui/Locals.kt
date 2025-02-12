@@ -9,6 +9,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyUiState
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 // Locals
@@ -21,6 +22,7 @@ val LocalWalletViewModel = staticCompositionLocalOf<WalletViewModel?> { null }
 val LocalBlocktankViewModel = staticCompositionLocalOf<BlocktankViewModel?> { null }
 val LocalCurrencyViewModel = staticCompositionLocalOf<CurrencyViewModel?> { null }
 val LocalActivityListViewModel = staticCompositionLocalOf<ActivityListViewModel?> { null }
+val LocalTransferViewModel = staticCompositionLocalOf<TransferViewModel?> { null }
 
 val appViewModel: AppViewModel?
     @Composable get() = LocalAppViewModel.current
@@ -36,3 +38,6 @@ val currencyViewModel: CurrencyViewModel?
 
 val activityListViewModel: ActivityListViewModel?
     @Composable get() = LocalActivityListViewModel.current
+
+val transferViewModel: TransferViewModel?
+    @Composable get() = LocalTransferViewModel.current
