@@ -1,6 +1,7 @@
 package to.bitkit.models
-import kotlinx.serialization.Serializable
+
 import kotlinx.datetime.Instant
+import kotlinx.serialization.Serializable
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -8,7 +9,7 @@ import java.util.Locale
 
 @Serializable
 data class FxRateResponse(
-    val tickers: List<FxRate>
+    val tickers: List<FxRate>,
 )
 
 @Serializable
@@ -30,6 +31,12 @@ data class FxRate(
         get() = Instant.fromEpochMilliseconds(lastUpdatedAt)
 }
 
+/** aka. Unit */
+enum class PrimaryDisplay {
+    BITCOIN, FIAT
+}
+
+/** aka. Denomination */
 enum class BitcoinDisplayUnit {
     MODERN, CLASSIC
 }
@@ -40,13 +47,13 @@ data class ConvertedAmount(
     val symbol: String,
     val currency: String,
     val flag: String,
-    val sats: Long
+    val sats: Long,
 ) {
     val btcValue: BigDecimal = BigDecimal(sats).divide(BigDecimal(100_000_000))
 
     data class BitcoinDisplayComponents(
         val symbol: String,
-        val value: String
+        val value: String,
     )
 
     fun bitcoinDisplay(unit: BitcoinDisplayUnit): BitcoinDisplayComponents {
@@ -62,6 +69,7 @@ data class ConvertedAmount(
                 }
                 formatter.format(sats)
             }
+
             BitcoinDisplayUnit.CLASSIC -> {
                 val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
                     groupingSeparator = spaceSeparator
@@ -71,4 +79,5 @@ data class ConvertedAmount(
             }
         }
         return BitcoinDisplayComponents(symbol, formattedValue)
-    }}
+    }
+}

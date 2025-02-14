@@ -22,17 +22,13 @@ import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.util.Date
 import javax.inject.Inject
-
-enum class PrimaryDisplay {
-    BITCOIN,
-    FIAT
-}
 
 @HiltViewModel
 class CurrencyViewModel @Inject constructor(
@@ -161,6 +157,12 @@ class CurrencyViewModel @Inject constructor(
         val targetCurrency = currency ?: uiState.value.selectedCurrency
         val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
+    }
+
+    fun convertFiatToBitcoin(amount: Long, currency: String? = null): Long {
+        val targetCurrency = currency ?: uiState.value.selectedCurrency
+        val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)
+        return rate?.let { currencyService.convertFiatToBitcoin(amount = amount, rate = it) } ?: 0
     }
 }
 

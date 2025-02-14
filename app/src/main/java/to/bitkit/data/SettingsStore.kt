@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import to.bitkit.ext.enumValueOfOrNull
 import to.bitkit.models.BitcoinDisplayUnit
-import to.bitkit.viewmodels.PrimaryDisplay
+import to.bitkit.models.PrimaryDisplay
 import javax.inject.Inject
 import javax.inject.Singleton
 

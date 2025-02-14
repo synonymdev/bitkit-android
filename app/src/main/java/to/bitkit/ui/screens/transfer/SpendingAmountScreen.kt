@@ -1,41 +1,54 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.NumberPadActionButton
+import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.transfer.components.TransferNumberPad
+import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToLong
 
 @Composable
 fun SpendingAmountScreen(
@@ -47,6 +60,7 @@ fun SpendingAmountScreen(
     val scope = rememberCoroutineScope()
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
+    val currency = currencyViewModel ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -66,20 +80,77 @@ fun SpendingAmountScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
         ) {
+            var spendingBalanceSats by remember { mutableLongStateOf(0) }
             var isLoading by remember { mutableStateOf(false) }
-            var spendingBalanceSats by remember { mutableIntStateOf(50_000) }
+
+            val balances = LocalBalances.current
+
+            // TODO review calculations
+            val transactionFee = 512u // TODO calc transaction.fee
+            // Calculate the maximum amount that can be transferred
+            val availableAmount = balances.totalOnchainSats - transactionFee
+            val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
+            val maxLspFee = 0u // TODO calculate
+            val feeMaximum = max(0.0, floor(maxLspBalance - maxLspFee.toDouble())).roundToLong()
+            val maximum = min(availableAmount.toLong(), feeMaximum)
+            Logger.debug("maxLspBalance: $maxLspBalance, maxLspFee: $maxLspFee")
+            val fee = transactionFee + maxLspFee
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(32.dp))
 
-            OutlinedTextField(
-                label = { Text("Sats") },
-                value = "$spendingBalanceSats",
-                onValueChange = { spendingBalanceSats = it.toIntOrNull() ?: 0 },
-                textStyle = MaterialTheme.typography.labelSmall,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+            NumberPadTextField(sats = spendingBalanceSats)
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Actions
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+                Column {
+                    Text13Up(
+                        text = stringResource(R.string.wallet__send_available),
+                        color = Colors.White64,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = moneyString(availableAmount.toLong()))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                UnitButton(
+                    color = Colors.Purple,
+                    onClick = {
+                        // TODO: update textField & value
+                    },
+                )
+                // 25% Button
+                NumberPadActionButton(
+                    text = stringResource(R.string.lightning__spending_amount__quarter),
+                    color = Colors.Purple,
+                    onClick = {
+                        val quarter = balances.totalOnchainSats / 4u
+                        val amount = min(quarter.toLong(), maximum)
+                        spendingBalanceSats = amount
+                    },
+                )
+                // Max Button
+                NumberPadActionButton(
+                    text = stringResource(R.string.common__max),
+                    color = Colors.Purple,
+                    onClick = {
+                        spendingBalanceSats = maximum
+                    },
+                )
+            }
+            HorizontalDivider()
+            TransferNumberPad(
+                value = spendingBalanceSats.toString(),
+                maxAmount = maximum,
+                onChange = { spendingBalanceSats = it.toLongOrNull() ?: 0 },
+                onError = {
+
+                }
             )
 
             Spacer(modifier = Modifier.weight(1f))
