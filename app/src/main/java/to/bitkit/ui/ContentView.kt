@@ -39,8 +39,10 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
+import to.bitkit.ui.screens.transfer.SpendingAmountScreen
+import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
+import to.bitkit.ui.screens.transfer.SpendingIntroScreen
 import to.bitkit.ui.screens.transfer.TransferIntroScreen
-import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
@@ -63,9 +65,8 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import to.bitkit.ui.screens.transfer.SpendingAmountScreen
-import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
 
 @Composable
 fun ContentView(
@@ -211,6 +212,16 @@ fun ContentView(
                 ) {
                     composable<Routes.TransferIntro> {
                         TransferIntroScreen()
+                    }
+                    composable<Routes.SpendingIntro> {
+                        SpendingIntroScreen(
+                            onContinueClick = {
+                                navController.navigate(Routes.SpendingAmount)
+                                appViewModel.setHasSeenSpendingIntro(true)
+                            },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
                     }
                     composable<Routes.SpendingAmount> {
                         SpendingAmountScreen(
@@ -517,6 +528,10 @@ fun NavController.navigateToRegtestSettings() = navigate(
     route = Routes.RegtestSettings,
 )
 
+fun NavController.navigateToTransferSpendingIntro() = navigate(
+    route = Routes.SpendingIntro,
+)
+
 fun NavController.navigateToTransferSpendingAmount() = navigate(
     route = Routes.SpendingAmount,
 )
@@ -589,6 +604,9 @@ object Routes {
 
     @Serializable
     data object TransferIntro
+
+    @Serializable
+    data object SpendingIntro
 
     @Serializable
     data object SpendingAmount

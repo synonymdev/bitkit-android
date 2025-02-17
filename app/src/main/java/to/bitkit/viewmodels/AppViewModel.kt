@@ -10,9 +10,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -60,11 +63,21 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
-    private val _showEmptyState = MutableStateFlow(false)
-    val showEmptyState = _showEmptyState.asStateFlow()
+    val showEmptyState: StateFlow<Boolean> = settingsStore.showEmptyState
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
     fun setShowEmptyState(value: Boolean) {
         viewModelScope.launch {
             settingsStore.setShowEmptyState(value)
+        }
+    }
+
+    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.hasSeenSpendingIntro
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenSpendingIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setHasSeenSpendingIntro(value)
         }
     }
 
@@ -81,17 +94,8 @@ class AppViewModel @Inject constructor(
             splashVisible = false
         }
 
-        observeSettings()
         observeLdkNodeEvents()
         observeSendEvents()
-    }
-
-    private fun observeSettings() {
-        viewModelScope.launch {
-            settingsStore.showEmptyState.collect {
-                _showEmptyState.value = it
-            }
-        }
     }
 
     private fun observeLdkNodeEvents() {
@@ -484,6 +488,7 @@ class AppViewModel @Inject constructor(
                                 true // Keep listening for other events
                             }
                         }
+
                         is Event.PaymentFailed -> {
                             if (event.paymentHash == hash) {
                                 result.complete(
@@ -494,6 +499,7 @@ class AppViewModel @Inject constructor(
                                 true // Keep listening for other events
                             }
                         }
+
                         else -> true // Continue collecting
                     }
                 }
