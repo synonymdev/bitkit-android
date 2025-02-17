@@ -6,14 +6,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -65,14 +66,26 @@ fun FundingAdvancedScreen(
             ) {
                 RectangleButton(
                     label = stringResource(R.string.lightning__funding_advanced__button1),
-                    icon = Icons.Default.QrCodeScanner,
-                    iconColor = Colors.Purple,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_scan),
+                            contentDescription = null,
+                            tint = Colors.Purple,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    },
                     onClick = onLnUrl,
                 )
                 RectangleButton(
                     label = stringResource(R.string.lightning__funding_advanced__button2),
-                    icon = Icons.Default.Edit,
-                    iconColor = Colors.Purple,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_purple),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    },
                     onClick = onManual,
                 )
             }

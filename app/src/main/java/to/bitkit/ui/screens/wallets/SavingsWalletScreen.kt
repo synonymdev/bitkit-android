@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -76,7 +74,7 @@ fun SavingsWalletScreen(
                         text = "Transfer To Spending",
                         icon = {
                             Icon(
-                                imageVector = Icons.Default.SwapVert,
+                                painter = painterResource(R.drawable.ic_transfer),
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )
