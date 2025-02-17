@@ -93,7 +93,6 @@ fun SpendingAmountScreen(
             val maxLspFee = 0u // TODO calculate
             val feeMaximum = max(0.0, floor(maxLspBalance - maxLspFee.toDouble())).roundToLong()
             val maximum = min(availableAmount.toLong(), feeMaximum)
-            Logger.debug("maxLspBalance: $maxLspBalance, maxLspFee: $maxLspFee")
             val fee = transactionFee + maxLspFee
 
             Spacer(modifier = Modifier.height(32.dp))
