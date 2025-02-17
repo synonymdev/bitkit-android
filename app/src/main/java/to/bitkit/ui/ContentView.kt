@@ -89,6 +89,7 @@ fun ContentView(
                 Lifecycle.Event.ON_START -> {
                     try {
                         walletViewModel.start()
+                        activityListViewModel.syncLdkNodePayments()
                     } catch (e: Throwable) {
                         Logger.error("Failed to start wallet", e)
                     }

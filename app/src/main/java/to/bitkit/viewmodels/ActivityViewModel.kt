@@ -164,7 +164,7 @@ class ActivityListViewModel @Inject constructor(
         _selectedTags.value = mutableSetOf()
     }
 
-    private fun syncLdkNodePayments() {
+    fun syncLdkNodePayments() {
         viewModelScope.launch {
             try {
                 lightningService.payments?.let {
