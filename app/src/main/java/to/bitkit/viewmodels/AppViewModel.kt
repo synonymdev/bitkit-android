@@ -28,6 +28,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
@@ -47,10 +48,14 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningService,
+    private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
+        private set
+
+    var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
 
     private val _sendUiState = MutableStateFlow(SendUiState())
@@ -96,6 +101,7 @@ class AppViewModel @Inject constructor(
 
         observeLdkNodeEvents()
         observeSendEvents()
+        checkGeoStatus()
     }
 
     private fun observeLdkNodeEvents() {
@@ -159,6 +165,16 @@ class AppViewModel @Inject constructor(
                 } catch (e: Exception) {
                     Logger.error("LDK event handler error", e)
                 }
+            }
+        }
+    }
+
+    private fun checkGeoStatus() {
+        viewModelScope.launch {
+            try {
+                isGeoBlocked = coreService.checkGeoStatus()
+            } catch (e: Throwable) {
+                Logger.error("Failed to check geo status: ${e.message}", context = "GeoCheck")
             }
         }
     }

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.RectangleButton
@@ -66,7 +67,7 @@ fun FundingScreen(
                 balances.totalOnchainSats >= Env.TransactionDefaults.recommendedBaseFee
             }
 
-            val isGeoBlocked = false // TODO use GeoBlocking state
+            val isGeoBlocked = appViewModel?.isGeoBlocked == true
 
             val text = if (isGeoBlocked) {
                 stringResource(R.string.lightning__funding__text_blocked)

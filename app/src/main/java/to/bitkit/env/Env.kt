@@ -58,6 +58,7 @@ internal object Env {
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
     val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
     val btcRatesServer get() = "https://bitkit.stag0.blocktank.to/fx/rates/btc" // TODO: switch to prod when available
+    val geoCheckUrl get() = "https://api1.blocktank.to/api/geocheck"
 
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
