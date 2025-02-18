@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -35,7 +36,6 @@ import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferNumberPad
@@ -43,7 +43,6 @@ import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 import kotlin.math.floor
 import kotlin.math.max
@@ -60,7 +59,6 @@ fun SpendingAmountScreen(
     val scope = rememberCoroutineScope()
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
-    val currency = currencyViewModel ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -143,12 +141,23 @@ fun SpendingAmountScreen(
                 )
             }
             HorizontalDivider()
+            val errorTitle = stringResource(R.string.lightning__spending_amount__error_max__title)
+            val errorDescription = if (maximum == 0L) {
+                stringResource(R.string.lightning__spending_amount__error_max__description_zero)
+            } else {
+                stringResource(R.string.lightning__spending_amount__error_max__description)
+                    .replace("{amount}", maximum.toString())
+            }
             TransferNumberPad(
                 value = spendingBalanceSats.toString(),
                 maxAmount = maximum,
                 onChange = { spendingBalanceSats = it.toLongOrNull() ?: 0 },
                 onError = {
-
+                    app.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = errorTitle,
+                        description = errorDescription,
+                    )
                 }
             )
 
