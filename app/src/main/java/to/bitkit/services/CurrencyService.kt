@@ -72,19 +72,6 @@ class CurrencyService @Inject constructor(
     fun getCurrentRate(currency: String, rates: List<FxRate>): FxRate? {
         return rates.firstOrNull { it.quote == currency }
     }
-
-    // TODO review
-    fun convertFiatToBitcoin(amount: Long, rate: FxRate): Long? {
-        return try {
-            val fiatAmount = BigDecimal(amount)
-            val btcAmount = fiatAmount.divide(BigDecimal(rate.rate), 8, RoundingMode.HALF_UP)
-            val satAmount = btcAmount.multiply(BigDecimal(100_000_000))
-                .setScale(0, RoundingMode.HALF_UP)
-            return satAmount.toLong()
-        } catch (e: Exception) {
-            null
-        }
-    }
 }
 
 sealed class CurrencyError(message: String) : AppError(message) {

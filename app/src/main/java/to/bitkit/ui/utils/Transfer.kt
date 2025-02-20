@@ -14,9 +14,9 @@ fun getDefaultLspBalance(
     maxLspBalance: Long,
 ): Long {
     val currency = currencyViewModel ?: return 0
-    val threshold1 = currency.convertFiatToBitcoin(225, currency = "EUR")
-    val threshold2 = currency.convertFiatToBitcoin(495, currency = "EUR")
-    val defaultLspBalance = currency.convertFiatToBitcoin(450, currency = "EUR")
+    val threshold1 = currency.convertFiatToBitcoin("225", currency = "EUR")
+    val threshold2 = currency.convertFiatToBitcoin("495", currency = "EUR")
+    val defaultLspBalance = currency.convertFiatToBitcoin("450", currency = "EUR")
 
     var lspBalance = defaultLspBalance - clientBalanceSat
 
