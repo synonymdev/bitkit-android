@@ -56,9 +56,7 @@ fun FundingAdvancedScreen(
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__funding_advanced__title).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(8.dp))
-
             BodyM(text = stringResource(R.string.lightning__funding_advanced__text), color = Colors.White64)
-
             Spacer(modifier = Modifier.height(32.dp))
 
             Column(

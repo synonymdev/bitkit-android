@@ -7,7 +7,6 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.utils.AppError
 import java.math.BigDecimal
-import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale

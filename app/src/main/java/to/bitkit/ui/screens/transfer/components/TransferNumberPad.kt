@@ -38,7 +38,7 @@ fun TransferNumberPad(
     val conversionUnit = remember { "BTC" } // Replace with actual state
     val numberPadSettings = getNumberPadSettings()
 
-    val handlePress: (String) -> Any = remember(value, maxAmount) {
+    val handlePress: (String) -> Unit = remember(value, maxAmount) {
         { key: String ->
             val newValue = handleNumberPadPress(
                 key = key,
@@ -82,7 +82,7 @@ private fun TransferNumberPadPreview() {
     AppThemeSurface {
         TransferNumberPad(
             value = "0",
-            maxAmount = 100000,
+            maxAmount = 100_000,
             onChange = {},
             modifier = Modifier.height(380.dp)
         )
