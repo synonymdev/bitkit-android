@@ -3,6 +3,7 @@ package to.bitkit.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -56,11 +57,17 @@ class SettingsStore @Inject constructor(
         store.edit { it[HAS_SEEN_SPENDING_INTRO] = value }
     }
 
+    val lightningSetupStep: Flow<Int> = store.data.map { it[LIGHTNING_SETUP_STEP] ?: 0 }
+    suspend fun setLightningSetupStep(value: Int) {
+        store.edit { it[LIGHTNING_SETUP_STEP] = value }
+    }
+
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
         private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
         private val SELECTED_CURRENCY_KEY = stringPreferencesKey("selected_currency")
         private val SHOW_EMPTY_STATE = booleanPreferencesKey("show_empty_state")
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
+        private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
     }
 }

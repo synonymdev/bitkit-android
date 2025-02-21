@@ -32,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
@@ -42,12 +43,11 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -55,6 +55,7 @@ fun SpendingConfirmScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
+    onConfirm: () -> Unit = {},
 ) {
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
@@ -82,8 +83,9 @@ fun SpendingConfirmScreen(
 
         ) {
             val clientBalance = order.clientBalanceSat
-            val lspBalance = order.lspBalanceSat
-            val lspFee = order.feeSat - clientBalance
+            val networkFee = order.networkFeeSat
+            val serviceFeeSat = order.serviceFeeSat
+            val totalFee = order.feeSat + order.clientBalanceSat
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -103,7 +105,7 @@ fun SpendingConfirmScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "Todo ₿ transactionFee")
+                    BodySSB(text = "₿ $networkFee")
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
@@ -118,7 +120,7 @@ fun SpendingConfirmScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "₿ $lspFee")
+                    BodySSB(text = "₿ $serviceFeeSat")
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
@@ -153,7 +155,7 @@ fun SpendingConfirmScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "Todo ₿ totalFee")
+                    BodySSB(text = "₿ $totalFee")
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
@@ -187,54 +189,21 @@ fun SpendingConfirmScreen(
                     .size(256.dp)
                     .align(alignment = CenterHorizontally)
             )
-
-            Spacer(modifier = Modifier.height(24.dp))
-            if (state.txId == null) {
-                Spacer(modifier = Modifier.weight(1f))
-                var isPaying by remember { mutableStateOf(false) }
-                PrimaryButton(
-                    text = "Confirm",
-                    onClick = {
-                        isPaying = true
-                        viewModel.payOrder(state.order!!)
-                    },
-                    enabled = !isPaying,
-                )
-            } else {
-                Card {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Text("✅ Payment sent", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            text = "TxId: ${state.txId}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            "You can close the app now. We will notify you when the channel is ready.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+            var isLoading by remember { mutableStateOf(false) }
+            Spacer(modifier = Modifier.weight(1f))
+            SwipeToConfirm(
+                text = stringResource(R.string.lightning__transfer__swipe),
+                loading = isLoading,
+                color = Colors.Purple,
+                onConfirm = {
+                    scope.launch {
+                        isLoading = true
+                        delay(300)
+                        viewModel.payOrder(order)
+                        onConfirm()
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
-                FullWidthTextButton(
-                    onClick = {
-                        scope.launch {
-                            try {
-                                blocktank.open(orderId = order.id)
-                                Logger.info("Channel opened for order ${order.id}")
-                                app.toast(Toast.ToastType.SUCCESS, "Success", "Manual open success")
-                            } catch (e: Throwable) {
-                                Logger.error("Error opening channel for order ${order.id}", e)
-                                app.toast(e)
-                            }
-                        }
-                    },
-                ) {
-                    Text(text = "Try manual open")
-                }
-            }
+            )
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

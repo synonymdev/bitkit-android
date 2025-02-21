@@ -39,6 +39,7 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
+import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
 import to.bitkit.ui.screens.transfer.SpendingIntroScreen
@@ -237,8 +238,17 @@ fun ContentView(
                             viewModel = transferViewModel,
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onConfirm = { navController.navigate(Routes.SettingUp) },
                         )
                     }
+                    composable<Routes.SettingUp> {
+                        SettingUpScreen(
+                            viewModel = transferViewModel,
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+
                     composable<Routes.Funding> {
                         FundingScreen(
                             onTransfer = { navController.navigate(Routes.SpendingAmount) },
@@ -614,6 +624,9 @@ object Routes {
 
     @Serializable
     data object SpendingConfirm
+
+    @Serializable
+    data object SettingUp
 
     @Serializable
     data object Funding

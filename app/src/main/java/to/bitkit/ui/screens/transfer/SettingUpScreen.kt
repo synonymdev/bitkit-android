@@ -20,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +30,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -38,18 +38,18 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.ProgressSteps
-import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.TransferViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingUpScreen(
+    viewModel: TransferViewModel,
     onContinueClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
-    // TODO use state
-    val lightningSettingUpStep = 0
+    val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
     ScreenColumn {
         CenterAlignedTopAppBar(
             title = {
@@ -73,12 +73,13 @@ fun SettingUpScreen(
             Display(text = stringResource(R.string.lightning__setting_up_header), color = Colors.Purple)
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(
-                text = stringResource(R.string.lightning__setting_up_text).withAccent(
-                    accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)
-                ),
+                text = stringResource(R.string.lightning__setting_up_text)
+                    .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
                 color = Colors.White64,
             )
             Spacer(modifier = Modifier.height(32.dp))
+            // TODO Update on success ie.lightningSetupStep == 4
+            // Animation UI
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -141,7 +142,7 @@ fun SettingUpScreen(
             )
             ProgressSteps(
                 steps = steps,
-                activeStepIndex = lightningSettingUpStep,
+                activeStepIndex = lightningSetupStep,
                 modifier = Modifier
                     .padding(vertical = 16.dp)
                     .align(alignment = Alignment.CenterHorizontally)
@@ -156,10 +157,12 @@ fun SettingUpScreen(
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
-@Composable
-private fun SettingUpScreenPreview() {
-    AppThemeSurface {
-        SettingUpScreen()
-    }
-}
+// @Preview(showSystemUi = true, showBackground = true)
+// @Composable
+// private fun SettingUpScreenPreview() {
+//     AppThemeSurface {
+//         SettingUpScreen(
+//             viewModel = viewModel(),
+//         )
+//     }
+// }
