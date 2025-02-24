@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,12 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,13 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.AppTopBar
@@ -85,7 +82,7 @@ fun SpendingConfirmScreen(
             val clientBalance = order.clientBalanceSat
             val networkFee = order.networkFeeSat
             val serviceFeeSat = order.serviceFeeSat
-            val totalFee = order.feeSat + order.clientBalanceSat
+            val totalFee = order.feeSat
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -94,71 +91,27 @@ fun SpendingConfirmScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.height(IntrinsicSize.Min)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(top = 16.dp)
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.lightning__spending_confirm__network_fee),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "₿ $networkFee")
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(top = 16.dp)
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.lightning__spending_confirm__lsp_fee),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "₿ $serviceFeeSat")
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-                }
+                FeeInfo(
+                    label = stringResource(R.string.lightning__spending_confirm__network_fee),
+                    amount = networkFee.toLong(),
+                )
+                FeeInfo(
+                    label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
+                    amount = serviceFeeSat.toLong(),
+                )
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.height(IntrinsicSize.Min)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(top = 16.dp)
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.lightning__spending_confirm__amount),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "₿ $clientBalance")
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(top = 16.dp)
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.lightning__spending_confirm__total),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "₿ $totalFee")
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-                }
+                FeeInfo(
+                    label = stringResource(R.string.lightning__spending_confirm__amount),
+                    amount = clientBalance.toLong(),
+                )
+                FeeInfo(
+                    label = stringResource(R.string.lightning__spending_confirm__total),
+                    amount = totalFee.toLong(),
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -206,5 +159,28 @@ fun SpendingConfirmScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun RowScope.FeeInfo(
+    label: String,
+    amount: Long,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .weight(1f)
+            .padding(top = 16.dp)
+    ) {
+        Caption13Up(
+            text = label,
+            color = Colors.White64,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        MoneySSB(sats = amount)
+        Spacer(modifier = Modifier.weight(1f))
+        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
     }
 }
