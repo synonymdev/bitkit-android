@@ -11,19 +11,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.Txid
-import to.bitkit.R
 import to.bitkit.data.SettingsStore
-import to.bitkit.models.Toast
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ResourceProvider
-import uniffi.bitkitcore.BtBolt11InvoiceState
-import uniffi.bitkitcore.BtOpenChannelState
 import uniffi.bitkitcore.BtOrderState2
-import uniffi.bitkitcore.BtPaymentState2
 import uniffi.bitkitcore.IBtOrder
 import javax.inject.Inject
 
@@ -35,13 +28,6 @@ class TransferViewModel @Inject constructor(
     ) : ViewModel() {
     private val _uiState = MutableStateFlow(TransferUiState())
     val uiState = _uiState.asStateFlow()
-
-    /**
-     * mapOf(orderId to txId)
-     * */
-    val paidOrders: MutableMap<String, Txid> = mutableMapOf()
-
-    val watchedOrders = mutableListOf<String>()
 
     val lightningSetupStep: StateFlow<Int> = settingsStore.lightningSetupStep
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
@@ -62,7 +48,6 @@ class TransferViewModel @Inject constructor(
                 watchOrder(order.id)
             } catch (e: Throwable) {
                 ToastEventBus.send(e)
-                throw e
             }
         }
     }
@@ -98,13 +83,13 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    @Suppress("IntroduceWhenSubject")
     private suspend fun updateOrder(order: IBtOrder): Int {
         var currentStep = 0
         if (order.channel != null) {
             return 3
         }
 
-        @Suppress("IntroduceWhenSubject")
         when {
             order.state2 == BtOrderState2.CREATED -> {
                 currentStep = 0
