@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,8 +30,8 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
@@ -39,14 +40,9 @@ import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferNumberPad
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
-import kotlin.math.floor
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToLong
 
 @Composable
@@ -78,20 +74,14 @@ fun SpendingAmountScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
         ) {
-            var spendingBalanceSats by remember { mutableLongStateOf(0) }
+            var spendingBalanceSats by rememberSaveable { mutableLongStateOf(0) }
             var isLoading by remember { mutableStateOf(false) }
 
             val balances = LocalBalances.current
-
-            // TODO review calculations
+            // TODO Calculate the maximum amount that can be transferred
             val transactionFee = 512u // TODO calc transaction.fee
-            // Calculate the maximum amount that can be transferred
             val availableAmount = balances.totalOnchainSats - transactionFee
-            val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
-            val maxLspFee = 0u // TODO calculate
-            val feeMaximum = max(0.0, floor(maxLspBalance - maxLspFee.toDouble())).roundToLong()
-            val maximum = min(availableAmount.toLong(), feeMaximum)
-            val fee = transactionFee + maxLspFee
+            val maximum = availableAmount.toLong()
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
@@ -112,13 +102,13 @@ fun SpendingAmountScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = moneyString(availableAmount.toLong()))
+                    MoneySSB(sats = availableAmount.toLong())
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(
                     color = Colors.Purple,
                     onClick = {
-                        // TODO: update textField & value
+                        // TODO: update textField & value to new unit
                     },
                 )
                 // 25% Button
@@ -126,9 +116,7 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = balances.totalOnchainSats / 4u
-                        val amount = min(quarter.toLong(), maximum)
-                        spendingBalanceSats = amount
+                        spendingBalanceSats = (availableAmount.toDouble() / 4.0).roundToLong()
                     },
                 )
                 // Max Button
@@ -136,7 +124,8 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        spendingBalanceSats = maximum
+                        // TODO calculate actual max, use estimate fees?
+                        spendingBalanceSats = (availableAmount.toDouble() * 0.9).roundToLong()
                     },
                 )
             }
