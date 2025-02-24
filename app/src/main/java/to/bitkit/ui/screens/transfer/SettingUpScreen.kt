@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -30,6 +31,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -38,11 +40,12 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.ProgressSteps
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingUpScreen(
     viewModel: TransferViewModel,
@@ -50,10 +53,31 @@ fun SettingUpScreen(
     onCloseClick: () -> Unit = {},
 ) {
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
+    SettingUpScreen(
+        lightningSetupStep = lightningSetupStep,
+        onContinueClick = onContinueClick,
+        onCloseClick = onCloseClick,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingUpScreen(
+    lightningSetupStep: Int,
+    onContinueClick: () -> Unit = {},
+    onCloseClick: () -> Unit = {},
+) {
+    val inProgress = lightningSetupStep < 3
     ScreenColumn {
         CenterAlignedTopAppBar(
             title = {
-                Title(text = stringResource(R.string.lightning__transfer__nav_title))
+                Title(
+                    text = if (inProgress) {
+                        stringResource(R.string.lightning__transfer__nav_title)
+                    } else {
+                        stringResource(R.string.lightning__transfer_success__nav_title)
+                    }
+                )
             },
             actions = {
                 IconButton(onClick = onCloseClick) {
@@ -70,99 +94,149 @@ fun SettingUpScreen(
                 .padding(horizontal = 16.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
-            Display(text = stringResource(R.string.lightning__setting_up_header), color = Colors.Purple)
-            Spacer(modifier = Modifier.height(8.dp))
-            BodyM(
-                text = stringResource(R.string.lightning__setting_up_text)
-                    .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
-                color = Colors.White64,
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            // TODO Update on success ie.lightningSetupStep == 4
-            // Animation UI
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                val infiniteTransition = rememberInfiniteTransition("transition")
-                val rotationLarge by infiniteTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = -270f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 3000, easing = EaseInOut),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "circleSmallRotation"
+            if (inProgress) {
+                Display(
+                    text = stringResource(R.string.lightning__setting_up_header),
+                    color = Colors.Purple,
                 )
-                val rotationSmall by infiniteTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 180f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 2500, easing = EaseInOut),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "circleSmallRotation"
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(
+                    text = stringResource(R.string.lightning__setting_up_text)
+                        .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+                    color = Colors.White64,
                 )
-                val rotationArrows by infiniteTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 90f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 2000, easing = EaseInOut),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "arrowsRotation"
+            } else {
+                Display(
+                    text = stringResource(R.string.lightning__transfer_success__title_spending)
+                        .withAccent(accentColor = Colors.Purple),
                 )
-                Image(
-                    painter = painterResource(id = R.drawable.ln_sync_large),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .rotate(rotationLarge)
-                )
-                Image(
-                    painter = painterResource(id = R.drawable.ln_sync_small),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .rotate(rotationSmall)
-                )
-                Image(
-                    painter = painterResource(id = R.drawable.transfer),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .rotate(rotationArrows)
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(
+                    text = stringResource(R.string.lightning__transfer_success__text_spending),
+                    color = Colors.White64,
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
-            val steps = listOf(
-                stringResource(R.string.lightning__setting_up_step1),
-                stringResource(R.string.lightning__setting_up_step2),
-                stringResource(R.string.lightning__setting_up_step3),
-                stringResource(R.string.lightning__setting_up_step4),
-            )
-            ProgressSteps(
-                steps = steps,
-                activeStepIndex = lightningSetupStep,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .align(alignment = Alignment.CenterHorizontally)
-            )
+            if (inProgress) {
+                AnimationView()
+                Spacer(modifier = Modifier.height(32.dp))
+                val steps = listOf(
+                    stringResource(R.string.lightning__setting_up_step1),
+                    stringResource(R.string.lightning__setting_up_step2),
+                    stringResource(R.string.lightning__setting_up_step3),
+                    stringResource(R.string.lightning__setting_up_step4),
+                )
+                ProgressSteps(
+                    steps = steps,
+                    activeStepIndex = lightningSetupStep,
+                    modifier = Modifier
+                        .padding(vertical = 16.dp)
+                        .align(alignment = Alignment.CenterHorizontally)
+                )
+            } else {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 16.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.check),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(256.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(
-                text = stringResource(R.string.lightning__setting_up_button),
+                text = if (inProgress) {
+                    stringResource(R.string.lightning__setting_up_button)
+                } else {
+                    localizedRandom(R.string.common__ok_random)
+                },
                 onClick = onContinueClick,
             )
         }
     }
 }
 
-// @Preview(showSystemUi = true, showBackground = true)
-// @Composable
-// private fun SettingUpScreenPreview() {
-//     AppThemeSurface {
-//         SettingUpScreen(
-//             viewModel = viewModel(),
-//         )
-//     }
-// }
+
+@Composable
+private fun AnimationView() {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.padding(horizontal = 16.dp)
+    ) {
+        val infiniteTransition = rememberInfiniteTransition("transition")
+        val rotationLarge by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = -270f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 3000, easing = EaseInOut),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "circleSmallRotation"
+        )
+        val rotationSmall by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 180f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2500, easing = EaseInOut),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "circleSmallRotation"
+        )
+        val rotationArrows by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 90f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2000, easing = EaseInOut),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "arrowsRotation"
+        )
+        Image(
+            painter = painterResource(id = R.drawable.ln_sync_large),
+            contentDescription = null,
+            modifier = Modifier
+                .rotate(rotationLarge)
+        )
+        Image(
+            painter = painterResource(id = R.drawable.ln_sync_small),
+            contentDescription = null,
+            modifier = Modifier
+                .rotate(rotationSmall)
+        )
+        Image(
+            painter = painterResource(id = R.drawable.transfer),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .rotate(rotationArrows)
+        )
+    }
+}
+
+@Preview(name="Progress", showSystemUi = true, showBackground = true)
+@Composable
+private fun SettingUpScreenProgressPreview() {
+    AppThemeSurface {
+        SettingUpScreen(
+            lightningSetupStep = 2,
+        )
+    }
+}
+
+@Preview(name="Success", showSystemUi = true, showBackground = true)
+@Composable
+private fun SettingUpScreenSuccessPreview() {
+    AppThemeSurface {
+        SettingUpScreen(
+            lightningSetupStep = 3,
+        )
+    }
+}

@@ -109,7 +109,6 @@ fun ProgressSteps(
     }
 }
 
-// Preview
 @Preview(showBackground = true)
 @Composable
 fun ProgressStepsPreview() {

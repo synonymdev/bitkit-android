@@ -99,7 +99,13 @@ class BlocktankViewModel @Inject constructor(
         )
     }
 
-    suspend fun open(orderId: String): IBtOrder {
-        return coreService.blocktank.open(orderId)
+    suspend fun openChannel(orderId: String): IBtOrder {
+        val order = coreService.blocktank.open(orderId)
+
+        val index = orders.indexOfFirst { it.id == order.id }
+        if (index != -1) {
+            orders[index] = order
+        }
+        return order
     }
 }

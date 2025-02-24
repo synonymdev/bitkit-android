@@ -54,37 +54,37 @@ class TransferViewModel @Inject constructor(
     fun payOrder(order: IBtOrder) {
         viewModelScope.launch {
             try {
-                val txId = lightningService.send(
+                lightningService.send(
                     address = order.payment.onchain.address,
                     sats = order.feeSat,
                 )
-                _uiState.update { it.copy(order = order, txId = txId) }
-                paidOrders[order.id] = txId
                 settingsStore.setLightningSetupStep(0)
                 watchOrder(order.id)
-                ToastEventBus.send(Toast.ToastType.SUCCESS, "Success", "Payment sent $txId")
             } catch (e: Throwable) {
                 ToastEventBus.send(e)
+                throw e
             }
         }
     }
 
-    fun watchOrder(orderId: String, frequencyMs: Long = 150_000) {
-        if (watchedOrders.contains(orderId)) return
-        watchedOrders.add(orderId)
+    private fun watchOrder(orderId: String, frequencyMs: Long = 5_000) {
         var isSettled = false
         var error: Throwable? = null
 
         viewModelScope.launch {
             while (!isSettled && error == null) {
                 try {
-                    Logger.debug("refreshing order $orderId")
-                    val order = refreshOrder(orderId)
+                    Logger.debug("Refreshing order $orderId")
+                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).first()
+                    val step = updateOrder(order)
+                    settingsStore.setLightningSetupStep(step)
+                    Logger.debug("LN setup step: $step")
+
                     if (order.state2 == BtOrderState2.EXPIRED) {
-                        error = Exception("Order expired")
+                        error = Exception("Order expired $orderId")
                         break
                     }
-                    if (order.state2 == BtOrderState2.EXECUTED) {
+                    if (step > 2) {
                         isSettled = true
                         break
                     }
@@ -94,98 +94,40 @@ class TransferViewModel @Inject constructor(
                 }
                 delay(frequencyMs)
             }
-            Logger.debug("stopped watching order $orderId")
+            Logger.debug("Stopped watching order $orderId")
         }
-        watchedOrders.remove(orderId)
     }
 
-    suspend fun refreshOrder(orderId: String): IBtOrder {
-        val currentOrder = _uiState.value.order ?: error("current order not found")
-        try {
-            var order = coreService.blocktank.orders(orderIds = listOf(orderId)).first()
-            val isPaid = paidOrders.containsKey(order.id)
+    private suspend fun updateOrder(order: IBtOrder): Int {
+        var currentStep = 0
+        if (order.channel != null) {
+            return 3
+        }
 
-            // attempt to finalise channel open
-            if (order.state2 == BtOrderState2.PAID &&
-                order.payment.state2 == BtPaymentState2.PAID) {
-                settingsStore.setLightningSetupStep(1)
+        @Suppress("IntroduceWhenSubject")
+        when {
+            order.state2 == BtOrderState2.CREATED -> {
+                currentStep = 0
+            }
+            order.state2 == BtOrderState2.PAID -> {
+                currentStep = 1
+
                 try {
-                    val updatedOrder = coreService.blocktank.open(order.id)
-                    settingsStore.setLightningSetupStep(3)
-                    order = updatedOrder
+                    coreService.blocktank.open(order.id)
                 } catch (e: Throwable) {
-                    throw e
+                    Logger.error("Error opening channel: ${e.message}", e)
                 }
             }
-
-            // order state is not changed
-            if (currentOrder.state2 == order.state2 &&
-                currentOrder.payment.state2 == order.payment.state2 &&
-                currentOrder.channel?.state == order.channel?.state) {
-                return order
+            order.state2 == BtOrderState2.EXECUTED -> {
+                currentStep = 2
             }
-
-            // update stored order
-            _uiState.update { it.copy(order = order) }
-
-            // handle state change for paid orders
-            if (isPaid &&
-                currentOrder.state2 != order.state2 ||
-                currentOrder.payment.state2 != order.payment.state2) {
-                handleOrderStateChange(order)
-            }
-
-            return order
-        } catch (e: Throwable) {
-            throw e
         }
-    }
-
-    private suspend fun handleOrderStateChange(order: IBtOrder) {
-        // val paymentTxId = order.payment.onchain.transactions.first().txId
-
-        // queued for opening
-        if (order.channel == null) {
-            settingsStore.setLightningSetupStep(2)
-        }
-
-        // opening connection
-        if (order.channel?.state == BtOpenChannelState.OPENING) {
-            settingsStore.setLightningSetupStep(3)
-        }
-
-        // given up
-        if (order.payment.bolt11Invoice.state == BtBolt11InvoiceState.CANCELED) {
-            ToastEventBus.send(
-                type = Toast.ToastType.WARNING,
-                title = ResourceProvider.getString(R.string.lightning__order_given_up_title),
-                description = ResourceProvider.getString(R.string.lightning__order_given_up_msg),
-            )
-        }
-
-        // order expired
-        if (order.state2 == BtOrderState2.EXPIRED) {
-            ToastEventBus.send(
-                type = Toast.ToastType.WARNING,
-                title = ResourceProvider.getString(R.string.lightning__order_expired_title),
-                description = ResourceProvider.getString(R.string.lightning__order_expired_msg),
-            )
-        }
-
-        // new channel open
-        if (order.state2 == BtOrderState2.EXECUTED) {
-            // todo refresh ldk-node state
-        }
-    }
-
-    fun resetState() {
-        _uiState.value = TransferUiState()
+        return currentStep
     }
 }
 
 // region state
 data class TransferUiState(
     val order: IBtOrder? = null,
-    val txId: Txid? = null,
 )
 // endregion
