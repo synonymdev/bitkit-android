@@ -43,6 +43,8 @@ class CurrencyViewModel @Inject constructor(
 
     private var lastSuccessfulRefresh: Date? = null
 
+    private var isRefreshing = false
+
     private val pollingFlow: Flow<Unit>
         get() = flow {
             while (currentCoroutineContext().isActive) {
@@ -86,6 +88,8 @@ class CurrencyViewModel @Inject constructor(
     }
 
     private suspend fun refresh() {
+        if (isRefreshing) return
+        isRefreshing = true
         try {
             val fetchedRates = currencyService.fetchLatestRates()
             _uiState.update {
@@ -103,6 +107,8 @@ class CurrencyViewModel @Inject constructor(
             lastSuccessfulRefresh?.let { last ->
                 _uiState.update { it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold) }
             }
+        } finally {
+            isRefreshing = false
         }
     }
 

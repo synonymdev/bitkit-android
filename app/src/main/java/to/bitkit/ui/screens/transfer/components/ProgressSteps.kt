@@ -111,7 +111,7 @@ fun ProgressSteps(
 
 @Preview(showBackground = true)
 @Composable
-fun ProgressStepsPreview() {
+private fun ProgressStepsPreview() {
     AppThemeSurface {
         val steps = listOf(
             "Step 1",

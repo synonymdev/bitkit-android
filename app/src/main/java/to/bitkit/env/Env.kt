@@ -63,6 +63,8 @@ internal object Env {
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
 
+    const val blocktankOrderRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
+
     val pushNotificationFeatures = listOf(
         BlocktankNotificationType.incomingHtlc,
         BlocktankNotificationType.mutualClose,

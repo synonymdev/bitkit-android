@@ -83,7 +83,7 @@ fun ContentView(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val scope = rememberCoroutineScope()
 
-    // Node start/stop on app fg/bg
+    // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -100,6 +100,9 @@ fun ContentView(
                         appViewModel.showNewTransactionSheet(pendingTransaction)
                         NewTransactionSheetDetails.clear(context)
                     }
+
+                    currencyViewModel.triggerRefresh()
+                    blocktankViewModel.triggerRefreshOrders()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
