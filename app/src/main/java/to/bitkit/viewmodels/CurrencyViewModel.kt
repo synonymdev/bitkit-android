@@ -27,8 +27,6 @@ import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.util.Date
 import javax.inject.Inject
 import kotlin.math.roundToLong
@@ -166,21 +164,6 @@ class CurrencyViewModel @Inject constructor(
         val targetCurrency = currency ?: uiState.value.selectedCurrency
         val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
-    }
-
-    fun convertFiatToBitcoin(amount: String, currency: String? = null): Long {
-        val sourceCurrency = currency ?: uiState.value.selectedCurrency
-        val rate = currencyService.getCurrentRate(sourceCurrency, uiState.value.rates) ?: return 0
-
-        try {
-            val fiatAmount = BigDecimal(amount)
-            val btcAmount = fiatAmount.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
-            val satAmount = btcAmount.multiply(BigDecimal(100_000_000))
-                .setScale(0, RoundingMode.HALF_UP)
-            return satAmount.toLong()
-        } catch (e: Exception) {
-            return 0
-        }
     }
 
     fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long? {

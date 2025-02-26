@@ -26,7 +26,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun UnitButton(
-    onClick: () -> Unit,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     color: Color = Colors.Brand,
 ) {
@@ -68,7 +68,7 @@ fun UnitButton(
 private fun UnitButtonPreview() {
     AppThemeSurface {
         Box(modifier = Modifier.padding(16.dp)) {
-            UnitButton(onClick = {})
+            UnitButton()
         }
     }
 }

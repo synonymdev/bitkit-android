@@ -40,10 +40,12 @@ fun TransferAmount(
     val currency = currencyViewModel ?: return
 
     var satsAmount by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(if (defaultValue > 0) defaultValue.toString() else ""))
+        val text = if (defaultValue > 0) defaultValue.toString() else ""
+        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
     var fiatAmount by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(if (primaryDisplay == PrimaryDisplay.FIAT) "0" else ""))
+        val text = if (primaryDisplay == PrimaryDisplay.FIAT) "0" else ""
+        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
 
     val satsFocus = remember { FocusRequester() }
@@ -55,12 +57,12 @@ fun TransferAmount(
     // Handle overrideSats changes
     LaunchedEffect(overrideSats) {
         overrideSats?.let { sats ->
-            satsAmount = satsAmount.copy(text = sats.toString(), TextRange(sats.toString().length))
+            satsAmount = satsAmount.copy(sats.toString(), TextRange(sats.toString().length))
             onSatsChange(sats)
 
             // Update fiat amount if needed
             currency.convert(sats)?.let { converted ->
-                fiatAmount = satsAmount.copy(text = converted.formatted, TextRange(converted.formatted.length))
+                fiatAmount = satsAmount.copy(converted.formatted, TextRange(converted.formatted.length))
             }
         }
     }
@@ -73,7 +75,7 @@ fun TransferAmount(
             fiatFocus.requestFocus()
             // Reset fiat amount to empty string if sats are 0
             if (sats == 0L) {
-                fiatAmount = fiatAmount.copy(text = "", TextRange(0))
+                fiatAmount = fiatAmount.copy("", TextRange(0))
             }
         }
     }
@@ -158,8 +160,8 @@ fun TransferAmount(
 
                     newFiatAmount.toDoubleOrNull()?.let { fiatDouble ->
                         currency.convertFiatToSats(fiatAmount = fiatDouble)?.let { convertedSats ->
-                            satsAmount =
-                                TextFieldValue(convertedSats.toString(), TextRange(convertedSats.toString().length))
+                            val satsString = convertedSats.toString()
+                            satsAmount = TextFieldValue(satsString, TextRange(satsString.length))
                             onSatsChange(convertedSats)
                         }
                     } ?: run {
@@ -175,7 +177,7 @@ fun TransferAmount(
                 .size(1.dp)
         )
 
-        // var isPressed by remember { mutableStateOf(false) }
+        var isPressed by remember { mutableStateOf(false) }
 
         // Visible balance display
         currency.convert(sats)?.let { converted ->
@@ -188,20 +190,20 @@ fun TransferAmount(
 
             Display(
                 text = displayText.withAccent(accentColor = Colors.White64),
-                // modifier = Modifier
-                //     .graphicsLayer { this.alpha = if (isPressed) 0.5f else 1f }
-                //     .pointerInput(Unit) {
-                //         detectTapGestures(
-                //             onPress = {
-                //                 isPressed = true
-                //                 tryAwaitRelease()
-                //                 isPressed = false
-                //             },
-                //             onTap = {
-                //                 currency.togglePrimaryDisplay()
-                //             }
-                //         )
-                //     }
+                modifier = Modifier
+                    .graphicsLayer { this.alpha = if (isPressed) 0.5f else 1f }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                isPressed = true
+                                tryAwaitRelease()
+                                isPressed = false
+                            },
+                            onTap = {
+                                currency.togglePrimaryDisplay()
+                            }
+                        )
+                    }
             )
         }
     }

@@ -115,10 +115,7 @@ fun SpendingAmountScreen(
                     MoneySSB(sats = availableAmount.toLong())
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                UnitButton(
-                    color = Colors.Purple,
-                    onClick = { },
-                )
+                UnitButton(color = Colors.Purple)
                 // 25% Button
                 NumberPadActionButton(
                     text = stringResource(R.string.lightning__spending_amount__quarter),

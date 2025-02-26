@@ -52,7 +52,7 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private fun watchOrder(orderId: String, frequencyMs: Long = 5_000) {
+    private fun watchOrder(orderId: String, frequencyMs: Long = 2_500) {
         var isSettled = false
         var error: Throwable? = null
 
