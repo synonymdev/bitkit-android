@@ -253,8 +253,15 @@ fun ContentView(
                     }
 
                     composable<Routes.Funding> {
+                        val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
                         FundingScreen(
-                            onTransfer = { navController.navigate(Routes.SpendingAmount) },
+                            onTransfer = {
+                                if (!hasSeenSpendingIntro) {
+                                    navController.navigateToTransferSpendingIntro()
+                                } else {
+                                    navController.navigateToTransferSpendingAmount()
+                                }
+                             },
                             onFund = {
                                 scope.launch {
                                     // TODO show receive sheet -> ReceiveAmount
