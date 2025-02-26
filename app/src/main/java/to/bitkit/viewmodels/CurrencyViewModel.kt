@@ -31,6 +31,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Date
 import javax.inject.Inject
+import kotlin.math.roundToLong
 
 @HiltViewModel
 class CurrencyViewModel @Inject constructor(
@@ -180,6 +181,17 @@ class CurrencyViewModel @Inject constructor(
         } catch (e: Exception) {
             return 0
         }
+    }
+
+    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long? {
+        val sourceCurrency = currency ?: uiState.value.selectedCurrency
+        val rate = currencyService.getCurrentRate(sourceCurrency, uiState.value.rates) ?: return null
+
+        // Convert the fiat amount to BTC, then to sats
+        val btc = fiatAmount / rate.rate
+        val sats = (btc * 100_000_000).roundToLong()
+
+        return sats
     }
 }
 
