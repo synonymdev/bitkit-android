@@ -62,7 +62,7 @@ fun SettingUpScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingUpScreen(
+private fun SettingUpScreen(
     lightningSetupStep: Int,
     onContinueClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},

@@ -52,6 +52,8 @@ fun SpendingConfirmScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
+    onLearnMoreClick: () -> Unit = {},
+    onAdvancedClick: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
     val app = appViewModel ?: return
@@ -113,23 +115,20 @@ fun SpendingConfirmScreen(
                     amount = totalFee.toLong(),
                 )
             }
+
             Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 PrimaryButton(
                     text = stringResource(R.string.common__learn_more),
                     size = ButtonSize.Small,
                     fullWidth = false,
-                    onClick = {
-                        // TODO: nav to Liquidity
-                    },
+                    onClick = onLearnMoreClick,
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__advanced),
                     size = ButtonSize.Small,
                     fullWidth = false,
-                    onClick = {
-                        // TODO: nav to Advanced
-                    },
+                    onClick = onAdvancedClick,
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -142,8 +141,9 @@ fun SpendingConfirmScreen(
                     .size(256.dp)
                     .align(alignment = CenterHorizontally)
             )
-            var isLoading by remember { mutableStateOf(false) }
             Spacer(modifier = Modifier.weight(1f))
+
+            var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading,

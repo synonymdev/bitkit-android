@@ -39,6 +39,7 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
+import to.bitkit.ui.screens.transfer.LiquidityScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
@@ -241,7 +242,16 @@ fun ContentView(
                             viewModel = transferViewModel,
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
+                            onAdvancedClick = { /* TODO navigate to advanced:receiving capacity */ },
                             onConfirm = { navController.navigate(Routes.SettingUp) },
+                        )
+                    }
+                    composable<Routes.TransferLiquidity> {
+                        LiquidityScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.popBackStack() }
                         )
                     }
                     composable<Routes.SettingUp> {
@@ -251,7 +261,6 @@ fun ContentView(
                             onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                         )
                     }
-
                     composable<Routes.Funding> {
                         val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
                         FundingScreen(
@@ -634,6 +643,9 @@ object Routes {
 
     @Serializable
     data object SpendingConfirm
+
+    @Serializable
+    data object TransferLiquidity
 
     @Serializable
     data object SettingUp

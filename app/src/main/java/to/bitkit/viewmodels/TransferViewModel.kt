@@ -94,6 +94,7 @@ class TransferViewModel @Inject constructor(
             order.state2 == BtOrderState2.CREATED -> {
                 currentStep = 0
             }
+
             order.state2 == BtOrderState2.PAID -> {
                 currentStep = 1
 
@@ -103,6 +104,7 @@ class TransferViewModel @Inject constructor(
                     Logger.error("Error opening channel: ${e.message}", e)
                 }
             }
+
             order.state2 == BtOrderState2.EXECUTED -> {
                 currentStep = 2
             }

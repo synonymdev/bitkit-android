@@ -29,10 +29,9 @@ val secondaryColor: Color
 private object ColorPalette {
     @Stable
     val Light = lightColorScheme(
-        primary = Brand500,
-        primaryContainer = Brand50,
-        secondary = Purple700,
-        background = Color.White,
+        primary = Colors.White,
+        secondary = Colors.White64,
+        background = Colors.Black,
         surface = Color.White,
         surfaceVariant = Gray100,
         outline = Gray100,
