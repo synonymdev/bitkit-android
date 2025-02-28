@@ -63,17 +63,13 @@ fun QrCodeImage(
 private fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
     if (content.isEmpty()) return null
 
-    val density = LocalDensity.current
-    val sizePx = with(density) { size.roundToPx() }
+    var bitmap by remember(content) { mutableStateOf<Bitmap?>(null) }
+    val sizePx = with(LocalDensity.current) { size.roundToPx() }
 
-    var bitmap by remember(content) {
-        mutableStateOf<Bitmap?>(null)
-    }
-
-    LaunchedEffect(bitmap) {
+    LaunchedEffect(content, size) {
         if (bitmap != null) return@LaunchedEffect
 
-        launch(Dispatchers.IO) {
+        launch(Dispatchers.Default) {
             val qrCodeWriter = QRCodeWriter()
 
             val encodeHints = mutableMapOf<EncodeHintType, Any?>().apply {
