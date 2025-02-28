@@ -25,16 +25,20 @@ class TransferViewModel @Inject constructor(
     private val lightningService: LightningService,
     private val coreService: CoreService,
     private val settingsStore: SettingsStore,
-    ) : ViewModel() {
+) : ViewModel() {
     private val _uiState = MutableStateFlow(TransferUiState())
     val uiState = _uiState.asStateFlow()
 
     val lightningSetupStep: StateFlow<Int> = settingsStore.lightningSetupStep
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-
     fun onOrderCreated(order: IBtOrder) {
-        _uiState.update { it.copy(order = order) }
+        _uiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+    }
+
+    fun onAdvancedOrderCreated(order: IBtOrder) {
+        val defaultOrder = _uiState.value.order
+        _uiState.update { it.copy(order = order, defaultOrder = defaultOrder, isAdvanced = true) }
     }
 
     fun payOrder(order: IBtOrder) {
@@ -111,10 +115,21 @@ class TransferViewModel @Inject constructor(
         }
         return currentStep
     }
+
+    fun onDefaultClick() {
+        val defaultOrder = _uiState.value.defaultOrder
+        _uiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
+    }
+
+    fun resetState() {
+        _uiState.value = TransferUiState()
+    }
 }
 
 // region state
 data class TransferUiState(
     val order: IBtOrder? = null,
+    val defaultOrder: IBtOrder? = null,
+    val isAdvanced: Boolean = false,
 )
 // endregion

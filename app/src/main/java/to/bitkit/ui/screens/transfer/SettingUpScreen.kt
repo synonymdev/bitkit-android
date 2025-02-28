@@ -55,7 +55,10 @@ fun SettingUpScreen(
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
     SettingUpScreen(
         lightningSetupStep = lightningSetupStep,
-        onContinueClick = onContinueClick,
+        onContinueClick = {
+            viewModel.resetState()
+            onContinueClick()
+        },
         onCloseClick = onCloseClick,
     )
 }
@@ -222,7 +225,7 @@ private fun AnimationView() {
     }
 }
 
-@Preview(name="Progress", showSystemUi = true, showBackground = true)
+@Preview(name = "Progress", showSystemUi = true, showBackground = true)
 @Composable
 private fun SettingUpScreenProgressPreview() {
     AppThemeSurface {
@@ -232,7 +235,7 @@ private fun SettingUpScreenProgressPreview() {
     }
 }
 
-@Preview(name="Success", showSystemUi = true, showBackground = true)
+@Preview(name = "Success", showSystemUi = true, showBackground = true)
 @Composable
 private fun SettingUpScreenSuccessPreview() {
     AppThemeSurface {

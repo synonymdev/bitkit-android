@@ -41,6 +41,7 @@ import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
+import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
 import to.bitkit.ui.screens.transfer.SpendingIntroScreen
@@ -243,8 +244,16 @@ fun ContentView(
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                             onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
-                            onAdvancedClick = { /* TODO navigate to advanced:receiving capacity */ },
+                            onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
                             onConfirm = { navController.navigate(Routes.SettingUp) },
+                        )
+                    }
+                    composable<Routes.SpendingAdvanced> {
+                        SpendingAdvancedScreen(
+                            viewModel = transferViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
                         )
                     }
                     composable<Routes.TransferLiquidity> {
@@ -643,6 +652,9 @@ object Routes {
 
     @Serializable
     data object SpendingConfirm
+
+    @Serializable
+    data object SpendingAdvanced
 
     @Serializable
     data object TransferLiquidity
