@@ -178,6 +178,15 @@ class BlocktankViewModel @Inject constructor(
         }
         return order
     }
+
+    fun totalBtChannelsValueSats(): ULong {
+        val channels = lightningService.channels ?: return 0u
+
+        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
+        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
+        val totalValue = btChannels.sumOf { it.channelValueSats }
+        return totalValue
+    }
 }
 
 private val defaultCreateOrderOptions = CreateOrderOptions(

@@ -172,6 +172,7 @@ fun BlocktankRegtestScreen(
                                 )
                             } finally {
                                 isMining = false
+                                wallet.refreshState()
                             }
                         }
                     },

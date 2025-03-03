@@ -41,7 +41,7 @@ fun getMinLspBalance(clientBalance: Long, minChannelSize: Long): Long {
 
 fun getMaxClientBalance(maxChannelSize: Long): Long {
     // Remote balance must be at least 2.5% of the channel size for LDK to accept (reserve balance)
-    val minRemoteBalance = (maxChannelSize * 0.025).toLong()
+    val minRemoteBalance = (maxChannelSize * 0.025).roundToLong()
     return maxChannelSize - minRemoteBalance
 }
 
@@ -50,8 +50,7 @@ fun useTransfer(clientBalanceSat: Long): TransferValues {
     val blocktank = blocktankViewModel ?: return TransferValues()
     val blocktankInfo = blocktank.info ?: return TransferValues()
 
-    // TODO get sum of all blocktank channels
-    val channelsSize = 0
+    val channelsSize = blocktank.totalBtChannelsValueSats().toLong()
 
     val (minChannelSizeSat, maxChannelSizeSat) = blocktankInfo.options.let {
         it.minChannelSizeSat to it.maxChannelSizeSat

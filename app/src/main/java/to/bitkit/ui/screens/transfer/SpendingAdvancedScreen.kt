@@ -164,7 +164,6 @@ fun SpendingAdvancedScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        // TODO fix max balance
                         overrideSats = transferValues.maxLspBalance
                     },
                 )
