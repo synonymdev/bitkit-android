@@ -154,11 +154,13 @@ private fun SettingUpScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            val randomOkText = localizedRandom(R.string.common__ok_random)
             PrimaryButton(
                 text = if (inProgress) {
                     stringResource(R.string.lightning__setting_up_button)
                 } else {
-                    localizedRandom(R.string.common__ok_random)
+                    randomOkText
                 },
                 onClick = onContinueClick,
             )
