@@ -23,10 +23,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
@@ -41,6 +43,7 @@ import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
 import kotlin.math.roundToLong
@@ -56,6 +59,7 @@ fun SpendingAmountScreen(
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val currencies = LocalCurrencies.current
+    val resources = LocalContext.current.resources
 
     ScreenColumn {
         AppTopBar(
@@ -84,6 +88,7 @@ fun SpendingAmountScreen(
             // TODO Calculate the maximum amount that can be transferred
             val transactionFee = 512u // TODO calc transaction.fee
             val availableAmount = balances.totalOnchainSats - transactionFee
+            val transferValues = useTransfer(spendingBalanceSats)
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
@@ -140,6 +145,16 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = {
+                    // limit to maxLspBalance
+                    if (transferValues.defaultLspBalance == 0L) {
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = resources.getString(R.string.lightning__spending_amount__error_max__title),
+                            description = resources.getString(R.string.lightning__spending_amount__error_max__description_zero),
+                        )
+                        return@PrimaryButton
+                    }
+
                     isLoading = true
                     scope.launch {
                         try {

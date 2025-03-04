@@ -125,7 +125,7 @@
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Maximální disponibilní zůstatek</string>
     <string name="lightning__spending_amount__error_max__description">Částka, kterou můžete převést na svůj disponibilní zůstatek, je v současné době omezena na ₿ {amount}.</string>
-    <string name="lightning__spending_amount__error_max__description_zero">Dosáhli jste maximálního disponibilního zůstatku.</string>
+    <string name="lightning__spending_amount__error_max__description_zero">Váš převod do disponibilního zůstatku je omezen z důvodu pravidel likvidity. Podrobnosti naleznete v Centru nápovědy.</string>
     <string name="lightning__spending_confirm__network_fee">Síťové poplatky</string>
     <string name="lightning__spending_confirm__lsp_fee">Poplatky za služby</string>
     <string name="lightning__spending_confirm__amount">Do výdajů</string>
