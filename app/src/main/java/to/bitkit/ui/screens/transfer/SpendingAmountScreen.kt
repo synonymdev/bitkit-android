@@ -14,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,8 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToLong
 
 @Composable
@@ -85,10 +88,25 @@ fun SpendingAmountScreen(
             var isLoading by remember { mutableStateOf(false) }
 
             val balances = LocalBalances.current
-            // TODO Calculate the maximum amount that can be transferred
-            val transactionFee = 512u // TODO calc transaction.fee
-            val availableAmount = balances.totalOnchainSats - transactionFee
+
+            val availableAmount = balances.totalOnchainSats - 512u // default tx fee
             val transferValues = useTransfer(spendingBalanceSats)
+            val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
+
+            var maxLspFee by remember { mutableStateOf(0uL) }
+
+            val feeMaximum = max(0, (availableAmount - maxLspFee).toLong())
+            val maximum = min(transferValues.maxClientBalance, feeMaximum)
+
+            LaunchedEffect(availableAmount, maxLspBalance) {
+                runCatching {
+                    val estimate = blocktank.estimateOrderFee(
+                        spendingBalanceSats = availableAmount,
+                        receivingBalanceSats = maxLspBalance.toULong(),
+                    )
+                    maxLspFee = estimate.feeSat
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
@@ -134,8 +152,7 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        // TODO calculate actual max, use estimate fees?
-                        overrideSats = (availableAmount.toDouble() * 0.9).roundToLong()
+                        overrideSats = maximum
                     },
                 )
             }
@@ -146,7 +163,7 @@ fun SpendingAmountScreen(
                 text = stringResource(R.string.common__continue),
                 onClick = {
                     // limit to maxLspBalance
-                    if (transferValues.defaultLspBalance == 0L) {
+                    if (maxLspBalance == 0L) {
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = resources.getString(R.string.lightning__spending_amount__error_max__title),
