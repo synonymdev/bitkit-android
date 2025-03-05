@@ -216,7 +216,7 @@ fun RestoreWalletView(
                 val areButtonsEnabled by remember {
                     derivedStateOf {
                         val wordCount = if (is24Words) 24 else 12
-                        words.subList(0, wordCount).none { it.isBlank() }
+                        words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty()
                     }
                 }
                 SecondaryButton(
