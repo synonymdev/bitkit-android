@@ -57,6 +57,7 @@ fun RestoreWalletView(
     onRestoreClick: (mnemonic: String, passphrase: String?) -> Unit,
 ) {
     val words = remember { mutableStateListOf(*Array(24) { "" }) }
+    val invalidWordIndices = remember { mutableStateListOf<Int>() }
     var bip39Passphrase by remember { mutableStateOf("") }
     var showingPassphrase by remember { mutableStateOf(false) }
     var firstFieldText by remember { mutableStateOf("") }
@@ -116,6 +117,7 @@ fun RestoreWalletView(
                         MnemonicInputField(
                             label = "${index + 1}.",
                             value = if (index == 0) firstFieldText else words[index],
+                            isError = index in invalidWordIndices,
                             onValueChanged = { newValue ->
                                 if (index == 0) {
                                     if (newValue.contains(" ")) {
@@ -123,7 +125,11 @@ fun RestoreWalletView(
                                             newValue,
                                             words,
                                             onWordCountChanged = { is24Words = it },
-                                            onFirstWordChanged = { firstFieldText = it }
+                                            onFirstWordChanged = { firstFieldText = it },
+                                            onInvalidWords = { invalidIndices ->
+                                                invalidWordIndices.clear()
+                                                invalidWordIndices.addAll(invalidIndices)
+                                            }
                                         )
                                     } else {
                                         words[index] = newValue
@@ -217,16 +223,10 @@ fun RestoreWalletView(
 }
 
 @Composable
-fun MnemonicInputField(label: String, value: String, onValueChanged: (String) -> Unit) {
-    var isError by remember { mutableStateOf(false) }
-
+fun MnemonicInputField(label: String, isError: Boolean = false, value: String, onValueChanged: (String) -> Unit) {
     OutlinedTextField(
         value = value,
-        onValueChange = { newValue ->
-            val trimmedValue = newValue.trim().lowercase()
-            isError = trimmedValue.isNotEmpty() && !bip39Words.contains(trimmedValue)
-            onValueChanged(newValue)
-        },
+        onValueChange = onValueChanged,
         prefix = {
             Text(
                 text = label,
@@ -252,9 +252,19 @@ private fun handlePastedWords(
     words: SnapshotStateList<String>,
     onWordCountChanged: (Boolean) -> Unit,
     onFirstWordChanged: (String) -> Unit,
+    onInvalidWords: (List<Int>) -> Unit
 ) {
     val pastedWords = pastedText.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
     if (pastedWords.size == 12 || pastedWords.size == 24) {
+
+        val invalidWordIndices = pastedWords.withIndex()
+            .filter { !bip39Words.contains(it.value.lowercase()) }
+            .map { it.index }
+
+        if (invalidWordIndices.isNotEmpty()) {
+            onInvalidWords(invalidWordIndices)
+        }
+
         onWordCountChanged(pastedWords.size == 24)
         for (index in pastedWords.indices) {
             words[index] = pastedWords[index]
