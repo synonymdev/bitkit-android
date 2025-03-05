@@ -204,6 +204,19 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
+    BodyS(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        color = color
+    )
+}
+
+@Composable
+fun BodyS(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
     Text(
         text = text,
         style = TextStyle(
