@@ -210,7 +210,7 @@ fun RestoreWalletView(
             )
 
             AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
-                BodyM(
+                BodyS(
                     text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red),
                     color = Colors.White64,
                     modifier = Modifier.padding(top = 21.dp)
