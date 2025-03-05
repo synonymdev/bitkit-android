@@ -91,7 +91,8 @@ fun SpendingAdvancedScreen(
 
             val transferValues = useTransfer(clientBalance.toLong())
 
-            val isValid = lspBalance >= transferValues.minLspBalance && lspBalance <= transferValues.maxLspBalance
+            val isValid = lspBalance >= transferValues.minLspBalance &&
+                    lspBalance <= transferValues.maxLspBalance
 
             // Fetch LSP Fee estimate
             LaunchedEffect(lspBalance) {
@@ -99,15 +100,20 @@ fun SpendingAdvancedScreen(
                 if (lspBalance < transferValues.minLspBalance) {
                     return@LaunchedEffect
                 }
-                val estimate = blocktank.estimateOrderFee(
-                    spendingBalanceSats = clientBalance,
-                    receivingBalanceSats = lspBalance.toULong(),
-                )
-                fee = estimate.feeSat.toLong()
+                runCatching {
+                    val estimate = blocktank.estimateOrderFee(
+                        spendingBalanceSats = clientBalance,
+                        receivingBalanceSats = lspBalance.toULong(),
+                    )
+                    fee = estimate.feeSat.toLong()
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__spending_advanced__title).withAccent(accentColor = Colors.Purple))
+            Display(
+                text = stringResource(R.string.lightning__spending_advanced__title)
+                    .withAccent(accentColor = Colors.Purple)
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             TransferAmount(
@@ -124,7 +130,10 @@ fun SpendingAdvancedScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.requiredHeight(20.dp),
             ) {
-                Caption13Up(text = stringResource(R.string.lightning__spending_advanced__fee), color = Colors.White64)
+                Caption13Up(
+                    text = stringResource(R.string.lightning__spending_advanced__fee),
+                    color = Colors.White64,
+                )
                 Spacer(modifier = Modifier.width(4.dp))
                 fee?.let {
                     MoneySSB(it)

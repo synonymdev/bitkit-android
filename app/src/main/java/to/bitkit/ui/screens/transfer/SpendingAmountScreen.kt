@@ -90,13 +90,14 @@ fun SpendingAmountScreen(
             val balances = LocalBalances.current
 
             val availableAmount = balances.totalOnchainSats - 512u // default tx fee
-            val transferValues = useTransfer(spendingBalanceSats)
+
+            val maxClientBalance = useTransfer(spendingBalanceSats).maxClientBalance
             val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
 
             var maxLspFee by remember { mutableStateOf(0uL) }
 
             val feeMaximum = max(0, (availableAmount - maxLspFee).toLong())
-            val maximum = min(transferValues.maxClientBalance, feeMaximum)
+            val maximum = min(maxClientBalance, feeMaximum)
 
             LaunchedEffect(availableAmount, maxLspBalance) {
                 runCatching {
@@ -144,7 +145,9 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = (availableAmount.toDouble() / 4.0).roundToLong()
+                        val quarter = (availableAmount.toDouble() / 4.0).roundToLong()
+                        val amount = min(quarter, maximum)
+                        overrideSats = amount
                     },
                 )
                 // Max Button
@@ -162,7 +165,6 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = {
-                    // limit to maxLspBalance
                     if (maxLspBalance == 0L) {
                         app.toast(
                             type = Toast.ToastType.ERROR,
