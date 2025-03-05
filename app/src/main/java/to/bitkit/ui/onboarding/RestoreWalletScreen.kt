@@ -162,8 +162,16 @@ fun RestoreWalletView(
                         MnemonicInputField(
                             label = "${index + 1}.",
                             value = words[index],
+                            isError = index in invalidWordIndices,
                             onValueChanged = { newValue ->
                                 words[index] = newValue
+
+                                updateWordValidity(
+                                    newValue,
+                                    index,
+                                    words,
+                                    invalidWordIndices,
+                                )
                             }
                         )
                     }
