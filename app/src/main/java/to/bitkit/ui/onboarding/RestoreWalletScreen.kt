@@ -49,6 +49,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.bip39Words
+import to.bitkit.utils.isBip39
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,9 +135,27 @@ fun RestoreWalletView(
                                     } else {
                                         words[index] = newValue
                                         firstFieldText = newValue
+
+                                        val isValid = newValue.isBip39()
+                                        if (!isValid && newValue.isNotEmpty()) {
+                                            if (!invalidWordIndices.contains(index)) {
+                                                invalidWordIndices.add(index)
+                                            }
+                                        } else {
+                                            invalidWordIndices.remove(index)
+                                        }
                                     }
                                 } else {
                                     words[index] = newValue
+
+                                    val isValid = newValue.isBip39()
+                                    if (!isValid && newValue.isNotEmpty()) {
+                                        if (!invalidWordIndices.contains(index)) {
+                                            invalidWordIndices.add(index)
+                                        }
+                                    } else {
+                                        invalidWordIndices.remove(index)
+                                    }
                                 }
                             }
                         )
@@ -258,7 +277,7 @@ private fun handlePastedWords(
     if (pastedWords.size == 12 || pastedWords.size == 24) {
 
         val invalidWordIndices = pastedWords.withIndex()
-            .filter { !bip39Words.contains(it.value.lowercase()) }
+            .filter { !it.value.isBip39() }
             .map { it.index }
 
         if (invalidWordIndices.isNotEmpty()) {
