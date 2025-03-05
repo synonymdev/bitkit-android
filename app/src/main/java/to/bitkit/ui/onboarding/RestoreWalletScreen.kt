@@ -48,6 +48,7 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.bip39Words
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -217,17 +218,24 @@ fun RestoreWalletView(
 
 @Composable
 fun MnemonicInputField(label: String, value: String, onValueChanged: (String) -> Unit) {
+    var isError by remember { mutableStateOf(false) }
+
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChanged,
+        onValueChange = { newValue ->
+            val trimmedValue = newValue.trim().lowercase()
+            isError = trimmedValue.isNotEmpty() && !bip39Words.contains(trimmedValue)
+            onValueChanged(newValue)
+        },
         prefix = {
             Text(
                 text = label,
-                color = Colors.White64,
+                color = if (isError) Colors.Red else Colors.White64,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 4.dp)
             )
         },
+        isError = isError,
         shape = RoundedCornerShape(8.dp),
         colors = AppTextFieldDefaults.semiTransparent,
         singleLine = true,
