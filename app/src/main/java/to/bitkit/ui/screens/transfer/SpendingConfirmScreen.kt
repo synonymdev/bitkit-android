@@ -33,8 +33,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
@@ -58,8 +56,6 @@ fun SpendingConfirmScreen(
     onAdvancedClick: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
-    val app = appViewModel ?: return
-    val blocktank = blocktankViewModel ?: return
     val scope = rememberCoroutineScope()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
