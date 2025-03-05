@@ -1,5 +1,6 @@
 package to.bitkit.ui.onboarding
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -207,6 +208,15 @@ fun RestoreWalletView(
                     .height(16.dp)
                     .weight(1f)
             )
+
+            AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
+                BodyM(
+                    text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red),
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 21.dp)
+                )
+            }
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
