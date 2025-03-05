@@ -133,29 +133,21 @@ fun RestoreWalletView(
                                             }
                                         )
                                     } else {
-                                        words[index] = newValue
-                                        firstFieldText = newValue
-
-                                        val isValid = newValue.isBip39()
-                                        if (!isValid && newValue.isNotEmpty()) {
-                                            if (!invalidWordIndices.contains(index)) {
-                                                invalidWordIndices.add(index)
-                                            }
-                                        } else {
-                                            invalidWordIndices.remove(index)
-                                        }
+                                        updateWordValidity(
+                                            newValue,
+                                            index,
+                                            words,
+                                            invalidWordIndices,
+                                            onWordUpdate = { firstFieldText = it }
+                                        )
                                     }
                                 } else {
-                                    words[index] = newValue
-
-                                    val isValid = newValue.isBip39()
-                                    if (!isValid && newValue.isNotEmpty()) {
-                                        if (!invalidWordIndices.contains(index)) {
-                                            invalidWordIndices.add(index)
-                                        }
-                                    } else {
-                                        invalidWordIndices.remove(index)
-                                    }
+                                    updateWordValidity(
+                                        newValue,
+                                        index,
+                                        words,
+                                        invalidWordIndices,
+                                    )
                                 }
                             }
                         )
@@ -292,6 +284,26 @@ private fun handlePastedWords(
             words[index] = ""
         }
         onFirstWordChanged(pastedWords.first())
+    }
+}
+
+private fun updateWordValidity(
+    newValue: String,
+    index: Int,
+    words: SnapshotStateList<String>,
+    invalidWordIndices: SnapshotStateList<Int>,
+    onWordUpdate: ((String) -> Unit)? = null
+) {
+    words[index] = newValue
+    onWordUpdate?.invoke(newValue)
+
+    val isValid = newValue.isBip39()
+    if (!isValid && newValue.isNotEmpty()) {
+        if (!invalidWordIndices.contains(index)) {
+            invalidWordIndices.add(index)
+        }
+    } else {
+        invalidWordIndices.remove(index)
     }
 }
 
