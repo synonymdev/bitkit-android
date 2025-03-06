@@ -56,8 +56,6 @@ class WalletViewModelTest : BaseUnitTest() {
         wheneverBlocking { lightningService.newAddress() }.thenReturn("onchainAddress")
         whenever(db.configDao()).thenReturn(mock())
         whenever(db.configDao().getAll()).thenReturn(mock())
-        whenever(db.ordersDao()).thenReturn(mock())
-        whenever(db.ordersDao().getAll()).thenReturn(mock())
 
         val task = mock<Task<String>> {
             on(it.isComplete).thenReturn(true)

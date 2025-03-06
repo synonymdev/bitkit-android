@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,13 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.viewmodels.PrimaryDisplay
 
 @Composable
 fun BalanceHeaderView(
@@ -73,29 +70,22 @@ fun BalanceHeaderView(
                         modifier = Modifier.height(62.dp)
                     ) {
                         if (prefix != null) {
-                            Text(
+                            Display(
                                 text = prefix,
-                                fontSize = 46.sp,
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        if (showBitcoinSymbol) {
-                            Text(
-                                text = btcComponents.symbol,
-                                fontSize = 46.sp,
-                                fontWeight = FontWeight.Black,
                                 modifier = Modifier
                                     .alpha(0.6f)
                                     .padding(end = 8.dp)
                             )
                         }
-                        Text(
-                            text = btcComponents.value,
-                            fontSize = 46.sp,
-                            fontWeight = FontWeight.Black,
-                        )
+                        if (showBitcoinSymbol) {
+                            Display(
+                                text = btcComponents.symbol,
+                                modifier = Modifier
+                                    .alpha(0.6f)
+                                    .padding(end = 8.dp)
+                            )
+                        }
+                        Display(text = btcComponents.value)
                     }
                 }
             } else {
@@ -112,28 +102,20 @@ fun BalanceHeaderView(
                         modifier = Modifier.height(62.dp)
                     ) {
                         if (prefix != null) {
-                            Text(
+                            Display(
                                 text = prefix,
-                                fontSize = 46.sp,
-                                fontWeight = FontWeight.Black,
                                 modifier = Modifier
                                     .alpha(0.6f)
                                     .padding(end = 8.dp)
                             )
                         }
-                        Text(
+                        Display(
                             text = converted.symbol,
-                            fontSize = 46.sp,
-                            fontWeight = FontWeight.Black,
                             modifier = Modifier
                                 .alpha(0.6f)
                                 .padding(end = 8.dp)
                         )
-                        Text(
-                            text = converted.formatted,
-                            fontSize = 46.sp,
-                            fontWeight = FontWeight.Black,
-                        )
+                        Display(text = converted.formatted)
                     }
                 }
             }
@@ -150,17 +132,13 @@ private fun SmallRow(prefix: String?, text: String) {
             .padding(bottom = 4.dp)
     ) {
         if (prefix != null) {
-            Text(
+            Caption13Up(
                 text = prefix,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
                 modifier = Modifier.alpha(0.6f)
             )
         }
-        Text(
+        Caption13Up(
             text = text,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.alpha(0.6f)
         )
     }

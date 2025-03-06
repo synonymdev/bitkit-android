@@ -42,10 +42,10 @@ class CurrencyService @Inject constructor(
 
     fun convert(sats: Long, rate: FxRate): ConvertedAmount? {
         val btcAmount = BigDecimal(sats).divide(BigDecimal(100_000_000))
-        val value = btcAmount.multiply(BigDecimal(rate.rate))
+        val value: BigDecimal = btcAmount.multiply(BigDecimal(rate.rate))
 
         val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-            decimalSeparator = ','
+            decimalSeparator = '.'
         }
         val formatter = DecimalFormat("#,##0.00", symbols).apply {
             minimumFractionDigits = 2
@@ -60,7 +60,7 @@ class CurrencyService @Inject constructor(
             symbol = rate.currencySymbol,
             currency = rate.quote,
             flag = rate.currencyFlag,
-            sats = sats
+            sats = sats,
         )
     }
 

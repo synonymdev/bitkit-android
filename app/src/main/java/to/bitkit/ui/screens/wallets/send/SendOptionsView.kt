@@ -8,21 +8,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,14 +32,16 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.wallets.send.components.SendButton
-import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun SendOptionsView(
@@ -122,16 +123,19 @@ private fun SendOptionsContent(
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
-        Text(
-            text = stringResource(R.string.label_to),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Normal,
-        )
+        Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(4.dp))
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.contact),
-            icon = Icons.Default.Person,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Colors.Brand,
+                    modifier = Modifier.size(28.dp),
+                )
+            },
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
             scope.launch {
@@ -140,26 +144,47 @@ private fun SendOptionsContent(
         }
 
         val clipboard = LocalClipboardManager.current
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.paste_invoice),
-            icon = Icons.Default.ContentPaste,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.ContentPaste,
+                    contentDescription = null,
+                    tint = Colors.Brand,
+                    modifier = Modifier.size(28.dp),
+                )
+            },
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
             val uri = clipboard.getText()?.text.orEmpty().trim()
             onEvent(SendEvent.Paste(uri))
         }
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.enter_manually),
-            icon = Icons.Outlined.Edit,
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = null,
+                    tint = Colors.Brand,
+                    modifier = Modifier.size(28.dp),
+                )
+            },
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
             onEvent(SendEvent.EnterManually)
         }
 
-        SendButton(
+        RectangleButton(
             label = stringResource(R.string.wallet__recipient_scan),
-            icon = Icons.Default.CenterFocusWeak,
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_scan),
+                    contentDescription = null,
+                    tint = Colors.Brand,
+                    modifier = Modifier.size(28.dp),
+                )
+            },
         ) {
             onEvent(SendEvent.Scan)
         }

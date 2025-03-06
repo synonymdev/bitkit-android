@@ -10,9 +10,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,6 +28,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
@@ -44,10 +48,14 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningService,
+    private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
+        private set
+
+    var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
 
     private val _sendUiState = MutableStateFlow(SendUiState())
@@ -60,11 +68,21 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
-    private val _showEmptyState = MutableStateFlow(false)
-    val showEmptyState = _showEmptyState.asStateFlow()
+    val showEmptyState: StateFlow<Boolean> = settingsStore.showEmptyState
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
     fun setShowEmptyState(value: Boolean) {
         viewModelScope.launch {
             settingsStore.setShowEmptyState(value)
+        }
+    }
+
+    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.hasSeenSpendingIntro
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenSpendingIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setHasSeenSpendingIntro(value)
         }
     }
 
@@ -81,17 +99,9 @@ class AppViewModel @Inject constructor(
             splashVisible = false
         }
 
-        observeSettings()
         observeLdkNodeEvents()
         observeSendEvents()
-    }
-
-    private fun observeSettings() {
-        viewModelScope.launch {
-            settingsStore.showEmptyState.collect {
-                _showEmptyState.value = it
-            }
-        }
+        checkGeoStatus()
     }
 
     private fun observeLdkNodeEvents() {
@@ -155,6 +165,16 @@ class AppViewModel @Inject constructor(
                 } catch (e: Exception) {
                     Logger.error("LDK event handler error", e)
                 }
+            }
+        }
+    }
+
+    private fun checkGeoStatus() {
+        viewModelScope.launch {
+            try {
+                isGeoBlocked = coreService.checkGeoStatus()
+            } catch (e: Throwable) {
+                Logger.error("Failed to check geo status: ${e.message}", context = "GeoCheck")
             }
         }
     }
@@ -484,6 +504,7 @@ class AppViewModel @Inject constructor(
                                 true // Keep listening for other events
                             }
                         }
+
                         is Event.PaymentFailed -> {
                             if (event.paymentHash == hash) {
                                 result.complete(
@@ -494,6 +515,7 @@ class AppViewModel @Inject constructor(
                                 true // Keep listening for other events
                             }
                         }
+
                         else -> true // Continue collecting
                     }
                 }

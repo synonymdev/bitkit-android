@@ -1,5 +1,8 @@
 package to.bitkit.services
 
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -50,6 +53,7 @@ import kotlin.random.Random
 @Singleton
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
+    private val httpClient: HttpClient,
 ) {
     private var walletIndex: Int = 0
 
@@ -82,6 +86,32 @@ class CoreService @Inject constructor(
                 Logger.info("Blocktank URL updated to ${Env.blocktankClientServer}")
             } catch (e: Exception) {
                 Logger.error("Failed to update Blocktank URL", e)
+            }
+        }
+    }
+
+    /** Returns true if geo blocked */
+    suspend fun checkGeoStatus(): Boolean? {
+        return ServiceQueue.CORE.background {
+            Logger.info("Checking geo status…", context = "GeoCheck")
+            val response = httpClient.get(Env.geoCheckUrl)
+            Logger.debug("Received geo status response: ${response.status.value}", context = "GeoCheck")
+
+            when (response.status.value) {
+                HttpStatusCode.OK.value -> {
+                    Logger.info("Region allowed", context = "GeoCheck")
+                    false
+                }
+
+                HttpStatusCode.Forbidden.value -> {
+                    Logger.warn("Region blocked", context = "GeoCheck")
+                    true
+                }
+
+                else -> {
+                    Logger.warn("Unexpected status code: ${response.status.value}", context = "GeoCheck")
+                    null
+                }
             }
         }
     }

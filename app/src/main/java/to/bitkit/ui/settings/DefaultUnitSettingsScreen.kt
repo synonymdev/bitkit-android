@@ -38,7 +38,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.display
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.PrimaryDisplay
+import to.bitkit.models.PrimaryDisplay
 
 @Composable
 fun DefaultUnitSettingsScreen(
