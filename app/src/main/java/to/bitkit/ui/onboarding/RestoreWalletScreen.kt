@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -255,6 +256,56 @@ fun RestoreWalletView(
                     .height(16.dp)
                     .weight(1f)
             )
+
+            AnimatedVisibility(visible = suggestions.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 29.dp)
+                ) {
+                    BodyS(
+                        text = stringResource(R.string.onboarding__restore_suggestions),
+                        color = Colors.White64,
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    ) {
+                        suggestions.forEach { suggestion ->
+                            PrimaryButton(
+                                text = suggestion,
+                                onClick = {
+                                    focusedIndex?.let { index ->
+                                        if (index == 0) {
+                                            firstFieldText = suggestion
+                                            updateWordValidity(
+                                                suggestion,
+                                                index,
+                                                words,
+                                                invalidWordIndices,
+                                                onWordUpdate = { firstFieldText = it }
+                                            )
+                                        } else {
+                                            updateWordValidity(
+                                                suggestion,
+                                                index,
+                                                words,
+                                                invalidWordIndices,
+                                            )
+                                        }
+                                        suggestions.clear()
+                                    }
+                                },
+                                size = ButtonSize.Small,
+                                fullWidth = false
+                            )
+                        }
+                    }
+                }
+            }
 
             AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
                 BodyS(
