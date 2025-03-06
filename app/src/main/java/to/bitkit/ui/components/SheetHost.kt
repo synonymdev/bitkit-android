@@ -53,6 +53,7 @@ fun SheetHost(
     }
 
     // Observe the state of the bottom sheet to invoke onDismiss callback
+    // TODO prevent onDismiss call during first render
     LaunchedEffect(scaffoldState.bottomSheetState.isVisible) {
         if (!scaffoldState.bottomSheetState.isVisible) {
             onDismiss()

@@ -25,27 +25,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush.Companion.verticalGradient
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.Blue500
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Green500
-import to.bitkit.ui.theme.Orange500
-import to.bitkit.ui.theme.Purple500
-import to.bitkit.ui.theme.Red500
 
 @Composable
 fun ToastView(

@@ -23,19 +23,28 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
 import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.transfer.TransferScreen
-import to.bitkit.ui.screens.transfer.TransferViewModel
+import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
+import to.bitkit.ui.screens.transfer.FundingScreen
+import to.bitkit.ui.screens.transfer.SettingUpScreen
+import to.bitkit.ui.screens.transfer.SpendingAmountScreen
+import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
+import to.bitkit.ui.screens.transfer.SpendingIntroScreen
+import to.bitkit.ui.screens.transfer.TransferIntroScreen
+import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -57,6 +66,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -66,19 +76,21 @@ fun ContentView(
     blocktankViewModel: BlocktankViewModel,
     currencyViewModel: CurrencyViewModel,
     activityListViewModel: ActivityListViewModel,
+    transferViewModel: TransferViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val scope = rememberCoroutineScope()
 
-    // Node start/stop on app fg/bg
+    // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
                     try {
                         walletViewModel.start()
+                        activityListViewModel.syncLdkNodePayments()
                     } catch (e: Throwable) {
                         Logger.error("Failed to start wallet", e)
                     }
@@ -88,6 +100,9 @@ fun ContentView(
                         appViewModel.showNewTransactionSheet(pendingTransaction)
                         NewTransactionSheetDetails.clear(context)
                     }
+
+                    currencyViewModel.triggerRefresh()
+                    blocktankViewModel.triggerRefreshOrders()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
@@ -172,6 +187,7 @@ fun ContentView(
             LocalBlocktankViewModel provides blocktankViewModel,
             LocalCurrencyViewModel provides currencyViewModel,
             LocalActivityListViewModel provides activityListViewModel,
+            LocalTransferViewModel provides transferViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {
@@ -191,10 +207,89 @@ fun ContentView(
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
-                transfer(navController)
                 allActivity(activityListViewModel, navController)
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
+
+                // TODO extract transferNavigation
+                navigation<Routes.TransferRoot>(
+                    startDestination = Routes.TransferIntro,
+                ) {
+                    composable<Routes.TransferIntro> {
+                        TransferIntroScreen()
+                    }
+                    composable<Routes.SpendingIntro> {
+                        SpendingIntroScreen(
+                            onContinueClick = {
+                                navController.navigate(Routes.SpendingAmount)
+                                appViewModel.setHasSeenSpendingIntro(true)
+                            },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SpendingAmount> {
+                        SpendingAmountScreen(
+                            viewModel = transferViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                        )
+                    }
+                    composable<Routes.SpendingConfirm> {
+                        SpendingConfirmScreen(
+                            viewModel = transferViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onConfirm = { navController.navigate(Routes.SettingUp) },
+                        )
+                    }
+                    composable<Routes.SettingUp> {
+                        SettingUpScreen(
+                            viewModel = transferViewModel,
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+
+                    composable<Routes.Funding> {
+                        val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
+                        FundingScreen(
+                            onTransfer = {
+                                if (!hasSeenSpendingIntro) {
+                                    navController.navigateToTransferSpendingIntro()
+                                } else {
+                                    navController.navigateToTransferSpendingAmount()
+                                }
+                             },
+                            onFund = {
+                                scope.launch {
+                                    // TODO show receive sheet -> ReceiveAmount
+                                    navController.popBackStack<Routes.Home>(inclusive = false)
+                                    delay(500) // Wait for nav to actually finish
+                                    appViewModel.showSheet(BottomSheetType.Receive)
+                                }
+                            },
+                            onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.navigateUp() },
+                        )
+                    }
+                    composable<Routes.FundingAdvanced> {
+                        FundingAdvancedScreen(
+                            onLnUrl = { navController.navigateToQrScanner() },
+                            onManual = { navController.navigate(Routes.ExternalConnection) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalConnection> {
+                        ExternalConnectionScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -342,15 +437,6 @@ private fun NavGraphBuilder.regtestSettings(
     }
 }
 
-private fun NavGraphBuilder.transfer(
-    navController: NavHostController,
-) {
-    composable<Routes.Transfer> {
-        val viewModel = hiltViewModel<TransferViewModel>()
-        TransferScreen(viewModel, navController)
-    }
-}
-
 private fun NavGraphBuilder.allActivity(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
@@ -463,8 +549,16 @@ fun NavController.navigateToRegtestSettings() = navigate(
     route = Routes.RegtestSettings,
 )
 
-fun NavController.navigateToTransfer() = navigate(
-    route = Routes.Transfer,
+fun NavController.navigateToTransferSpendingIntro() = navigate(
+    route = Routes.SpendingIntro,
+)
+
+fun NavController.navigateToTransferSpendingAmount() = navigate(
+    route = Routes.SpendingAmount,
+)
+
+fun NavController.navigateToTransferFunding() = navigate(
+    route = Routes.Funding,
 )
 
 fun NavController.navigateToAllActivity() = navigate(
@@ -527,7 +621,31 @@ object Routes {
     data object RegtestSettings
 
     @Serializable
-    data object Transfer
+    data object TransferRoot
+
+    @Serializable
+    data object TransferIntro
+
+    @Serializable
+    data object SpendingIntro
+
+    @Serializable
+    data object SpendingAmount
+
+    @Serializable
+    data object SpendingConfirm
+
+    @Serializable
+    data object SettingUp
+
+    @Serializable
+    data object Funding
+
+    @Serializable
+    data object FundingAdvanced
+
+    @Serializable
+    data object ExternalConnection
 
     @Serializable
     data object AllActivity

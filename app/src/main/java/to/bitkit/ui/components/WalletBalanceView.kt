@@ -20,7 +20,7 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.PrimaryDisplay
+import to.bitkit.models.PrimaryDisplay
 
 @Composable
 fun RowScope.WalletBalanceView(

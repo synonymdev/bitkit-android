@@ -27,6 +27,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @AndroidEntryPoint
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
     private val currencyViewModel by viewModels<CurrencyViewModel>()
     private val activityListViewModel by viewModels<ActivityListViewModel>()
+    private val transferViewModel by viewModels<TransferViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,6 +134,7 @@ class MainActivity : ComponentActivity() {
                         blocktankViewModel = blocktankViewModel,
                         currencyViewModel = currencyViewModel,
                         activityListViewModel = activityListViewModel,
+                        transferViewModel = transferViewModel,
                     )
                 }
 

@@ -335,7 +335,7 @@ private fun OrderDetailView(
                             coroutineScope.launch {
                                 Logger.info("Opening channel for order ${order.id}")
                                 try {
-                                    blocktank.open(orderId = order.id)
+                                    blocktank.openChannel(orderId = order.id)
                                     Logger.info("Channel opened for order ${order.id}")
                                 } catch (e: Throwable) {
                                     Logger.error("Error opening channel for order ${order.id}", e)
@@ -570,7 +570,7 @@ private fun OrderRow(order: IBtOrder) {
                 shape = MaterialTheme.shapes.small
             ) {
                 Text(
-                    text = order.state.toString(),
+                    text = order.state2.toString(),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(4.dp)
                 )

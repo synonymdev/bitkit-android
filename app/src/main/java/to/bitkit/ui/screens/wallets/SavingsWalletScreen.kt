@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,7 +40,7 @@ import to.bitkit.ui.utils.withAccent
 fun SavingsWalletScreen(
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
-    onTransferClick: () -> Unit,
+    onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
@@ -72,11 +70,11 @@ fun SavingsWalletScreen(
                 if (!showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))
                     SecondaryButton(
-                        onClick = onTransferClick,
+                        onClick = onTransferToSpendingClick,
                         text = "Transfer To Spending",
                         icon = {
                             Icon(
-                                imageVector = Icons.Default.SwapVert,
+                                painter = painterResource(R.drawable.ic_transfer),
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )
@@ -112,7 +110,7 @@ private fun SavingsWalletScreenPreview() {
         SavingsWalletScreen(
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
-            onTransferClick = {},
+            onTransferToSpendingClick = {},
             onBackClick = { },
         )
     }

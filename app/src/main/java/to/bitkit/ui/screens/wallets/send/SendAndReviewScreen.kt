@@ -13,10 +13,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
@@ -25,8 +31,8 @@ import to.bitkit.ext.truncate
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.screens.wallets.send.components.SwipeButton
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
@@ -47,6 +53,10 @@ fun SendAndReviewScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
+        val scope = rememberCoroutineScope()
+        // TODO handle loading via uiState?
+        var isLoading by remember { mutableStateOf(false) }
+
         SheetTopBar(stringResource(R.string.title_send_review)) {
             onBack()
         }
@@ -160,10 +170,15 @@ fun SendAndReviewScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-            SwipeButton(
-                onComplete = {
-                    delay(300)
-                    onEvent(SendEvent.SwipeToPay)
+            SwipeToConfirm(
+                text = stringResource(R.string.wallet__send_swipe),
+                loading = isLoading,
+                onConfirm = {
+                    scope.launch {
+                        isLoading = true
+                        delay(300)
+                        onEvent(SendEvent.SwipeToPay)
+                    }
                 }
             )
             Spacer(modifier = Modifier.height(24.dp))

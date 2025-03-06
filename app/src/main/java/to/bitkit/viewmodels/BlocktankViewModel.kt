@@ -6,10 +6,20 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
+import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
@@ -20,6 +30,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningService: LightningService,
 ) : ViewModel() {
@@ -30,25 +41,66 @@ class BlocktankViewModel @Inject constructor(
     var info by mutableStateOf<IBtInfo?>(null)
         private set
 
+    private var isRefreshing = false
+
+    private val pollingFlow: Flow<Unit>
+        get() = flow {
+            while (currentCoroutineContext().isActive) {
+                emit(Unit)
+                delay(Env.blocktankOrderRefreshInterval)
+            }
+        }.flowOn(bgDispatcher)
+
+
     init {
         viewModelScope.launch {
             refreshInfo()
+        }
+        startPolling()
+    }
+
+    suspend fun refreshInfo() {
+        try {
+            info = coreService.blocktank.info(refresh = false) // instantly load from cache first
+            info = coreService.blocktank.info(refresh = true)
+        } catch (e: Throwable) {
+            Logger.error("Failed to refresh Blocktank info", e)
+        }
+    }
+
+    private fun startPolling() {
+        viewModelScope.launch {
+            pollingFlow.collect {
+                refreshOrders()
+            }
+        }
+    }
+
+    fun triggerRefreshOrders() {
+        viewModelScope.launch {
             refreshOrders()
         }
     }
 
-    suspend fun refreshInfo() {
-        info = coreService.blocktank.info(refresh = false) // instantly load from cache first
-        info = coreService.blocktank.info(refresh = true)
-    }
-
     suspend fun refreshOrders() {
-        // Sync instantly from cache
-        orders = coreService.blocktank.orders(refresh = false).toMutableList()
-        cJitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableList()
-        // Update from server
-        orders = coreService.blocktank.orders(refresh = true).toMutableList()
-        cJitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableList()
+        if (isRefreshing) return
+        isRefreshing = true
+        try {
+            Logger.debug("Refreshing orders...")
+
+            // Sync instantly from cache
+            orders = coreService.blocktank.orders(refresh = false).toMutableList()
+            cJitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableList()
+            // Update from server
+            orders = coreService.blocktank.orders(refresh = true).toMutableList()
+            cJitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableList()
+
+            Logger.debug("Orders refreshed")
+        } catch (e: Throwable) {
+            Logger.error("Failed to refresh orders", e)
+        } finally {
+            isRefreshing = false
+        }
     }
 
     suspend fun createCjit(amountSats: ULong, description: String): IcJitEntry {
@@ -94,7 +146,13 @@ class BlocktankViewModel @Inject constructor(
         )
     }
 
-    suspend fun open(orderId: String): IBtOrder {
-        return coreService.blocktank.open(orderId)
+    suspend fun openChannel(orderId: String): IBtOrder {
+        val order = coreService.blocktank.open(orderId)
+
+        val index = orders.indexOfFirst { it.id == order.id }
+        if (index != -1) {
+            orders[index] = order
+        }
+        return order
     }
 }

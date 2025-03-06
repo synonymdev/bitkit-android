@@ -185,10 +185,11 @@ fun OnboardingTab(
     titleAccentColor: Color,
     text: String,
     disclaimerText: String? = null,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         contentAlignment = Alignment.TopCenter,
-        modifier = Modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize()
     ) {
         Image(
             painter = painterResource(id = imageResId),

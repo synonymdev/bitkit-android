@@ -22,17 +22,14 @@ import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.util.Date
 import javax.inject.Inject
-
-enum class PrimaryDisplay {
-    BITCOIN,
-    FIAT
-}
+import kotlin.math.roundToLong
 
 @HiltViewModel
 class CurrencyViewModel @Inject constructor(
@@ -44,6 +41,8 @@ class CurrencyViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     private var lastSuccessfulRefresh: Date? = null
+
+    private var isRefreshing = false
 
     private val pollingFlow: Flow<Unit>
         get() = flow {
@@ -88,6 +87,8 @@ class CurrencyViewModel @Inject constructor(
     }
 
     private suspend fun refresh() {
+        if (isRefreshing) return
+        isRefreshing = true
         try {
             val fetchedRates = currencyService.fetchLatestRates()
             _uiState.update {
@@ -105,6 +106,8 @@ class CurrencyViewModel @Inject constructor(
             lastSuccessfulRefresh?.let { last ->
                 _uiState.update { it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold) }
             }
+        } finally {
+            isRefreshing = false
         }
     }
 
@@ -161,6 +164,17 @@ class CurrencyViewModel @Inject constructor(
         val targetCurrency = currency ?: uiState.value.selectedCurrency
         val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
+    }
+
+    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long? {
+        val sourceCurrency = currency ?: uiState.value.selectedCurrency
+        val rate = currencyService.getCurrentRate(sourceCurrency, uiState.value.rates) ?: return null
+
+        // Convert the fiat amount to BTC, then to sats
+        val btc = fiatAmount / rate.rate
+        val sats = (btc * 100_000_000).roundToLong()
+
+        return sats
     }
 }
 
