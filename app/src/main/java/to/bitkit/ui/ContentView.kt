@@ -40,6 +40,8 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
+import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
+import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
@@ -219,6 +221,22 @@ fun ContentView(
                 ) {
                     composable<Routes.TransferIntro> {
                         TransferIntroScreen()
+                    }
+                    composable<Routes.SavingsIntro> {
+                        SavingsIntroScreen(
+                            onContinueClick = {
+                                navController.navigate(Routes.SavingsAvailability)
+                                appViewModel.setHasSeenSavingsIntro(true)
+                            },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsAvailability> {
+                        SavingsAvailabilityScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = true) },
+                        )
                     }
                     composable<Routes.SpendingIntro> {
                         SpendingIntroScreen(
@@ -567,6 +585,14 @@ fun NavController.navigateToRegtestSettings() = navigate(
     route = Routes.RegtestSettings,
 )
 
+fun NavController.navigateToTransferSavingsIntro() = navigate(
+    route = Routes.SavingsIntro,
+)
+
+fun NavController.navigateToTransferSavingsAvailability() = navigate(
+    route = Routes.SavingsAvailability,
+)
+
 fun NavController.navigateToTransferSpendingIntro() = navigate(
     route = Routes.SpendingIntro,
 )
@@ -661,6 +687,12 @@ object Routes {
 
     @Serializable
     data object SettingUp
+
+    @Serializable
+    data object SavingsIntro
+
+    @Serializable
+    data object SavingsAvailability
 
     @Serializable
     data object Funding

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +29,7 @@ import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
@@ -39,6 +41,7 @@ import to.bitkit.ui.utils.withAccent
 fun SpendingWalletScreen(
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
+    onTransferToSavingsClick: () -> Unit,
     onBackCLick: () -> Unit,
 ) {
     val balances = LocalBalances.current
@@ -46,6 +49,10 @@ fun SpendingWalletScreen(
         // TODO use && hasLnActivity + LN spendingSats
         mutableStateOf(balances.totalLightningSats == 0uL)
     }
+    val canTransfer by remember(balances.totalLightningSats) {
+        mutableStateOf(balances.totalLightningSats > 0uL)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),
@@ -66,8 +73,25 @@ fun SpendingWalletScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
                 BalanceHeaderView(sats = balances.totalLightningSats.toLong(), modifier = Modifier.fillMaxWidth())
+
                 if (!showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))
+
+                    if (canTransfer) {
+                        SecondaryButton(
+                            onClick = onTransferToSavingsClick,
+                            text = "Transfer To Savings",
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_transfer),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     val activity = activityListViewModel ?: return@Column
                     val lightningActivities by activity.lightningActivities.collectAsState()
                     ActivityListWithHeaders(
@@ -97,6 +121,7 @@ private fun SpendingWalletScreenPreview() {
         SpendingWalletScreen(
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
+            onTransferToSavingsClick = {},
             onBackCLick = {},
         )
     }
