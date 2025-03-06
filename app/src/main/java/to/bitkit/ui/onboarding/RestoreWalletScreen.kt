@@ -97,7 +97,7 @@ fun RestoreWalletView(
 
         suggestions.clear()
         if (input.isNotEmpty()) {
-            val filtered = bip39Words.filter { it.startsWith(input.lowercase()) }.take(5)
+            val filtered = bip39Words.filter { it.startsWith(input.lowercase()) }.take(3)
             suggestions.addAll(filtered)
         }
     }
