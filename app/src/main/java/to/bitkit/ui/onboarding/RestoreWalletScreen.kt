@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -49,6 +50,7 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.bip39Words
 import to.bitkit.utils.isBip39
 import to.bitkit.utils.validBip39Checksum
 
@@ -60,6 +62,8 @@ fun RestoreWalletView(
 ) {
     val words = remember { mutableStateListOf(*Array(24) { "" }) }
     val invalidWordIndices = remember { mutableStateListOf<Int>() }
+    val suggestions = remember { mutableStateListOf<String>() }
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
     var bip39Passphrase by remember { mutableStateOf("") }
     var showingPassphrase by remember { mutableStateOf(false) }
     var firstFieldText by remember { mutableStateOf("") }
@@ -67,7 +71,10 @@ fun RestoreWalletView(
     val checksumErrorVisible by remember {
         derivedStateOf {
             val wordCount = if (is24Words) 24 else 12
-            words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !words.subList(0, wordCount).validBip39Checksum()
+            words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !words.subList(
+                0,
+                wordCount
+            ).validBip39Checksum()
         }
     }
 
@@ -79,6 +86,19 @@ fun RestoreWalletView(
             words.subList(0, wordCount)
                 .joinToString(separator = " ")
                 .trim()
+        }
+    }
+
+    fun updateSuggestions(input: String, index: Int?) {
+        if (index == null) {
+            suggestions.clear()
+            return
+        }
+
+        suggestions.clear()
+        if (input.isNotEmpty()) {
+            val filtered = bip39Words.filter { it.startsWith(input.lowercase()) }.take(5)
+            suggestions.addAll(filtered)
         }
     }
 
@@ -147,6 +167,7 @@ fun RestoreWalletView(
                                             invalidWordIndices,
                                             onWordUpdate = { firstFieldText = it }
                                         )
+                                        updateSuggestions(newValue, focusedIndex)
                                     }
                                 } else {
                                     updateWordValidity(
@@ -155,6 +176,16 @@ fun RestoreWalletView(
                                         words,
                                         invalidWordIndices,
                                     )
+                                    updateSuggestions(newValue, focusedIndex)
+                                }
+                            },
+                            onFocusChanged = { focused ->
+                                if (focused) {
+                                    focusedIndex = index
+                                    updateSuggestions(if (index == 0) firstFieldText else words[index], index)
+                                } else if (focusedIndex == index) {
+                                    focusedIndex = null
+                                    suggestions.clear()
                                 }
                             }
                         )
@@ -179,6 +210,16 @@ fun RestoreWalletView(
                                     words,
                                     invalidWordIndices,
                                 )
+                                updateSuggestions(newValue, focusedIndex)
+                            },
+                            onFocusChanged = { focused ->
+                                if (focused) {
+                                    focusedIndex = index
+                                    updateSuggestions(words[index], index)
+                                } else if (focusedIndex == index) {
+                                    focusedIndex = null
+                                    suggestions.clear()
+                                }
                             }
                         )
                     }
@@ -240,7 +281,8 @@ fun RestoreWalletView(
                 val areButtonsEnabled by remember {
                     derivedStateOf {
                         val wordCount = if (is24Words) 24 else 12
-                        words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
+                        words.subList(0, wordCount)
+                            .none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
                     }
                 }
                 SecondaryButton(
@@ -266,7 +308,13 @@ fun RestoreWalletView(
 }
 
 @Composable
-fun MnemonicInputField(label: String, isError: Boolean = false, value: String, onValueChanged: (String) -> Unit) {
+fun MnemonicInputField(
+    label: String,
+    isError: Boolean = false,
+    value: String,
+    onValueChanged: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChanged,
@@ -287,6 +335,7 @@ fun MnemonicInputField(label: String, isError: Boolean = false, value: String, o
             imeAction = ImeAction.Next,
             capitalization = KeyboardCapitalization.None,
         ),
+        modifier = Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
     )
 }
 
