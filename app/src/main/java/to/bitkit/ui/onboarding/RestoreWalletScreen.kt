@@ -67,7 +67,7 @@ fun RestoreWalletView(
     val checksumErrorVisible by remember {
         derivedStateOf {
             val wordCount = if (is24Words) 24 else 12
-            words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !words.validBip39Checksum()
+            words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !words.subList(0, wordCount).validBip39Checksum()
         }
     }
 
