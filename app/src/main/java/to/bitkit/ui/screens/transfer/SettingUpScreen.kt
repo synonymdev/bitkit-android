@@ -96,11 +96,10 @@ private fun SettingUpScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             if (inProgress) {
                 Display(
-                    text = stringResource(R.string.lightning__setting_up_header),
-                    color = Colors.Purple,
+                    text = stringResource(R.string.lightning__savings_progress__title).withAccent(accentColor = Colors.Purple),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 BodyM(
@@ -119,10 +118,10 @@ private fun SettingUpScreen(
                     color = Colors.White64,
                 )
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             if (inProgress) {
                 AnimationView()
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 val steps = listOf(
                     stringResource(R.string.lightning__setting_up_step1),
                     stringResource(R.string.lightning__setting_up_step2),
