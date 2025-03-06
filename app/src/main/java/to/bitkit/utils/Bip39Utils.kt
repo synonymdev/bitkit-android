@@ -7,9 +7,8 @@ val bip39Words = setOf( "abandon", "ability", "able", "about", "above", "absent"
 fun String.isBip39() = bip39Words.contains(this.lowercase())
 
 /**
- * Validates a BIP39 mnemonic phrase by checking its checksum.
+ * Validates a BIP39 mnemonic phrase by checking its checksum. This method only tests 12 or 24 words phrases
  *
- * @param words The list of BIP39 words (12 or 24 words)
  * @return True if the mnemonic is valid, false otherwise
  */
 fun List<String>.validBip39Checksum() : Boolean {
