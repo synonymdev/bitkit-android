@@ -1,5 +1,6 @@
 package to.bitkit.ui.onboarding
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,8 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.bip39Words
+import to.bitkit.utils.isBip39
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +59,7 @@ fun RestoreWalletView(
     onRestoreClick: (mnemonic: String, passphrase: String?) -> Unit,
 ) {
     val words = remember { mutableStateListOf(*Array(24) { "" }) }
+    val invalidWordIndices = remember { mutableStateListOf<Int>() }
     var bip39Passphrase by remember { mutableStateOf("") }
     var showingPassphrase by remember { mutableStateOf(false) }
     var firstFieldText by remember { mutableStateOf("") }
@@ -115,6 +119,7 @@ fun RestoreWalletView(
                         MnemonicInputField(
                             label = "${index + 1}.",
                             value = if (index == 0) firstFieldText else words[index],
+                            isError = index in invalidWordIndices,
                             onValueChanged = { newValue ->
                                 if (index == 0) {
                                     if (newValue.contains(" ")) {
@@ -122,14 +127,28 @@ fun RestoreWalletView(
                                             newValue,
                                             words,
                                             onWordCountChanged = { is24Words = it },
-                                            onFirstWordChanged = { firstFieldText = it }
+                                            onFirstWordChanged = { firstFieldText = it },
+                                            onInvalidWords = { invalidIndices ->
+                                                invalidWordIndices.clear()
+                                                invalidWordIndices.addAll(invalidIndices)
+                                            }
                                         )
                                     } else {
-                                        words[index] = newValue
-                                        firstFieldText = newValue
+                                        updateWordValidity(
+                                            newValue,
+                                            index,
+                                            words,
+                                            invalidWordIndices,
+                                            onWordUpdate = { firstFieldText = it }
+                                        )
                                     }
                                 } else {
-                                    words[index] = newValue
+                                    updateWordValidity(
+                                        newValue,
+                                        index,
+                                        words,
+                                        invalidWordIndices,
+                                    )
                                 }
                             }
                         )
@@ -144,8 +163,16 @@ fun RestoreWalletView(
                         MnemonicInputField(
                             label = "${index + 1}.",
                             value = words[index],
+                            isError = index in invalidWordIndices,
                             onValueChanged = { newValue ->
                                 words[index] = newValue
+
+                                updateWordValidity(
+                                    newValue,
+                                    index,
+                                    words,
+                                    invalidWordIndices,
+                                )
                             }
                         )
                     }
@@ -181,6 +208,15 @@ fun RestoreWalletView(
                     .height(16.dp)
                     .weight(1f)
             )
+
+            AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
+                BodyS(
+                    text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red),
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 21.dp)
+                )
+            }
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -190,7 +226,7 @@ fun RestoreWalletView(
                 val areButtonsEnabled by remember {
                     derivedStateOf {
                         val wordCount = if (is24Words) 24 else 12
-                        words.subList(0, wordCount).none { it.isBlank() }
+                        words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty()
                     }
                 }
                 SecondaryButton(
@@ -216,18 +252,19 @@ fun RestoreWalletView(
 }
 
 @Composable
-fun MnemonicInputField(label: String, value: String, onValueChanged: (String) -> Unit) {
+fun MnemonicInputField(label: String, isError: Boolean = false, value: String, onValueChanged: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChanged,
         prefix = {
             Text(
                 text = label,
-                color = Colors.White64,
+                color = if (isError) Colors.Red else Colors.White64,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 4.dp)
             )
         },
+        isError = isError,
         shape = RoundedCornerShape(8.dp),
         colors = AppTextFieldDefaults.semiTransparent,
         singleLine = true,
@@ -244,9 +281,19 @@ private fun handlePastedWords(
     words: SnapshotStateList<String>,
     onWordCountChanged: (Boolean) -> Unit,
     onFirstWordChanged: (String) -> Unit,
+    onInvalidWords: (List<Int>) -> Unit
 ) {
     val pastedWords = pastedText.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
     if (pastedWords.size == 12 || pastedWords.size == 24) {
+
+        val invalidWordIndices = pastedWords.withIndex()
+            .filter { !it.value.isBip39() }
+            .map { it.index }
+
+        if (invalidWordIndices.isNotEmpty()) {
+            onInvalidWords(invalidWordIndices)
+        }
+
         onWordCountChanged(pastedWords.size == 24)
         for (index in pastedWords.indices) {
             words[index] = pastedWords[index]
@@ -255,6 +302,26 @@ private fun handlePastedWords(
             words[index] = ""
         }
         onFirstWordChanged(pastedWords.first())
+    }
+}
+
+private fun updateWordValidity(
+    newValue: String,
+    index: Int,
+    words: SnapshotStateList<String>,
+    invalidWordIndices: SnapshotStateList<Int>,
+    onWordUpdate: ((String) -> Unit)? = null
+) {
+    words[index] = newValue
+    onWordUpdate?.invoke(newValue)
+
+    val isValid = newValue.isBip39()
+    if (!isValid && newValue.isNotEmpty()) {
+        if (!invalidWordIndices.contains(index)) {
+            invalidWordIndices.add(index)
+        }
+    } else {
+        invalidWordIndices.remove(index)
     }
 }
 

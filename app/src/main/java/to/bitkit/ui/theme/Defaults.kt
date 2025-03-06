@@ -38,6 +38,10 @@ object AppTextFieldDefaults {
             unfocusedIndicatorColor = Color.Transparent,
             focusedContainerColor = Colors.White10,
             unfocusedContainerColor = Colors.White10,
+            errorIndicatorColor = Color.Transparent,
+            errorContainerColor = Colors.White10,
+            errorTextColor = Colors.Red,
+            errorPrefixColor = Colors.Red
         )
 }
 
