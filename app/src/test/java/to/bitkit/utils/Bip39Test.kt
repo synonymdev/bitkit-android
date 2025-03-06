@@ -1,6 +1,7 @@
 package to.bitkit.utils
 
 import junit.framework.TestCase.assertFalse
+import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
 import to.bitkit.env.Env.DERIVATION_NAME
@@ -87,6 +88,43 @@ class Bip39Test {
         assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())
         assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon zoo").validBip39Checksum())
         assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon actor").validBip39Checksum())
+    }
+
+
+    @Test
+    fun `isBip39 should return true for valid BIP39 word`() {
+        Assert.assertTrue("abandon".isBip39())
+        Assert.assertTrue("zoo".isBip39())
+        Assert.assertTrue("abandon".uppercase().isBip39())
+        Assert.assertTrue("abandon".lowercase().isBip39())
+        Assert.assertTrue("abandon".capitalize().isBip39())
+    }
+
+    @Test
+    fun `isBip39 should return false for invalid BIP39 word`() {
+        Assert.assertFalse("invalidword".isBip39())
+        Assert.assertFalse("".isBip39())
+        Assert.assertFalse("123".isBip39())
+        Assert.assertFalse("abandon ".isBip39())
+        Assert.assertFalse(" abandon".isBip39())
+        Assert.assertFalse(" abandon ".isBip39())
+        Assert.assertFalse("abandon1".isBip39())
+        Assert.assertFalse("abandon-".isBip39())
+        Assert.assertFalse("abandon_".isBip39())
+    }
+
+    @Test
+    fun `isBip39 should handle empty string`() {
+        Assert.assertFalse("".isBip39())
+    }
+
+    @Test
+    fun `isBip39 should handle non-alphabetic characters`() {
+        Assert.assertFalse("123".isBip39())
+        Assert.assertFalse("!@#".isBip39())
+        Assert.assertFalse("abandon1".isBip39())
+        Assert.assertFalse("abandon-".isBip39())
+        Assert.assertFalse("abandon_".isBip39())
     }
 
 }
