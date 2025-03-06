@@ -49,8 +49,8 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.utils.bip39Words
 import to.bitkit.utils.isBip39
+import to.bitkit.utils.validBip39Checksum
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +64,12 @@ fun RestoreWalletView(
     var showingPassphrase by remember { mutableStateOf(false) }
     var firstFieldText by remember { mutableStateOf("") }
     var is24Words by remember { mutableStateOf(false) }
+    val checksumErrorVisible by remember {
+        derivedStateOf {
+            val wordCount = if (is24Words) 24 else 12
+            words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !words.validBip39Checksum()
+        }
+    }
 
     val wordsPerColumn = if (is24Words) 12 else 6
 
@@ -217,6 +223,14 @@ fun RestoreWalletView(
                 )
             }
 
+            AnimatedVisibility(visible = checksumErrorVisible) {
+                BodyS(
+                    text = stringResource(R.string.onboarding__restore_inv_checksum),
+                    color = Colors.Red,
+                    modifier = Modifier.padding(top = 21.dp)
+                )
+            }
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -226,7 +240,7 @@ fun RestoreWalletView(
                 val areButtonsEnabled by remember {
                     derivedStateOf {
                         val wordCount = if (is24Words) 24 else 12
-                        words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty()
+                        words.subList(0, wordCount).none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
                     }
                 }
                 SecondaryButton(

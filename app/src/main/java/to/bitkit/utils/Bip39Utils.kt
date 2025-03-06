@@ -12,14 +12,14 @@ fun String.isBip39() = bip39Words.contains(this.lowercase())
  * @param words The list of BIP39 words (12 or 24 words)
  * @return True if the mnemonic is valid, false otherwise
  */
-fun validateBip39Checksum(words: List<String>) : Boolean {
-    if (words.size != 12 && words.size != 24) {
+fun List<String>.validBip39Checksum() : Boolean {
+    if (this.size != 12 && this.size != 24) {
         return false
     }
 
-    if (words.any { !it.isBip39() }) return false
+    if (this.any { !it.isBip39() }) return false
 
-    val indices = words.map { word ->
+    val indices = this.map { word ->
         val index = bip39Words.indexOf(word)
         if (index == -1) {
             return false
@@ -29,7 +29,7 @@ fun validateBip39Checksum(words: List<String>) : Boolean {
 
     // 12 words = 128 bits of entropy + 4 bits of checksum
     // 24 words = 256 bits of entropy + 8 bits of checksum
-    val entropyBits = if (words.size == 12) 128 else 256
+    val entropyBits = if (this.size == 12) 128 else 256
     val checksumBits = entropyBits / 32
 
     val bits = indices.joinToString(separator = "") { index ->
