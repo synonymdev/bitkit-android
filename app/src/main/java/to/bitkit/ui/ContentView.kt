@@ -41,6 +41,7 @@ import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
+import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
@@ -235,7 +236,15 @@ fun ContentView(
                     composable<Routes.SavingsAvailability> {
                         SavingsAvailabilityScreen(
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = true) },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCancelClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
+                        )
+                    }
+                    composable<Routes.SavingsConfirm> {
+                        SavingsConfirmScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                         )
                     }
                     composable<Routes.SpendingIntro> {
@@ -693,6 +702,9 @@ object Routes {
 
     @Serializable
     data object SavingsAvailability
+
+    @Serializable
+    data object SavingsConfirm
 
     @Serializable
     data object Funding
