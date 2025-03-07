@@ -2,15 +2,7 @@ package to.bitkit.utils
 
 import junit.framework.TestCase.assertFalse
 import org.junit.Assert
-import org.junit.Before
 import org.junit.Test
-import to.bitkit.env.Env.DERIVATION_NAME
-import to.bitkit.ext.fromBase64
-import to.bitkit.ext.fromHex
-import to.bitkit.ext.toHex
-import to.bitkit.ext.toBase64
-import to.bitkit.fcm.EncryptedNotification
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
