@@ -119,6 +119,7 @@ fun RestoreWalletView(
             suggestions.addAll(filtered)
 
             if (filtered.isNotEmpty() && (!suggestionsWereVisible || (index >= wordsPerColumn))) {
+                if (filtered.size == 1 && filtered.firstOrNull() == input) return
                 scope.launch {
                     delay(100)
                     scrollState.animateScrollTo(scrollState.maxValue)
