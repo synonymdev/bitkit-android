@@ -132,13 +132,13 @@ fun RestoreWalletView(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
                     .verticalScroll(rememberScrollState())
-                    .imePadding()
             ) {
                 Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
                 Spacer(modifier = Modifier.height(8.dp))
