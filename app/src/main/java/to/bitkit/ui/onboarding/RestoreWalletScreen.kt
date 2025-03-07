@@ -5,7 +5,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,21 +37,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -99,32 +98,16 @@ fun RestoreWalletView(
         }
     }
 
-    val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    var suggestionsWereVisible by remember { mutableStateOf(false) }
-    val inputFieldPositions = remember { mutableMapOf<Int, Int>() }
-
     fun updateSuggestions(input: String, index: Int?) {
-        if (index == null || input.length < 3) {
+        if (index == null || input.length < 2) {
             suggestions.clear()
-            suggestionsWereVisible = false
             return
         }
-
-        suggestionsWereVisible = suggestions.isNotEmpty()
 
         suggestions.clear()
         if (input.isNotEmpty()) {
             val filtered = bip39Words.filter { it.startsWith(input.lowercase()) }.take(3)
             suggestions.addAll(filtered)
-
-            if (filtered.isNotEmpty() && (!suggestionsWereVisible || (index >= wordsPerColumn))) {
-                if (filtered.size == 1 && filtered.firstOrNull() == input) return
-                scope.launch {
-                    delay(100)
-                    scrollState.animateScrollTo(scrollState.maxValue)
-                }
-            }
         }
     }
 
@@ -145,57 +128,95 @@ fun RestoreWalletView(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 32.dp)
-                .verticalScroll(scrollState)
-                .imePadding()
         ) {
-            Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
-            Spacer(modifier = Modifier.height(8.dp))
-            BodyM(
-                text = stringResource(R.string.onboarding__restore_phrase),
-                color = Colors.White80,
-            )
-            Spacer(modifier = Modifier.height(32.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+            ) {
+                Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(
+                    text = stringResource(R.string.onboarding__restore_phrase),
+                    color = Colors.White80,
+                )
+                Spacer(modifier = Modifier.height(32.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // First column (1-6 or 1-12)
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    for (index in 0 until wordsPerColumn) {
-                        MnemonicInputField(
-                            label = "${index + 1}.",
-                            value = if (index == 0) firstFieldText else words[index],
-                            isError = index in invalidWordIndices,
-                            onValueChanged = { newValue ->
-                                if (index == 0) {
-                                    if (newValue.contains(" ")) {
-                                        handlePastedWords(
-                                            newValue,
-                                            words,
-                                            onWordCountChanged = { is24Words = it },
-                                            onFirstWordChanged = { firstFieldText = it },
-                                            onInvalidWords = { invalidIndices ->
-                                                invalidWordIndices.clear()
-                                                invalidWordIndices.addAll(invalidIndices)
-                                            }
-                                        )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // First column (1-6 or 1-12)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        for (index in 0 until wordsPerColumn) {
+                            MnemonicInputField(
+                                label = "${index + 1}.",
+                                value = if (index == 0) firstFieldText else words[index],
+                                isError = index in invalidWordIndices,
+                                onValueChanged = { newValue ->
+                                    if (index == 0) {
+                                        if (newValue.contains(" ")) {
+                                            handlePastedWords(
+                                                newValue,
+                                                words,
+                                                onWordCountChanged = { is24Words = it },
+                                                onFirstWordChanged = { firstFieldText = it },
+                                                onInvalidWords = { invalidIndices ->
+                                                    invalidWordIndices.clear()
+                                                    invalidWordIndices.addAll(invalidIndices)
+                                                }
+                                            )
+                                        } else {
+                                            updateWordValidity(
+                                                newValue,
+                                                index,
+                                                words,
+                                                invalidWordIndices,
+                                                onWordUpdate = { firstFieldText = it }
+                                            )
+                                            updateSuggestions(newValue, focusedIndex)
+                                        }
                                     } else {
                                         updateWordValidity(
                                             newValue,
                                             index,
                                             words,
                                             invalidWordIndices,
-                                            onWordUpdate = { firstFieldText = it }
                                         )
                                         updateSuggestions(newValue, focusedIndex)
                                     }
-                                } else {
+                                },
+                                onFocusChanged = { focused ->
+                                    if (focused) {
+                                        focusedIndex = index
+                                        updateSuggestions(if (index == 0) firstFieldText else words[index], index)
+                                    } else if (focusedIndex == index) {
+                                        focusedIndex = null
+                                        suggestions.clear()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    // Second column (7-12 or 13-24)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        for (index in wordsPerColumn until (wordsPerColumn * 2)) {
+                            MnemonicInputField(
+                                label = "${index + 1}.",
+                                value = words[index],
+                                isError = index in invalidWordIndices,
+                                onValueChanged = { newValue ->
+                                    words[index] = newValue
+
                                     updateWordValidity(
                                         newValue,
                                         index,
@@ -203,100 +224,114 @@ fun RestoreWalletView(
                                         invalidWordIndices,
                                     )
                                     updateSuggestions(newValue, focusedIndex)
+                                },
+                                onFocusChanged = { focused ->
+                                    if (focused) {
+                                        focusedIndex = index
+                                        updateSuggestions(words[index], index)
+                                    } else if (focusedIndex == index) {
+                                        focusedIndex = null
+                                        suggestions.clear()
+                                    }
                                 }
-                            },
-                            onFocusChanged = { focused ->
-                                if (focused) {
-                                    focusedIndex = index
-                                    updateSuggestions(if (index == 0) firstFieldText else words[index], index)
-                                } else if (focusedIndex == index) {
-                                    focusedIndex = null
-                                    suggestions.clear()
-                                }
-                            },
-                            onPositionChanged = { position ->
-                                inputFieldPositions[index] = position
-                            }
-                        )
+                            )
+                        }
                     }
                 }
-                // Second column (7-12 or 13-24)
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    for (index in wordsPerColumn until (wordsPerColumn * 2)) {
-                        MnemonicInputField(
-                            label = "${index + 1}.",
-                            value = words[index],
-                            isError = index in invalidWordIndices,
-                            onValueChanged = { newValue ->
-                                words[index] = newValue
+                // Passphrase
+                if (showingPassphrase) {
+                    OutlinedTextField(
+                        value = bip39Passphrase,
+                        onValueChange = { bip39Passphrase = it },
+                        placeholder = { Text(text = stringResource(R.string.onboarding__restore_passphrase_placeholder)) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = AppTextFieldDefaults.semiTransparent,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            imeAction = ImeAction.Next,
+                            capitalization = KeyboardCapitalization.None,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    BodyS(
+                        text = stringResource(R.string.onboarding__restore_passphrase_meaning),
+                        color = Colors.White64,
+                    )
+                }
 
-                                updateWordValidity(
-                                    newValue,
-                                    index,
-                                    words,
-                                    invalidWordIndices,
-                                )
-                                updateSuggestions(newValue, focusedIndex)
-                            },
-                            onFocusChanged = { focused ->
-                                if (focused) {
-                                    focusedIndex = index
-                                    updateSuggestions(words[index], index)
-                                } else if (focusedIndex == index) {
-                                    focusedIndex = null
-                                    suggestions.clear()
-                                }
-                            },
-                            onPositionChanged = { position ->
-                                inputFieldPositions[index] = position
-                            }
-                        )
-                    }
-                }
-            }
-            // Passphrase
-            if (showingPassphrase) {
-                OutlinedTextField(
-                    value = bip39Passphrase,
-                    onValueChange = { bip39Passphrase = it },
-                    placeholder = { Text(text = stringResource(R.string.onboarding__restore_passphrase_placeholder)) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = AppTextFieldDefaults.semiTransparent,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        imeAction = ImeAction.Next,
-                        capitalization = KeyboardCapitalization.None,
-                    ),
+                Spacer(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
+                        .height(16.dp)
+                        .weight(1f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                BodyS(
-                    text = stringResource(R.string.onboarding__restore_passphrase_meaning),
-                    color = Colors.White64,
-                )
+
+                AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
+                    BodyS(
+                        text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red),
+                        color = Colors.White64,
+                        modifier = Modifier.padding(top = 21.dp)
+                    )
+                }
+
+                AnimatedVisibility(visible = checksumErrorVisible) {
+                    BodyS(
+                        text = stringResource(R.string.onboarding__restore_inv_checksum),
+                        color = Colors.Red,
+                        modifier = Modifier.padding(top = 21.dp)
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(vertical = 16.dp)
+                        .fillMaxWidth(),
+                ) {
+                    val areButtonsEnabled by remember {
+                        derivedStateOf {
+                            val wordCount = if (is24Words) 24 else 12
+                            words.subList(0, wordCount)
+                                .none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
+                        }
+                    }
+                    SecondaryButton(
+                        text = stringResource(R.string.onboarding__advanced),
+                        onClick = {
+                            showingPassphrase = !showingPassphrase
+                            bip39Passphrase = ""
+                        },
+                        enabled = areButtonsEnabled,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.onboarding__restore),
+                        onClick = {
+                            onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
+                        },
+                        enabled = areButtonsEnabled,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
-            Spacer(
-                modifier = Modifier
-                    .height(16.dp)
-                    .weight(1f)
-            )
-
+            // Suggestions row
             AnimatedVisibility(
                 visible = suggestions.isNotEmpty(),
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .imePadding()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 29.dp)
+                        .background(Colors.Black)
+                        .padding(horizontal = 32.dp, vertical = 8.dp)
                 ) {
                     BodyS(
                         text = stringResource(R.string.onboarding__restore_suggestions),
@@ -332,12 +367,6 @@ fun RestoreWalletView(
                                             )
                                         }
                                         suggestions.clear()
-
-                                        inputFieldPositions[index]?.let { position ->
-                                            scope.launch {
-                                                scrollState.animateScrollTo(position)
-                                            }
-                                        }
                                     }
                                 },
                                 size = ButtonSize.Small,
@@ -346,54 +375,6 @@ fun RestoreWalletView(
                         }
                     }
                 }
-            }
-
-            AnimatedVisibility(visible = invalidWordIndices.isNotEmpty()) {
-                BodyS(
-                    text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(top = 21.dp)
-                )
-            }
-
-            AnimatedVisibility(visible = checksumErrorVisible) {
-                BodyS(
-                    text = stringResource(R.string.onboarding__restore_inv_checksum),
-                    color = Colors.Red,
-                    modifier = Modifier.padding(top = 21.dp)
-                )
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .fillMaxWidth(),
-            ) {
-                val areButtonsEnabled by remember {
-                    derivedStateOf {
-                        val wordCount = if (is24Words) 24 else 12
-                        words.subList(0, wordCount)
-                            .none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
-                    }
-                }
-                SecondaryButton(
-                    text = stringResource(R.string.onboarding__advanced),
-                    onClick = {
-                        showingPassphrase = !showingPassphrase
-                        bip39Passphrase = ""
-                    },
-                    enabled = areButtonsEnabled,
-                    modifier = Modifier.weight(1f)
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.onboarding__restore),
-                    onClick = {
-                        onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
-                    },
-                    enabled = areButtonsEnabled,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
     }
@@ -405,8 +386,7 @@ fun MnemonicInputField(
     isError: Boolean = false,
     value: String,
     onValueChanged: (String) -> Unit,
-    onFocusChanged: (Boolean) -> Unit,
-    onPositionChanged: (Int) -> Unit
+    onFocusChanged: (Boolean) -> Unit
 ) {
     OutlinedTextField(
         value = value,
@@ -430,10 +410,6 @@ fun MnemonicInputField(
         ),
         modifier = Modifier
             .onFocusChanged { onFocusChanged(it.isFocused) }
-            .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInParent().y.toInt()
-                onPositionChanged(position)
-            }
     )
 }
 
