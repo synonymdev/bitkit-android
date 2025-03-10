@@ -439,7 +439,7 @@ fun MnemonicInputField(
         modifier = Modifier
             .onFocusChanged { onFocusChanged(it.isFocused) }
             .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInParent().y.toInt()
+                val position = coordinates.positionInParent().y.toInt() * 2 //double the scroll to ensure enough space
                 onPositionChanged(position)
             }
     )
