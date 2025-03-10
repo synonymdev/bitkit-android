@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors.Brand
 
@@ -109,9 +110,8 @@ fun HighlightLabel(
                 },
             contentAlignment = Alignment.Center
         ) {
-            Text(
+            Caption13Up(
                 text = text,
-                style = textStyle,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
@@ -139,6 +139,6 @@ fun ShortTextLogoPreview() {
 @Composable
 fun LongTextLogoPreview() {
     AppThemeSurface {
-        HighlightLabel(text = "SUPER ADVENTURE GAME DELUXE")
+        HighlightLabel(text = "NOT YOUR KEYS, NOT YOUR COINS")
     }
 }
