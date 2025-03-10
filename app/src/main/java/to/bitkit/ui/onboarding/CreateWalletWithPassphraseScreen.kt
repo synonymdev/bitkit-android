@@ -67,18 +67,30 @@ fun CreateWalletWithPassphraseScreen(
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
-        TopAppBar(
-            title = {},
-            navigationIcon = {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                        contentDescription = stringResource(R.string.common__back),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            },
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.common__back),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            HighlightLabel(
+                stringResource(R.string.onboarding__advanced).uppercase(),
+                Modifier
+                    .padding(top = MediumAppBarCollapsedHeight / 2 - (mainRectHeight / 2))
+            )
+        }
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -125,13 +137,6 @@ fun CreateWalletWithPassphraseScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
-
-        HighlightLabel(
-            stringResource(R.string.onboarding__advanced).uppercase(),
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = MediumAppBarCollapsedHeight / 2 - (mainRectHeight / 2))
-        )
     }
 }
 
