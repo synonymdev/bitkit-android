@@ -143,7 +143,7 @@ fun SpendingConfirmScreen(
                     fullWidth = false,
                     onClick = {
                         if (isAdvanced) {
-                            viewModel.onDefaultClick()
+                            viewModel.onUseDefaultLspBalanceClick()
                         } else {
                             onAdvancedClick()
                         }

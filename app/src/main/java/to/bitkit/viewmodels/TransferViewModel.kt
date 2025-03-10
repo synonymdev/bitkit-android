@@ -32,6 +32,11 @@ class TransferViewModel @Inject constructor(
     val lightningSetupStep: StateFlow<Int> = settingsStore.lightningSetupStep
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
+    private val _selectedChannelIdsState = MutableStateFlow<Set<String>>(emptySet())
+    val selectedChannelIdsState = _selectedChannelIdsState.asStateFlow()
+
+    // region Spending
+
     fun onOrderCreated(order: IBtOrder) {
         _uiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
     }
@@ -116,7 +121,7 @@ class TransferViewModel @Inject constructor(
         return currentStep
     }
 
-    fun onDefaultClick() {
+    fun onUseDefaultLspBalanceClick() {
         val defaultOrder = _uiState.value.defaultOrder
         _uiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
     }
@@ -124,6 +129,16 @@ class TransferViewModel @Inject constructor(
     fun resetState() {
         _uiState.value = TransferUiState()
     }
+
+    // endregion
+
+    // region Savings
+
+    fun setSelectedChannelIds(channelIds: Set<String>) {
+        _selectedChannelIdsState.update { channelIds }
+    }
+
+    // endregion
 }
 
 // region state

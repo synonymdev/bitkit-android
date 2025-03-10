@@ -40,6 +40,7 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
+import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
@@ -236,13 +237,20 @@ fun ContentView(
                     composable<Routes.SavingsAvailability> {
                         SavingsAvailabilityScreen(
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                             onCancelClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                             onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
                         )
                     }
                     composable<Routes.SavingsConfirm> {
                         SavingsConfirmScreen(
+                            onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsAdvanced> {
+                        SavingsAdvancedScreen(
+                            onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                         )
@@ -705,6 +713,9 @@ object Routes {
 
     @Serializable
     data object SavingsConfirm
+
+    @Serializable
+    data object SavingsAdvanced
 
     @Serializable
     data object Funding

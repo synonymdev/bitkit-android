@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.LightningBalance
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
@@ -419,6 +420,22 @@ class LightningService @Inject constructor(
         }
     }.flowOn(bgDispatcher)
     // endregion
+
+    fun getChannelAmountOnClose(channelId: String): ULong {
+        val node = this.node ?: throw ServiceError.NodeNotStarted
+
+        val channel = channels
+            ?.find { it.channelId == channelId }
+            ?.takeIf { it.isChannelReady } // only open channels
+            ?: return 0uL
+
+        val balance = balances?.lightningBalances
+            ?.filterIsInstance<LightningBalance.ClaimableOnChannelClose>()
+            ?.find { it.channelId == channel.channelId }
+            ?: return 0uL
+
+        return balance.amountSatoshis
+    }
 }
 
 // region helpers

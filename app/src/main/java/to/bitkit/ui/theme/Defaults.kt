@@ -3,6 +3,8 @@ package to.bitkit.ui.theme
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwitchColors
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -71,5 +73,25 @@ object AppButtonDefaults {
         get() = ButtonDefaults.textButtonColors(
             contentColor = Colors.White80,
             disabledContentColor = Colors.White32,
+        )
+}
+
+@Immutable
+object AppSwitchDefaults {
+    @Stable
+    val colors: SwitchColors
+        @Composable
+        get() = SwitchDefaults.colors(
+            // When checked (ON state)
+            checkedThumbColor = Colors.White,
+            checkedTrackColor = Colors.Brand,
+            checkedBorderColor = Colors.Brand,
+            checkedIconColor = Colors.Brand,
+
+            // When unchecked (OFF state)
+            uncheckedThumbColor = Colors.White,
+            uncheckedTrackColor = Colors.Gray4,
+            uncheckedBorderColor = Colors.Gray4,
+            uncheckedIconColor = Colors.Gray4,
         )
 }
