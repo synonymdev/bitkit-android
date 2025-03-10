@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors.Brand
 
 @Composable
 fun HighlightLabel(
@@ -39,7 +40,6 @@ fun HighlightLabel(
         textAlign = TextAlign.Center
     )
 ) {
-    val orangeColor = Color(0xFFFF4400)
     val density = LocalDensity.current
     val triangleWidth = 13.dp
     val triangleWidthPx = with(density) { triangleWidth.toPx() }
@@ -66,7 +66,7 @@ fun HighlightLabel(
                     lineTo(triangleWidthPx, 0f)
                     close()
                 },
-                color = orangeColor
+                color = Brand
             )
 
             // Bottom left triangle
@@ -77,7 +77,7 @@ fun HighlightLabel(
                     lineTo(triangleWidthPx, mainRectHeightPx)
                     close()
                 },
-                color = orangeColor
+                color = Brand
             )
         }
 
@@ -89,7 +89,7 @@ fun HighlightLabel(
                 .drawBehind {
                     // Main rectangle (flexible width based on text)
                     drawRect(
-                        color = orangeColor,
+                        color = Brand,
                         size = Size(this.size.width, this.size.height)
                     )
 
@@ -103,7 +103,7 @@ fun HighlightLabel(
                                 lineTo(this@drawBehind.size.width, this@drawBehind.size.height)
                                 close()
                             },
-                            color = orangeColor.copy(alpha = 0.5f)
+                            color = Brand.copy(alpha = 0.5f)
                         )
                     }
                 },
