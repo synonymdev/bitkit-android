@@ -24,6 +24,8 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors.Brand
 
+val mainRectHeight = 26.dp
+
 @Composable
 fun HighlightLabel(
     text: String,
@@ -33,7 +35,6 @@ fun HighlightLabel(
     val triangleWidth = 13.dp
     val triangleWidthPx = with(density) { triangleWidth.toPx() }
     val logoHeight = 42.dp
-    val mainRectHeight = 26.dp
     val mainRectHeightPx = with(density) { mainRectHeight.toPx() }
     val logoHeightPx = with(density) { logoHeight.toPx() }
 

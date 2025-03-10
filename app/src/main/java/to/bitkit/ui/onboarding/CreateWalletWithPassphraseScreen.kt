@@ -3,6 +3,7 @@ package to.bitkit.ui.onboarding
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults.MediumAppBarCollapsedHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +49,8 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.shared.HighlightLabel
+import to.bitkit.ui.shared.mainRectHeight
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -121,6 +125,13 @@ fun CreateWalletWithPassphraseScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
+
+        HighlightLabel(
+            stringResource(R.string.onboarding__advanced).uppercase(),
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = MediumAppBarCollapsedHeight / 2 - (mainRectHeight / 2))
+        )
     }
 }
 
