@@ -287,6 +287,7 @@ fun RestoreWalletView(
                     BodyS(
                         text = stringResource(R.string.onboarding__restore_passphrase_meaning),
                         color = Colors.White64,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
                 }
 
@@ -325,15 +326,17 @@ fun RestoreWalletView(
                                 .none { it.isBlank() } && invalidWordIndices.isEmpty() && !checksumErrorVisible
                         }
                     }
-                    SecondaryButton(
-                        text = stringResource(R.string.onboarding__advanced),
-                        onClick = {
-                            showingPassphrase = !showingPassphrase
-                            bip39Passphrase = ""
-                        },
-                        enabled = areButtonsEnabled,
-                        modifier = Modifier.weight(1f)
-                    )
+                    AnimatedVisibility(visible = !showingPassphrase, modifier = Modifier.weight(1f)) {
+                        SecondaryButton(
+                            text = stringResource(R.string.onboarding__advanced),
+                            onClick = {
+                                showingPassphrase = !showingPassphrase
+                                bip39Passphrase = ""
+                            },
+                            enabled = areButtonsEnabled,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     PrimaryButton(
                         text = stringResource(R.string.onboarding__restore),
                         onClick = {
