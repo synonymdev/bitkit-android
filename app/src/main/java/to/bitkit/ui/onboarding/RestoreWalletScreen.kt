@@ -287,6 +287,7 @@ fun RestoreWalletView(
                     BodyS(
                         text = stringResource(R.string.onboarding__restore_passphrase_meaning),
                         color = Colors.White64,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
                 }
 
