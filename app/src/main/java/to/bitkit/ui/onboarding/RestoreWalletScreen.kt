@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,17 +36,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
@@ -86,6 +89,10 @@ fun RestoreWalletView(
             ).validBip39Checksum()
         }
     }
+
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val inputFieldPositions = remember { mutableMapOf<Int, Int>() }
 
     val wordsPerColumn = if (is24Words) 12 else 6
 
@@ -138,7 +145,7 @@ fun RestoreWalletView(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
             ) {
                 Display(stringResource(R.string.onboarding__restore_header).withAccent(accentColor = Colors.Blue))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -191,15 +198,25 @@ fun RestoreWalletView(
                                         )
                                         updateSuggestions(newValue, focusedIndex)
                                     }
+                                    coroutineScope.launch {
+                                        inputFieldPositions[index]?.let { scrollState.animateScrollTo(it) }
+                                    }
                                 },
                                 onFocusChanged = { focused ->
                                     if (focused) {
                                         focusedIndex = index
                                         updateSuggestions(if (index == 0) firstFieldText else words[index], index)
+
+                                        coroutineScope.launch {
+                                            inputFieldPositions[index]?.let { scrollState.animateScrollTo(it) }
+                                        }
                                     } else if (focusedIndex == index) {
                                         focusedIndex = null
                                         suggestions.clear()
                                     }
+                                },
+                                onPositionChanged = { position ->
+                                    inputFieldPositions[index] = position
                                 }
                             )
                         }
@@ -224,15 +241,25 @@ fun RestoreWalletView(
                                         invalidWordIndices,
                                     )
                                     updateSuggestions(newValue, focusedIndex)
+                                    coroutineScope.launch {
+                                        inputFieldPositions[index]?.let { scrollState.animateScrollTo(it) }
+                                    }
                                 },
                                 onFocusChanged = { focused ->
                                     if (focused) {
                                         focusedIndex = index
                                         updateSuggestions(words[index], index)
+
+                                        coroutineScope.launch {
+                                            inputFieldPositions[index]?.let { scrollState.animateScrollTo(it) }
+                                        }
                                     } else if (focusedIndex == index) {
                                         focusedIndex = null
                                         suggestions.clear()
                                     }
+                                },
+                                onPositionChanged = { position ->
+                                    inputFieldPositions[index] = position
                                 }
                             )
                         }
@@ -386,7 +413,8 @@ fun MnemonicInputField(
     isError: Boolean = false,
     value: String,
     onValueChanged: (String) -> Unit,
-    onFocusChanged: (Boolean) -> Unit
+    onFocusChanged: (Boolean) -> Unit,
+    onPositionChanged: (Int) -> Unit
 ) {
     OutlinedTextField(
         value = value,
@@ -410,6 +438,10 @@ fun MnemonicInputField(
         ),
         modifier = Modifier
             .onFocusChanged { onFocusChanged(it.isFocused) }
+            .onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInParent().y.toInt()
+                onPositionChanged(position)
+            }
     )
 }
 
