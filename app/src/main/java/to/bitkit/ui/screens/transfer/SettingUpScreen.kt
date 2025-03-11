@@ -120,7 +120,7 @@ private fun SettingUpScreen(
             }
             Spacer(modifier = Modifier.height(28.dp))
             if (inProgress) {
-                AnimationView()
+                TransferAnimationView()
                 Spacer(modifier = Modifier.height(16.dp))
                 val steps = listOf(
                     stringResource(R.string.lightning__setting_up_step1),
@@ -170,7 +170,7 @@ private fun SettingUpScreen(
 
 
 @Composable
-private fun AnimationView() {
+private fun TransferAnimationView() {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier.padding(horizontal = 16.dp)
@@ -178,30 +178,30 @@ private fun AnimationView() {
         val infiniteTransition = rememberInfiniteTransition("transition")
         val rotationLarge by infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = -270f,
+            targetValue = -180f,
             animationSpec = infiniteRepeatable(
                 animation = tween(durationMillis = 3000, easing = EaseInOut),
                 repeatMode = RepeatMode.Reverse,
             ),
-            label = "circleSmallRotation"
+            label = "rotationLarge"
         )
         val rotationSmall by infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = 180f,
+            targetValue = 120f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2500, easing = EaseInOut),
+                animation = tween(durationMillis = 3000, easing = EaseInOut),
                 repeatMode = RepeatMode.Reverse,
             ),
-            label = "circleSmallRotation"
+            label = "rotationSmall"
         )
         val rotationArrows by infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = 90f,
+            targetValue = 70f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = EaseInOut),
+                animation = tween(durationMillis = 3000, easing = EaseInOut),
                 repeatMode = RepeatMode.Reverse,
             ),
-            label = "arrowsRotation"
+            label = "rotationArrows"
         )
         Image(
             painter = painterResource(id = R.drawable.ln_sync_large),
