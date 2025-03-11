@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.currentActivity
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar
@@ -105,6 +106,7 @@ private fun debugPushNotification() {
         title = "Bitkit Notification",
         text = "Short custom notification description",
         bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
+        context = requireNotNull(currentActivity())
     )
 }
 

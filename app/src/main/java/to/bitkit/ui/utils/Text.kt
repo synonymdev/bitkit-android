@@ -2,7 +2,7 @@ package to.bitkit.ui.utils
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -104,15 +104,17 @@ fun String.withBold(
 }
 
 @Composable
-@ReadOnlyComposable
 fun localizedRandom(@StringRes id: Int): String {
     val resources = LocalContext.current.resources
-    val localizedString = resources.getString(id)
-    val parts = localizedString.split("\n")
 
-    return if (parts.size > 1) {
-        parts.random()
-    } else {
-        localizedString
+    return remember(id) {
+        val localizedString = resources.getString(id)
+        val parts = localizedString.split("\n")
+
+        if (parts.size > 1) {
+            parts.random()
+        } else {
+            localizedString
+        }
     }
 }

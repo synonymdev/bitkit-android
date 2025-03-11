@@ -55,14 +55,17 @@ fun SettingUpScreen(
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
     SettingUpScreen(
         lightningSetupStep = lightningSetupStep,
-        onContinueClick = onContinueClick,
+        onContinueClick = {
+            viewModel.resetState()
+            onContinueClick()
+        },
         onCloseClick = onCloseClick,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingUpScreen(
+private fun SettingUpScreen(
     lightningSetupStep: Int,
     onContinueClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
@@ -93,11 +96,10 @@ fun SettingUpScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             if (inProgress) {
                 Display(
-                    text = stringResource(R.string.lightning__setting_up_header),
-                    color = Colors.Purple,
+                    text = stringResource(R.string.lightning__savings_progress__title).withAccent(accentColor = Colors.Purple),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 BodyM(
@@ -116,10 +118,10 @@ fun SettingUpScreen(
                     color = Colors.White64,
                 )
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             if (inProgress) {
                 AnimationView()
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 val steps = listOf(
                     stringResource(R.string.lightning__setting_up_step1),
                     stringResource(R.string.lightning__setting_up_step2),
@@ -151,11 +153,13 @@ fun SettingUpScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            val randomOkText = localizedRandom(R.string.common__ok_random)
             PrimaryButton(
                 text = if (inProgress) {
                     stringResource(R.string.lightning__setting_up_button)
                 } else {
-                    localizedRandom(R.string.common__ok_random)
+                    randomOkText
                 },
                 onClick = onContinueClick,
             )
@@ -222,7 +226,7 @@ private fun AnimationView() {
     }
 }
 
-@Preview(name="Progress", showSystemUi = true, showBackground = true)
+@Preview(name = "Progress", showSystemUi = true, showBackground = true)
 @Composable
 private fun SettingUpScreenProgressPreview() {
     AppThemeSurface {
@@ -232,7 +236,7 @@ private fun SettingUpScreenProgressPreview() {
     }
 }
 
-@Preview(name="Success", showSystemUi = true, showBackground = true)
+@Preview(name = "Success", showSystemUi = true, showBackground = true)
 @Composable
 private fun SettingUpScreenSuccessPreview() {
     AppThemeSurface {

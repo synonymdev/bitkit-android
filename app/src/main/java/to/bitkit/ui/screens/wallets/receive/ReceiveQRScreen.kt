@@ -33,10 +33,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -46,6 +44,7 @@ import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.MainUiState
 
 private object Routes {
     const val QR = "qr_screen"
@@ -66,10 +65,8 @@ fun ReceiveQRScreen(
 
     LaunchedEffect(Unit) {
         try {
-            coroutineScope {
-                launch { wallet.refreshBip21() }
-                launch { blocktank.refreshInfo() }
-            }
+            launch { wallet.refreshBip21() }
+            launch { blocktank.refreshInfo() }
         } catch (e: Exception) {
             app.toast(e)
         }

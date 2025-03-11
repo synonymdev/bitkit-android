@@ -12,10 +12,12 @@ import uniffi.bitkitcore.BtOrderState
 import uniffi.bitkitcore.BtOrderState2
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
+import uniffi.bitkitcore.IBtEstimateFeeResponse2
 import uniffi.bitkitcore.initDb
 import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -175,5 +177,37 @@ class BlocktankTest {
         )
         assertTrue(orders.isNotEmpty(), "Orders list should not be empty")
         assertEquals(orders.first().id, order.id, "Retrieved order should match created order")
+    }
+
+    @Test
+    fun testOrderEstimate() = runBlocking {
+        val lspBalanceSat = 100_000uL
+        val channelExpiryWeeks = 2u
+        val options = CreateOrderOptions(
+            clientBalanceSat = 0uL,
+            lspNodeId = null,
+            couponCode = "",
+            source = "bitkit-android",
+            discountCode = null,
+            turboChannel = false,
+            zeroConfPayment = true,
+            zeroReserve = false,
+            clientNodeId = null,
+            signature = null,
+            timestamp = null,
+            refundOnchainAddress = null,
+            announceChannel = true,
+        )
+
+        val estimate: IBtEstimateFeeResponse2 = service.blocktank.newOrderFeeEstimate(
+            lspBalanceSat = lspBalanceSat,
+            channelExpiryWeeks = channelExpiryWeeks,
+            options = options
+        )
+
+        assertNotNull(estimate.min0ConfTxFee, "Min 0 conf tx fee should not be null")
+        assertNotEquals(0uL, estimate.feeSat, "Fee should not be zero")
+        assertNotEquals(0uL, estimate.networkFeeSat, "Network fee should not be zero")
+        assertNotEquals(0uL, estimate.serviceFeeSat, "Service fee should not be zero")
     }
 }

@@ -420,3 +420,12 @@ class LightningService @Inject constructor(
     }.flowOn(bgDispatcher)
     // endregion
 }
+
+// region helpers
+
+/** Returns only `open` channels, filtering out pending ones. */
+fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
+    return this.filter { it.isChannelReady }
+}
+
+// endregion

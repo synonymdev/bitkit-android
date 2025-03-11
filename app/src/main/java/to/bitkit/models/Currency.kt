@@ -61,13 +61,7 @@ data class ConvertedAmount(
         val spaceSeparator = ' '
         val formattedValue = when (unit) {
             BitcoinDisplayUnit.MODERN -> {
-                val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-                    groupingSeparator = spaceSeparator
-                }
-                val formatter = DecimalFormat("#,###", formatSymbols).apply {
-                    isGroupingUsed = true
-                }
-                formatter.format(sats)
+                sats.formatToModernDisplay()
             }
 
             BitcoinDisplayUnit.CLASSIC -> {
@@ -78,6 +72,20 @@ data class ConvertedAmount(
                 formatter.format(btcValue)
             }
         }
-        return BitcoinDisplayComponents(symbol, formattedValue)
+        return BitcoinDisplayComponents(
+            symbol = symbol,
+            value = formattedValue,
+        )
     }
+}
+
+fun Long.formatToModernDisplay(): String {
+    val sats = this
+    val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+        groupingSeparator = ' '
+    }
+    val formatter = DecimalFormat("#,###", formatSymbols).apply {
+        isGroupingUsed = true
+    }
+    return formatter.format(sats)
 }
