@@ -46,7 +46,8 @@ class TransferViewModel @Inject constructor(
         _spendingUiState.update { it.copy(order = order, defaultOrder = defaultOrder, isAdvanced = true) }
     }
 
-    fun payOrder(order: IBtOrder) {
+    /** Pays for the order and start watching it for state updates */
+    fun onTransferToSpendingConfirm(order: IBtOrder) {
         viewModelScope.launch {
             try {
                 lightningService.send(
@@ -126,7 +127,7 @@ class TransferViewModel @Inject constructor(
         _spendingUiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
     }
 
-    fun resetState() {
+    fun resetSpendingState() {
         _spendingUiState.value = TransferToSpendingUiState()
     }
 

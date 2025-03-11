@@ -173,7 +173,7 @@ fun SpendingConfirmScreen(
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        viewModel.payOrder(order)
+                        viewModel.onTransferToSpendingConfirm(order)
                         onConfirm()
                     }
                 }

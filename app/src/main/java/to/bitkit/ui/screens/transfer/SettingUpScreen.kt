@@ -56,7 +56,7 @@ fun SettingUpScreen(
     SettingUpScreen(
         lightningSetupStep = lightningSetupStep,
         onContinueClick = {
-            viewModel.resetState()
+            viewModel.resetSpendingState()
             onContinueClick()
         },
         onCloseClick = onCloseClick,
