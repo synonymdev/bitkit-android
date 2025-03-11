@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -15,7 +14,6 @@ import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import to.bitkit.R
-import to.bitkit.currentActivity
 import to.bitkit.ext.notificationManager
 import to.bitkit.ext.notificationManagerCompat
 import to.bitkit.ext.requiresPermission
@@ -54,18 +52,22 @@ internal fun Context.notificationBuilder(
         .setAutoCancel(true) // remove on tap
 }
 
-@SuppressLint("MissingPermission")
 internal fun pushNotification(
     title: String?,
     text: String?,
     extras: Bundle? = null,
     bigText: String? = null,
     id: Int = Random.nextInt(),
-    context: Context? = currentActivity(),
+    context: Context,
 ): Int {
     Logger.debug("Push notification: $title, $text")
-    context?.withPermission(postNotificationsPermission) {
-        val builder = notificationBuilder(extras)
+
+    // Only check permission if running on Android 13+ (SDK 33+)
+    val requiresPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        context.requiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+
+    if (!requiresPermission) {
+        val builder = context.notificationBuilder(extras)
             .setContentTitle(title)
             .setContentText(text)
             .apply {
@@ -73,19 +75,8 @@ internal fun pushNotification(
                     setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
                 }
             }
-        notificationManagerCompat.notify(id, builder.build())
+        context.notificationManagerCompat.notify(id, builder.build())
     }
+
     return id
 }
-
-inline fun <T> Context.withPermission(permission: String, block: Context.() -> T) {
-    if (requiresPermission(permission)) return
-    block()
-}
-
-val postNotificationsPermission
-    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.POST_NOTIFICATIONS
-    } else {
-        TODO("Cant request 'POST_NOTIFICATIONS' permissions on SDK < 33")
-    }

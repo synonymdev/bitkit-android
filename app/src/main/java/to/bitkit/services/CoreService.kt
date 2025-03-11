@@ -19,6 +19,7 @@ import uniffi.bitkitcore.BtOrderState2
 import uniffi.bitkitcore.CJitStateEnum
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
+import uniffi.bitkitcore.IBtEstimateFeeResponse2
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
 import uniffi.bitkitcore.IcJitEntry
@@ -31,6 +32,7 @@ import uniffi.bitkitcore.addTags
 import uniffi.bitkitcore.createCjitEntry
 import uniffi.bitkitcore.createOrder
 import uniffi.bitkitcore.deleteActivityById
+import uniffi.bitkitcore.estimateOrderFeeFull
 import uniffi.bitkitcore.getActivities
 import uniffi.bitkitcore.getActivityById
 import uniffi.bitkitcore.getAllUniqueTags
@@ -404,7 +406,21 @@ class BlocktankService(
     ): IBtOrder {
         return ServiceQueue.CORE.background {
             createOrder(
-                lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options
+                lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options,
+            )
+        }
+    }
+
+    suspend fun newOrderFeeEstimate(
+        lspBalanceSat: ULong,
+        channelExpiryWeeks: UInt,
+        options: CreateOrderOptions,
+    ): IBtEstimateFeeResponse2 {
+        return ServiceQueue.CORE.background {
+            estimateOrderFeeFull(
+                lspBalanceSat = lspBalanceSat,
+                channelExpiryWeeks = channelExpiryWeeks,
+                options = options,
             )
         }
     }

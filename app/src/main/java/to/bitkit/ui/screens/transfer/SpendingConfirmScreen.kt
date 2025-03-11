@@ -33,11 +33,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
@@ -52,13 +52,14 @@ fun SpendingConfirmScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
+    onLearnMoreClick: () -> Unit = {},
+    onAdvancedClick: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
-    val app = appViewModel ?: return
-    val blocktank = blocktankViewModel ?: return
     val scope = rememberCoroutineScope()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
+    val isAdvanced = state.isAdvanced
 
     ScreenColumn {
         AppTopBar(
@@ -81,8 +82,9 @@ fun SpendingConfirmScreen(
         ) {
             val clientBalance = order.clientBalanceSat
             val networkFee = order.networkFeeSat
-            val serviceFeeSat = order.serviceFeeSat
+            val serviceFee = order.serviceFeeSat
             val totalFee = order.feeSat
+            val lspBalance = order.lspBalanceSat
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -97,7 +99,7 @@ fun SpendingConfirmScreen(
                 )
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
-                    amount = serviceFeeSat.toLong(),
+                    amount = serviceFee.toLong(),
                 )
             }
             Row(
@@ -113,37 +115,56 @@ fun SpendingConfirmScreen(
                     amount = totalFee.toLong(),
                 )
             }
+
+            if (isAdvanced) {
+                Spacer(modifier = Modifier.height(16.dp))
+                LightningChannel(
+                    capacity = (clientBalance + lspBalance).toLong(),
+                    localBalance = clientBalance.toLong(),
+                    remoteBalance = lspBalance.toLong(),
+                    status = ChannelStatusUi.OPEN,
+                    showLabels = true,
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 PrimaryButton(
                     text = stringResource(R.string.common__learn_more),
                     size = ButtonSize.Small,
                     fullWidth = false,
-                    onClick = {
-                        // TODO: nav to Liquidity
-                    },
+                    onClick = onLearnMoreClick,
                 )
                 PrimaryButton(
-                    text = stringResource(R.string.common__advanced),
+                    text = stringResource(
+                        if (isAdvanced) R.string.lightning__spending_confirm__default else R.string.common__advanced
+                    ),
                     size = ButtonSize.Small,
                     fullWidth = false,
                     onClick = {
-                        // TODO: nav to Advanced
+                        if (isAdvanced) {
+                            viewModel.onDefaultClick()
+                        } else {
+                            onAdvancedClick()
+                        }
                     },
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            Image(
-                painter = painterResource(id = R.drawable.coin_stack_x),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(256.dp)
-                    .align(alignment = CenterHorizontally)
-            )
-            var isLoading by remember { mutableStateOf(false) }
+            if (!isAdvanced) {
+                Image(
+                    painter = painterResource(id = R.drawable.coin_stack_x),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .size(256.dp)
+                        .align(alignment = CenterHorizontally)
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
+
+            var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading,

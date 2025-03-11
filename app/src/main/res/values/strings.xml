@@ -125,7 +125,7 @@
     <string name="lightning__spending_amount__quarter">25%</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
-    <string name="lightning__spending_amount__error_max__description_zero">You\'ve reached the maximum for your spending balance.</string>
+    <string name="lightning__spending_amount__error_max__description_zero">Your transfer to the spending balance is limited due to liquidity policy. For details, visit the Help Center.</string>
     <string name="lightning__spending_confirm__network_fee">Network fees</string>
     <string name="lightning__spending_confirm__lsp_fee">Service fees</string>
     <string name="lightning__spending_confirm__amount">To spending</string>

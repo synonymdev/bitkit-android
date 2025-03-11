@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
@@ -24,35 +27,29 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.Toast
-import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TransferAmount
-import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToLong
 
 @Composable
-fun SpendingAmountScreen(
+fun SpendingAdvancedScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
@@ -62,7 +59,8 @@ fun SpendingAmountScreen(
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val currencies = LocalCurrencies.current
-    val resources = LocalContext.current.resources
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val order = state.order ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -83,71 +81,91 @@ fun SpendingAmountScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var spendingBalanceSats by rememberSaveable { mutableLongStateOf(0) }
+
+            var lspBalance by rememberSaveable { mutableLongStateOf(0) }
             var overrideSats: Long? by remember { mutableStateOf(null) }
+
+            val clientBalance = order.clientBalanceSat
+            var fee: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
 
-            val balances = LocalBalances.current
+            val transferValues = useTransfer(clientBalance.toLong())
 
-            val availableAmount = balances.totalOnchainSats - 512u // default tx fee
+            val isValid = lspBalance >= transferValues.minLspBalance &&
+                    lspBalance <= transferValues.maxLspBalance
 
-            val maxClientBalance = useTransfer(spendingBalanceSats).maxClientBalance
-            val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
-
-            var maxLspFee by remember { mutableStateOf(0uL) }
-
-            val feeMaximum = max(0, (availableAmount - maxLspFee).toLong())
-            val maximum = min(maxClientBalance, feeMaximum)
-
-            LaunchedEffect(availableAmount, maxLspBalance) {
+            // Fetch LSP Fee estimate
+            LaunchedEffect(lspBalance) {
+                fee = null
+                if (lspBalance < transferValues.minLspBalance) {
+                    return@LaunchedEffect
+                }
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
-                        spendingBalanceSats = availableAmount,
-                        receivingBalanceSats = maxLspBalance.toULong(),
+                        spendingBalanceSats = clientBalance,
+                        receivingBalanceSats = lspBalance.toULong(),
                     )
-                    maxLspFee = estimate.feeSat
+                    fee = estimate.feeSat.toLong()
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
+            Display(
+                text = stringResource(R.string.lightning__spending_advanced__title)
+                    .withAccent(accentColor = Colors.Purple)
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             TransferAmount(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
                 onSatsChange = { sats ->
-                    spendingBalanceSats = sats
+                    lspBalance = sats
                     overrideSats = null
                 },
             )
 
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.requiredHeight(20.dp),
+            ) {
+                Caption13Up(
+                    text = stringResource(R.string.lightning__spending_advanced__fee),
+                    color = Colors.White64,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                fee?.let {
+                    MoneySSB(it)
+                } ?: run {
+                    Caption13Up(text = "—", color = Colors.White64)
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
-            // Actions
+            // Actions Row
             Row(
                 verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(vertical = 8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
             ) {
-                Column {
-                    Text13Up(
-                        text = stringResource(R.string.wallet__send_available),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = availableAmount.toLong())
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                UnitButton(color = Colors.Purple)
-                // 25% Button
+                // Min Button
                 NumberPadActionButton(
-                    text = stringResource(R.string.lightning__spending_amount__quarter),
+                    text = stringResource(R.string.common__min),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = (availableAmount.toDouble() / 4.0).roundToLong()
-                        val amount = min(quarter, maximum)
-                        overrideSats = amount
+                        overrideSats = transferValues.minLspBalance
+                    },
+                )
+                // Default Button
+                NumberPadActionButton(
+                    text = stringResource(R.string.common__default),
+                    color = Colors.Purple,
+                    onClick = {
+                        overrideSats = order.lspBalanceSat.toLong()
                     },
                 )
                 // Max Button
@@ -155,7 +173,7 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = maximum
+                        overrideSats = transferValues.maxLspBalance
                     },
                 )
             }
@@ -165,20 +183,14 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = {
-                    if (maxLspBalance == 0L) {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = resources.getString(R.string.lightning__spending_amount__error_max__title),
-                            description = resources.getString(R.string.lightning__spending_amount__error_max__description_zero),
-                        )
-                        return@PrimaryButton
-                    }
-
                     isLoading = true
                     scope.launch {
                         try {
-                            val order = blocktank.createOrder(spendingBalanceSats.toULong())
-                            viewModel.onOrderCreated(order)
+                            val newOrder = blocktank.createOrder(
+                                spendingBalanceSats = clientBalance,
+                                receivingBalanceSats = lspBalance.toULong(),
+                            )
+                            viewModel.onAdvancedOrderCreated(newOrder)
                             onOrderCreated()
                         } catch (e: Throwable) {
                             app.toast(e)
@@ -187,7 +199,7 @@ fun SpendingAmountScreen(
                         }
                     }
                 },
-                enabled = !isLoading && spendingBalanceSats != 0L,
+                enabled = !isLoading && isValid,
                 isLoading = isLoading,
             )
 

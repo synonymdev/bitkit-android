@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -50,7 +52,6 @@ import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToQrScanner
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
-import to.bitkit.ui.postNotificationsPermission
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
@@ -223,14 +224,19 @@ private fun HomeContentView(
 @Composable
 private fun RequestNotificationPermissions() {
     val context = LocalContext.current
-    var isGranted by remember { mutableStateOf(!context.requiresPermission(postNotificationsPermission)) }
+
+    // Only check permission if running on Android 13+ (SDK 33+)
+    val requiresPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        context.requiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+
+    var isGranted by remember { mutableStateOf(!requiresPermission) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         isGranted = it
     }
 
     LaunchedEffect(isGranted) {
-        if (!isGranted) {
-            launcher.launch(postNotificationsPermission)
+        if (!isGranted && requiresPermission) {
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }

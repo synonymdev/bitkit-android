@@ -23,6 +23,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
+import uniffi.bitkitcore.IBtEstimateFeeResponse2
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
 import uniffi.bitkitcore.IcJitEntry
@@ -116,10 +117,13 @@ class BlocktankViewModel @Inject constructor(
         )
     }
 
-    suspend fun createOrder(spendingBalanceSats: ULong, channelExpiryWeeks: UInt = 6u): IBtOrder {
+    suspend fun createOrder(
+        spendingBalanceSats: ULong,
+        receivingBalanceSats: ULong = spendingBalanceSats * 2u,
+        channelExpiryWeeks: UInt = 6u,
+    ): IBtOrder {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        val receivingBalanceSats = spendingBalanceSats * 2u
         val timestamp = nowTimestamp().toString()
         val signature = lightningService.sign("channelOpen-$timestamp")
 
@@ -146,6 +150,25 @@ class BlocktankViewModel @Inject constructor(
         )
     }
 
+    suspend fun estimateOrderFee(
+        spendingBalanceSats: ULong,
+        receivingBalanceSats: ULong,
+        channelExpiryWeeks: UInt = 6u,
+    ): IBtEstimateFeeResponse2 {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
+        val options = defaultCreateOrderOptions.copy(
+            clientBalanceSat = spendingBalanceSats,
+            clientNodeId = nodeId,
+        )
+
+        return coreService.blocktank.newOrderFeeEstimate(
+            lspBalanceSat = receivingBalanceSats,
+            channelExpiryWeeks = channelExpiryWeeks,
+            options = options,
+        )
+    }
+
     suspend fun openChannel(orderId: String): IBtOrder {
         val order = coreService.blocktank.open(orderId)
 
@@ -155,4 +178,29 @@ class BlocktankViewModel @Inject constructor(
         }
         return order
     }
+
+    fun totalBtChannelsValueSats(): ULong {
+        val channels = lightningService.channels ?: return 0u
+
+        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
+        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
+        val totalValue = btChannels.sumOf { it.channelValueSats }
+        return totalValue
+    }
 }
+
+private val defaultCreateOrderOptions = CreateOrderOptions(
+    clientBalanceSat = 0uL,
+    lspNodeId = null,
+    couponCode = "",
+    source = "bitkit-android",
+    discountCode = null,
+    turboChannel = false,
+    zeroConfPayment = false,
+    zeroReserve = true,
+    clientNodeId = null,
+    signature = null,
+    timestamp = null,
+    refundOnchainAddress = null,
+    announceChannel = false,
+)
