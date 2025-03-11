@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -37,53 +38,46 @@ fun CreateWalletScreen(
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
 ) {
-    Box(
-        contentAlignment = Alignment.TopCenter,
+    Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
     ) {
+        Spacer(modifier = Modifier.weight(1f))
         Image(
             painter = painterResource(id = R.drawable.wallet),
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .padding(top = 170.dp)
-                .fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().sizeIn(maxHeight = 311.dp)
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(.325f)
-                .align(Alignment.BottomCenter)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
-            Spacer(modifier = Modifier.height(8.dp))
-            BodyM(
-                text = stringResource(R.string.onboarding__slide4_text).withAccent(
-                    defaultColor = Colors.White64,
-                    accentStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Colors.White),
-                ),
-            )
+        Spacer(modifier = Modifier.height(24.dp))
+        Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
+        Spacer(modifier = Modifier.height(8.dp))
+        BodyM(
+            text = stringResource(R.string.onboarding__slide4_text).withAccent(
+                defaultColor = Colors.White64,
+                accentStyle = SpanStyle(fontWeight = FontWeight.Bold, color = Colors.White),
+            ),
+        )
 
-            Spacer(modifier = Modifier.height(32.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                PrimaryButton(
-                    text = stringResource(R.string.onboarding__new_wallet),
-                    onClick = onCreateClick,
-                    modifier = Modifier.weight(1f)
-                )
-                SecondaryButton(
-                    text = stringResource(R.string.onboarding__restore),
-                    onClick = onRestoreClick,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+        Spacer(modifier = Modifier.height(32.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.onboarding__new_wallet),
+                onClick = onCreateClick,
+                modifier = Modifier.weight(1f)
+            )
+            SecondaryButton(
+                text = stringResource(R.string.onboarding__restore),
+                onClick = onRestoreClick,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
+
 }
 
 @Preview(showBackground = true)
