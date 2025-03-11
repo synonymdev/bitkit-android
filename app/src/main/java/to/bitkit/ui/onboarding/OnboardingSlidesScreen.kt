@@ -196,13 +196,13 @@ fun OnboardingTab(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .padding(top = 170.dp)
+                .padding(top = 125.dp, start = 29.62.dp, end = 29.62.dp)
                 .fillMaxWidth()
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(.325f)
+                .fillMaxHeight(.4f)
                 .align(Alignment.BottomCenter),
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))
