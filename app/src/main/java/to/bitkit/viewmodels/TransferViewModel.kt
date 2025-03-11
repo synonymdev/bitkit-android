@@ -26,8 +26,8 @@ class TransferViewModel @Inject constructor(
     private val coreService: CoreService,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(TransferUiState())
-    val uiState = _uiState.asStateFlow()
+    private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
+    val spendingUiState = _spendingUiState.asStateFlow()
 
     val lightningSetupStep: StateFlow<Int> = settingsStore.lightningSetupStep
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
@@ -38,12 +38,12 @@ class TransferViewModel @Inject constructor(
     // region Spending
 
     fun onOrderCreated(order: IBtOrder) {
-        _uiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
     }
 
     fun onAdvancedOrderCreated(order: IBtOrder) {
-        val defaultOrder = _uiState.value.order
-        _uiState.update { it.copy(order = order, defaultOrder = defaultOrder, isAdvanced = true) }
+        val defaultOrder = _spendingUiState.value.order
+        _spendingUiState.update { it.copy(order = order, defaultOrder = defaultOrder, isAdvanced = true) }
     }
 
     fun payOrder(order: IBtOrder) {
@@ -122,12 +122,12 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onUseDefaultLspBalanceClick() {
-        val defaultOrder = _uiState.value.defaultOrder
-        _uiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
+        val defaultOrder = _spendingUiState.value.defaultOrder
+        _spendingUiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
     }
 
     fun resetState() {
-        _uiState.value = TransferUiState()
+        _spendingUiState.value = TransferToSpendingUiState()
     }
 
     // endregion
@@ -142,7 +142,7 @@ class TransferViewModel @Inject constructor(
 }
 
 // region state
-data class TransferUiState(
+data class TransferToSpendingUiState(
     val order: IBtOrder? = null,
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,

@@ -57,7 +57,7 @@ fun SpendingConfirmScreen(
     onConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val isAdvanced = state.isAdvanced
 
