@@ -45,13 +45,13 @@ fun CreateWalletScreen(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .padding(top = 125.dp, start = 29.62.dp, end = 29.62.dp)
+                .padding(top = 125.dp)
                 .fillMaxWidth()
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(.4f)
+                .height(250.dp)
                 .align(Alignment.BottomCenter),
         ) {
             Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
