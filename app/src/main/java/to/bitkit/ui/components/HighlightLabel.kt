@@ -1,4 +1,4 @@
-package to.bitkit.ui.shared
+package to.bitkit.ui.components
 
 
 import androidx.compose.foundation.Canvas
@@ -20,7 +20,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors.Brand
 
@@ -113,14 +112,6 @@ fun HighlightLabel(
 fun FlexibleLogoPreview() {
     AppThemeSurface {
         HighlightLabel(text = stringResource(R.string.onboarding__advanced))
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ShortTextLogoPreview() {
-    AppThemeSurface {
-        HighlightLabel(text = "GAME")
     }
 }
 

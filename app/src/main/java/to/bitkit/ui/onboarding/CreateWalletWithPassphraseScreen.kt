@@ -41,9 +41,9 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.HighlightLabel
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.shared.HighlightLabel
-import to.bitkit.ui.shared.mainRectHeight
+import to.bitkit.ui.components.mainRectHeight
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
