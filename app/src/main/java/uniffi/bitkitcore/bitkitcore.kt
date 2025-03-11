@@ -838,7 +838,7 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_bitkitcore_fn_func_remove_tags(`activityId`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    fun uniffi_bitkitcore_fn_func_test_notification(`deviceToken`: RustBuffer.ByValue,`secretMessage`: RustBuffer.ByValue,
+    fun uniffi_bitkitcore_fn_func_test_notification(`deviceToken`: RustBuffer.ByValue,`secretMessage`: RustBuffer.ByValue,`notificationType`: RustBuffer.ByValue,
     ): Long
     fun uniffi_bitkitcore_fn_func_update_activity(`activityId`: RustBuffer.ByValue,`activity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1132,7 +1132,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_remove_tags() != 58873.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_bitkitcore_checksum_func_test_notification() != 20406.toShort()) {
+    if (lib.uniffi_bitkitcore_checksum_func_test_notification() != 33162.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_update_activity() != 42510.toShort()) {
@@ -5964,9 +5964,9 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
 
     @Throws(BlocktankException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-     suspend fun `testNotification`(`deviceToken`: kotlin.String, `secretMessage`: kotlin.String) : kotlin.String {
+     suspend fun `testNotification`(`deviceToken`: kotlin.String, `secretMessage`: kotlin.String, `notificationType`: kotlin.String?) : kotlin.String {
         return uniffiRustCallAsync(
-        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_test_notification(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`secretMessage`),),
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_test_notification(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`secretMessage`),FfiConverterOptionalString.lower(`notificationType`),),
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
         { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
         { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
