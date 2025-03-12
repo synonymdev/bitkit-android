@@ -17,14 +17,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BlocktankServiceOld @Inject constructor(
+class BlocktankNotificationsService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val keychain: Keychain,
     private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
 
-    // region notifications
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
@@ -76,5 +75,4 @@ class BlocktankServiceOld @Inject constructor(
             )
         }
     }
-    // endregion
 }
