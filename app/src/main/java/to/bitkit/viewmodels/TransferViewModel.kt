@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
@@ -23,6 +25,9 @@ import to.bitkit.utils.Logger
 import uniffi.bitkitcore.BtOrderState2
 import uniffi.bitkitcore.IBtOrder
 import javax.inject.Inject
+
+const val RETRY_INTERVAL = 5 * 60 * 1000L // 5 minutes in ms
+const val GIVE_UP = 30 * 60 * 1000L // 30 minutes in ms
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
@@ -145,21 +150,26 @@ class TransferViewModel @Inject constructor(
 
     /** Closes the provided channels */
     fun onTransferToSavingsConfirm(channels: List<ChannelDetails>) {
+        _selectedChannelIdsState.update { emptySet() }
         viewModelScope.launch {
             val channelsFailedToCoopClose = closeChannels(channels)
             // TODO emit effect: TransferToSavingsProgressDone(channelsFailedToCoopClose)
             //  and update UI on SavingsProgress screen
 
             if (channelsFailedToCoopClose.isNotEmpty()) {
-                // TODO: schedule retries in background for 30min
                 // TODO later: use background service
-                Logger.info("Channels failed to coop close: ${channelsFailedToCoopClose.joinToString { it.channelId }}")
+                channelsPendingCoopClose = channelsFailedToCoopClose
+                startCoopCloseRetries(System.currentTimeMillis())
+
+                Logger.info("Coop close failed: ${channelsFailedToCoopClose.map { it.channelId }}")
+            } else {
+                channelsPendingCoopClose = emptyList()
             }
         }
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
-        val failedChannels = coroutineScope {
+        val channelsFailedToClose = coroutineScope {
             channels.map { channel ->
                 async {
                     try {
@@ -174,7 +184,38 @@ class TransferViewModel @Inject constructor(
             }.awaitAll()
         }.filterNotNull()
 
-        return failedChannels
+        return channelsFailedToClose
+    }
+
+    private var coopCloseRetryJob: Job? = null
+    private var channelsPendingCoopClose = emptyList<ChannelDetails>()
+
+    /** Retry to coop close the channel(s) for 30 min */
+    private fun startCoopCloseRetries(startTime: Long) {
+        coopCloseRetryJob?.cancel()
+
+        coopCloseRetryJob = viewModelScope.launch {
+            val giveUpTime = startTime + GIVE_UP
+
+            while (isActive && System.currentTimeMillis() < giveUpTime) {
+                Logger.info("Trying coop close...")
+                val channelsFailedToCoopClose = closeChannels(channelsPendingCoopClose)
+
+                if (channelsFailedToCoopClose.isEmpty()) {
+                    channelsPendingCoopClose = emptyList()
+                    Logger.info("Coop close success.")
+                    return@launch
+                } else {
+                    channelsPendingCoopClose = channelsFailedToCoopClose
+                    Logger.info("Coop close failed: ${channelsFailedToCoopClose.map { it.channelId }}")
+                }
+
+                delay(RETRY_INTERVAL)
+            }
+
+            Logger.info("Giving up on coop close.")
+            // TODO: showBottomSheet: forceTransfer
+        }
     }
 
     // endregion
