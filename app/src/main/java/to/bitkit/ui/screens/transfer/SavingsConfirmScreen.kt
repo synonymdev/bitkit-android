@@ -48,9 +48,10 @@ import to.bitkit.ui.walletViewModel
 
 @Composable
 fun SavingsConfirmScreen(
-    onAdvancedClick: () -> Unit = {},
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
+    onConfirm: () -> Unit,
+    onAdvancedClick: () -> Unit,
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
     val currency = currencyViewModel ?: return
     val transfer = transferViewModel ?: return
@@ -64,19 +65,13 @@ fun SavingsConfirmScreen(
     val selectedChannelIds by transfer.selectedChannelIdsState.collectAsStateWithLifecycle()
     val selectedChannels: List<ChannelDetails>? = selectedChannelIds
         .takeIf { it.isNotEmpty() }
-        ?.let { openChannels.filter { channel -> it.contains(channel.channelId) } }
+        ?.let { list -> openChannels.filter { channel -> list.contains(channel.channelId) } }
 
     val hasSelected = selectedChannelIds.isNotEmpty()
 
     val channels = selectedChannels ?: openChannels
 
-    val amount = channels.sumOf { channel ->
-        wallet.getChannelAmountOnClose(channel.channelId)
-    }
-
-    fun onConfirm() {
-        /* TODO: onConfirm */
-    }
+    val amount = channels.sumOf { wallet.getChannelAmountOnClose(it.channelId) }
 
     SavingsConfirmContent(
         amount = amount,
@@ -87,7 +82,10 @@ fun SavingsConfirmScreen(
         onAmountClick = { currency.togglePrimaryDisplay() },
         onAdvancedClick = onAdvancedClick,
         onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
-        onConfirm = { onConfirm() },
+        onConfirm = {
+            transfer.onTransferToSavingsConfirm(channels)
+            onConfirm()
+        },
     )
 }
 

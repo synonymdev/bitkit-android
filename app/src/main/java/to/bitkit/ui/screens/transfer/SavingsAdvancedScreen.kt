@@ -48,9 +48,9 @@ import to.bitkit.ui.walletViewModel
 
 @Composable
 fun SavingsAdvancedScreen(
-    onContinueClick: () -> Unit = {},
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
+    onContinueClick: () -> Unit,
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
     val currency = currencyViewModel ?: return
     val wallet = walletViewModel ?: return

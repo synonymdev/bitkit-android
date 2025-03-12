@@ -243,6 +243,7 @@ fun ContentView(
                     }
                     composable<Routes.SavingsConfirm> {
                         SavingsConfirmScreen(
+                            onConfirm = { /* TODO: nav to SavingsProgress */ },
                             onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },

@@ -3,6 +3,9 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -11,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -137,6 +141,40 @@ class TransferViewModel @Inject constructor(
 
     fun setSelectedChannelIds(channelIds: Set<String>) {
         _selectedChannelIdsState.update { channelIds }
+    }
+
+    /** Closes the provided channels */
+    fun onTransferToSavingsConfirm(channels: List<ChannelDetails>) {
+        viewModelScope.launch {
+            val channelsFailedToCoopClose = closeChannels(channels)
+            // TODO emit effect: TransferToSavingsProgressDone(channelsFailedToCoopClose)
+            //  and update UI on SavingsProgress screen
+
+            if (channelsFailedToCoopClose.isNotEmpty()) {
+                // TODO: schedule retries in background for 30min
+                // TODO later: use background service
+                Logger.info("Channels failed to coop close: ${channelsFailedToCoopClose.joinToString { it.channelId }}")
+            }
+        }
+    }
+
+    private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
+        val failedChannels = coroutineScope {
+            channels.map { channel ->
+                async {
+                    try {
+                        Logger.info("Closing channel: ${channel.channelId}")
+                        lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+                        null
+                    } catch (e: Throwable) {
+                        Logger.error("Error closing channel: ${channel.channelId}", e)
+                        channel
+                    }
+                }
+            }.awaitAll()
+        }.filterNotNull()
+
+        return failedChannels
     }
 
     // endregion
