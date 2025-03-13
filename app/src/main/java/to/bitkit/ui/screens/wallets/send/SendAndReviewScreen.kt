@@ -28,6 +28,7 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ext.truncate
+import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
@@ -65,10 +66,8 @@ fun SendAndReviewScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
         ) {
-            Caption13Up(text = stringResource(R.string.label_amount), color = Colors.White64)
-            Display(
-                text = moneyString(uiState.amount.toLong()),
-            )
+
+            BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(16.dp))
 
