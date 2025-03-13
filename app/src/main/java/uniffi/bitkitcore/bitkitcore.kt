@@ -824,7 +824,7 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_bitkitcore_fn_func_refresh_active_orders(
     ): Long
-    fun uniffi_bitkitcore_fn_func_register_device(`deviceToken`: RustBuffer.ByValue,`publicKey`: RustBuffer.ByValue,`features`: RustBuffer.ByValue,`nodeId`: RustBuffer.ByValue,`isoTimestamp`: RustBuffer.ByValue,`signature`: RustBuffer.ByValue,
+    fun uniffi_bitkitcore_fn_func_register_device(`deviceToken`: RustBuffer.ByValue,`publicKey`: RustBuffer.ByValue,`features`: RustBuffer.ByValue,`nodeId`: RustBuffer.ByValue,`isoTimestamp`: RustBuffer.ByValue,`signature`: RustBuffer.ByValue,`customUrl`: RustBuffer.ByValue,
     ): Long
     fun uniffi_bitkitcore_fn_func_regtest_close_channel(`fundingTxId`: RustBuffer.ByValue,`vout`: Int,`forceCloseAfterS`: RustBuffer.ByValue,
     ): Long
@@ -838,7 +838,7 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_bitkitcore_fn_func_remove_tags(`activityId`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    fun uniffi_bitkitcore_fn_func_test_notification(`deviceToken`: RustBuffer.ByValue,`secretMessage`: RustBuffer.ByValue,`notificationType`: RustBuffer.ByValue,
+    fun uniffi_bitkitcore_fn_func_test_notification(`deviceToken`: RustBuffer.ByValue,`secretMessage`: RustBuffer.ByValue,`notificationType`: RustBuffer.ByValue,`customUrl`: RustBuffer.ByValue,
     ): Long
     fun uniffi_bitkitcore_fn_func_update_activity(`activityId`: RustBuffer.ByValue,`activity`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1111,7 +1111,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_refresh_active_orders() != 50661.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_bitkitcore_checksum_func_register_device() != 31513.toShort()) {
+    if (lib.uniffi_bitkitcore_checksum_func_register_device() != 54847.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_regtest_close_channel() != 48652.toShort()) {
@@ -1132,7 +1132,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_bitkitcore_checksum_func_remove_tags() != 58873.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_bitkitcore_checksum_func_test_notification() != 33162.toShort()) {
+    if (lib.uniffi_bitkitcore_checksum_func_test_notification() != 32857.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_bitkitcore_checksum_func_update_activity() != 42510.toShort()) {
@@ -1414,7 +1414,7 @@ data class CreateOrderOptions (
     var `couponCode`: kotlin.String, 
     var `source`: kotlin.String?, 
     var `discountCode`: kotlin.String?, 
-    var `turboChannel`: kotlin.Boolean, 
+    var `zeroConf`: kotlin.Boolean, 
     var `zeroConfPayment`: kotlin.Boolean?, 
     var `zeroReserve`: kotlin.Boolean, 
     var `clientNodeId`: kotlin.String?, 
@@ -1452,7 +1452,7 @@ public object FfiConverterTypeCreateOrderOptions: FfiConverterRustBuffer<CreateO
             FfiConverterString.allocationSize(value.`couponCode`) +
             FfiConverterOptionalString.allocationSize(value.`source`) +
             FfiConverterOptionalString.allocationSize(value.`discountCode`) +
-            FfiConverterBoolean.allocationSize(value.`turboChannel`) +
+            FfiConverterBoolean.allocationSize(value.`zeroConf`) +
             FfiConverterOptionalBoolean.allocationSize(value.`zeroConfPayment`) +
             FfiConverterBoolean.allocationSize(value.`zeroReserve`) +
             FfiConverterOptionalString.allocationSize(value.`clientNodeId`) +
@@ -1468,7 +1468,7 @@ public object FfiConverterTypeCreateOrderOptions: FfiConverterRustBuffer<CreateO
             FfiConverterString.write(value.`couponCode`, buf)
             FfiConverterOptionalString.write(value.`source`, buf)
             FfiConverterOptionalString.write(value.`discountCode`, buf)
-            FfiConverterBoolean.write(value.`turboChannel`, buf)
+            FfiConverterBoolean.write(value.`zeroConf`, buf)
             FfiConverterOptionalBoolean.write(value.`zeroConfPayment`, buf)
             FfiConverterBoolean.write(value.`zeroReserve`, buf)
             FfiConverterOptionalString.write(value.`clientNodeId`, buf)
@@ -5864,9 +5864,9 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
 
     @Throws(BlocktankException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-     suspend fun `registerDevice`(`deviceToken`: kotlin.String, `publicKey`: kotlin.String, `features`: List<kotlin.String>, `nodeId`: kotlin.String, `isoTimestamp`: kotlin.String, `signature`: kotlin.String) : kotlin.String {
+     suspend fun `registerDevice`(`deviceToken`: kotlin.String, `publicKey`: kotlin.String, `features`: List<kotlin.String>, `nodeId`: kotlin.String, `isoTimestamp`: kotlin.String, `signature`: kotlin.String, `customUrl`: kotlin.String?) : kotlin.String {
         return uniffiRustCallAsync(
-        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_register_device(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`publicKey`),FfiConverterSequenceString.lower(`features`),FfiConverterString.lower(`nodeId`),FfiConverterString.lower(`isoTimestamp`),FfiConverterString.lower(`signature`),),
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_register_device(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`publicKey`),FfiConverterSequenceString.lower(`features`),FfiConverterString.lower(`nodeId`),FfiConverterString.lower(`isoTimestamp`),FfiConverterString.lower(`signature`),FfiConverterOptionalString.lower(`customUrl`),),
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
         { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
         { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },
@@ -5964,9 +5964,9 @@ public object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.Str
 
     @Throws(BlocktankException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-     suspend fun `testNotification`(`deviceToken`: kotlin.String, `secretMessage`: kotlin.String, `notificationType`: kotlin.String?) : kotlin.String {
+     suspend fun `testNotification`(`deviceToken`: kotlin.String, `secretMessage`: kotlin.String, `notificationType`: kotlin.String?, `customUrl`: kotlin.String?) : kotlin.String {
         return uniffiRustCallAsync(
-        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_test_notification(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`secretMessage`),FfiConverterOptionalString.lower(`notificationType`),),
+        UniffiLib.INSTANCE.uniffi_bitkitcore_fn_func_test_notification(FfiConverterString.lower(`deviceToken`),FfiConverterString.lower(`secretMessage`),FfiConverterOptionalString.lower(`notificationType`),FfiConverterOptionalString.lower(`customUrl`),),
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_poll_rust_buffer(future, callback, continuation) },
         { future, continuation -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_complete_rust_buffer(future, continuation) },
         { future -> UniffiLib.INSTANCE.ffi_bitkitcore_rust_future_free_rust_buffer(future) },

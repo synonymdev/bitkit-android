@@ -52,6 +52,7 @@ class BlocktankNotificationsService @Inject constructor(
                 nodeId = nodeId,
                 isoTimestamp = "$timestamp",
                 signature = signature,
+                customUrl = Env.blocktankPushNotificationServer,
             )
         }
 
@@ -72,6 +73,7 @@ class BlocktankNotificationsService @Inject constructor(
                 deviceToken = deviceToken,
                 secretMessage = "hello",
                 notificationType = "incomingHtlc",
+                customUrl = Env.blocktankPushNotificationServer,
             )
         }
     }
