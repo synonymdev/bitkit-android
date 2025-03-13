@@ -63,9 +63,9 @@ fun SendAddressScreen(
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
                     .focusRequester(focusRequester),
             )
-            Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(
                 text = stringResource(R.string.continue_button),
                 enabled = uiState.isAddressInputValid,
