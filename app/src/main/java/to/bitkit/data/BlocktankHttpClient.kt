@@ -14,13 +14,10 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private typealias IgnoreResponse = String
-
 @Singleton
 class BlocktankHttpClient @Inject constructor(
     private val client: HttpClient,
 ) {
-
     // region rates
     suspend fun fetchLatestRates(): FxRateResponse {
         return get<FxRateResponse>(Env.btcRatesServer)
