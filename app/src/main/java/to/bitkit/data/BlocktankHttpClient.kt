@@ -34,12 +34,12 @@ class BlocktankHttpClient @Inject constructor(
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
-                    throw BlocktankErrorOld.InvalidResponse(it.message.orEmpty())
+                    throw BlocktankHttpError.InvalidResponse(it.message.orEmpty())
                 }
                 responseBody
             }
 
-            else -> throw BlocktankErrorOld.InvalidResponse(response.status.description)
+            else -> throw BlocktankHttpError.InvalidResponse(response.status.description)
         }
     }
 
@@ -53,17 +53,17 @@ class BlocktankHttpClient @Inject constructor(
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
-                    throw BlocktankErrorOld.InvalidResponse(it.message.orEmpty())
+                    throw BlocktankHttpError.InvalidResponse(it.message.orEmpty())
                 }
                 responseBody
             }
 
-            else -> throw BlocktankErrorOld.InvalidResponse(response.status.description)
+            else -> throw BlocktankHttpError.InvalidResponse(response.status.description)
         }
     }
     // endregion
 }
 
-sealed class BlocktankErrorOld(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : BlocktankErrorOld(message)
+sealed class BlocktankHttpError(message: String) : AppError(message) {
+    data class InvalidResponse(override val message: String) : BlocktankHttpError(message)
 }
