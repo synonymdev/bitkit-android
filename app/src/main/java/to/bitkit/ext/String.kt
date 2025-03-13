@@ -17,3 +17,5 @@ fun String.truncate(length: Int): String {
         this
     }.trim()
 }
+
+fun String.removeSpaces() = this.filterNot { it.isWhitespace() }
