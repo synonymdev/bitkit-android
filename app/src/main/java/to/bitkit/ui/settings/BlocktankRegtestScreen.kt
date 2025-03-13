@@ -155,7 +155,7 @@ fun BlocktankRegtestScreen(
                             isMining = true
                             try {
                                 val count =
-                                    mineBlockCount.toIntOrNull() ?: error("Invalid block count: $mineBlockCount")
+                                    mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 app.toast(

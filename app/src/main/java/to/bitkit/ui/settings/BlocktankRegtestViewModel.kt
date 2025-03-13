@@ -12,8 +12,8 @@ class BlocktankRegtestViewModel @Inject constructor(
      * Mines a number of blocks on the regtest network.
      * @param count Number of blocks to mine. Default is 1.
      */
-    suspend fun regtestMine(count: Int = 1) {
-        uniffi.bitkitcore.regtestMine(count = count.toUInt())
+    suspend fun regtestMine(count: UInt = 1u) {
+        uniffi.bitkitcore.regtestMine(count = count)
     }
 
     /**
