@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,6 +38,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Colors.Black25
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
@@ -50,6 +52,7 @@ fun SendOptionsView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(Black25)
             .fillMaxHeight(.875f)
             .imePadding()
     ) {
