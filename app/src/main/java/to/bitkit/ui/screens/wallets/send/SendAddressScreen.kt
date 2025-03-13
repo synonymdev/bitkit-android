@@ -58,7 +58,6 @@ fun SendAddressScreen(
                 value = uiState.addressInput,
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
                 minLines = 12,
-                maxLines = 12,
                 colors = AppTextFieldDefaults.noIndicatorColors,
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier
