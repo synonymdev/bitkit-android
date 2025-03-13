@@ -16,19 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.viewmodels.SendEvent
-import to.bitkit.viewmodels.SendUiState
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.SendUiState
 
 @Composable
 fun SendAddressScreen(
