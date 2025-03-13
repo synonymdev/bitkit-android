@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.ui.components.PrimaryButton
@@ -48,12 +49,8 @@ fun SendAddressScreen(
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-            Text(
-                text = stringResource(R.string.wallet__send_to),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+            Caption13Up(text = stringResource(R.string.wallet__send_to))
+            Spacer(modifier = Modifier.height(16.dp))
             TextField(
                 placeholder = { Text(stringResource(R.string.address_placeholder)) },
                 value = uiState.addressInput,
