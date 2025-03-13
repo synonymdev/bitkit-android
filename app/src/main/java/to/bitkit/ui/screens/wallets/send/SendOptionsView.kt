@@ -53,7 +53,7 @@ fun SendOptionsView(
         modifier = Modifier
             .fillMaxWidth()
             .background(Black25)
-            .fillMaxHeight(.875f)
+            .fillMaxHeight()
             .imePadding()
     ) {
         val navController = rememberNavController()
