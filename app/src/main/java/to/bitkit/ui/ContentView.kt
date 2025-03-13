@@ -44,6 +44,7 @@ import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
 import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
 import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
 import to.bitkit.ui.screens.transfer.SavingsIntroScreen
+import to.bitkit.ui.screens.transfer.SavingsProgressScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
@@ -243,7 +244,7 @@ fun ContentView(
                     }
                     composable<Routes.SavingsConfirm> {
                         SavingsConfirmScreen(
-                            onConfirm = { /* TODO: nav to SavingsProgress */ },
+                            onConfirm = { navController.navigate(Routes.SavingsProgress) },
                             onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
@@ -253,6 +254,12 @@ fun ContentView(
                         SavingsAdvancedScreen(
                             onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                             onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsProgress> {
+                        SavingsProgressScreen(
+                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                             onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
                         )
                     }
@@ -717,6 +724,9 @@ object Routes {
 
     @Serializable
     data object SavingsAdvanced
+
+    @Serializable
+    data object SavingsProgress
 
     @Serializable
     data object Funding

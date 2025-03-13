@@ -144,28 +144,20 @@ class TransferViewModel @Inject constructor(
 
     // region Savings
 
+    private var channelsToClose = emptyList<ChannelDetails>()
+
     fun setSelectedChannelIds(channelIds: Set<String>) {
         _selectedChannelIdsState.update { channelIds }
     }
 
-    /** Closes the provided channels */
     fun onTransferToSavingsConfirm(channels: List<ChannelDetails>) {
         _selectedChannelIdsState.update { emptySet() }
-        viewModelScope.launch {
-            val channelsFailedToCoopClose = closeChannels(channels)
-            // TODO emit effect: TransferToSavingsProgressDone(channelsFailedToCoopClose)
-            //  and update UI on SavingsProgress screen
+        channelsToClose = channels
+    }
 
-            if (channelsFailedToCoopClose.isNotEmpty()) {
-                // TODO later: use background service
-                channelsPendingCoopClose = channelsFailedToCoopClose
-                startCoopCloseRetries(System.currentTimeMillis())
-
-                Logger.info("Coop close failed: ${channelsFailedToCoopClose.map { it.channelId }}")
-            } else {
-                channelsPendingCoopClose = emptyList()
-            }
-        }
+    /** Closes the channels selected earlier, pending closure */
+    suspend fun closeSelectedChannels(): List<ChannelDetails> {
+        return closeChannels(channelsToClose)
     }
 
     private suspend fun closeChannels(channels: List<ChannelDetails>): List<ChannelDetails> {
@@ -188,10 +180,10 @@ class TransferViewModel @Inject constructor(
     }
 
     private var coopCloseRetryJob: Job? = null
-    private var channelsPendingCoopClose = emptyList<ChannelDetails>()
 
     /** Retry to coop close the channel(s) for 30 min */
-    private fun startCoopCloseRetries(startTime: Long) {
+    fun startCoopCloseRetries(channels: List<ChannelDetails>, startTime: Long) {
+        channelsToClose = channels
         coopCloseRetryJob?.cancel()
 
         coopCloseRetryJob = viewModelScope.launch {
@@ -199,14 +191,14 @@ class TransferViewModel @Inject constructor(
 
             while (isActive && System.currentTimeMillis() < giveUpTime) {
                 Logger.info("Trying coop close...")
-                val channelsFailedToCoopClose = closeChannels(channelsPendingCoopClose)
+                val channelsFailedToCoopClose = closeChannels(channelsToClose)
 
                 if (channelsFailedToCoopClose.isEmpty()) {
-                    channelsPendingCoopClose = emptyList()
+                    channelsToClose = emptyList()
                     Logger.info("Coop close success.")
                     return@launch
                 } else {
-                    channelsPendingCoopClose = channelsFailedToCoopClose
+                    channelsToClose = channelsFailedToCoopClose
                     Logger.info("Coop close failed: ${channelsFailedToCoopClose.map { it.channelId }}")
                 }
 
