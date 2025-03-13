@@ -130,7 +130,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.contact),
             icon = {
                 Icon(
-                    painterResource(R.drawable.ic_users),
+                    painter = painterResource(R.drawable.ic_users),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
@@ -148,7 +148,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.paste_invoice),
             icon = {
                 Icon(
-                    imageVector = Icons.Default.ContentPaste,
+                    painter = painterResource(R.drawable.ic_clipboard_text),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
