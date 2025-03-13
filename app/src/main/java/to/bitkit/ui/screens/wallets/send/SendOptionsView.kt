@@ -119,6 +119,7 @@ private fun SendOptionsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Black25)
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
