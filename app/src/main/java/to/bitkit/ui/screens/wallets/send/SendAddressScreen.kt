@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.viewmodels.SendEvent
@@ -77,13 +78,28 @@ fun SendAddressScreen(
 
 }
 
-@LightModePreview
-@DarkModePreview
+@Preview(showSystemUi = true)
 @Composable
-private fun SendEnterManuallyScreenPreview() {
+private fun Preview() {
     AppThemeSurface {
         SendAddressScreen(
             uiState = SendUiState(),
+            onBack = {},
+            onEvent = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        SendAddressScreen(
+            uiState = SendUiState(
+                address = "bc1q5f29hzkgp6hqla63m32pa0jyfqq32c20837cz4",
+                addressInput = "bc1q5f29hzkgp6hqla63m32pa0jyfqq32c20837cz4",
+                isAddressInputValid = true
+            ),
             onBack = {},
             onEvent = {},
         )
