@@ -57,7 +57,7 @@ fun SendAddressScreen(
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
                 minLines = 12,
                 colors = AppTextFieldDefaults.noIndicatorColors,
-                shape = MaterialTheme.shapes.medium,
+                shape = MaterialTheme.shapes.small,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
