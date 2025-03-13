@@ -124,7 +124,7 @@ private fun SendOptionsContent(
     ) {
         SheetTopBar(stringResource(R.string.title_send))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         RectangleButton(
             label = stringResource(R.string.contact),
