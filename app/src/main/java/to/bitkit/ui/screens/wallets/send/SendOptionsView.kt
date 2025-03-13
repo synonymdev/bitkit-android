@@ -130,7 +130,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.contact),
             icon = {
                 Icon(
-                    imageVector = Icons.Default.Person,
+                    painterResource(R.drawable.ic_users),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
