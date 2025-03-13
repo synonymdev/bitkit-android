@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -196,13 +197,13 @@ fun OnboardingTab(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .padding(top = 170.dp)
+                .padding(top = 125.dp)
                 .fillMaxWidth()
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(.325f)
+                .height(250.dp)
                 .align(Alignment.BottomCenter),
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))

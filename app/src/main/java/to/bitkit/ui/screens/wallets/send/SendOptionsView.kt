@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -9,16 +11,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -39,6 +38,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Colors.Black25
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
@@ -53,6 +53,7 @@ fun SendOptionsView(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(.875f)
+            .background(Black25)
             .imePadding()
     ) {
         val navController = rememberNavController()
@@ -120,17 +121,18 @@ private fun SendOptionsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Black25)
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         RectangleButton(
             label = stringResource(R.string.contact),
             icon = {
                 Icon(
-                    imageVector = Icons.Default.Person,
+                    painter = painterResource(R.drawable.ic_users),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
@@ -148,7 +150,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.paste_invoice),
             icon = {
                 Icon(
-                    imageVector = Icons.Default.ContentPaste,
+                    painter = painterResource(R.drawable.ic_clipboard_text),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
@@ -164,7 +166,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.enter_manually),
             icon = {
                 Icon(
-                    imageVector = Icons.Outlined.Edit,
+                    painter = painterResource(R.drawable.ic_pencil_simple),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
@@ -189,6 +191,13 @@ private fun SendOptionsContent(
             onEvent(SendEvent.Scan)
         }
         Spacer(modifier = Modifier.weight(1f))
+
+        Image(
+            painter = painterResource(R.drawable.coin_stack_logo),
+            contentDescription = null,
+            contentScale = ContentScale.FillWidth,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
