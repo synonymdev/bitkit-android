@@ -164,7 +164,7 @@ private fun SendOptionsContent(
             label = stringResource(R.string.enter_manually),
             icon = {
                 Icon(
-                    imageVector = Icons.Outlined.Edit,
+                    painter = painterResource(R.drawable.ic_pencil_simple),
                     contentDescription = null,
                     tint = Colors.Brand,
                     modifier = Modifier.size(28.dp),
