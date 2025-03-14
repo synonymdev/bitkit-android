@@ -11,14 +11,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -125,7 +129,24 @@ fun SendAndReviewScreen(
                     ) {
                         Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
                         Spacer(modifier = Modifier.height(8.dp))
-                        BodySSB(text = "Instant (±$0.01)")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_speed_normal),
+                                contentDescription = null,
+                                tint = Colors.Brand,
+                                modifier = Modifier.size(16.dp)
+                            ) //TODO GET FROM STATE
+                            BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
+                            Icon(
+                                painterResource(R.drawable.ic_pencil_simple),
+                                contentDescription = null,
+                                tint = Colors.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.weight(1f))
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
