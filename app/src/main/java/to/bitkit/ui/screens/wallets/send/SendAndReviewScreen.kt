@@ -134,10 +134,7 @@ private fun OnChainDescription(
             ),
             color = Colors.White64,
         )
-        val destination = when (uiState.payMethod) {
-            SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
-            SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
-        }
+        val destination = uiState.address.ellipsisMiddle(25)
         Spacer(modifier = Modifier.height(8.dp))
         BodySSB(text = destination)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
@@ -215,7 +212,7 @@ private fun LightningDescription(
             text = stringResource(R.string.wallet__send_invoice),
             color = Colors.White64,
         )
-        val destination = uiState.bolt11?.truncate(100).orEmpty()
+        val destination = uiState.bolt11?.ellipsisMiddle(25).orEmpty()
         Spacer(modifier = Modifier.height(8.dp))
         BodySSB(text = destination)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
