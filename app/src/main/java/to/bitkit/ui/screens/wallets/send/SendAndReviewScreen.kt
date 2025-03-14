@@ -77,15 +77,6 @@ fun SendAndReviewScreen(
                 SendMethod.LIGHTNING -> LightningDescription(uiState = uiState, onEvent = onEvent)
             }
 
-            uiState.decodedInvoice?.description?.let { description ->
-                Column {
-                    Caption13Up(text = stringResource(R.string.label_note), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = description)
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-                }
-            }
-
             Spacer(modifier = Modifier.height(16.dp))
             Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
             Spacer(modifier = Modifier.height(8.dp))
@@ -273,6 +264,15 @@ private fun LightningDescription(
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                 }
+            }
+        }
+
+        uiState.decodedInvoice?.description?.let { description ->
+            Column {
+                Caption13Up(text = stringResource(R.string.label_note), color = Colors.White64)
+                Spacer(modifier = Modifier.height(8.dp))
+                BodySSB(text = description)
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
             }
         }
     }
