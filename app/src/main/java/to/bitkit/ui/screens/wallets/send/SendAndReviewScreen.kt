@@ -144,7 +144,24 @@ private fun OnChainDescription(
                 ) {
                     Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "Todo Normal (₿ 210)")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_speed_normal),
+                            contentDescription = null,
+                            tint = Colors.Brand,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        BodySSB(text = "Normal (₿ 210)") //TODO GET FROM STATE
+                        Icon(
+                            painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = Colors.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                 }
@@ -157,7 +174,18 @@ private fun OnChainDescription(
                 ) {
                     Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
                     Spacer(modifier = Modifier.height(8.dp))
-                    BodySSB(text = "Todo ± 20-60 minutes")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_clock),
+                            contentDescription = null,
+                            tint = Colors.Brand,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        BodySSB(text = "± 20-60 minutes") //TODO GET FROM STATE
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                 }
@@ -282,9 +310,6 @@ private fun LightningDescription(
                         .weight(1f)
                         .padding(top = 16.dp)
                 ) {
-                    val invoiceExpiryTimestamp = expirySeconds.let {
-                        Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
-                    }
                     Caption13Up(
                         text = stringResource(R.string.label_invoice_expiration),
                         color = Colors.White64
@@ -300,6 +325,9 @@ private fun LightningDescription(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
+                        val invoiceExpiryTimestamp = expirySeconds.let {
+                            Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
+                        }
                         BodySSB(text = invoiceExpiryTimestamp)
                     }
                     Spacer(modifier = Modifier.weight(1f))
