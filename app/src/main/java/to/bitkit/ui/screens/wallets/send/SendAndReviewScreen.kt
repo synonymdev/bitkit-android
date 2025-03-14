@@ -261,12 +261,12 @@ private fun LightningDescription(
                     Icon(
                         painterResource(R.drawable.ic_lightning),
                         contentDescription = null,
-                        tint = Colors.Brand,
+                        tint = Colors.Purple,
                         modifier = Modifier.size(16.dp)
                     )
                     BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
                     Icon(
-                        painterResource(R.drawable.ic_timer),
+                        painterResource(R.drawable.ic_pencil_simple),
                         contentDescription = null,
                         tint = Colors.White,
                         modifier = Modifier.size(16.dp)
@@ -295,9 +295,9 @@ private fun LightningDescription(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Icon(
-                            painterResource(R.drawable.ic_clock),
+                            painterResource(R.drawable.ic_timer),
                             contentDescription = null,
-                            tint = Colors.Brand,
+                            tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
                         BodySSB(text = invoiceExpiryTimestamp)
