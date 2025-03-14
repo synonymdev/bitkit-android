@@ -119,9 +119,7 @@ private fun OnChainDescription(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
-            text = stringResource(
-                if (uiState.payMethod == SendMethod.ONCHAIN) R.string.wallet__send_to else R.string.wallet__send_invoice
-            ),
+            text = stringResource(R.string.wallet__send_to),
             color = Colors.White64,
         )
         val destination = uiState.address.ellipsisMiddle(25)
