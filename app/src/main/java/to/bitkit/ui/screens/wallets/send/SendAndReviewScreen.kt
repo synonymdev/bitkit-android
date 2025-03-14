@@ -93,7 +93,7 @@ fun SendAndReviewScreen(
             //TODO DISPLAY TAGS
             PrimaryButton(
                 stringResource(R.string.wallet__tags_add),
-                onClick = {},
+                onClick = {}, //TODO IMPLEMENT
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_tag),
