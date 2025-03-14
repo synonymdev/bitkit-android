@@ -36,6 +36,7 @@ import to.bitkit.ext.truncate
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppThemeSurface
@@ -90,7 +91,19 @@ fun SendAndReviewScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
-                BodySSB(text = "Todo")
+                //TODO DISPLAY TAGS
+                PrimaryButton(
+                    stringResource(R.string.wallet__tags_add),
+                    onClick = {},
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_tag),
+                            contentDescription = null,
+                            tint = Colors.Brand
+                        )
+                    },
+                    fullWidth = false
+                )
             }
 
             Spacer(modifier = Modifier.weight(1f))
