@@ -70,118 +70,13 @@ fun SendAndReviewScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
         ) {
-
             BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Caption13Up(
-                text = stringResource(
-                    if (uiState.payMethod == SendMethod.ONCHAIN) R.string.wallet__send_to else R.string.wallet__send_invoice
-                ),
-                color = Colors.White64,
-            )
-            val destination = when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
-                SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            BodySSB(text = destination)
-            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(IntrinsicSize.Min)
-            ) {
-                if (uiState.payMethod == SendMethod.ONCHAIN) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f)
-                            .clickable { onEvent(SendEvent.SpeedAndFee) }
-                            .padding(top = 16.dp)
-                    ) {
-                        Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        BodySSB(text = "Todo Normal (₿ 210)")
-                        Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f)
-                            .clickable { onEvent(SendEvent.SpeedAndFee) }
-                            .padding(top = 16.dp)
-                    ) {
-                        Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        BodySSB(text = "Todo ± 20-60 minutes")
-                        Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f)
-                            .padding(top = 16.dp)
-                    ) {
-                        Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                painterResource(R.drawable.ic_speed_normal),
-                                contentDescription = null,
-                                tint = Colors.Brand,
-                                modifier = Modifier.size(16.dp)
-                            ) //TODO GET FROM STATE
-                            BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
-                            Icon(
-                                painterResource(R.drawable.ic_pencil_simple),
-                                contentDescription = null,
-                                tint = Colors.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                    }
-                    uiState.decodedInvoice?.expirySeconds?.let { expirySeconds ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .weight(1f)
-                                .padding(top = 16.dp)
-                        ) {
-                            val invoiceExpiryTimestamp = expirySeconds.let {
-                                Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
-                            }
-                            Caption13Up(
-                                text = stringResource(R.string.label_invoice_expiration),
-                                color = Colors.White64
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    painterResource(R.drawable.ic_clock),
-                                    contentDescription = null,
-                                    tint = Colors.Brand,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                BodySSB(text = invoiceExpiryTimestamp)
-                            }
-                            Spacer(modifier = Modifier.weight(1f))
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                        }
-                    }
-                }
+            when (uiState.payMethod) {
+                SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
+                SendMethod.LIGHTNING -> LightningDescription(uiState = uiState, onEvent = onEvent)
             }
 
             uiState.decodedInvoice?.description?.let { description ->
@@ -213,6 +108,240 @@ fun SendAndReviewScreen(
                 }
             )
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun OnChainDescription(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Caption13Up(
+            text = stringResource(
+                if (uiState.payMethod == SendMethod.ONCHAIN) R.string.wallet__send_to else R.string.wallet__send_invoice
+            ),
+            color = Colors.White64,
+        )
+        val destination = when (uiState.payMethod) {
+            SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
+            SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        BodySSB(text = destination)
+        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            if (uiState.payMethod == SendMethod.ONCHAIN) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable { onEvent(SendEvent.SpeedAndFee) }
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = "Todo Normal (₿ 210)")
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable { onEvent(SendEvent.SpeedAndFee) }
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = "Todo ± 20-60 minutes")
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_speed_normal),
+                            contentDescription = null,
+                            tint = Colors.Brand,
+                            modifier = Modifier.size(16.dp)
+                        ) //TODO GET FROM STATE
+                        BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
+                        Icon(
+                            painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = Colors.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+                uiState.decodedInvoice?.expirySeconds?.let { expirySeconds ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                            .padding(top = 16.dp)
+                    ) {
+                        val invoiceExpiryTimestamp = expirySeconds.let {
+                            Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
+                        }
+                        Caption13Up(
+                            text = stringResource(R.string.label_invoice_expiration),
+                            color = Colors.White64
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_clock),
+                                contentDescription = null,
+                                tint = Colors.Brand,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            BodySSB(text = invoiceExpiryTimestamp)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LightningDescription(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Caption13Up(
+            text = stringResource(
+                if (uiState.payMethod == SendMethod.ONCHAIN) R.string.wallet__send_to else R.string.wallet__send_invoice
+            ),
+            color = Colors.White64,
+        )
+        val destination = when (uiState.payMethod) {
+            SendMethod.ONCHAIN -> uiState.address.ellipsisMiddle(25)
+            SendMethod.LIGHTNING -> uiState.bolt11?.truncate(100) ?: ""
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        BodySSB(text = destination)
+        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            if (uiState.payMethod == SendMethod.ONCHAIN) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable { onEvent(SendEvent.SpeedAndFee) }
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = "Todo Normal (₿ 210)")
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable { onEvent(SendEvent.SpeedAndFee) }
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BodySSB(text = "Todo ± 20-60 minutes")
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .padding(top = 16.dp)
+                ) {
+                    Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_speed_normal),
+                            contentDescription = null,
+                            tint = Colors.Brand,
+                            modifier = Modifier.size(16.dp)
+                        ) //TODO GET FROM STATE
+                        BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
+                        Icon(
+                            painterResource(R.drawable.ic_pencil_simple),
+                            contentDescription = null,
+                            tint = Colors.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+                uiState.decodedInvoice?.expirySeconds?.let { expirySeconds ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                            .padding(top = 16.dp)
+                    ) {
+                        val invoiceExpiryTimestamp = expirySeconds.let {
+                            Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
+                        }
+                        Caption13Up(
+                            text = stringResource(R.string.label_invoice_expiration),
+                            color = Colors.White64
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_clock),
+                                contentDescription = null,
+                                tint = Colors.Brand,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            BodySSB(text = invoiceExpiryTimestamp)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    }
+                }
+            }
         }
     }
 }
