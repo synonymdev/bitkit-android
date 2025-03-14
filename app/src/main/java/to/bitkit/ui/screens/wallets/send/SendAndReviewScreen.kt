@@ -87,24 +87,23 @@ fun SendAndReviewScreen(
                 }
             }
 
-            Column {
-                Spacer(modifier = Modifier.height(16.dp))
-                Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
-                //TODO DISPLAY TAGS
-                PrimaryButton(
-                    stringResource(R.string.wallet__tags_add),
-                    onClick = {},
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_tag),
-                            contentDescription = null,
-                            tint = Colors.Brand
-                        )
-                    },
-                    fullWidth = false
-                )
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
+            Spacer(modifier = Modifier.height(8.dp))
+            //TODO DISPLAY TAGS
+            PrimaryButton(
+                stringResource(R.string.wallet__tags_add),
+                onClick = {},
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tag),
+                        contentDescription = null,
+                        tint = Colors.Brand
+                    )
+                },
+                fullWidth = false
+            )
+            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
             Spacer(modifier = Modifier.weight(1f))
             SwipeToConfirm(
