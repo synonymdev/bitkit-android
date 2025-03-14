@@ -311,7 +311,7 @@ private fun LightningDescription(
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(name = "Lightning")
 @Composable
 private fun SendAndReviewPreview() {
     AppThemeSurface {
@@ -340,7 +340,7 @@ private fun SendAndReviewPreview() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(name = "OnChain")
 @Composable
 private fun SendAndReviewPreview2() {
     AppThemeSurface {
