@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -347,7 +348,7 @@ private fun LightningDescription(
 }
 
 @Suppress("SpellCheckingInspection")
-@DarkModePreview
+@Preview
 @Composable
 private fun SendAndReviewPreview() {
     AppThemeSurface {
@@ -360,7 +361,36 @@ private fun SendAndReviewPreview() {
                 decodedInvoice = LightningInvoice(
                     bolt11 = "bcrt123",
                     paymentHash = ByteArray(0),
-                    amountSatoshis = 0uL,
+                    amountSatoshis = 100000uL,
+                    timestampSeconds = 0uL,
+                    expirySeconds = 3600uL,
+                    isExpired = false,
+                    networkType = NetworkType.REGTEST,
+                    payeeNodeId = null,
+                    description = "Some invoice description",
+                )
+            ),
+            onBack = {},
+            onEvent = {},
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview
+@Composable
+private fun SendAndReviewPreview2() {
+    AppThemeSurface {
+        SendAndReviewScreen(
+            uiState = SendUiState(
+                amount = 1234uL,
+                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
+                bolt11 = "lnbcrt1…",
+                payMethod = SendMethod.ONCHAIN,
+                decodedInvoice = LightningInvoice(
+                    bolt11 = "bcrt123",
+                    paymentHash = ByteArray(0),
+                    amountSatoshis = 10000uL,
                     timestampSeconds = 0uL,
                     expirySeconds = 3600uL,
                     isExpired = false,
