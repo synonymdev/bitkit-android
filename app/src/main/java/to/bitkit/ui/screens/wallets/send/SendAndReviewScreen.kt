@@ -32,7 +32,6 @@ import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
-import to.bitkit.ext.truncate
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
