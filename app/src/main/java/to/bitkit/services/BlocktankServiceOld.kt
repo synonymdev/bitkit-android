@@ -72,6 +72,7 @@ class BlocktankServiceOld @Inject constructor(
             uniffi.bitkitcore.testNotification(
                 deviceToken = deviceToken,
                 secretMessage = "hello",
+                notificationType = "incomingHtlc",
             )
         }
     }

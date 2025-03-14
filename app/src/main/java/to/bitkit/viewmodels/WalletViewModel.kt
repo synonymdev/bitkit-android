@@ -414,19 +414,23 @@ class WalletViewModel @Inject constructor(
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            val token = FirebaseMessaging.getInstance().token.await()
-            blocktankServiceOld.testNotification(token)
+            try {
+                val token = FirebaseMessaging.getInstance().token.await()
+                blocktankServiceOld.testNotification(token)
+            } catch (e: Throwable) {
+                Logger.error("Error in LSP notification test:", e)
+                ToastEventBus.send(e)
+            }
         }
     }
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) {
             try {
-                val info = coreService.blocktank.info()
+                val info = coreService.blocktank.info(refresh = true)
                 Logger.debug("Blocktank info: $info")
             } catch (e: Throwable) {
                 Logger.error("Error getting Blocktank info:", e)
-                ToastEventBus.send(e)
             }
         }
     }

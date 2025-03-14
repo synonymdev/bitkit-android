@@ -406,9 +406,7 @@ class BlocktankService(
         options: CreateOrderOptions,
     ): IBtOrder {
         return ServiceQueue.CORE.background {
-            createOrder(
-                lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options,
-            )
+            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
         }
     }
 
