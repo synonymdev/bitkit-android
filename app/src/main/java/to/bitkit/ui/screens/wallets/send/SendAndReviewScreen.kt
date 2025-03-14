@@ -165,7 +165,18 @@ fun SendAndReviewScreen(
                                 color = Colors.White64
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            BodySSB(text = invoiceExpiryTimestamp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_clock),
+                                    contentDescription = null,
+                                    tint = Colors.Brand,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                BodySSB(text = invoiceExpiryTimestamp)
+                            }
                             Spacer(modifier = Modifier.weight(1f))
                             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                         }
