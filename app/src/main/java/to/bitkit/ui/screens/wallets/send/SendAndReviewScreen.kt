@@ -293,12 +293,6 @@ private fun LightningDescription(
                         modifier = Modifier.size(16.dp)
                     )
                     BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
-                    Icon(
-                        painterResource(R.drawable.ic_pencil_simple),
-                        contentDescription = null,
-                        tint = Colors.White,
-                        modifier = Modifier.size(16.dp)
-                    )
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
