@@ -71,7 +71,7 @@ fun SavingsConfirmScreen(
 
     val channels = selectedChannels ?: openChannels
 
-    val amount = channels.sumOf { wallet.getChannelAmountOnClose(it.channelId) }
+    val amount = channels.sumOf { transfer.getChannelAmountOnClose(it.channelId) }
 
     SavingsConfirmContent(
         amount = amount,

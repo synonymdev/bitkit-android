@@ -355,10 +355,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun getChannelAmountOnClose(channelId: String): ULong {
-        return lightningService.getChannelAmountOnClose(channelId)
-    }
-
     // region debug
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {

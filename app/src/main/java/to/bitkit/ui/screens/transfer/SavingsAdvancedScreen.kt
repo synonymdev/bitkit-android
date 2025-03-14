@@ -78,7 +78,7 @@ fun SavingsAdvancedScreen(
         openChannels.map {
             TransferChannelUiState(
                 channelId = it.channelId,
-                balance = wallet.getChannelAmountOnClose(it.channelId),
+                balance = transfer.getChannelAmountOnClose(it.channelId),
                 isSelected = selectedChannelIds.contains(it.channelId),
             )
         }

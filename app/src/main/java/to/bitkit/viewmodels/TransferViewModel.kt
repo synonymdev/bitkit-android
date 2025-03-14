@@ -144,6 +144,10 @@ class TransferViewModel @Inject constructor(
 
     // region Savings
 
+    fun getChannelAmountOnClose(channelId: String): ULong {
+        return lightningService.getChannelAmountOnClose(channelId)
+    }
+
     private var channelsToClose = emptyList<ChannelDetails>()
 
     fun setSelectedChannelIds(channelIds: Set<String>) {
