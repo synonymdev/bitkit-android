@@ -78,7 +78,7 @@ fun SendAndReviewScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Caption13Up(text = stringResource(R.string.label_tags), color = Colors.White64)
+            Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
             Spacer(modifier = Modifier.height(8.dp))
             //TODO DISPLAY TAGS
             PrimaryButton(
@@ -138,7 +138,7 @@ private fun OnChainDescription(
                     .clickable { onEvent(SendEvent.SpeedAndFee) }
                     .padding(top = 16.dp)
             ) {
-                Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                Caption13Up(text = stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -168,7 +168,7 @@ private fun OnChainDescription(
                     .clickable { onEvent(SendEvent.SpeedAndFee) }
                     .padding(top = 16.dp)
             ) {
-                Caption13Up(text = stringResource(R.string.label_confirms_in), color = Colors.White64)
+                Caption13Up(text = stringResource(R.string.wallet__send_confirming_in), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -215,7 +215,7 @@ private fun LightningDescription(
                     .weight(1f)
                     .padding(top = 16.dp)
             ) {
-                Caption13Up(text = stringResource(R.string.label_speed), color = Colors.White64)
+                Caption13Up(text = stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -240,7 +240,7 @@ private fun LightningDescription(
                         .padding(top = 16.dp)
                 ) {
                     Caption13Up(
-                        text = stringResource(R.string.label_invoice_expiration),
+                        text = stringResource(R.string.wallet__send_invoice_expiration),
                         color = Colors.White64
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -267,7 +267,7 @@ private fun LightningDescription(
 
         uiState.decodedInvoice?.description?.let { description ->
             Column {
-                Caption13Up(text = stringResource(R.string.label_note), color = Colors.White64)
+                Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
                 BodySSB(text = description)
                 HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
