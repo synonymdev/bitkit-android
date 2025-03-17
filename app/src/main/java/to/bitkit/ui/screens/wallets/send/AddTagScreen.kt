@@ -42,15 +42,15 @@ fun AddTagScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
         ) {
-
-            Spacer(modifier = Modifier.height(16.dp))
             if (tags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
                 Caption13Up(text = stringResource(R.string.wallet__tags_previously), color = Colors.White64)
                 Spacer(modifier = Modifier.height(16.dp))
             }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 tags.map { tagText ->
                     PrimaryButton( //TODO REPLACE WITH THE RIGHT COMPONENT
@@ -61,8 +61,10 @@ fun AddTagScreen(
                     )
                 }
             }
-        }
+            Spacer(modifier = Modifier.height(16.dp))
+            Caption13Up(text = stringResource(R.string.wallet__tags_new), color = Colors.White64)
 
+        }
     }
 }
 
