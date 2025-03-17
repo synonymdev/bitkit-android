@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,6 +104,17 @@ class AppViewModel @Inject constructor(
         observeLdkNodeEvents()
         observeSendEvents()
         checkGeoStatus()
+        updateSuggestionTags()
+    }
+
+    private fun updateSuggestionTags() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _sendUiState.update {
+                it.copy(
+                    suggestionTags = coreService.activity.allPossibleTags(),
+                )
+            }
+        }
     }
 
     private fun observeLdkNodeEvents() {
@@ -326,6 +338,7 @@ class AppViewModel @Inject constructor(
                         amount = invoice.amountSatoshis,
                         isUnified = invoice.hasLightingParam(),
                         decodedInvoice = lnInvoice,
+                        suggestionTags = coreService.activity.allPossibleTags(),
                         payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
                     )
                 }
