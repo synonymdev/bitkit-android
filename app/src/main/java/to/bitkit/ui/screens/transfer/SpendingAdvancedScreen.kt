@@ -81,12 +81,11 @@ fun SpendingAdvancedScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-
             var lspBalance by rememberSaveable { mutableLongStateOf(0) }
             var overrideSats: Long? by remember { mutableStateOf(null) }
 
             val clientBalance = order.clientBalanceSat
-            var fee: Long? by remember { mutableStateOf(null) }
+            var feeEstimate: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
 
             val transferValues = useTransfer(clientBalance.toLong())
@@ -94,9 +93,9 @@ fun SpendingAdvancedScreen(
             val isValid = lspBalance >= transferValues.minLspBalance &&
                     lspBalance <= transferValues.maxLspBalance
 
-            // Fetch LSP Fee estimate
+            // Update LSP Fee estimate
             LaunchedEffect(lspBalance) {
-                fee = null
+                feeEstimate = null
                 if (lspBalance < transferValues.minLspBalance) {
                     return@LaunchedEffect
                 }
@@ -105,7 +104,7 @@ fun SpendingAdvancedScreen(
                         spendingBalanceSats = clientBalance,
                         receivingBalanceSats = lspBalance.toULong(),
                     )
-                    fee = estimate.feeSat.toLong()
+                    feeEstimate = estimate.feeSat.toLong()
                 }
             }
 
@@ -135,7 +134,7 @@ fun SpendingAdvancedScreen(
                     color = Colors.White64,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                fee?.let {
+                feeEstimate?.let {
                     MoneySSB(it)
                 } ?: run {
                     Caption13Up(text = "—", color = Colors.White64)
