@@ -199,7 +199,7 @@ class BlocktankTest {
             announceChannel = true,
         )
 
-        val estimate: IBtEstimateFeeResponse2 = service.blocktank.newOrderFeeEstimate(
+        val estimate: IBtEstimateFeeResponse2 = service.blocktank.estimateFee(
             lspBalanceSat = lspBalanceSat,
             channelExpiryWeeks = channelExpiryWeeks,
             options = options

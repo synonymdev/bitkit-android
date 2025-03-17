@@ -162,7 +162,7 @@ class BlocktankViewModel @Inject constructor(
             clientNodeId = nodeId,
         )
 
-        return coreService.blocktank.newOrderFeeEstimate(
+        return coreService.blocktank.estimateFee(
             lspBalanceSat = receivingBalanceSats,
             channelExpiryWeeks = channelExpiryWeeks,
             options = options,
