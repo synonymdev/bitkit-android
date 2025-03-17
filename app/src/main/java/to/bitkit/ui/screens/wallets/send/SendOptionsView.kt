@@ -106,6 +106,22 @@ fun SendOptionsView(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { appViewModel.setSendEvent(it) },
+                    onClickAddTag = { navController.navigate(SendRoute.AddTag) }
+                )
+            }
+            composable<SendRoute.AddTag> {
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                AddTagScreen (
+                    tags = uiState.suggestionTags,
+                    onBack = { navController.popBackStack() },
+                    onTagSelected = { tag ->
+                        //TODO IMPLEMENT
+                        navController.popBackStack()
+                    },
+                    onTagCreated = {
+                        //TODO IMPLEMENT
+                        navController.popBackStack()
+                    }
                 )
             }
         }
@@ -228,4 +244,7 @@ interface SendRoute {
 
     @Serializable
     data object ReviewAndSend : SendRoute
+
+    @Serializable
+    data object AddTag : SendRoute
 }

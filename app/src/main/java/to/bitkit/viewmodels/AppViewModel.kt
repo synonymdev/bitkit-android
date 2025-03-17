@@ -632,6 +632,8 @@ data class SendUiState(
     val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
+    val selectedTags: List<String> = listOf(),
+    val suggestionTags: List<String> = listOf(),
     val decodedInvoice: LightningInvoice? = null,
 )
 

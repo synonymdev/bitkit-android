@@ -52,6 +52,7 @@ fun SendAndReviewScreen(
     uiState: SendUiState,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
+    onClickAddTag: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -83,7 +84,7 @@ fun SendAndReviewScreen(
             //TODO DISPLAY TAGS
             PrimaryButton(
                 stringResource(R.string.wallet__tags_add),
-                onClick = {}, //TODO IMPLEMENT
+                onClick = { onClickAddTag() },
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_tag),
@@ -301,6 +302,7 @@ private fun SendAndReviewPreview() {
             ),
             onBack = {},
             onEvent = {},
+            onClickAddTag = {},
         )
     }
 }
@@ -330,6 +332,7 @@ private fun SendAndReviewPreview2() {
             ),
             onBack = {},
             onEvent = {},
+            onClickAddTag = {},
         )
     }
 }

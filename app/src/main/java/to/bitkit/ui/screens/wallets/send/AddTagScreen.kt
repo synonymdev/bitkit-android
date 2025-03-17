@@ -37,7 +37,7 @@ import to.bitkit.ui.theme.Colors
 fun AddTagScreen(
     tags: List<String>,
     onTagSelected: (String) -> Unit,
-    onTagAdded: (String) -> Unit,
+    onTagCreated: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -88,7 +88,7 @@ fun AddTagScreen(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagAdded(inputText)
+                    onTagCreated(inputText)
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -103,7 +103,7 @@ private fun Preview() {
         AddTagScreen(
             tags = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift"),
             onTagSelected = {},
-            onTagAdded = {}) { }
+            onTagCreated = {}) { }
     }
 }
 
@@ -114,6 +114,6 @@ private fun Preview2() {
         AddTagScreen(
             tags = listOf(),
             onTagSelected = {},
-            onTagAdded = {}) { }
+            onTagCreated = {}) { }
     }
 }
