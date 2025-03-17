@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.transfer.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -17,13 +18,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun TransferAnimationView(
-    largeCircleRes: Int,
-    smallCircleRes: Int,
+    @DrawableRes largeCircleRes: Int,
+    @DrawableRes smallCircleRes: Int,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -76,6 +79,17 @@ fun TransferAnimationView(
             modifier = Modifier
                 .fillMaxWidth()
                 .rotate(rotationArrows)
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        TransferAnimationView(
+            largeCircleRes = R.drawable.ln_sync_large,
+            smallCircleRes = R.drawable.ln_sync_small,
         )
     }
 }
