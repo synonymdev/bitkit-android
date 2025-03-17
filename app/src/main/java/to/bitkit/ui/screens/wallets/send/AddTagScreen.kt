@@ -25,9 +25,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -67,11 +66,10 @@ fun AddTagScreen(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             ) {
                 tags.map { tagText ->
-                    PrimaryButton( //TODO REPLACE WITH THE RIGHT COMPONENT
+                    TagButton(
                         tagText,
+                        isSelected = false,
                         onClick = { onTagSelected(tagText) },
-                        size = ButtonSize.Small,
-                        fullWidth = false
                     )
                 }
             }
