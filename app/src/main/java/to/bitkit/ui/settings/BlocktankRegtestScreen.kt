@@ -107,7 +107,7 @@ fun BlocktankRegtestScreen(
                         Logger.debug("Initiating regtest deposit with address: $depositAddress, amount: $depositAmount")
                         isDepositing = true
                         try {
-                            val amount = depositAmount.toIntOrNull() ?: error("Invalid deposit amount: $depositAmount")
+                            val amount = depositAmount.toULongOrNull() ?: error("Invalid deposit amount: $depositAmount")
                             val txId = viewModel.regtestDeposit(depositAddress, amount)
                             Logger.debug("Deposit successful with txId: $txId")
                             app.toast(
@@ -155,7 +155,7 @@ fun BlocktankRegtestScreen(
                             isMining = true
                             try {
                                 val count =
-                                    mineBlockCount.toIntOrNull() ?: error("Invalid block count: $mineBlockCount")
+                                    mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 app.toast(
@@ -206,7 +206,7 @@ fun BlocktankRegtestScreen(
                     coroutineScope.launch {
                         Logger.debug("Initiating regtest payment with invoice: $paymentInvoice, amount: $paymentAmount")
                         try {
-                            val amount = if (paymentAmount.isEmpty()) null else paymentAmount.toIntOrNull()
+                            val amount = if (paymentAmount.isEmpty()) null else paymentAmount.toULongOrNull()
                             val paymentId = viewModel.regtestPay(paymentInvoice, amount)
                             Logger.debug("Payment successful with ID: $paymentId")
                             app.toast(
@@ -264,8 +264,8 @@ fun BlocktankRegtestScreen(
                     coroutineScope.launch {
                         Logger.debug("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")
                         try {
-                            val voutNum = vout.toIntOrNull() ?: error("Invalid Vout: $vout")
-                            val closeAfter = forceCloseAfter.toIntOrNull()
+                            val voutNum = vout.toUIntOrNull() ?: error("Invalid Vout: $vout")
+                            val closeAfter = forceCloseAfter.toULongOrNull()
                                 ?: error("Invalid Force Close After: $forceCloseAfter")
                             val closingTxId = viewModel.regtestCloseChannel(
                                 fundingTxId = fundingTxId,

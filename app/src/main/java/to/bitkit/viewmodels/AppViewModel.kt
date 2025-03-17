@@ -24,6 +24,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.removeSpaces
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -230,11 +231,12 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onAddressChange(value: String) {
+        val valueWithoutSpaces = value.removeSpaces()
         viewModelScope.launch {
-            val result = runCatching { scannerService.decode(value) }
+            val result = runCatching { scannerService.decode(valueWithoutSpaces) }
             _sendUiState.update {
                 it.copy(
-                    addressInput = value,
+                    addressInput = valueWithoutSpaces,
                     isAddressInputValid = result.isSuccess,
                 )
             }

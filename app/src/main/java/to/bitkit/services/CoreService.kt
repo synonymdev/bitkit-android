@@ -84,8 +84,9 @@ class CoreService @Inject constructor(
             }
 
             try {
-                updateBlocktankUrl(newUrl = Env.blocktankClientServer)
-                Logger.info("Blocktank URL updated to ${Env.blocktankClientServer}")
+                val blocktankUrl = Env.blocktankClientServer
+                updateBlocktankUrl(newUrl = blocktankUrl)
+                Logger.info("Blocktank URL updated to $blocktankUrl")
             } catch (e: Exception) {
                 Logger.error("Failed to update Blocktank URL", e)
             }
@@ -405,9 +406,7 @@ class BlocktankService(
         options: CreateOrderOptions,
     ): IBtOrder {
         return ServiceQueue.CORE.background {
-            createOrder(
-                lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options,
-            )
+            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
         }
     }
 
