@@ -1,13 +1,8 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.BlocktankHttpClient
-import to.bitkit.data.RegisterDeviceRequest
-import to.bitkit.data.TestNotificationRequest
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
@@ -22,15 +17,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BlocktankServiceOld @Inject constructor(
+class BlocktankNotificationsService @Inject constructor(
     @BgDispatcher bgDispatcher: CoroutineDispatcher,
-    private val blocktankHttpClient: BlocktankHttpClient,
     private val lightningService: LightningService,
     private val keychain: Keychain,
     private val crypto: Crypto,
 ) : BaseCoroutineScope(bgDispatcher) {
 
-    // region notifications
     suspend fun registerDevice(deviceToken: String) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
@@ -51,17 +44,16 @@ class BlocktankServiceOld @Inject constructor(
         }
         keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
-        val payload = RegisterDeviceRequest(
-            deviceToken = deviceToken,
-            publicKey = publicKey,
-            features = Env.pushNotificationFeatures.map { it.toString() },
-            nodeId = nodeId,
-            isoTimestamp = "$timestamp",
-            signature = signature,
-        )
-
         ServiceQueue.CORE.background {
-            blocktankHttpClient.registerDevice(payload)
+            uniffi.bitkitcore.registerDevice(
+                deviceToken = deviceToken,
+                publicKey = publicKey,
+                features = Env.pushNotificationFeatures.map { it.toString() },
+                nodeId = nodeId,
+                isoTimestamp = "$timestamp",
+                signature = signature,
+                customUrl = Env.blocktankPushNotificationServer,
+            )
         }
 
         // Cache token so we can avoid re-registering
@@ -76,21 +68,13 @@ class BlocktankServiceOld @Inject constructor(
     suspend fun testNotification(deviceToken: String) {
         Logger.debug("Sending test notification to self…")
 
-        val payload = TestNotificationRequest(
-            data = TestNotificationRequest.Data(
-                source = "blocktank",
-                type = "incomingHtlc",
-                payload = JsonObject(
-                    mapOf(
-                        "secretMessage" to JsonPrimitive("hello")
-                    )
-                )
-            )
-        )
-
         ServiceQueue.CORE.background {
-            blocktankHttpClient.testNotification(deviceToken, payload)
+            uniffi.bitkitcore.testNotification(
+                deviceToken = deviceToken,
+                secretMessage = "hello",
+                notificationType = "incomingHtlc",
+                customUrl = Env.blocktankPushNotificationServer,
+            )
         }
     }
-    // endregion
 }

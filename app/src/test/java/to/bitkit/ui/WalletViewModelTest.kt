@@ -19,7 +19,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.services.BlocktankServiceOld
+import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
@@ -37,7 +37,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var coreService: CoreService = mock()
-    private var blocktankServiceOld: BlocktankServiceOld = mock()
+    private var blocktankNotificationsService: BlocktankNotificationsService = mock()
     private var lightningService: LightningService = mock()
     private var appStorage: AppStorage = mock()
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
@@ -70,7 +70,7 @@ class WalletViewModelTest : BaseUnitTest() {
             db = db,
             keychain = keychain,
             coreService = coreService,
-            blocktankServiceOld = blocktankServiceOld,
+            blocktankNotificationsService = blocktankNotificationsService,
             lightningService = lightningService,
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
@@ -114,7 +114,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankServiceOld).registerDevice("newToken")
+        verify(blocktankNotificationsService).registerDevice("newToken")
     }
 
     @Test
@@ -124,14 +124,14 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.start()
 
-        verify(blocktankServiceOld, never()).registerDevice(anyString())
+        verify(blocktankNotificationsService, never()).registerDevice(anyString())
     }
 
     @Test
     fun `manualRegisterForNotifications should register device with FCM token`() = test {
         sut.manualRegisterForNotifications()
 
-        verify(blocktankServiceOld).registerDevice("cachedToken")
+        verify(blocktankNotificationsService).registerDevice("cachedToken")
     }
 
     private fun setupExistingWalletMocks() {

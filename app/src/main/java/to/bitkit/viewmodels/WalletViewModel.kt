@@ -36,7 +36,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.services.BlocktankServiceOld
+import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
@@ -52,7 +52,7 @@ class WalletViewModel @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val coreService: CoreService,
-    private val blocktankServiceOld: BlocktankServiceOld,
+    private val blocktankNotificationsService: BlocktankNotificationsService,
     private val lightningService: LightningService,
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -226,7 +226,7 @@ class WalletViewModel @Inject constructor(
         }
 
         try {
-            blocktankServiceOld.registerDevice(token)
+            blocktankNotificationsService.registerDevice(token)
         } catch (e: Throwable) {
             Logger.error("Failed to register device for notifications", e)
         }
@@ -359,7 +359,7 @@ class WalletViewModel @Inject constructor(
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             val token = firebaseMessaging.token.await()
-            runCatching { blocktankServiceOld.registerDevice(token) }
+            runCatching { blocktankNotificationsService.registerDevice(token) }
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -414,19 +414,23 @@ class WalletViewModel @Inject constructor(
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            val token = FirebaseMessaging.getInstance().token.await()
-            blocktankServiceOld.testNotification(token)
+            try {
+                val token = FirebaseMessaging.getInstance().token.await()
+                blocktankNotificationsService.testNotification(token)
+            } catch (e: Throwable) {
+                Logger.error("Error in LSP notification test:", e)
+                ToastEventBus.send(e)
+            }
         }
     }
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) {
             try {
-                val info = coreService.blocktank.info()
+                val info = coreService.blocktank.info(refresh = true)
                 Logger.debug("Blocktank info: $info")
             } catch (e: Throwable) {
                 Logger.error("Error getting Blocktank info:", e)
-                ToastEventBus.send(e)
             }
         }
     }
