@@ -15,6 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -27,13 +29,33 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.TagsViewmodel
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AddTagScreen(
+    viewModel: TagsViewmodel,
+    onBack: () -> Unit,
+    onTagSelected: (String) -> Unit,
+    ) {
+    val uiState: AddTagUIState by viewModel.uiState.collectAsState()
+
+    AddTagScreen(
+        uiState = uiState,
+        onTagSelected = onTagSelected,
+        onTagConfirmed = { tag -> viewModel.addTag(tag)},
+        onInputUpdated = { newText -> viewModel.onInputUpdated(newText) },
+        onBack = onBack
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagScreen(
     uiState: AddTagUIState,
     onTagSelected: (String) -> Unit,
-    onTagCreated: (String) -> Unit,
+    onTagConfirmed: (String) -> Unit,
     onInputUpdated: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -58,7 +80,9 @@ fun AddTagScreen(
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
             ) {
                 uiState.tagsSuggestions.map { tagText ->
                     TagButton(
@@ -83,7 +107,7 @@ fun AddTagScreen(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagCreated(uiState.tagInput)
+                    onTagConfirmed(uiState.tagInput)
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -101,7 +125,7 @@ private fun Preview() {
             ),
             onTagSelected = {},
             onInputUpdated = {},
-            onTagCreated = {}
+            onTagConfirmed = {}
         ) { }
     }
 }
@@ -114,6 +138,6 @@ private fun Preview2() {
             uiState = AddTagUIState(),
             onTagSelected = {},
             onInputUpdated = {},
-            onTagCreated = {}) { }
+            onTagConfirmed = {}) { }
     }
 }
