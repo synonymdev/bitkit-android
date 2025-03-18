@@ -114,8 +114,8 @@ fun SendOptionsView(
                 AddTagScreen(
                     onBack = { navController.popBackStack() },
                     onTagSelected = { tag ->
+                        appViewModel.addTagToSelected(tag)
                         navController.popBackStack()
-                        //TODO PASS TAG AS BUNDLE
                     },
                 )
             }

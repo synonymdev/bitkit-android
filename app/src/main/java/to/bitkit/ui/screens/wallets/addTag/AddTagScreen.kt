@@ -39,13 +39,16 @@ fun AddTagScreen(
     viewModel: TagsViewmodel = hiltViewModel(),
     onBack: () -> Unit,
     onTagSelected: (String) -> Unit,
-    ) {
+) {
     val uiState: AddTagUIState by viewModel.uiState.collectAsState()
 
     AddTagContent(
         uiState = uiState,
         onTagSelected = onTagSelected,
-        onTagConfirmed = { tag -> viewModel.addTag(tag)},
+        onTagConfirmed = { tag ->
+            viewModel.addTag(tag)
+            onTagSelected(tag)
+        },
         onInputUpdated = { newText -> viewModel.onInputUpdated(newText) },
         onBack = onBack
     )
