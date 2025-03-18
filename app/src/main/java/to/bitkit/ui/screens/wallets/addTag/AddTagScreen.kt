@@ -42,7 +42,7 @@ fun AddTagScreen(
     ) {
     val uiState: AddTagUIState by viewModel.uiState.collectAsState()
 
-    AddTagScreen(
+    AddTagContent(
         uiState = uiState,
         onTagSelected = onTagSelected,
         onTagConfirmed = { tag -> viewModel.addTag(tag)},
@@ -53,7 +53,7 @@ fun AddTagScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AddTagScreen(
+fun AddTagContent(
     uiState: AddTagUIState,
     onTagSelected: (String) -> Unit,
     onTagConfirmed: (String) -> Unit,
@@ -120,7 +120,7 @@ fun AddTagScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        AddTagScreen(
+        AddTagContent(
             uiState = AddTagUIState(
                 tagsSuggestions = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift")
             ),
@@ -135,7 +135,7 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        AddTagScreen(
+        AddTagContent(
             uiState = AddTagUIState(),
             onTagSelected = {},
             onInputUpdated = {},
