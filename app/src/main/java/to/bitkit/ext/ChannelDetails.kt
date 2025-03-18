@@ -4,6 +4,17 @@ import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.MaxDustHtlcExposure
 
+/**
+ * Calculates the expected amount in sats that will be available upon channel closure.
+ */
+val ChannelDetails.amountOnClose: ULong
+    get() {
+        val outboundCapacitySat = this.outboundCapacityMsat / 1000u
+        val reserveSats = this.unspendablePunishmentReserve ?: 0u
+
+        return outboundCapacitySat + reserveSats
+    }
+
 fun mockChannelDetails(
     channelId: String,
     isChannelReady: Boolean = true,
@@ -13,7 +24,7 @@ fun mockChannelDetails(
         counterpartyNodeId = "counterpartyNodeId",
         fundingTxo = null,
         channelValueSats = 100_000uL,
-        unspendablePunishmentReserve = 0uL,
+        unspendablePunishmentReserve = 354uL,
         userChannelId = "userChannelId",
         feerateSatPer1000Weight = 5u,
         outboundCapacityMsat = 50_000uL,
@@ -25,7 +36,7 @@ fun mockChannelDetails(
         isUsable = true,
         isAnnounced = false,
         cltvExpiryDelta = null,
-        counterpartyUnspendablePunishmentReserve = 354uL,
+        counterpartyUnspendablePunishmentReserve = 0uL,
         counterpartyOutboundHtlcMinimumMsat = null,
         counterpartyOutboundHtlcMaximumMsat = null,
         counterpartyForwardingInfoFeeBaseMsat = null,

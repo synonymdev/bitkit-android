@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.amountOnClose
 import to.bitkit.services.filterOpen
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -78,7 +79,7 @@ fun SavingsAdvancedScreen(
         openChannels.map {
             TransferChannelUiState(
                 channelId = it.channelId,
-                balance = transfer.getChannelAmountOnClose(it.channelId),
+                balance = it.amountOnClose,
                 isSelected = selectedChannelIds.contains(it.channelId),
             )
         }

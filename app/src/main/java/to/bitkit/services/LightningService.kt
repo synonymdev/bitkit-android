@@ -271,21 +271,6 @@ class LightningService @Inject constructor(
             throw LdkError(e)
         }
     }
-
-    /** Calculates expected amount of funds received on channel close. */
-    fun getChannelAmountOnClose(channelId: String): ULong {
-        val channel = channels
-            ?.find { it.channelId == channelId }
-            ?.takeIf { it.isChannelReady } // only open channels
-            ?: return 0uL
-
-        val balance = balances?.lightningBalances
-            ?.filterIsInstance<LightningBalance.ClaimableOnChannelClose>()
-            ?.find { it.channelId == channel.channelId }
-            ?: return 0uL
-
-        return balance.amountSatoshis
-    }
     // endregion
 
     // region payments

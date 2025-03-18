@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
+import to.bitkit.ext.amountOnClose
 import to.bitkit.services.filterOpen
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -71,7 +72,7 @@ fun SavingsConfirmScreen(
 
     val channels = selectedChannels ?: openChannels
 
-    val amount = channels.sumOf { transfer.getChannelAmountOnClose(it.channelId) }
+    val amount = channels.sumOf { it.amountOnClose }
 
     SavingsConfirmContent(
         amount = amount,
