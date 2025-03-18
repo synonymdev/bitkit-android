@@ -85,23 +85,34 @@ class TransferViewModel @Inject constructor(
         var error: Throwable? = null
 
         viewModelScope.launch {
+            Logger.debug("Started to watch order order $orderId")
+
             while (!isSettled && error == null) {
                 try {
                     Logger.debug("Refreshing order $orderId")
-                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).first()
+                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).firstOrNull()
+                    if (order == null) {
+                        error = Exception("Order not found $orderId")
+                        Logger.error("Order not found $orderId", context = "TransferViewModel")
+                        break
+                    }
+
                     val step = updateOrder(order)
                     settingsStore.setLightningSetupStep(step)
                     Logger.debug("LN setup step: $step")
 
                     if (order.state2 == BtOrderState2.EXPIRED) {
                         error = Exception("Order expired $orderId")
+                        Logger.error("Order expired $orderId", context = "TransferViewModel")
                         break
                     }
                     if (step > 2) {
+                        Logger.debug("Order settled, stopping watch")
                         isSettled = true
                         break
                     }
                 } catch (e: Throwable) {
+                    Logger.error("Failed to watch order", e)
                     error = e
                     break
                 }
@@ -111,19 +122,18 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    @Suppress("IntroduceWhenSubject")
     private suspend fun updateOrder(order: IBtOrder): Int {
         var currentStep = 0
         if (order.channel != null) {
             return 3
         }
 
-        when {
-            order.state2 == BtOrderState2.CREATED -> {
+        when (order.state2) {
+            BtOrderState2.CREATED -> {
                 currentStep = 0
             }
 
-            order.state2 == BtOrderState2.PAID -> {
+            BtOrderState2.PAID -> {
                 currentStep = 1
 
                 try {
@@ -133,9 +143,11 @@ class TransferViewModel @Inject constructor(
                 }
             }
 
-            order.state2 == BtOrderState2.EXECUTED -> {
+            BtOrderState2.EXECUTED -> {
                 currentStep = 2
             }
+
+            else -> Unit
         }
         return currentStep
     }
