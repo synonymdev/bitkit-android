@@ -46,7 +46,6 @@ fun AddTagScreen(
         uiState = uiState,
         onTagSelected = onTagSelected,
         onTagConfirmed = { tag ->
-            viewModel.addTag(tag)
             onTagSelected(tag)
         },
         onInputUpdated = { newText -> viewModel.onInputUpdated(newText) },

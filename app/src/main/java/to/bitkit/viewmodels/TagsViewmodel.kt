@@ -35,8 +35,8 @@ class TagsViewmodel @Inject constructor(
         }
     }
 
-    fun addTag(tag: String) {
-        addTags(activityId = "", tags = listOf(tag)) //TODO ADD ACTIVITY ID
+    fun addTag(activityId: String, tag: String) {
+        addTags(activityId = activityId, tags = listOf(tag))
     }
 
     fun onInputUpdated(input: String) {
