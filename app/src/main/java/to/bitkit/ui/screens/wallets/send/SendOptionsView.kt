@@ -111,10 +111,13 @@ fun SendOptionsView(
                 )
             }
             composable<SendRoute.AddTag> {
-//                AddTagScreen(
-//                    onBack = { navController.popBackStack() },
-//
-//                )
+                AddTagScreen(
+                    onBack = { navController.popBackStack() },
+                    onTagSelected = { tag ->
+                        navController.popBackStack()
+                        //TODO PASS TAG AS BUNDLE
+                    },
+                )
             }
         }
     }

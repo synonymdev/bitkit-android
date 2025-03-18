@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.TagButton
@@ -35,7 +36,7 @@ import to.bitkit.viewmodels.TagsViewmodel
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagScreen(
-    viewModel: TagsViewmodel,
+    viewModel: TagsViewmodel = hiltViewModel(),
     onBack: () -> Unit,
     onTagSelected: (String) -> Unit,
     ) {
