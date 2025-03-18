@@ -122,7 +122,7 @@ class BlocktankViewModel @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = 6u,
     ): IBtOrder {
-        val options = defaultCreateOrderOptions(receivingBalanceSats)
+        val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
         Logger.info("Buying channel with these options: $options")
 
