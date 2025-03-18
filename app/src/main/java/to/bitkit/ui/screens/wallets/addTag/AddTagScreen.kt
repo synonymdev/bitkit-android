@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallets.send
+package to.bitkit.ui.screens.wallets.addTag
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,10 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -35,16 +31,15 @@ import to.bitkit.ui.theme.Colors
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagScreen(
-    tags: List<String>,
+    uiState: AddTagUIState,
     onTagSelected: (String) -> Unit,
     onTagCreated: (String) -> Unit,
+    onInputUpdated: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        var inputText by remember { mutableStateOf("") }
-
 
         SheetTopBar(stringResource(R.string.wallet__tags_add)) {
             onBack()
@@ -55,7 +50,7 @@ fun AddTagScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
         ) {
-            if (tags.isNotEmpty()) {
+            if (uiState.tagsSuggestions.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Caption13Up(text = stringResource(R.string.wallet__tags_previously), color = Colors.White64)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -65,7 +60,7 @@ fun AddTagScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             ) {
-                tags.map { tagText ->
+                uiState.tagsSuggestions.map { tagText ->
                     TagButton(
                         tagText,
                         isSelected = false,
@@ -78,8 +73,8 @@ fun AddTagScreen(
             Spacer(modifier = Modifier.height(16.dp))
             TextField(
                 placeholder = { Text(stringResource(R.string.wallet__tags_new_enter)) },
-                value = inputText,
-                onValueChange = { newText -> inputText = newText },
+                value = uiState.tagInput,
+                onValueChange = onInputUpdated,
                 maxLines = 1,
                 singleLine = true,
                 colors = AppTextFieldDefaults.noIndicatorColors,
@@ -88,7 +83,7 @@ fun AddTagScreen(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagCreated(inputText)
+                    onTagCreated(uiState.tagInput)
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -101,9 +96,13 @@ fun AddTagScreen(
 private fun Preview() {
     AppThemeSurface {
         AddTagScreen(
-            tags = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift"),
+            uiState = AddTagUIState(
+                tagsSuggestions = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift")
+            ),
             onTagSelected = {},
-            onTagCreated = {}) { }
+            onInputUpdated = {},
+            onTagCreated = {}
+        ) { }
     }
 }
 
@@ -112,8 +111,9 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         AddTagScreen(
-            tags = listOf(),
+            uiState = AddTagUIState(),
             onTagSelected = {},
+            onInputUpdated = {},
             onTagCreated = {}) { }
     }
 }
