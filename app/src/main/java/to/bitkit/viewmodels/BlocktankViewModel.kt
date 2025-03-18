@@ -122,26 +122,9 @@ class BlocktankViewModel @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = 6u,
     ): IBtOrder {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val options = defaultCreateOrderOptions(receivingBalanceSats)
 
-        val timestamp = nowTimestamp().toString()
-        val signature = lightningService.sign("channelOpen-$timestamp")
-
-        val options = CreateOrderOptions(
-            clientBalanceSat = spendingBalanceSats,
-            lspNodeId = null,
-            couponCode = "",
-            source = "bitkit-android",
-            discountCode = null,
-            zeroConf = true,
-            zeroConfPayment = false,
-            zeroReserve = true,
-            clientNodeId = nodeId,
-            signature = signature,
-            timestamp = timestamp,
-            refundOnchainAddress = null,
-            announceChannel = false,
-        )
+        Logger.info("Buying channel with these options: $options")
 
         return coreService.blocktank.newOrder(
             lspBalanceSat = receivingBalanceSats,
@@ -157,6 +140,7 @@ class BlocktankViewModel @Inject constructor(
     ): IBtEstimateFeeResponse2 {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
+        // TODO use defaultCreateOrderOptions() ?!
         val options = defaultCreateOrderOptions.copy(
             clientBalanceSat = spendingBalanceSats,
             clientNodeId = nodeId,
@@ -186,6 +170,29 @@ class BlocktankViewModel @Inject constructor(
         val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
         val totalValue = btChannels.sumOf { it.channelValueSats }
         return totalValue
+    }
+
+    private suspend fun defaultCreateOrderOptions(clientBalanceSat: ULong): CreateOrderOptions {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+
+        val timestamp = nowTimestamp().toString()
+        val signature = lightningService.sign("channelOpen-$timestamp")
+
+        return CreateOrderOptions(
+            clientBalanceSat = clientBalanceSat,
+            lspNodeId = null,
+            couponCode = "",
+            source = "bitkit-android",
+            discountCode = null,
+            zeroConf = true,
+            zeroConfPayment = false,
+            zeroReserve = true,
+            clientNodeId = nodeId,
+            signature = signature,
+            timestamp = timestamp,
+            refundOnchainAddress = null,
+            announceChannel = false,
+        )
     }
 }
 
