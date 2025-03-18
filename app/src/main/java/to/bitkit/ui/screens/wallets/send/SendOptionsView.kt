@@ -111,19 +111,10 @@ fun SendOptionsView(
                 )
             }
             composable<SendRoute.AddTag> {
-                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
-                AddTagScreen(
-                    tags = uiState.suggestionTags,
-                    onBack = { navController.popBackStack() },
-                    onTagSelected = { tag ->
-                        //TODO IMPLEMENT
-                        navController.popBackStack()
-                    },
-                    onTagCreated = {
-                        //TODO IMPLEMENT
-                        navController.popBackStack()
-                    }
-                )
+//                AddTagScreen(
+//                    onBack = { navController.popBackStack() },
+//
+//                )
             }
         }
     }
