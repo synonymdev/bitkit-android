@@ -164,7 +164,7 @@ fun SpendingAdvancedScreen(
                     text = stringResource(R.string.common__default),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = order.lspBalanceSat.toLong()
+                        overrideSats = transferValues.defaultLspBalance
                     },
                 )
                 // Max Button
