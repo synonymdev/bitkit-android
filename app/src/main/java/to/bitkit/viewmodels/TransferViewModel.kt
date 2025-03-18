@@ -23,6 +23,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.BtOrderState2
+import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
 import javax.inject.Inject
 
@@ -44,6 +45,17 @@ class TransferViewModel @Inject constructor(
     private val _selectedChannelIdsState = MutableStateFlow<Set<String>>(emptySet())
     val selectedChannelIdsState = _selectedChannelIdsState.asStateFlow()
 
+    fun totalBtChannelsValueSats(info: IBtInfo?): ULong {
+        val channels = lightningService.channels ?: return 0u
+        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
+
+        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
+
+        val totalValue = btChannels.sumOf { it.channelValueSats }
+
+        return totalValue
+    }
+
     // region Spending
 
     fun onOrderCreated(order: IBtOrder) {
@@ -59,10 +71,7 @@ class TransferViewModel @Inject constructor(
     fun onTransferToSpendingConfirm(order: IBtOrder) {
         viewModelScope.launch {
             try {
-                lightningService.send(
-                    address = order.payment.onchain.address,
-                    sats = order.feeSat,
-                )
+                lightningService.send(address = order.payment.onchain.address, sats = order.feeSat)
                 settingsStore.setLightningSetupStep(0)
                 watchOrder(order.id)
             } catch (e: Throwable) {

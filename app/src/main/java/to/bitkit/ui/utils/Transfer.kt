@@ -3,6 +3,7 @@ package to.bitkit.ui.utils
 import androidx.compose.runtime.Composable
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.transferViewModel
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -47,10 +48,11 @@ fun getMaxClientBalance(maxChannelSize: Long): Long {
 
 @Composable
 fun useTransfer(clientBalanceSat: Long): TransferValues {
+    val transfer = transferViewModel ?: return TransferValues()
     val blocktank = blocktankViewModel ?: return TransferValues()
     val blocktankInfo = blocktank.info ?: return TransferValues()
 
-    val channelsSize = blocktank.totalBtChannelsValueSats().toLong()
+    val channelsSize = transfer.totalBtChannelsValueSats(blocktankInfo).toLong()
 
     val (minChannelSizeSat, maxChannelSizeSat) = blocktankInfo.options.let {
         it.minChannelSizeSat to it.maxChannelSizeSat
