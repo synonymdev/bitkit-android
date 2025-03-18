@@ -7,6 +7,7 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.utils.AppError
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -42,7 +43,7 @@ class CurrencyService @Inject constructor(
 
     fun convert(sats: Long, rate: FxRate): ConvertedAmount? {
         val btcAmount = BigDecimal(sats).divide(BigDecimal(100_000_000))
-        val value: BigDecimal = btcAmount.multiply(BigDecimal(rate.rate))
+        val value: BigDecimal = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
 
         val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
             decimalSeparator = '.'
@@ -62,6 +63,15 @@ class CurrencyService @Inject constructor(
             flag = rate.currencyFlag,
             sats = sats,
         )
+    }
+
+    fun convertFiatToSats(fiatValue: BigDecimal, rate: FxRate): ULong {
+        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
+        val satsDecimal = btcAmount.multiply(BigDecimal(100_000_000))
+
+        val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+
+        return roundedNumber.toLong().toULong()
     }
 
     fun getAvailableCurrencies(rates: List<FxRate>): List<String> {
