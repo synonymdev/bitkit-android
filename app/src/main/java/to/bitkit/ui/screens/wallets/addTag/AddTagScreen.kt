@@ -79,20 +79,20 @@ fun AddTagContent(
                 Spacer(modifier = Modifier.height(16.dp))
                 Caption13Up(text = stringResource(R.string.wallet__tags_previously), color = Colors.White64)
                 Spacer(modifier = Modifier.height(16.dp))
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                uiState.tagsSuggestions.map { tagText ->
-                    TagButton(
-                        tagText,
-                        isSelected = false,
-                        onClick = { onTagSelected(tagText) },
-                    )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    uiState.tagsSuggestions.map { tagText ->
+                        TagButton(
+                            tagText,
+                            isSelected = false,
+                            onClick = { onTagSelected(tagText) },
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
