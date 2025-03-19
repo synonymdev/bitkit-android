@@ -1,11 +1,5 @@
 package to.bitkit.ui.screens.transfer
 
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +19,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +33,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.ProgressSteps
+import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
@@ -56,7 +50,7 @@ fun SettingUpScreen(
     SettingUpScreen(
         lightningSetupStep = lightningSetupStep,
         onContinueClick = {
-            viewModel.resetState()
+            viewModel.resetSpendingState()
             onContinueClick()
         },
         onCloseClick = onCloseClick,
@@ -120,7 +114,10 @@ private fun SettingUpScreen(
             }
             Spacer(modifier = Modifier.height(28.dp))
             if (inProgress) {
-                AnimationView()
+                TransferAnimationView(
+                    largeCircleRes = R.drawable.ln_sync_large,
+                    smallCircleRes = R.drawable.ln_sync_small,
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 val steps = listOf(
                     stringResource(R.string.lightning__setting_up_step1),
@@ -165,64 +162,6 @@ private fun SettingUpScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-}
-
-
-@Composable
-private fun AnimationView() {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.padding(horizontal = 16.dp)
-    ) {
-        val infiniteTransition = rememberInfiniteTransition("transition")
-        val rotationLarge by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = -270f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 3000, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "circleSmallRotation"
-        )
-        val rotationSmall by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 180f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2500, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "circleSmallRotation"
-        )
-        val rotationArrows by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 90f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "arrowsRotation"
-        )
-        Image(
-            painter = painterResource(id = R.drawable.ln_sync_large),
-            contentDescription = null,
-            modifier = Modifier
-                .rotate(rotationLarge)
-        )
-        Image(
-            painter = painterResource(id = R.drawable.ln_sync_small),
-            contentDescription = null,
-            modifier = Modifier
-                .rotate(rotationSmall)
-        )
-        Image(
-            painter = painterResource(id = R.drawable.transfer),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxWidth()
-                .rotate(rotationArrows)
-        )
     }
 }
 

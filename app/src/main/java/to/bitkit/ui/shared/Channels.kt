@@ -66,6 +66,7 @@ internal fun Channels(
 
                 ChannelItem(
                     isReady = it.isChannelReady,
+                    isUsable = it.isUsable,
                     isAnnounced = it.isAnnounced,
                     inboundHtlcMax = inboundHtlcMax.toLong(),
                     inboundHtlcMin = inboundHtlcMin.toLong(),
@@ -89,6 +90,7 @@ internal fun Channels(
 @Composable
 private fun ChannelItem(
     isReady: Boolean,
+    isUsable: Boolean,
     isAnnounced: Boolean,
     inboundHtlcMax: Long,
     inboundHtlcMin: Long,
@@ -150,6 +152,7 @@ private fun ChannelItem(
         Column {
             val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal)
             Text("Announced: $isAnnounced", style = style)
+            Text("Usable: $isUsable", style = style)
             Text("Inbound htlc max: " + moneyString(inboundHtlcMax), style = style)
             Text("Inbound htlc min: " + moneyString(inboundHtlcMin), style = style)
             Text("Next outbound htlc limit: " + moneyString(nextOutboundHtlcLimit), style = style)
@@ -164,6 +167,7 @@ private fun ChannelItemPreview() {
     AppThemeSurface {
         ChannelItem(
             isReady = true,
+            isUsable = true,
             channelId = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789",
             outbound = 1000,
             inbound = 1000,

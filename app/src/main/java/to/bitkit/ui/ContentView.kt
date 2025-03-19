@@ -40,6 +40,11 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
+import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen
+import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen
+import to.bitkit.ui.screens.transfer.SavingsConfirmScreen
+import to.bitkit.ui.screens.transfer.SavingsIntroScreen
+import to.bitkit.ui.screens.transfer.SavingsProgressScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
@@ -219,6 +224,44 @@ fun ContentView(
                 ) {
                     composable<Routes.TransferIntro> {
                         TransferIntroScreen()
+                    }
+                    composable<Routes.SavingsIntro> {
+                        SavingsIntroScreen(
+                            onContinueClick = {
+                                navController.navigate(Routes.SavingsAvailability)
+                                appViewModel.setHasSeenSavingsIntro(true)
+                            },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsAvailability> {
+                        SavingsAvailabilityScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCancelClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
+                        )
+                    }
+                    composable<Routes.SavingsConfirm> {
+                        SavingsConfirmScreen(
+                            onConfirm = { navController.navigate(Routes.SavingsProgress) },
+                            onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsAdvanced> {
+                        SavingsAdvancedScreen(
+                            onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
+                    }
+                    composable<Routes.SavingsProgress> {
+                        SavingsProgressScreen(
+                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                        )
                     }
                     composable<Routes.SpendingIntro> {
                         SpendingIntroScreen(
@@ -567,6 +610,14 @@ fun NavController.navigateToRegtestSettings() = navigate(
     route = Routes.RegtestSettings,
 )
 
+fun NavController.navigateToTransferSavingsIntro() = navigate(
+    route = Routes.SavingsIntro,
+)
+
+fun NavController.navigateToTransferSavingsAvailability() = navigate(
+    route = Routes.SavingsAvailability,
+)
+
 fun NavController.navigateToTransferSpendingIntro() = navigate(
     route = Routes.SpendingIntro,
 )
@@ -661,6 +712,21 @@ object Routes {
 
     @Serializable
     data object SettingUp
+
+    @Serializable
+    data object SavingsIntro
+
+    @Serializable
+    data object SavingsAvailability
+
+    @Serializable
+    data object SavingsConfirm
+
+    @Serializable
+    data object SavingsAdvanced
+
+    @Serializable
+    data object SavingsProgress
 
     @Serializable
     data object Funding

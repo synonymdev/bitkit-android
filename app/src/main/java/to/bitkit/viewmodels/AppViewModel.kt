@@ -87,6 +87,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.hasSeenSavingsIntro
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenSavingsIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setHasSeenSavingsIntro(value)
+        }
+    }
+
     private var scan: Scanner? = null
 
     init {

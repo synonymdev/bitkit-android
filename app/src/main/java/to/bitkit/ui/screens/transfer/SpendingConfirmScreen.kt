@@ -59,7 +59,7 @@ fun SpendingConfirmScreen(
     onConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val isAdvanced = state.isAdvanced
 
@@ -146,7 +146,7 @@ fun SpendingConfirmScreen(
                     fullWidth = false,
                     onClick = {
                         if (isAdvanced) {
-                            viewModel.onDefaultClick()
+                            viewModel.onUseDefaultLspBalanceClick()
                         } else {
                             onAdvancedClick()
                         }
@@ -176,7 +176,7 @@ fun SpendingConfirmScreen(
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        viewModel.payOrder(order)
+                        viewModel.onTransferToSpendingConfirm(order)
                         onConfirm()
                     }
                 }
