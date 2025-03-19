@@ -638,7 +638,7 @@ data class SendUiState(
     val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
-    val selectedTags: List<String> = listOf(), //TODO save tags in other PR
+    val selectedTags: List<String> = listOf(),
     val decodedInvoice: LightningInvoice? = null,
 )
 

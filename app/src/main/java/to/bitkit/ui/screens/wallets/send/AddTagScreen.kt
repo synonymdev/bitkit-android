@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallets.addTag
+package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,17 +30,18 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.TagsViewmodel
+import to.bitkit.viewmodels.AddTagUiState
+import to.bitkit.viewmodels.TagsViewModel
 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagScreen(
-    viewModel: TagsViewmodel = hiltViewModel(),
+    viewModel: TagsViewModel = hiltViewModel(),
     onBack: () -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
-    val uiState: AddTagUIState by viewModel.uiState.collectAsState()
+    val uiState: AddTagUiState by viewModel.uiState.collectAsState()
 
     AddTagContent(
         uiState = uiState,
@@ -56,7 +57,7 @@ fun AddTagScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagContent(
-    uiState: AddTagUIState,
+    uiState: AddTagUiState,
     onTagSelected: (String) -> Unit,
     onTagConfirmed: (String) -> Unit,
     onInputUpdated: (String) -> Unit,
@@ -123,7 +124,7 @@ fun AddTagContent(
 private fun Preview() {
     AppThemeSurface {
         AddTagContent(
-            uiState = AddTagUIState(
+            uiState = AddTagUiState(
                 tagsSuggestions = listOf("Lunch", "Mom", "Dad", "Dinner", "Tip", "Gift")
             ),
             onTagSelected = {},
@@ -138,7 +139,7 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         AddTagContent(
-            uiState = AddTagUIState(),
+            uiState = AddTagUiState(),
             onTagSelected = {},
             onInputUpdated = {},
             onTagConfirmed = {}) { }

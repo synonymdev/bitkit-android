@@ -9,16 +9,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.services.CoreService
-import to.bitkit.ui.screens.wallets.addTag.AddTagUIState
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
-class TagsViewmodel @Inject constructor(
+class TagsViewModel @Inject constructor(
     private val coreService: CoreService,
 ): ViewModel() {
 
-    private val _uiState = MutableStateFlow(AddTagUIState())
+    private val _uiState = MutableStateFlow(AddTagUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
@@ -50,3 +49,8 @@ class TagsViewmodel @Inject constructor(
         }
     }
 }
+
+data class AddTagUiState(
+    val tagsSuggestions: List<String> = listOf(),
+    val tagInput: String = ""
+)
