@@ -3,6 +3,8 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,9 +36,11 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -47,11 +51,13 @@ import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.NetworkType
 import java.time.Instant
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SendAndReviewScreen(
     uiState: SendUiState,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
+    onClickAddTag: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -80,10 +86,25 @@ fun SendAndReviewScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
             Spacer(modifier = Modifier.height(8.dp))
-            //TODO DISPLAY TAGS
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                uiState.selectedTags.map { tagText ->
+                    TagButton(
+                        text = tagText,
+                        isSelected = false,
+                        onClick = {  }, //TODO IMPLEMENT IN OTHER PR
+                    )
+                }
+            }
             PrimaryButton(
-                stringResource(R.string.wallet__tags_add),
-                onClick = {}, //TODO IMPLEMENT
+                text = stringResource(R.string.wallet__tags_add),
+                size = ButtonSize.Small,
+                onClick = { onClickAddTag() },
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_tag),
@@ -301,6 +322,7 @@ private fun SendAndReviewPreview() {
             ),
             onBack = {},
             onEvent = {},
+            onClickAddTag = {},
         )
     }
 }
@@ -330,6 +352,7 @@ private fun SendAndReviewPreview2() {
             ),
             onBack = {},
             onEvent = {},
+            onClickAddTag = {},
         )
     }
 }
