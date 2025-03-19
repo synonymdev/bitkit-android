@@ -870,8 +870,8 @@
     <string name="wallet__send_swipe">Zaplatit přejetím prstem</string>
     <string name="wallet__send_yes">Ano, odeslat</string>
     <string name="wallet__send_dialog1">Zdá se, že posíláte více než $100. Přejete si pokračovat?</string>
-    <string name="wallet__send_dialog2">Zdá se, že posíláte více než 50 % svého celkového zůstatku. Přejete si pokračovat?</string>
-    <string name="wallet__send_dialog3">Zdá se, že transakční poplatek přesahuje 50 % částky, kterou odesíláte. Přejete si pokračovat?</string>
+    <string name="wallet__send_dialog2">Zdá se, že posíláte více než 50 %% svého celkového zůstatku. Přejete si pokračovat?</string>
+    <string name="wallet__send_dialog3">Zdá se, že transakční poplatek přesahuje 50 %% částky, kterou odesíláte. Přejete si pokračovat?</string>
     <string name="wallet__send_dialog4">Transakční poplatek se zdá být vyšší než $10. Přejete si pokračovat?</string>
     <string name="wallet__send_dialog5_title">Poplatek je potenciálně příliš nízký</string>
     <string name="wallet__send_dialog5_description">Současné síťové podmínky vyžadují, aby váš poplatek byl vyšší než {minimumFee} ₿/vbyte. Tato transakce může selhat, chvíli trvat, než se potvrdí nebo může být z mempoolu odstraněna. Přejete si pokračovat?</string>

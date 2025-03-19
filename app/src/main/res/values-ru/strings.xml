@@ -828,8 +828,8 @@
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_yes">Да, Отправить</string>
     <string name="wallet__send_dialog1">Похоже, вы отправляете более 100$. Вы хотите продолжать?</string>
-    <string name="wallet__send_dialog2">Похоже, вы отправляете более 50% от общего баланса. Вы хотите продолжать?</string>
-    <string name="wallet__send_dialog3">Комиссия за транзакцию составляет более 50% от суммы, которую вы отправляете. Вы хотите продолжать?</string>
+    <string name="wallet__send_dialog2">Похоже, вы отправляете более 50%% от общего баланса. Вы хотите продолжать?</string>
+    <string name="wallet__send_dialog3">Комиссия за транзакцию составляет более 50%% от суммы, которую вы отправляете. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog4">Комиссия за транзакцию составляет более 10$. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog5_title">Комиссия может быть слишком низкой</string>
     <string name="wallet__send_dialog5_description">Текущие условия сети требуют, чтобы ваша комиссия была больше {minimumFee} ₿/вбайт. Эта транзакция может не пройти, занять время на подтверждение или быть удалена из мемпула. Вы хотите продолжить?</string>

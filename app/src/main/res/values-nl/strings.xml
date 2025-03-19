@@ -623,8 +623,8 @@
     <string name="wallet__send_swipe">Veeg Om Te Betalen</string>
     <string name="wallet__send_yes">Ja, Verstuur</string>
     <string name="wallet__send_dialog1">Het lijkt er op dat u meer dan $100 wilt versturen. Wilt u doorgaan?</string>
-    <string name="wallet__send_dialog2">Het lijkt er op dat u meer dan 50% van uw totale saldo wil versturen. Wilt u doorgaan?</string>
-    <string name="wallet__send_dialog3">De transactiekosten lijken meer dan 50% van het totale bedrag wat u wilt versturen. Wilt u doorgaan?</string>
+    <string name="wallet__send_dialog2">Het lijkt er op dat u meer dan 50%% van uw totale saldo wil versturen. Wilt u doorgaan?</string>
+    <string name="wallet__send_dialog3">De transactiekosten lijken meer dan 50%% van het totale bedrag wat u wilt versturen. Wilt u doorgaan?</string>
     <string name="wallet__send_dialog4">De transactiekosten lijken meer dan $10 te zijn. Wilt u doorgaan?</string>
     <string name="wallet__send_dialog5_title">Vergoeding is mogelijk te laag</string>
     <string name="wallet__send_dialog5_description">De huidige netwerkomstandigheden vereisen dat uw vergoeding groter is dan {minimumFee} ₿/vbyte. Deze transactie kan mislukken, lang duren om te bevestigen, of uit de mempool worden verwijderd. Wilt u doorgaan?</string>

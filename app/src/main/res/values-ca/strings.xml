@@ -505,8 +505,8 @@
     <string name="wallet__send_swipe">Desplaça per pagar</string>
     <string name="wallet__send_yes">Sí, Enviar</string>
     <string name="wallet__send_dialog1">Sembla que estàs enviant més de 100 $. Vols continuar?</string>
-    <string name="wallet__send_dialog2">Sembla que estàs enviant més del 50% del teu saldo total. Vols continuar?</string>
-    <string name="wallet__send_dialog3">La comissió de la transacció sembla ser més del 50% de l\'import que estàs enviant. Vols continuar?</string>
+    <string name="wallet__send_dialog2">Sembla que estàs enviant més del 50%% del teu saldo total. Vols continuar?</string>
+    <string name="wallet__send_dialog3">La comissió de la transacció sembla ser més del 50%% de l\'import que estàs enviant. Vols continuar?</string>
     <string name="wallet__send_dialog4">La comissió de la transacció sembla ser superior a 10 $. Vols continuar?</string>
     <string name="wallet__send_dialog5_title">La comissió és massa baixa</string>
     <string name="wallet__send_sent">Bitcoin Enviat</string>

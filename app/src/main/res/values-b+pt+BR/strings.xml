@@ -768,8 +768,8 @@
     <string name="wallet__send_swipe">Passe o dedo para Pagar</string>
     <string name="wallet__send_yes">Sim, Enviar</string>
     <string name="wallet__send_dialog1">Parece que você está enviando mais de US$ 100. Deseja continuar?</string>
-    <string name="wallet__send_dialog2">Parece que você está enviando mais de 50% do seu saldo total. Deseja continuar?</string>
-    <string name="wallet__send_dialog3">A taxa de transação parece ser superior a 50% do valor que você está enviando. Deseja continuar?</string>
+    <string name="wallet__send_dialog2">Parece que você está enviando mais de 50%% do seu saldo total. Deseja continuar?</string>
+    <string name="wallet__send_dialog3">A taxa de transação parece ser superior a 50%% do valor que você está enviando. Deseja continuar?</string>
     <string name="wallet__send_dialog4">A taxa de transação parece ser superior a US$ 10. Deseja continuar?</string>
     <string name="wallet__send_dialog5_title">A taxa é potencialmente muito baixa</string>
     <string name="wallet__send_dialog5_description">As condições atuais da rede exigem que sua taxa seja maior que {minimumFee} ₿/vbyte. Essa transação pode falhar, demorar um pouco para ser confirmada ou ser excluída da mempool. Deseja prosseguir?</string>

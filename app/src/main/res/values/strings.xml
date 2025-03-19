@@ -870,8 +870,8 @@
     <string name="wallet__send_swipe">Swipe To Pay</string>
     <string name="wallet__send_yes">Yes, Send</string>
     <string name="wallet__send_dialog1">It appears you are sending over $100. Do you want to continue?</string>
-    <string name="wallet__send_dialog2">It appears you are sending over 50% of your total balance. Do you want to continue?</string>
-    <string name="wallet__send_dialog3">The transaction fee appears to be over 50% of the amount you are sending. Do you want to continue?</string>
+    <string name="wallet__send_dialog2">It appears you are sending over 50%% of your total balance. Do you want to continue?</string>
+    <string name="wallet__send_dialog3">The transaction fee appears to be over 50%% of the amount you are sending. Do you want to continue?</string>
     <string name="wallet__send_dialog4">The transaction fee appears to be over $10. Do you want to continue?</string>
     <string name="wallet__send_dialog5_title">Fee is potentially too low</string>
     <string name="wallet__send_dialog5_description">Current network conditions require that your fee should be greater than {minimumFee} ₿/vbyte. This transaction may fail, take a while to confirm, or get trimmed from the mempool. Do you wish to proceed?</string>

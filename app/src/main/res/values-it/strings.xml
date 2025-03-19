@@ -770,7 +770,7 @@
     <string name="wallet__send_swipe">Scorri per Pagare</string>
     <string name="wallet__send_yes">Si, Invia</string>
     <string name="wallet__send_dialog1">Sembra che tu stia inviando più di $100. Vuoi continuare?</string>
-    <string name="wallet__send_dialog2">Sembra che tu stia inviando più del 50% del suo saldo totale. Vuoi continuare?</string>
+    <string name="wallet__send_dialog2">Sembra che tu stia inviando più del 50%% del suo saldo totale. Vuoi continuare?</string>
     <string name="wallet__send_dialog3">La commissione della transazione sembra essere superiore al 50% dell\'importo che stai inviando. Vuoi continuare?</string>
     <string name="wallet__send_dialog4">La commissione della transazione sembra essere superiore a $10. Vuoi continuare?</string>
     <string name="wallet__send_dialog5_title">Le commissione è potenzialmente troppo bassa</string>
