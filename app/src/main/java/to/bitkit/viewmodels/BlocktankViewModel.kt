@@ -138,13 +138,7 @@ class BlocktankViewModel @Inject constructor(
         receivingBalanceSats: ULong,
         channelExpiryWeeks: UInt = 6u,
     ): IBtEstimateFeeResponse2 {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
-
-        // TODO use defaultCreateOrderOptions() ?!
-        val options = defaultCreateOrderOptions.copy(
-            clientBalanceSat = spendingBalanceSats,
-            clientNodeId = nodeId,
-        )
+        val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
         return coreService.blocktank.estimateFee(
             lspBalanceSat = receivingBalanceSats,
@@ -186,19 +180,3 @@ class BlocktankViewModel @Inject constructor(
         )
     }
 }
-
-private val defaultCreateOrderOptions = CreateOrderOptions(
-    clientBalanceSat = 0uL,
-    lspNodeId = null,
-    couponCode = "",
-    source = "bitkit-android",
-    discountCode = null,
-    zeroConf = true,
-    zeroConfPayment = false,
-    zeroReserve = true,
-    clientNodeId = null,
-    signature = null,
-    timestamp = null,
-    refundOnchainAddress = null,
-    announceChannel = false,
-)
