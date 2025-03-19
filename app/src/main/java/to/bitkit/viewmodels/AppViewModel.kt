@@ -99,7 +99,7 @@ class AppViewModel @Inject constructor(
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(
-                selectedTags = it.selectedTags + newTag
+                selectedTags = (it.selectedTags + newTag).distinct()
             )
         }
     }
