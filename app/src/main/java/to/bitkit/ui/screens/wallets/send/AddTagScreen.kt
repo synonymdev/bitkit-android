@@ -128,8 +128,9 @@ private fun Preview() {
             ),
             onTagSelected = {},
             onInputUpdated = {},
-            onTagConfirmed = {}
-        ) { }
+            onTagConfirmed = {},
+            onBack = {}
+        )
     }
 }
 
@@ -141,6 +142,8 @@ private fun Preview2() {
             uiState = AddTagUiState(),
             onTagSelected = {},
             onInputUpdated = {},
-            onTagConfirmed = {}) { }
+            onTagConfirmed = {},
+            onBack = {}
+        )
     }
 }
