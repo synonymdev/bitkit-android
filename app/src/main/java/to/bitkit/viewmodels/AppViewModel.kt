@@ -96,6 +96,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun addTagToSelected(newTag: String) {
+        _sendUiState.update {
+            it.copy(
+                selectedTags = it.selectedTags + newTag
+            )
+        }
+    }
+
     private var scan: Scanner? = null
 
     init {
@@ -641,6 +649,7 @@ data class SendUiState(
     val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
+    val selectedTags: List<String> = listOf(), //TODO save tags in other PR
     val decodedInvoice: LightningInvoice? = null,
 )
 
