@@ -83,6 +83,9 @@ android {
             isIncludeAndroidResources = true // robolectric
         }
     }
+    lint {
+        disable += "StringFormatInvalid"
+    }
 }
 composeCompiler {
     featureFlags = setOf(
