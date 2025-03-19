@@ -36,6 +36,7 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
@@ -94,14 +95,15 @@ fun SendAndReviewScreen(
             ) {
                 uiState.selectedTags.map { tagText ->
                     TagButton(
-                        tagText,
+                        text = tagText,
                         isSelected = false,
                         onClick = {  }, //TODO IMPLEMENT IN OTHER PR
                     )
                 }
             }
             PrimaryButton(
-                stringResource(R.string.wallet__tags_add),
+                text = stringResource(R.string.wallet__tags_add),
+                size = ButtonSize.Small,
                 onClick = { onClickAddTag() },
                 icon = {
                     Icon(
