@@ -19,6 +19,8 @@ import kotlin.math.pow
 class CurrencyService @Inject constructor(
     private val blocktankHttpClient: BlocktankHttpClient,
 ) {
+    private var cachedRates: List<FxRate>? = null
+
     private val maxRetries = 3
 
     suspend fun fetchLatestRates(): List<FxRate> {
@@ -27,7 +29,12 @@ class CurrencyService @Inject constructor(
         for (attempt in 0 until maxRetries) {
             try {
                 val response = ServiceQueue.FOREX.background { blocktankHttpClient.fetchLatestRates() }
-                return response.tickers
+                val rates = response.tickers
+
+                // TODO Cache to disk
+                cachedRates = rates
+
+                return rates
             } catch (e: Exception) {
                 lastError = e
                 if (attempt < maxRetries - 1) {
@@ -39,6 +46,11 @@ class CurrencyService @Inject constructor(
         }
 
         throw lastError ?: CurrencyError.Unknown
+    }
+
+    fun loadCachedRates(): List<FxRate>? {
+        // TODO load from disk
+        return cachedRates
     }
 
     fun convert(sats: Long, rate: FxRate): ConvertedAmount? {
