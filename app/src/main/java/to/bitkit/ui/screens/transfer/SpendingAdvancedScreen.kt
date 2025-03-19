@@ -101,9 +101,9 @@ fun SpendingAdvancedScreen(
             }
 
             // Update feeEstimate
-            LaunchedEffect(receivingSatsAmount) {
+            LaunchedEffect(receivingSatsAmount, transferValues) {
                 feeEstimate = null
-                if (receivingSatsAmount.toULong() < transferValues.minLspBalance) return@LaunchedEffect
+                if (!isValid) return@LaunchedEffect
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = clientBalance,
