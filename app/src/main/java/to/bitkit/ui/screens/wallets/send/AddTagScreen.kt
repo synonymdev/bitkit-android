@@ -34,7 +34,6 @@ import to.bitkit.viewmodels.AddTagUiState
 import to.bitkit.viewmodels.TagsViewModel
 
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTagScreen(
     viewModel: TagsViewModel = hiltViewModel(),
