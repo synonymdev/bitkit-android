@@ -136,6 +136,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     private fun setupExistingWalletMocks() {
         whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        sut.setWalletExistsState()
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("mnemonic")
         whenever(appStorage.onchainAddress).thenReturn("onchainAddress")
         whenever(appStorage.bolt11).thenReturn("bolt11")
