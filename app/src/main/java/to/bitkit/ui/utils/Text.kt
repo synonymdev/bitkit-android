@@ -64,6 +64,10 @@ fun String.withAccentLink(url: String): AnnotatedString {
     )
 }
 
+fun String.removeAccentTags(): String {
+    return this.replace("<accent>", "").replace("</accent>", "")
+}
+
 fun String.withBold(
     defaultColor: Color = Color.Unspecified,
     boldStyle: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold),

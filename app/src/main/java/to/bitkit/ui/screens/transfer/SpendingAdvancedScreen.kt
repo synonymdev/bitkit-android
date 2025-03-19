@@ -59,7 +59,7 @@ fun SpendingAdvancedScreen(
     val app = appViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val currencies = LocalCurrencies.current
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
 
     ScreenColumn {

@@ -87,11 +87,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun addTagToSelected(newTag: String) {
-        _sendUiState.update {
-            it.copy(
-                selectedTags = (it.selectedTags + newTag).distinct()
-            )
+    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.hasSeenSavingsIntro
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenSavingsIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setHasSeenSavingsIntro(value)
         }
     }
 
@@ -640,7 +641,6 @@ data class SendUiState(
     val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
-    val selectedTags: List<String> = listOf(),
     val decodedInvoice: LightningInvoice? = null,
 )
 

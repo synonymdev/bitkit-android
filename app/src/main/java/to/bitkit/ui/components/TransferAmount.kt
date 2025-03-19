@@ -1,6 +1,5 @@
 package to.bitkit.ui.components
 
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -17,8 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -27,6 +24,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
@@ -177,8 +175,6 @@ fun TransferAmount(
                 .size(1.dp)
         )
 
-        var isPressed by remember { mutableStateOf(false) }
-
         // Visible balance display
         currency.convert(sats)?.let { converted ->
             val displayText = if (primaryDisplay == PrimaryDisplay.BITCOIN) {
@@ -191,19 +187,7 @@ fun TransferAmount(
             Display(
                 text = displayText.withAccent(accentColor = Colors.White64),
                 modifier = Modifier
-                    .graphicsLayer { this.alpha = if (isPressed) 0.5f else 1f }
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                isPressed = true
-                                tryAwaitRelease()
-                                isPressed = false
-                            },
-                            onTap = {
-                                currency.togglePrimaryDisplay()
-                            }
-                        )
-                    }
+                    .clickableAlpha { currency.togglePrimaryDisplay() }
             )
         }
     }

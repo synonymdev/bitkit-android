@@ -50,6 +50,8 @@ import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToQrScanner
+import to.bitkit.ui.navigateToTransferSavingsAvailability
+import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
@@ -124,10 +126,18 @@ fun HomeScreen(
                     )
                 }
                 composable<HomeRoutes.Spending> {
+                    val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
                     SpendingWalletScreen(
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onBackCLick = { walletNavController.popBackStack() }
+                        onTransferToSavingsClick = {
+                            if (!hasSeenSavingsIntro) {
+                                rootNavController.navigateToTransferSavingsIntro()
+                            } else {
+                                rootNavController.navigateToTransferSavingsAvailability()
+                            }
+                        },
+                        onBackCLick = { walletNavController.popBackStack() },
                     )
                 }
             }

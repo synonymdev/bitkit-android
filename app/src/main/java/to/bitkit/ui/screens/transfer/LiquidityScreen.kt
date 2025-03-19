@@ -37,7 +37,7 @@ fun LiquidityScreen(
     onCloseClick: () -> Unit = {},
 ) {
     val transfer = transferViewModel ?: return
-    val state by transfer.uiState.collectAsStateWithLifecycle()
+    val state by transfer.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
 
     val channelSize = (order.clientBalanceSat + order.lspBalanceSat).toLong()

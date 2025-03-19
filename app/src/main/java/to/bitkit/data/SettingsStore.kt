@@ -57,6 +57,11 @@ class SettingsStore @Inject constructor(
         store.edit { it[HAS_SEEN_SPENDING_INTRO] = value }
     }
 
+    val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] ?: false }
+    suspend fun setHasSeenSavingsIntro(value: Boolean) {
+        store.edit { it[HAS_SEEN_SAVINGS_INTRO] = value }
+    }
+
     val lightningSetupStep: Flow<Int> = store.data.map { it[LIGHTNING_SETUP_STEP] ?: 0 }
     suspend fun setLightningSetupStep(value: Int) {
         store.edit { it[LIGHTNING_SETUP_STEP] = value }
@@ -68,6 +73,7 @@ class SettingsStore @Inject constructor(
         private val SELECTED_CURRENCY_KEY = stringPreferencesKey("selected_currency")
         private val SHOW_EMPTY_STATE = booleanPreferencesKey("show_empty_state")
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
+        private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")
         private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
     }
 }
