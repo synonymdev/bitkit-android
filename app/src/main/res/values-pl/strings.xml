@@ -170,7 +170,7 @@
     <string name="wallet__send_swipe">Przesuń palcem by zapłacić</string>
     <string name="wallet__send_yes">Tak, wyślij</string>
     <string name="wallet__send_dialog1">Wygląda na to, że wysyłasz ponad $100. Czy kontynuować?</string>
-    <string name="wallet__send_dialog2">Wygląda na to, że wysyłasz ponad 50% swojego salda. Czy kontynuować?</string>
+    <string name="wallet__send_dialog2">Wygląda na to, że wysyłasz ponad 50%% swojego salda. Czy kontynuować?</string>
     <string name="wallet__activity_successful">Sukces</string>
     <string name="wallet__activity_invoice">Faktura</string>
 </resources>
