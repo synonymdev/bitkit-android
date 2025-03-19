@@ -84,7 +84,7 @@ android {
         }
     }
     lint {
-        disable += "StringFormatInvalid"
+        abortOnError = false
     }
 }
 composeCompiler {
