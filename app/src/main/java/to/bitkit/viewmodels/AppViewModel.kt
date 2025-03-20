@@ -501,7 +501,9 @@ class AppViewModel @Inject constructor(
     }
 
     private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
-        if (_sendUiState.value.selectedTags.isEmpty()) {
+        val tags = _sendUiState.value.selectedTags
+        Logger.debug("attachTagsToActivity $tags")
+        if (tags.isEmpty()) {
             Logger.debug("selectedTags empty")
             return
         }
@@ -524,8 +526,10 @@ class AppViewModel @Inject constructor(
                     if (paymentHashOrTxId == activity.v1.id) {
                         coreService.activity.appendTags(
                             toActivityId = activity.v1.id,
-                            tags = _sendUiState.value.selectedTags
-                        )
+                            tags = tags
+                        ).onFailure {
+                            Logger.error("Error attaching tags $tags")
+                        }
                     } else {
                         Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
                     }
@@ -535,7 +539,7 @@ class AppViewModel @Inject constructor(
                     if (paymentHashOrTxId == activity.v1.txId) {
                         coreService.activity.appendTags(
                             toActivityId = activity.v1.id,
-                            tags = _sendUiState.value.selectedTags
+                            tags = tags
                         )
                     } else {
                         Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
