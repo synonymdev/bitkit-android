@@ -58,6 +58,7 @@ fun SendAndReviewScreen(
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     onClickAddTag: () -> Unit,
+    onClickTag: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -98,7 +99,7 @@ fun SendAndReviewScreen(
                         text = tagText,
                         isSelected = false,
                         displayIconClose = true,
-                        onClick = {  }, //TODO IMPLEMENT IN OTHER PR
+                        onClick = { onClickTag(tagText) },
                     )
                 }
             }
@@ -324,6 +325,7 @@ private fun SendAndReviewPreview() {
             onBack = {},
             onEvent = {},
             onClickAddTag = {},
+            onClickTag = {},
         )
     }
 }
@@ -355,6 +357,7 @@ private fun SendAndReviewPreview2() {
             onBack = {},
             onEvent = {},
             onClickAddTag = {},
+            onClickTag = {},
         )
     }
 }

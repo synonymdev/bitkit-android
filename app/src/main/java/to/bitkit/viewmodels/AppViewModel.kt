@@ -109,6 +109,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun removeTag(tag: String) {
+        _sendUiState.update {
+            it.copy(
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+            )
+        }
+    }
+
     private var scan: Scanner? = null
 
     init {
