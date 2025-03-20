@@ -527,7 +527,7 @@ class AppViewModel @Inject constructor(
                             tags = _sendUiState.value.selectedTags
                         )
                     } else {
-                        Logger.error("Different tcId. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
+                        Logger.error("Different tcId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
                     }
                 }
             }
