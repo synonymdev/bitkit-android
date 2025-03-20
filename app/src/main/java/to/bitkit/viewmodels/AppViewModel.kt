@@ -502,7 +502,11 @@ class AppViewModel @Inject constructor(
 
     private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
         if (_sendUiState.value.selectedTags.isEmpty()) return
-        if (paymentHashOrTxId == null) return
+
+        if (paymentHashOrTxId == null) {
+            Logger.error(msg = "null paymentHashOrTxId")
+            return
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             val activity = coreService.activity.get(filter = type, txType = PaymentType.SENT, limit = 1u).firstOrNull()
