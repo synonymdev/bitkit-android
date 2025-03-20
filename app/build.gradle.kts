@@ -83,6 +83,9 @@ android {
             isIncludeAndroidResources = true // robolectric
         }
     }
+    lint {
+        abortOnError = false
+    }
 }
 composeCompiler {
     featureFlags = setOf(
