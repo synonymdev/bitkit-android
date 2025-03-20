@@ -56,7 +56,8 @@ fun TagButton(
 
         Icon(
             painter = painterResource(R.drawable.ic_x),
-            contentDescription = null
+            contentDescription = null,
+            tint = Colors.White
         )
     }
 }
