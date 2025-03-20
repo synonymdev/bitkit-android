@@ -512,13 +512,17 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            //TODO COMPARE PAYMENT HASH AND TX ID
-
             when (activity) {
-                is Activity.Lightning -> coreService.activity.appendTags(
-                    toActivityId = activity.v1.id,
-                    tags = _sendUiState.value.selectedTags
-                )
+                is Activity.Lightning -> {
+                    if (paymentHashOrTxId == activity.v1.id) {
+                        coreService.activity.appendTags(
+                            toActivityId = activity.v1.id,
+                            tags = _sendUiState.value.selectedTags
+                        )
+                    } else {
+                        Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
+                    }
+                }
 
                 is Activity.Onchain -> {
                     if (paymentHashOrTxId == activity.v1.txId) {
@@ -527,7 +531,7 @@ class AppViewModel @Inject constructor(
                             tags = _sendUiState.value.selectedTags
                         )
                     } else {
-                        Logger.error("Different tcId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
+                        Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
                     }
                 }
             }
