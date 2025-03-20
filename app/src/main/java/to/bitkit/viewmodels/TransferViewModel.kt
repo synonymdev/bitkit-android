@@ -19,12 +19,18 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
+import to.bitkit.services.CurrencyService
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.BtOrderState2
+import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
+import java.math.BigDecimal
 import javax.inject.Inject
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToLong
 
 const val RETRY_INTERVAL = 5 * 60 * 1000L // 5 minutes in ms
 const val GIVE_UP = 30 * 60 * 1000L // 30 minutes in ms
@@ -33,6 +39,7 @@ const val GIVE_UP = 30 * 60 * 1000L // 30 minutes in ms
 class TransferViewModel @Inject constructor(
     private val lightningService: LightningService,
     private val coreService: CoreService,
+    private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
@@ -43,6 +50,9 @@ class TransferViewModel @Inject constructor(
 
     private val _selectedChannelIdsState = MutableStateFlow<Set<String>>(emptySet())
     val selectedChannelIdsState = _selectedChannelIdsState.asStateFlow()
+
+    private val _transferValues = MutableStateFlow(TransferValues())
+    val transferValues = _transferValues.asStateFlow()
 
     // region Spending
 
@@ -59,10 +69,7 @@ class TransferViewModel @Inject constructor(
     fun onTransferToSpendingConfirm(order: IBtOrder) {
         viewModelScope.launch {
             try {
-                lightningService.send(
-                    address = order.payment.onchain.address,
-                    sats = order.feeSat,
-                )
+                lightningService.send(address = order.payment.onchain.address, sats = order.feeSat)
                 settingsStore.setLightningSetupStep(0)
                 watchOrder(order.id)
             } catch (e: Throwable) {
@@ -76,23 +83,34 @@ class TransferViewModel @Inject constructor(
         var error: Throwable? = null
 
         viewModelScope.launch {
+            Logger.debug("Started to watch order order $orderId")
+
             while (!isSettled && error == null) {
                 try {
                     Logger.debug("Refreshing order $orderId")
-                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).first()
+                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).firstOrNull()
+                    if (order == null) {
+                        error = Exception("Order not found $orderId")
+                        Logger.error("Order not found $orderId", context = "TransferViewModel")
+                        break
+                    }
+
                     val step = updateOrder(order)
                     settingsStore.setLightningSetupStep(step)
                     Logger.debug("LN setup step: $step")
 
                     if (order.state2 == BtOrderState2.EXPIRED) {
                         error = Exception("Order expired $orderId")
+                        Logger.error("Order expired $orderId", context = "TransferViewModel")
                         break
                     }
                     if (step > 2) {
+                        Logger.debug("Order settled, stopping watch")
                         isSettled = true
                         break
                     }
                 } catch (e: Throwable) {
+                    Logger.error("Failed to watch order", e)
                     error = e
                     break
                 }
@@ -102,19 +120,18 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    @Suppress("IntroduceWhenSubject")
     private suspend fun updateOrder(order: IBtOrder): Int {
         var currentStep = 0
         if (order.channel != null) {
             return 3
         }
 
-        when {
-            order.state2 == BtOrderState2.CREATED -> {
+        when (order.state2) {
+            BtOrderState2.CREATED -> {
                 currentStep = 0
             }
 
-            order.state2 == BtOrderState2.PAID -> {
+            BtOrderState2.PAID -> {
                 currentStep = 1
 
                 try {
@@ -124,9 +141,11 @@ class TransferViewModel @Inject constructor(
                 }
             }
 
-            order.state2 == BtOrderState2.EXECUTED -> {
+            BtOrderState2.EXECUTED -> {
                 currentStep = 2
             }
+
+            else -> Unit
         }
         return currentStep
     }
@@ -138,6 +157,105 @@ class TransferViewModel @Inject constructor(
 
     fun resetSpendingState() {
         _spendingUiState.value = TransferToSpendingUiState()
+        _transferValues.value = TransferValues()
+    }
+
+    // endregion
+
+    // region Balance Calc
+
+    fun updateTransferValues(clientBalanceSat: ULong, blocktankInfo: IBtInfo?) {
+        _transferValues.value = calculateTransferValues(clientBalanceSat, blocktankInfo)
+    }
+
+    fun calculateTransferValues(clientBalanceSat: ULong, blocktankInfo: IBtInfo?): TransferValues {
+        if (blocktankInfo == null) return TransferValues()
+
+        // Calculate the total value of existing Blocktank channels
+        val channelsSize = totalBtChannelsValueSats(blocktankInfo)
+
+        val minChannelSizeSat = blocktankInfo.options.minChannelSizeSat
+        val maxChannelSizeSat = blocktankInfo.options.maxChannelSizeSat
+
+        // Because LSP limits constantly change depending on network fees
+        // Add a 2% buffer to avoid fluctuations while making the order
+        val maxChannelSize1 = (maxChannelSizeSat.toDouble() * 0.98).roundToLong().toULong()
+
+        // The maximum channel size the user can open including existing channels
+        val maxChannelSize2 = if (maxChannelSize1 > channelsSize) maxChannelSize1 - channelsSize else 0u
+        val maxChannelSize = min(maxChannelSize1, maxChannelSize2)
+
+        val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
+        val maxLspBalance = if (maxChannelSize > clientBalanceSat) maxChannelSize - clientBalanceSat else 0u
+        val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
+        val maxClientBalance = getMaxClientBalance(maxChannelSize)
+
+        return TransferValues(
+            defaultLspBalance = defaultLspBalance,
+            minLspBalance = minLspBalance,
+            maxLspBalance = maxLspBalance,
+            maxClientBalance = maxClientBalance,
+        )
+    }
+
+    private fun getDefaultLspBalance(clientBalanceSat: ULong, maxLspBalance: ULong): ULong {
+        val rates = currencyService.loadCachedRates()
+        val eurRate = rates?.let { currencyService.getCurrentRate("EUR", it) }
+        if (eurRate == null) {
+            Logger.error("Failed to get rates for getDefaultLspBalance", context = "TransferViewModel")
+            return 0u
+        }
+
+        // Calculate thresholds in sats
+        val threshold1 = currencyService.convertFiatToSats(BigDecimal("225"), eurRate)
+        val threshold2 = currencyService.convertFiatToSats(BigDecimal("495"), eurRate)
+        val defaultLspBalanceSats = currencyService.convertFiatToSats(BigDecimal("450"), eurRate)
+
+        Logger.debug("getDefaultLspBalance - clientBalanceSat: $clientBalanceSat")
+        Logger.debug("getDefaultLspBalance - maxLspBalance: $maxLspBalance")
+        Logger.debug("getDefaultLspBalance - defaultLspBalanceSats: $defaultLspBalanceSats")
+
+        // Safely calculate lspBalance to avoid arithmetic overflow
+        var lspBalance: ULong = 0u
+        if (defaultLspBalanceSats > clientBalanceSat) {
+            lspBalance = defaultLspBalanceSats - clientBalanceSat
+        }
+        if (lspBalance > threshold1) {
+            lspBalance = clientBalanceSat
+        }
+        if (lspBalance > threshold2) {
+            lspBalance = maxLspBalance
+        }
+
+        return min(lspBalance, maxLspBalance)
+    }
+
+    private fun getMinLspBalance(clientBalance: ULong, minChannelSize: ULong): ULong {
+        // LSP balance must be at least 2.5% of the channel size for LDK to accept (reserve balance)
+        val ldkMinimum = (clientBalance.toDouble() * 0.025).toULong()
+        // Channel size must be at least minChannelSize
+        val lspMinimum = if (minChannelSize > clientBalance) minChannelSize - clientBalance else 0u
+
+        return max(ldkMinimum, lspMinimum)
+    }
+
+    private fun getMaxClientBalance(maxChannelSize: ULong): ULong {
+        // Remote balance must be at least 2.5% of the channel size for LDK to accept (reserve balance)
+        val minRemoteBalance = (maxChannelSize.toDouble() * 0.025).toULong()
+
+        return maxChannelSize - minRemoteBalance
+    }
+
+    /** Calculates the total value of channels connected to Blocktank nodes */
+    private fun totalBtChannelsValueSats(info: IBtInfo?): ULong {
+        val channels = lightningService.channels ?: return 0u
+        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
+
+        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
+
+        val totalValue = btChannels.sumOf { it.channelValueSats }
+
+        return totalValue
     }
 
     // endregion
@@ -218,5 +336,12 @@ data class TransferToSpendingUiState(
     val order: IBtOrder? = null,
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
+)
+
+data class TransferValues(
+    val defaultLspBalance: ULong = 0u,
+    val minLspBalance: ULong = 0u,
+    val maxLspBalance: ULong = 0u,
+    val maxClientBalance: ULong = 0u,
 )
 // endregion

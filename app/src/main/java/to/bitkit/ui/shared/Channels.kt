@@ -75,6 +75,7 @@ internal fun Channels(
                     channelId = it.channelId,
                     outbound = outbound.toLong(),
                     inbound = inbound.toLong(),
+                    confirmationsText = "Confirmations: ${it.confirmations ?: 0u}/${it.confirmationsRequired ?: 0u}",
                     onClose = { onChannelCloseTap(it) },
                 )
             }
@@ -99,6 +100,7 @@ private fun ChannelItem(
     channelId: String,
     outbound: Long,
     inbound: Long,
+    confirmationsText: String,
     onClose: () -> Unit,
 ) {
     Column(
@@ -151,16 +153,18 @@ private fun ChannelItem(
         }
         Column {
             val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal)
+            Text("Usable: ${if (isUsable) "✅" else "❌"}", style = style)
             Text("Announced: $isAnnounced", style = style)
-            Text("Usable: $isUsable", style = style)
             Text("Inbound htlc max: " + moneyString(inboundHtlcMax), style = style)
             Text("Inbound htlc min: " + moneyString(inboundHtlcMin), style = style)
             Text("Next outbound htlc limit: " + moneyString(nextOutboundHtlcLimit), style = style)
             Text("Next outbound htlc min: " + moneyString(nextOutboundHtlcMin), style = style)
+            Text(confirmationsText, style = style)
         }
     }
 }
 
+@Suppress("SpellCheckingInspection")
 @Preview(showBackground = true)
 @Composable
 private fun ChannelItemPreview() {
@@ -177,6 +181,7 @@ private fun ChannelItemPreview() {
             inboundHtlcMin = 246L,
             nextOutboundHtlcLimit = 531L,
             nextOutboundHtlcMin = 762L,
+            confirmationsText = "Confirmations: 1/2",
         )
     }
 }

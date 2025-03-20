@@ -122,26 +122,9 @@ class BlocktankViewModel @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = 6u,
     ): IBtOrder {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
-        val timestamp = nowTimestamp().toString()
-        val signature = lightningService.sign("channelOpen-$timestamp")
-
-        val options = CreateOrderOptions(
-            clientBalanceSat = spendingBalanceSats,
-            lspNodeId = null,
-            couponCode = "",
-            source = "bitkit-android",
-            discountCode = null,
-            zeroConf = true,
-            zeroConfPayment = false,
-            zeroReserve = true,
-            clientNodeId = nodeId,
-            signature = signature,
-            timestamp = timestamp,
-            refundOnchainAddress = null,
-            announceChannel = false,
-        )
+        Logger.info("Buying channel with these options: $options")
 
         return coreService.blocktank.newOrder(
             lspBalanceSat = receivingBalanceSats,
@@ -155,14 +138,9 @@ class BlocktankViewModel @Inject constructor(
         receivingBalanceSats: ULong,
         channelExpiryWeeks: UInt = 6u,
     ): IBtEstimateFeeResponse2 {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+        val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
-        val options = defaultCreateOrderOptions.copy(
-            clientBalanceSat = spendingBalanceSats,
-            clientNodeId = nodeId,
-        )
-
-        return coreService.blocktank.newOrderFeeEstimate(
+        return coreService.blocktank.estimateFee(
             lspBalanceSat = receivingBalanceSats,
             channelExpiryWeeks = channelExpiryWeeks,
             options = options,
@@ -179,28 +157,26 @@ class BlocktankViewModel @Inject constructor(
         return order
     }
 
-    fun totalBtChannelsValueSats(): ULong {
-        val channels = lightningService.channels ?: return 0u
+    private suspend fun defaultCreateOrderOptions(clientBalanceSat: ULong): CreateOrderOptions {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
-        val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
-        val totalValue = btChannels.sumOf { it.channelValueSats }
-        return totalValue
+        val timestamp = nowTimestamp().toString()
+        val signature = lightningService.sign("channelOpen-$timestamp")
+
+        return CreateOrderOptions(
+            clientBalanceSat = clientBalanceSat,
+            lspNodeId = null,
+            couponCode = "",
+            source = "bitkit-android",
+            discountCode = null,
+            zeroConf = true,
+            zeroConfPayment = false,
+            zeroReserve = true,
+            clientNodeId = nodeId,
+            signature = signature,
+            timestamp = timestamp,
+            refundOnchainAddress = null,
+            announceChannel = false,
+        )
     }
 }
-
-private val defaultCreateOrderOptions = CreateOrderOptions(
-    clientBalanceSat = 0uL,
-    lspNodeId = null,
-    couponCode = "",
-    source = "bitkit-android",
-    discountCode = null,
-    zeroConf = true,
-    zeroConfPayment = false,
-    zeroReserve = true,
-    clientNodeId = null,
-    signature = null,
-    timestamp = null,
-    refundOnchainAddress = null,
-    announceChannel = false,
-)

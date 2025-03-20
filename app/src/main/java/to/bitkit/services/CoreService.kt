@@ -415,10 +415,10 @@ class BlocktankService(
         }
     }
 
-    suspend fun newOrderFeeEstimate(
+    suspend fun estimateFee(
         lspBalanceSat: ULong,
         channelExpiryWeeks: UInt,
-        options: CreateOrderOptions,
+        options: CreateOrderOptions? = null,
     ): IBtEstimateFeeResponse2 {
         return ServiceQueue.CORE.background {
             estimateOrderFeeFull(

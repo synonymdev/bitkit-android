@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +45,6 @@ import to.bitkit.ui.components.TransferAmount
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
 
@@ -81,31 +81,35 @@ fun SpendingAdvancedScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-
-            var lspBalance by rememberSaveable { mutableLongStateOf(0) }
+            var receivingSatsAmount by rememberSaveable { mutableLongStateOf(0) }
             var overrideSats: Long? by remember { mutableStateOf(null) }
 
             val clientBalance = order.clientBalanceSat
-            var fee: Long? by remember { mutableStateOf(null) }
+            var feeEstimate: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
 
-            val transferValues = useTransfer(clientBalance.toLong())
+            val transferValues by viewModel.transferValues.collectAsState()
 
-            val isValid = lspBalance >= transferValues.minLspBalance &&
-                    lspBalance <= transferValues.maxLspBalance
+            LaunchedEffect(order.clientBalanceSat) {
+                viewModel.updateTransferValues(clientBalance, blocktank.info)
+            }
 
-            // Fetch LSP Fee estimate
-            LaunchedEffect(lspBalance) {
-                fee = null
-                if (lspBalance < transferValues.minLspBalance) {
-                    return@LaunchedEffect
-                }
+            val isValid = transferValues.let {
+                val isAboveMin = receivingSatsAmount.toULong() >= it.minLspBalance
+                val isBelowMax = receivingSatsAmount.toULong() <= it.maxLspBalance
+                isAboveMin && isBelowMax
+            }
+
+            // Update feeEstimate
+            LaunchedEffect(receivingSatsAmount, transferValues) {
+                feeEstimate = null
+                if (!isValid) return@LaunchedEffect
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = clientBalance,
-                        receivingBalanceSats = lspBalance.toULong(),
+                        receivingBalanceSats = receivingSatsAmount.toULong(),
                     )
-                    fee = estimate.feeSat.toLong()
+                    feeEstimate = estimate.feeSat.toLong()
                 }
             }
 
@@ -120,7 +124,7 @@ fun SpendingAdvancedScreen(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
                 onSatsChange = { sats ->
-                    lspBalance = sats
+                    receivingSatsAmount = sats
                     overrideSats = null
                 },
             )
@@ -135,7 +139,7 @@ fun SpendingAdvancedScreen(
                     color = Colors.White64,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                fee?.let {
+                feeEstimate?.let {
                     MoneySSB(it)
                 } ?: run {
                     Caption13Up(text = "—", color = Colors.White64)
@@ -157,7 +161,7 @@ fun SpendingAdvancedScreen(
                     text = stringResource(R.string.common__min),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = transferValues.minLspBalance
+                        overrideSats = transferValues.minLspBalance.toLong()
                     },
                 )
                 // Default Button
@@ -165,7 +169,7 @@ fun SpendingAdvancedScreen(
                     text = stringResource(R.string.common__default),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = order.lspBalanceSat.toLong()
+                        overrideSats = transferValues.defaultLspBalance.toLong()
                     },
                 )
                 // Max Button
@@ -173,7 +177,7 @@ fun SpendingAdvancedScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = transferValues.maxLspBalance
+                        overrideSats = transferValues.maxLspBalance.toLong()
                     },
                 )
             }
@@ -188,7 +192,7 @@ fun SpendingAdvancedScreen(
                         try {
                             val newOrder = blocktank.createOrder(
                                 spendingBalanceSats = clientBalance,
-                                receivingBalanceSats = lspBalance.toULong(),
+                                receivingBalanceSats = receivingSatsAmount.toULong(),
                             )
                             viewModel.onAdvancedOrderCreated(newOrder)
                             onOrderCreated()

@@ -54,12 +54,12 @@ fun TransferAmount(
 
     // Handle overrideSats changes
     LaunchedEffect(overrideSats) {
-        overrideSats?.let { sats ->
-            satsAmount = satsAmount.copy(sats.toString(), TextRange(sats.toString().length))
-            onSatsChange(sats)
+        overrideSats?.let { exactSats ->
+            satsAmount = satsAmount.copy(exactSats.toString(), TextRange(exactSats.toString().length))
+            onSatsChange(exactSats)
 
             // Update fiat amount if needed
-            currency.convert(sats)?.let { converted ->
+            currency.convert(exactSats)?.let { converted ->
                 fiatAmount = satsAmount.copy(converted.formatted, TextRange(converted.formatted.length))
             }
         }
