@@ -1,12 +1,10 @@
 package to.bitkit.ui.components
 
-import to.bitkit.R
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -21,6 +19,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -54,11 +53,13 @@ fun TagButton(
             fontWeight = FontWeight.Medium,
         )
 
-        Icon(
-            painter = painterResource(R.drawable.ic_x),
-            contentDescription = null,
-            tint = Colors.White
-        )
+        if (displayIconClose) {
+            Icon(
+                painter = painterResource(R.drawable.ic_x),
+                contentDescription = null,
+                tint = Colors.White
+            )
+        }
     }
 }
 
@@ -71,8 +72,8 @@ private fun Preview() {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TagButton("Selected", isSelected = true, onClick = {})
             TagButton("Not Selected", isSelected = false, onClick = {})
-            TagButton("Selected With icon close", isSelected = true, onClick = {})
-            TagButton("Not Selected With icon close", isSelected = false, onClick = {})
+            TagButton("Selected With icon close", displayIconClose = true, isSelected = true, onClick = {})
+            TagButton("Not Selected With icon close", displayIconClose = true, isSelected = false, onClick = {})
         }
     }
 }
