@@ -97,6 +97,7 @@ fun SendAndReviewScreen(
                     TagButton(
                         text = tagText,
                         isSelected = false,
+                        displayIconClose = true,
                         onClick = {  }, //TODO IMPLEMENT IN OTHER PR
                     )
                 }
@@ -338,6 +339,7 @@ private fun SendAndReviewPreview2() {
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
+                selectedTags = listOf("car", "house", "uber"),
                 decodedInvoice = LightningInvoice(
                     bolt11 = "bcrt123",
                     paymentHash = ByteArray(0),
