@@ -18,7 +18,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
-fun ExternalConnectionScreen(
+fun ExternalConfirmScreen(
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -36,15 +36,15 @@ fun ExternalConnectionScreen(
             },
         )
         Box(modifier = Modifier.fillMaxSize()) {
-            Text("TODO: ExternalConnectionScreen", modifier = Modifier.align(Alignment.Center))
+            Text("TODO: ExternalConfirmScreen", modifier = Modifier.align(Alignment.Center))
         }
     }
 }
 
 @Preview(showSystemUi = true, showBackground = true)
 @Composable
-private fun ExternalConnectionScreenPreview() {
+private fun ExternalConfirmScreenPreview() {
     AppThemeSurface {
-        ExternalConnectionScreen()
+        ExternalConfirmScreen()
     }
 }

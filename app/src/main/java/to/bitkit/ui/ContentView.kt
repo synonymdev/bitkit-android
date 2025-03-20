@@ -51,7 +51,11 @@ import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
 import to.bitkit.ui.screens.transfer.SpendingIntroScreen
 import to.bitkit.ui.screens.transfer.TransferIntroScreen
+import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
+import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
+import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
+import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -346,6 +350,30 @@ fun ContentView(
                     }
                     composable<Routes.ExternalConnection> {
                         ExternalConnectionScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalAmount> {
+                        ExternalAmountScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalConfirm> {
+                        ExternalConfirmScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalSuccess> {
+                        ExternalSuccessScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        )
+                    }
+                    composable<Routes.ExternalFeeCustom> {
+                        ExternalFeeCustomScreen(
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                         )
@@ -736,6 +764,18 @@ object Routes {
 
     @Serializable
     data object ExternalConnection
+
+    @Serializable
+    data object ExternalAmount
+
+    @Serializable
+    data object ExternalConfirm
+
+    @Serializable
+    data object ExternalSuccess
+
+    @Serializable
+    data object ExternalFeeCustom
 
     @Serializable
     data object AllActivity
