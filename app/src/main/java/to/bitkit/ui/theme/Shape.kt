@@ -14,4 +14,5 @@ val Shapes = Shapes(
 object AppShapes {
     val sheet = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
     val smallButton = RoundedCornerShape(8.dp)
+    val smallInput = RoundedCornerShape(8.dp)
 }

@@ -326,7 +326,7 @@ fun ContentView(
                                 } else {
                                     navController.navigateToTransferSpendingAmount()
                                 }
-                             },
+                            },
                             onFund = {
                                 scope.launch {
                                     // TODO show receive sheet -> ReceiveAmount
@@ -350,6 +350,9 @@ fun ContentView(
                     }
                     composable<Routes.ExternalConnection> {
                         ExternalConnectionScreen(
+                            onContinueClick = {
+                                navController.navigate(Routes.ExternalAmount)
+                            },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                         )
