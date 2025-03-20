@@ -44,8 +44,8 @@ import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.useTransfer
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 import kotlin.math.max
 import kotlin.math.min
@@ -83,27 +83,39 @@ fun SpendingAmountScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var spendingBalanceSats by rememberSaveable { mutableLongStateOf(0) }
+            var satsAmount by rememberSaveable { mutableLongStateOf(0) }
             var overrideSats: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
 
-            val balances = LocalBalances.current
+            val availableAmount = LocalBalances.current.totalOnchainSats - 512u // default tx fee
 
-            val availableAmount = balances.totalOnchainSats - 512u // default tx fee
-
-            val maxClientBalance = useTransfer(spendingBalanceSats).maxClientBalance
-            val maxLspBalance = useTransfer(availableAmount.toLong()).defaultLspBalance
-
+            var maxClientBalance by remember { mutableStateOf(0uL) }
+            var maxLspBalance by remember { mutableStateOf(0uL) }
             var maxLspFee by remember { mutableStateOf(0uL) }
 
-            val feeMaximum = max(0, (availableAmount - maxLspFee).toLong())
-            val maximum = min(maxClientBalance, feeMaximum)
+            val feeMaximum = max(0, availableAmount.toLong() - maxLspFee.toLong())
+            val maximum = min(maxClientBalance.toLong(), feeMaximum)
 
+            // Update maxClientBalance Effect
+            LaunchedEffect(satsAmount) {
+                val transferValues = viewModel.calculateTransferValues(satsAmount.toULong(), blocktank.info)
+                maxClientBalance = transferValues.maxClientBalance
+                Logger.debug("maxClientBalance: $maxClientBalance", context = "SpendingAmountScreen")
+            }
+
+            // Update maxLspBalance Effect
+            LaunchedEffect(availableAmount) {
+                val transferValues = viewModel.calculateTransferValues(availableAmount, blocktank.info)
+                maxLspBalance = transferValues.defaultLspBalance
+                Logger.debug("maxLspBalance: $maxLspBalance", context = "SpendingAmountScreen")
+            }
+
+            // Update maxLspFee Effect
             LaunchedEffect(availableAmount, maxLspBalance) {
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = availableAmount,
-                        receivingBalanceSats = maxLspBalance.toULong(),
+                        receivingBalanceSats = maxLspBalance,
                     )
                     maxLspFee = estimate.feeSat
                 }
@@ -117,7 +129,7 @@ fun SpendingAmountScreen(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
                 onSatsChange = { sats ->
-                    spendingBalanceSats = sats
+                    satsAmount = sats
                     overrideSats = null
                 },
             )
@@ -165,7 +177,7 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = {
-                    if (maxLspBalance == 0L) {
+                    if (maxLspBalance == 0uL) {
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = resources.getString(R.string.lightning__spending_amount__error_max__title),
@@ -177,7 +189,7 @@ fun SpendingAmountScreen(
                     isLoading = true
                     scope.launch {
                         try {
-                            val order = blocktank.createOrder(spendingBalanceSats.toULong())
+                            val order = blocktank.createOrder(satsAmount.toULong())
                             viewModel.onOrderCreated(order)
                             onOrderCreated()
                         } catch (e: Throwable) {
@@ -187,7 +199,7 @@ fun SpendingAmountScreen(
                         }
                     }
                 },
-                enabled = !isLoading && spendingBalanceSats != 0L,
+                enabled = !isLoading && satsAmount != 0L,
                 isLoading = isLoading,
             )
 
