@@ -181,7 +181,7 @@ private fun OnChainDescription(
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
             }
             Column(
                 modifier = Modifier
@@ -205,7 +205,7 @@ private fun OnChainDescription(
                     BodySSB(text = "± 20-60 minutes") //TODO GET FROM STATE
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
             }
 
         }
