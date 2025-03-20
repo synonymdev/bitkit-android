@@ -501,7 +501,10 @@ class AppViewModel @Inject constructor(
     }
 
     private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
-        if (_sendUiState.value.selectedTags.isEmpty()) return
+        if (_sendUiState.value.selectedTags.isEmpty()) {
+            Logger.debug("selectedTags empty")
+            return
+        }
 
         if (paymentHashOrTxId == null) {
             Logger.error(msg = "null paymentHashOrTxId")
