@@ -520,10 +520,16 @@ class AppViewModel @Inject constructor(
                     tags = _sendUiState.value.selectedTags
                 )
 
-                is Activity.Onchain -> coreService.activity.appendTags(
-                    toActivityId = activity.v1.id,
-                    tags = _sendUiState.value.selectedTags
-                )
+                is Activity.Onchain -> {
+                    if (paymentHashOrTxId == activity.v1.txId) {
+                        coreService.activity.appendTags(
+                            toActivityId = activity.v1.id,
+                            tags = _sendUiState.value.selectedTags
+                        )
+                    } else {
+                        Logger.error("Different tcId. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
+                    }
+                }
             }
         }
     }
