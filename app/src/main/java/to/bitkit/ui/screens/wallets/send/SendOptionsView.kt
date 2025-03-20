@@ -106,7 +106,8 @@ fun SendOptionsView(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { appViewModel.setSendEvent(it) },
-                    onClickAddTag = { navController.navigate(SendRoute.AddTag) }
+                    onClickAddTag = { navController.navigate(SendRoute.AddTag) },
+                    onClickTag = { tag -> appViewModel.removeTag(tag) }
                 )
             }
             composable<SendRoute.AddTag> {
