@@ -239,9 +239,10 @@ class LightningService @Inject constructor(
 
                 Result.success(Unit)
             } catch (e: NodeException) {
-                Logger.error("Peer connect error: $peer", LdkError(e))
+                val error = LdkError(e)
+                Logger.error("Peer connect error: $peer", error)
 
-                Result.failure(e)
+                Result.failure(error)
             }
         }
     }

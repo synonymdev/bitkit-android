@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.LnPeer
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -61,6 +62,9 @@ fun ExternalConnectionScreen(
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
+    val app = appViewModel ?: return
+    val clipboard = LocalClipboardManager.current
+
     LaunchedEffect(viewModel, onNodeConnected) {
         viewModel.effects.collect {
             when (it) {
@@ -70,23 +74,13 @@ fun ExternalConnectionScreen(
         }
     }
 
-    val clipboard = LocalClipboardManager.current
-    fun onPasteClick() {
-        val clipboardData = clipboard.getText()?.text.orEmpty().trim()
-        println("onPasteClick clipboardData: $clipboardData") // TODO implement paste & parse
-    }
-
-    fun onScanClick() {
-        println("onScanClick") // TODO implement scan externalNode
-    }
-
     val uiState by viewModel.uiState.collectAsState()
 
     ExternalConnectionContent(
         uiState = uiState,
         onContinueClick = { peer -> viewModel.onConnectionContinue(peer) },
-        onScanClick = { onScanClick() },
-        onPasteClick = { onPasteClick() },
+        onScanClick = { app.toast(Exception("Coming soon")) },
+        onPasteClick = { viewModel.onConnectionPaste(clipboardText = clipboard.getText()?.text.orEmpty()) },
         onBackClick = onBackClick,
         onCloseClick = onCloseClick,
     )
@@ -101,9 +95,9 @@ private fun ExternalConnectionContent(
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
-    var nodeId by remember { mutableStateOf("") }
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("") }
+    var nodeId by remember(uiState.peer) { mutableStateOf(uiState.peer?.nodeId.orEmpty()) }
+    var host by remember(uiState.peer) { mutableStateOf(uiState.peer?.host.orEmpty()) }
+    var port by remember(uiState.peer) { mutableStateOf(uiState.peer?.port.orEmpty()) }
 
     val isValid = nodeId.length == 66 && host.isNotBlank() && port.isNotBlank()
 

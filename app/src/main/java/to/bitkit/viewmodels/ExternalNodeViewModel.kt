@@ -40,6 +40,7 @@ class ExternalNodeViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = false) }
 
             if (result.isSuccess) {
+                _uiState.update { it.copy(peer = peer) }
                 setEffect(SideEffect.ConnectionSuccess)
             } else {
                 ToastEventBus.send(
@@ -50,13 +51,30 @@ class ExternalNodeViewModel @Inject constructor(
             }
         }
     }
+
+    fun onConnectionPaste(clipboardText: String) {
+        viewModelScope.launch {
+            val result = LnPeer.parseUri(clipboardText)
+
+            if (result.isSuccess) {
+                _uiState.update { it.copy(peer = result.getOrNull()) }
+            } else {
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = resourceProvider.getString(R.string.lightning__error_add_uri),
+                )
+            }
+        }
+    }
 }
 
 // region contract
 interface ExternalNodeContract {
     data class UiState(
         val isLoading: Boolean = false,
+        val peer: LnPeer? = null,
     )
+
     sealed class SideEffect {
         data object ConnectionSuccess : SideEffect()
     }
