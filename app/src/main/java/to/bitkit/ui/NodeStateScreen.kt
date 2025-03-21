@@ -141,10 +141,10 @@ fun NodeStateScreen(
             )
             Peers(uiState.peers, viewModel::disconnectPeer)
             Channels(
-                uiState.channels,
-                uiState.peers.isNotEmpty(),
-                viewModel::openChannel,
-                viewModel::closeChannel,
+                channels = uiState.channels,
+                hasPeers = uiState.peers.isNotEmpty(),
+                onChannelOpenTap = viewModel::openChannel,
+                onChannelCloseTap = viewModel::closeChannel,
             )
             uiState.balanceDetails?.let {
                 Balances(it)

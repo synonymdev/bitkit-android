@@ -6,7 +6,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,9 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
@@ -24,7 +21,9 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.WatchResult
 import to.bitkit.ext.removeSpaces
+import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -510,37 +509,29 @@ class AppViewModel @Inject constructor(
     ): Result<PaymentId> {
         return try {
             val hash = lightningService.send(bolt11 = bolt11, amount)
-            val result = CompletableDeferred<Result<PaymentId>>()
 
-            ldkNodeEventBus.events
-                .takeWhile { event ->
-                    when (event) {
-                        is Event.PaymentSuccessful -> {
-                            if (event.paymentHash == hash) {
-                                result.complete(Result.success(hash))
-                                false // Stop collecting
-                            } else {
-                                true // Keep listening for other events
-                            }
+            // Wait until matching payment event is received
+            val result = ldkNodeEventBus.events.watchUntil { event ->
+                when (event) {
+                    is Event.PaymentSuccessful -> {
+                        if (event.paymentHash == hash) {
+                            WatchResult.Complete(Result.success(hash))
+                        } else {
+                            WatchResult.Continue()
                         }
-
-                        is Event.PaymentFailed -> {
-                            if (event.paymentHash == hash) {
-                                result.complete(
-                                    Result.failure(Exception(event.reason?.name ?: "Unknown payment failure reason"))
-                                )
-                                false // Stop collecting
-                            } else {
-                                true // Keep listening for other events
-                            }
-                        }
-
-                        else -> true // Continue collecting
                     }
+                    is Event.PaymentFailed -> {
+                        if (event.paymentHash == hash) {
+                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                            WatchResult.Complete(Result.failure(error))
+                        } else {
+                            WatchResult.Continue()
+                        }
+                    }
+                    else -> WatchResult.Continue()
                 }
-                .collect()
-
-            result.await()
+            }
+            result
         } catch (e: Exception) {
             toast(
                 type = Toast.ToastType.ERROR,
