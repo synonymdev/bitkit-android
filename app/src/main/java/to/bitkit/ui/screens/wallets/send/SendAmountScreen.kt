@@ -116,7 +116,7 @@ fun SendAmountScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(41.dp))
 
             PrimaryButton(
                 text = stringResource(R.string.continue_button),
