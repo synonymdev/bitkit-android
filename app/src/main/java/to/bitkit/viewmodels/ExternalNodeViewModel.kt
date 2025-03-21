@@ -140,7 +140,6 @@ class ExternalNodeViewModel @Inject constructor(
     }
 }
 
-// region contract
 interface ExternalNodeContract {
     data class UiState(
         val isLoading: Boolean = false,
@@ -152,4 +151,4 @@ interface ExternalNodeContract {
         data object ConnectionSuccess : SideEffect()
         data object ConfirmSuccess : SideEffect()
     }
-} // endregion
+}
