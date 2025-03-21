@@ -8,14 +8,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +34,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 internal fun Channels(
@@ -106,16 +107,34 @@ private fun ChannelItem(
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = channelId.ellipsisMiddle(50),
-            style = MaterialTheme.typography.labelSmall,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = channelId.ellipsisMiddle(48),
+                style = MaterialTheme.typography.labelSmall,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            BoxButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.RemoveCircleOutline,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Colors.Red,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
         Card {
             LinearProgressIndicator(
-                color = if (isReady) colorScheme.primary else colorScheme.error,
-                trackColor = colorScheme.surfaceVariant,
+                color = if (isReady) Colors.Purple else Colors.Gray3,
+                trackColor = Colors.Gray5,
                 progress = (inbound.toDouble() / (outbound + inbound))::toFloat,
                 modifier = Modifier
                     .height(8.dp)
@@ -129,29 +148,8 @@ private fun ChannelItem(
             Text(moneyString(outbound), style = MaterialTheme.typography.labelSmall)
             Text(moneyString(inbound), style = MaterialTheme.typography.labelSmall)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = if (isReady) "✅ Ready" else "⏳ Pending", style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.weight(1f))
-            BoxButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.large)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.size(4.dp))
-                Text(
-                    text = stringResource(R.string.close),
-                    color = colorScheme.primary,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-        }
         Column {
+            Text(text = if (isReady) "✅ Ready" else "⏳ Pending", style = MaterialTheme.typography.labelMedium)
             val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal)
             Text("Usable: ${if (isUsable) "✅" else "❌"}", style = style)
             Text("Announced: $isAnnounced", style = style)
