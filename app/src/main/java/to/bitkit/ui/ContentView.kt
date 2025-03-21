@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navOptions
 import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -237,13 +238,13 @@ fun ContentView(
                                 appViewModel.setHasSeenSavingsIntro(true)
                             },
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.SavingsAvailability> {
                         SavingsAvailabilityScreen(
                             onBackClick = { navController.popBackStack() },
-                            onCancelClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCancelClick = { navController.navigateToHome() },
                             onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
                         )
                     }
@@ -252,20 +253,20 @@ fun ContentView(
                             onConfirm = { navController.navigate(Routes.SavingsProgress) },
                             onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.SavingsAdvanced> {
                         SavingsAdvancedScreen(
                             onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.SavingsProgress> {
                         SavingsProgressScreen(
-                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onContinueClick = { navController.navigateToHome() },
+                            onCloseClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.SpendingIntro> {
@@ -275,14 +276,14 @@ fun ContentView(
                                 appViewModel.setHasSeenSpendingIntro(true)
                             },
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.SpendingAmount> {
                         SpendingAmountScreen(
                             viewModel = transferViewModel,
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                             onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
                         )
                     }
@@ -290,7 +291,7 @@ fun ContentView(
                         SpendingConfirmScreen(
                             viewModel = transferViewModel,
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                             onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
                             onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
                             onConfirm = { navController.navigate(Routes.SettingUp) },
@@ -300,22 +301,22 @@ fun ContentView(
                         SpendingAdvancedScreen(
                             viewModel = transferViewModel,
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                             onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
                         )
                     }
                     composable<Routes.TransferLiquidity> {
                         LiquidityScreen(
                             onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
                             onContinueClick = { navController.popBackStack() }
                         )
                     }
                     composable<Routes.SettingUp> {
                         SettingUpScreen(
                             viewModel = transferViewModel,
-                            onCloseClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
-                            onContinueClick = { navController.popBackStack<Routes.Home>(inclusive = false) },
+                            onCloseClick = { navController.navigateToHome() },
+                            onContinueClick = { navController.navigateToHome() },
                         )
                     }
                     composable<Routes.Funding> {
@@ -331,7 +332,7 @@ fun ContentView(
                             onFund = {
                                 scope.launch {
                                     // TODO show receive sheet -> ReceiveAmount
-                                    navController.popBackStack<Routes.Home>(inclusive = false)
+                                    navController.navigateToHome()
                                     delay(500) // Wait for nav to actually finish
                                     appViewModel.showSheet(BottomSheetType.Receive)
                                 }
@@ -606,6 +607,11 @@ private fun NavGraphBuilder.qrScanner(
 // endregion
 
 // region events
+fun NavController.navigateToHome() = navigate(
+    route = Routes.Home,
+    navOptions = navOptions { popUpTo(Routes.Home) }
+)
+
 fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
 )
