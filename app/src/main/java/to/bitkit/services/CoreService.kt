@@ -240,9 +240,14 @@ class ActivityService(
 
     // MARK: - Tag Methods
 
-    suspend fun appendTags(toActivityId: String, tags: List<String>) {
-        ServiceQueue.CORE.background {
-            addTags(toActivityId, tags)
+    suspend fun appendTags(toActivityId: String, tags: List<String>) : Result<Unit>{
+        return try {
+            ServiceQueue.CORE.background {
+                addTags(toActivityId, tags)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
