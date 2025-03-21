@@ -111,7 +111,7 @@ fun SendAmountScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 32.dp))
 
             Keyboard(
-                onClick = { number -> onEvent(SendEvent.AmountChange(uiState.amountInput + number)) },
+                onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
                 isDecimal = false, //TODO UPDATE IN OTHER PR
                 modifier = Modifier.fillMaxWidth(),
             )
