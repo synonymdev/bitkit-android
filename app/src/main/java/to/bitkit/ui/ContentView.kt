@@ -77,6 +77,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -343,43 +344,57 @@ fun ContentView(
                     composable<Routes.FundingAdvanced> {
                         FundingAdvancedScreen(
                             onLnUrl = { navController.navigateToQrScanner() },
-                            onManual = { navController.navigate(Routes.ExternalConnection) },
+                            onManual = { navController.navigate(Routes.ExternalNav) },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                         )
                     }
-                    composable<Routes.ExternalConnection> {
-                        ExternalConnectionScreen(
-                            onContinueClick = {
-                                navController.navigate(Routes.ExternalAmount)
-                            },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        )
-                    }
-                    composable<Routes.ExternalAmount> {
-                        ExternalAmountScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        )
-                    }
-                    composable<Routes.ExternalConfirm> {
-                        ExternalConfirmScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        )
-                    }
-                    composable<Routes.ExternalSuccess> {
-                        ExternalSuccessScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        )
-                    }
-                    composable<Routes.ExternalFeeCustom> {
-                        ExternalFeeCustomScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        )
+                    navigation<Routes.ExternalNav>(
+                        startDestination = Routes.ExternalConnection,
+                    ) {
+                        composable<Routes.ExternalConnection> {
+                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
+                            ExternalConnectionScreen(
+                                viewModel = viewModel,
+                                onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
+                                onBackClick = { navController.popBackStack() },
+                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                            )
+                        }
+                        composable<Routes.ExternalAmount> {
+                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
+                            ExternalAmountScreen(
+                                viewModel = viewModel,
+                                onBackClick = { navController.popBackStack() },
+                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                            )
+                        }
+                        composable<Routes.ExternalConfirm> {
+                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
+                            ExternalConfirmScreen(
+                                viewModel = viewModel,
+                                onBackClick = { navController.popBackStack() },
+                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                            )
+                        }
+                        composable<Routes.ExternalSuccess> {
+                            ExternalSuccessScreen(
+                                onBackClick = { navController.popBackStack() },
+                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                            )
+                        }
+                        composable<Routes.ExternalFeeCustom> {
+                            ExternalFeeCustomScreen(
+                                onBackClick = { navController.popBackStack() },
+                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                            )
+                        }
                     }
                 }
             }
@@ -764,6 +779,9 @@ object Routes {
 
     @Serializable
     data object FundingAdvanced
+
+    @Serializable
+    data object ExternalNav
 
     @Serializable
     data object ExternalConnection

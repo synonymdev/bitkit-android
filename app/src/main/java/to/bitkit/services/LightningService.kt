@@ -227,6 +227,25 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun connectPeer(peer: LnPeer) : Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            try {
+                Logger.debug("Connecting peer: $peer")
+
+                node.connect(peer.nodeId, peer.address, persist = true)
+                Logger.info("Peer connected: $peer")
+
+                Result.success(Unit)
+            } catch (e: NodeException) {
+                Logger.error("Peer connect error: $peer", LdkError(e))
+
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun disconnectPeer(peer: LnPeer) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
         Logger.debug("Disconnecting peer: $peer")

@@ -16,9 +16,22 @@ import to.bitkit.R
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.ExternalNodeViewModel
 
 @Composable
 fun ExternalAmountScreen(
+    viewModel: ExternalNodeViewModel,
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
+) {
+    ExternalAmountContent(
+        onBackClick = onBackClick,
+        onCloseClick = onCloseClick,
+    )
+}
+
+@Composable
+private fun ExternalAmountContent(
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -45,6 +58,6 @@ fun ExternalAmountScreen(
 @Composable
 private fun ExternalAmountScreenPreview() {
     AppThemeSurface {
-        ExternalAmountScreen()
+        ExternalAmountContent()
     }
 }

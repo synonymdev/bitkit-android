@@ -20,11 +20,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -33,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.models.LnPeer
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -46,26 +50,41 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.ExternalNodeContract
+import to.bitkit.viewmodels.ExternalNodeContract.SideEffect
+import to.bitkit.viewmodels.ExternalNodeViewModel
 
 @Composable
 fun ExternalConnectionScreen(
-    onContinueClick: () -> Unit = {},
+    viewModel: ExternalNodeViewModel,
+    onNodeConnected: () -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
+    LaunchedEffect(viewModel, onNodeConnected) {
+        viewModel.effects.collect {
+            when (it) {
+                SideEffect.ConnectionSuccess -> onNodeConnected()
+                else -> Unit
+            }
+        }
+    }
+
+    val clipboard = LocalClipboardManager.current
     fun onPasteClick() {
-        println("onPasteClick") // TODO implement paste & parse
+        val clipboardData = clipboard.getText()?.text.orEmpty().trim()
+        println("onPasteClick clipboardData: $clipboardData") // TODO implement paste & parse
     }
 
     fun onScanClick() {
         println("onScanClick") // TODO implement scan externalNode
     }
 
+    val uiState by viewModel.uiState.collectAsState()
+
     ExternalConnectionContent(
-        onContinueClick = {
-            // TODO handle: connectPeer & persist
-            onContinueClick()
-        },
+        uiState = uiState,
+        onContinueClick = { peer -> viewModel.onConnectionContinue(peer) },
         onScanClick = { onScanClick() },
         onPasteClick = { onPasteClick() },
         onBackClick = onBackClick,
@@ -75,7 +94,8 @@ fun ExternalConnectionScreen(
 
 @Composable
 private fun ExternalConnectionContent(
-    onContinueClick: () -> Unit = {},
+    uiState: ExternalNodeContract.UiState,
+    onContinueClick: (LnPeer) -> Unit = {},
     onScanClick: () -> Unit = {},
     onPasteClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
@@ -85,7 +105,6 @@ private fun ExternalConnectionContent(
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("") }
 
-    var isLoading by remember { mutableStateOf(false) }
     val isValid = nodeId.length == 66 && host.isNotBlank() && port.isNotBlank()
 
     ScreenColumn {
@@ -139,7 +158,7 @@ private fun ExternalConnectionContent(
                 placeholder = { Text("00.00.00.00") },
                 value = host,
                 onValueChange = { host = it },
-                singleLine = false,
+                singleLine = true,
                 colors = AppTextFieldDefaults.semiTransparent,
                 shape = AppShapes.smallInput,
                 keyboardOptions = KeyboardOptions(
@@ -151,13 +170,13 @@ private fun ExternalConnectionContent(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-            Caption13Up(text = stringResource(R.string.lightning__external_manual__host), color = Colors.White64)
+            Caption13Up(text = stringResource(R.string.lightning__external_manual__port), color = Colors.White64)
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 placeholder = { Text("9735") },
                 value = port,
                 onValueChange = { port = it },
-                singleLine = false,
+                singleLine = true,
                 colors = AppTextFieldDefaults.semiTransparent,
                 shape = AppShapes.smallInput,
                 keyboardOptions = KeyboardOptions(
@@ -198,9 +217,9 @@ private fun ExternalConnectionContent(
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
-                    onClick = onContinueClick,
+                    onClick = { onContinueClick(LnPeer(nodeId = nodeId, host = host, port = port)) },
                     enabled = isValid,
-                    isLoading = isLoading,
+                    isLoading = uiState.isLoading,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -211,8 +230,10 @@ private fun ExternalConnectionContent(
 
 @Preview(showSystemUi = true, showBackground = true)
 @Composable
-private fun ExternalConnectionScreenPreview() {
+private fun Preview() {
     AppThemeSurface {
-        ExternalConnectionContent()
+        ExternalConnectionContent(
+            uiState = ExternalNodeContract.UiState(),
+        )
     }
 }
