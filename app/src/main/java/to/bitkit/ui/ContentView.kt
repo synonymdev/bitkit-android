@@ -392,8 +392,8 @@ fun ContentView(
                         }
                         composable<Routes.ExternalSuccess> {
                             ExternalSuccessScreen(
-                                onBackClick = { navController.popBackStack() },
-                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                                onContinue = { navController.navigateToHome() },
+                                onClose = { navController.navigateToHome() },
                             )
                         }
                         composable<Routes.ExternalFeeCustom> {

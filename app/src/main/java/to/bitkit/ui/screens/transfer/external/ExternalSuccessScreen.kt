@@ -1,50 +1,42 @@
 package to.bitkit.ui.screens.transfer.external
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import to.bitkit.R
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.components.InfoScreenContent
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.localizedRandom
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun ExternalSuccessScreen(
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
+    onContinue: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    ScreenColumn {
-        AppTopBar(
-            titleText = stringResource(R.string.lightning__external__nav_title),
-            onBackClick = onBackClick,
-            actions = {
-                IconButton(onClick = onCloseClick) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.common__close),
-                    )
-                }
-            },
-        )
-        Box(modifier = Modifier.fillMaxSize()) {
-            Text("TODO: ExternalSuccessScreen", modifier = Modifier.align(Alignment.Center))
-        }
-    }
+    InfoScreenContent(
+        navTitle = stringResource(R.string.lightning__external__nav_title),
+        title = stringResource(R.string.lightning__external_success__title).withAccent(accentColor = Colors.Purple),
+        description = stringResource(R.string.lightning__external_success__text)
+            .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+        image = painterResource(R.drawable.switch_box),
+        buttonText = localizedRandom(R.string.common__ok_random),
+        onButtonClick = onContinue,
+        onCloseClick = onClose,
+    )
 }
 
 @Preview(showSystemUi = true, showBackground = true)
 @Composable
 private fun ExternalSuccessScreenPreview() {
     AppThemeSurface {
-        ExternalSuccessScreen()
+        ExternalSuccessScreen(
+            onContinue = {},
+            onClose = {},
+        )
     }
 }
