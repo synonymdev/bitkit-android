@@ -271,7 +271,7 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             try {
-                Logger.debug("Opening channel (channelAmountSats: $channelAmountSats) with peer: $peer")
+                Logger.debug("Initiating channel open (sats: $channelAmountSats) with peer: $peer")
 
                 val userChannelId = node.openChannel(
                     nodeId = peer.nodeId,
@@ -281,12 +281,12 @@ class LightningService @Inject constructor(
                     channelConfig = null,
                 )
 
-                Logger.info("Channel open success, userChannelId: $peer")
+                Logger.info("Channel open initiated, userChannelId: $userChannelId")
 
                 Result.success(userChannelId)
             } catch (e: NodeException) {
                 val error = LdkError(e)
-                Logger.error("Error opening channel", error)
+                Logger.error("Error initiating channel open", error)
                 Result.failure(error)
             }
         }

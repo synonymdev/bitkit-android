@@ -9,9 +9,14 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.R
+import to.bitkit.ext.WatchResult
+import to.bitkit.ext.watchUntil
 import to.bitkit.models.LnPeer
 import to.bitkit.models.Toast
+import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.ResourceProvider
@@ -23,6 +28,7 @@ import javax.inject.Inject
 class ExternalNodeViewModel @Inject constructor(
     private val resourceProvider: ResourceProvider,
     private val lightningService: LightningService,
+    private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -81,15 +87,54 @@ class ExternalNodeViewModel @Inject constructor(
             )
 
             if (result.isSuccess) {
-                setEffect(SideEffect.ConfirmSuccess)
-            } else {
-                _uiState.update { it.copy(isLoading = false) }
+                val userChannelId = requireNotNull(result.getOrNull())
 
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = resourceProvider.getString(R.string.lightning__error_channel_purchase),
-                    description = resourceProvider.getString(R.string.lightning__error_channel_setup_msg),
-                )
+                // Wait until matching channel event is received
+                val initResult = awaitChannelInitResult(userChannelId)
+
+                if (initResult.isSuccess) {
+                    setEffect(SideEffect.ConfirmSuccess)
+                } else {
+                    failConfirm(initResult.exceptionOrNull()?.message.orEmpty())
+                }
+            } else {
+                failConfirm(result.exceptionOrNull()?.message.orEmpty())
+            }
+        }
+    }
+
+    private suspend fun failConfirm(errorMessage: String) {
+        _uiState.update { it.copy(isLoading = false) }
+
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = resourceProvider.getString(R.string.lightning__error_channel_purchase),
+            description = resourceProvider
+                .getString(R.string.lightning__error_channel_setup_msg)
+                .replace("{raw}", errorMessage),
+        )
+    }
+
+    private suspend fun awaitChannelInitResult(userChannelId: UserChannelId): Result<Unit> {
+        return ldkNodeEventBus.events.watchUntil { event ->
+            when (event) {
+                is Event.ChannelClosed -> {
+                    if (event.userChannelId == userChannelId) {
+                        WatchResult.Complete(Result.failure(Exception("${event.reason}")))
+                    } else {
+                        WatchResult.Continue()
+                    }
+                }
+
+                is Event.ChannelPending -> {
+                    if (event.userChannelId == userChannelId) {
+                        WatchResult.Complete(Result.success(Unit))
+                    } else {
+                        WatchResult.Continue()
+                    }
+                }
+
+                else -> WatchResult.Continue()
             }
         }
     }
