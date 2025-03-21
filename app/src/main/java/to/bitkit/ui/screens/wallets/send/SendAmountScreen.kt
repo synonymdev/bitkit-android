@@ -105,9 +105,10 @@ fun SendAmountScreen(
                     )
                 }
             }
-            HorizontalDivider()
 
             Spacer(modifier = Modifier.weight(1f))
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 32.dp))
 
             Keyboard(
                 onClick = { number -> onEvent(SendEvent.AmountChange(uiState.amountInput + number)) },
