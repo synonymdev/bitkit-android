@@ -7,8 +7,7 @@ import kotlinx.coroutines.flow.takeWhile
 
 /**
  * Suspends and collects the elements of the Flow until the provided predicate satisfies
- * a `WatchResult.Complete`. The predicate evaluates each emitted value and determines
- * whether to continue the Flow or complete with the given result.
+ * a `WatchResult.Complete`.
  *
  * @param predicate A suspending function that processes each emitted value and returns a
  * `WatchResult` indicating whether to continue or complete with a result.
