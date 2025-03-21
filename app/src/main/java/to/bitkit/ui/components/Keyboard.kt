@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,6 +87,16 @@ private fun Preview() {
 @Preview(showBackground = true)
 @Composable
 private fun Preview2() {
+    AppThemeSurface {
+        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
+            Keyboard(isDecimal = false, modifier = Modifier.fillMaxWidth().padding(41.dp), onClick = {})
+        }
+    }
+}
+
+@Preview(showBackground = true, device = Devices.PIXEL_TABLET)
+@Composable
+private fun Preview3() {
     AppThemeSurface {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
             Keyboard(isDecimal = false, modifier = Modifier.fillMaxWidth().padding(41.dp), onClick = {})
