@@ -70,6 +70,29 @@ class ExternalNodeViewModel @Inject constructor(
     fun onAmountContinue(satsAmount: Long) {
         _uiState.update { it.copy(localBalance = satsAmount) }
     }
+
+    fun onConfirm() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+
+            val result = lightningService.openChannel(
+                peer = requireNotNull(_uiState.value.peer),
+                channelAmountSats = _uiState.value.localBalance.toULong(),
+            )
+
+            if (result.isSuccess) {
+                setEffect(SideEffect.ConfirmSuccess)
+            } else {
+                _uiState.update { it.copy(isLoading = false) }
+
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = resourceProvider.getString(R.string.lightning__error_channel_purchase),
+                    description = resourceProvider.getString(R.string.lightning__error_channel_setup_msg),
+                )
+            }
+        }
+    }
 }
 
 // region contract
@@ -82,5 +105,6 @@ interface ExternalNodeContract {
 
     sealed class SideEffect {
         data object ConnectionSuccess : SideEffect()
+        data object ConfirmSuccess : SideEffect()
     }
 } // endregion

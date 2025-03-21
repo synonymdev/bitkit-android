@@ -64,6 +64,7 @@ fun ExternalConnectionScreen(
 ) {
     val app = appViewModel ?: return
     val clipboard = LocalClipboardManager.current
+    val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(viewModel, onNodeConnected) {
         viewModel.effects.collect {
@@ -73,8 +74,6 @@ fun ExternalConnectionScreen(
             }
         }
     }
-
-    val uiState by viewModel.uiState.collectAsState()
 
     ExternalConnectionContent(
         uiState = uiState,

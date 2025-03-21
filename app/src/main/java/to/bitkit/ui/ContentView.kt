@@ -380,6 +380,11 @@ fun ContentView(
 
                             ExternalConfirmScreen(
                                 viewModel = viewModel,
+                                onConfirm = {
+                                    walletViewModel.refreshState()
+                                    navController.navigate(Routes.ExternalSuccess)
+                                },
+                                onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
                                 onBackClick = { navController.popBackStack() },
                                 onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                             )
