@@ -369,6 +369,7 @@ fun ContentView(
 
                             ExternalAmountScreen(
                                 viewModel = viewModel,
+                                onContinue = { navController.navigate(Routes.ExternalConfirm) },
                                 onBackClick = { navController.popBackStack() },
                                 onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                             )

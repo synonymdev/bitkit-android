@@ -66,6 +66,10 @@ class ExternalNodeViewModel @Inject constructor(
             }
         }
     }
+
+    fun onAmountContinue(satsAmount: Long) {
+        _uiState.update { it.copy(localBalance = satsAmount) }
+    }
 }
 
 // region contract
@@ -73,6 +77,7 @@ interface ExternalNodeContract {
     data class UiState(
         val isLoading: Boolean = false,
         val peer: LnPeer? = null,
+        val localBalance: Long = 0,
     )
 
     sealed class SideEffect {
