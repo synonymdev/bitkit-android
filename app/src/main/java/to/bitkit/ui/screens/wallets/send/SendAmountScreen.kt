@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
@@ -56,14 +57,14 @@ fun SendAmountScreen(
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-            TextField(
+            TextField( //TODO UPDATE IN OTHER PR
                 placeholder = { Text(stringResource(R.string.amount_placeholder)) },
+                readOnly = true,
                 value = uiState.amountInput,
-                onValueChange = { onEvent(SendEvent.AmountChange(it)) },
+                onValueChange = {  },
                 colors = AppTextFieldDefaults.noIndicatorColors,
                 shape = MaterialTheme.shapes.small,
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
@@ -108,11 +109,20 @@ fun SendAmountScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            Keyboard(
+                onClick = { number -> onEvent(SendEvent.AmountChange(uiState.amountInput + number)) },
+                isDecimal = false, //TODO UPDATE IN OTHER PR
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             PrimaryButton(
                 text = stringResource(R.string.continue_button),
                 enabled = uiState.isAmountInputValid,
                 onClick = { onEvent(SendEvent.AmountContinue(uiState.amountInput)) },
             )
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
