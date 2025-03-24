@@ -61,7 +61,7 @@ fun SendAmountScreen(
                 text = stringResource(R.string.wallet__send_available),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
