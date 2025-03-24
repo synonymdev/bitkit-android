@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +29,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.formatStringWithSeparator
 import to.bitkit.viewmodels.CurrencyUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -72,10 +72,11 @@ fun SendAmountScreen(
                     color = Colors.White64,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
+
                 BodySSB(
                     text = when (uiState.payMethod) {
-                        SendMethod.ONCHAIN ->balances.totalOnchainSats.toLong().toString()
-                        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong().toString()
+                        SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong().formatStringWithSeparator()
+                        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong().formatStringWithSeparator()
                     },
                     color = Colors.White
                 )

@@ -13,6 +13,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import to.bitkit.ui.theme.Colors
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 fun String.withAccent(
     defaultColor: Color = Color.Unspecified,
@@ -121,4 +124,14 @@ fun localizedRandom(@StringRes id: Int): String {
             localizedString
         }
     }
+}
+
+fun Long.formatStringWithSeparator(): String {
+    val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+        groupingSeparator = ' '
+    }
+
+    val formatter = DecimalFormat("#,###", symbols)
+
+    return runCatching { formatter.format(this) }.getOrNull() ?: this.toString()
 }
