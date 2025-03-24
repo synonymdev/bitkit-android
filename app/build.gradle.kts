@@ -105,6 +105,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.biometric)
     implementation("com.google.zxing:core:3.5.2")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     // CameraX
