@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
@@ -83,6 +85,8 @@ fun SendAmountScreen(
                         }
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
+                UnitButton()
             }
 
             Spacer(modifier = Modifier.weight(1f))
