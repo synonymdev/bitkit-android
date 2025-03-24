@@ -20,6 +20,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
@@ -59,23 +60,29 @@ fun SendAmountScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            Text13Up(
+                text = stringResource(R.string.wallet__send_available),
+                color = Colors.White64,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
             Row(
-                verticalAlignment = Alignment.Bottom,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    val balances = LocalBalances.current
-                    Text13Up(
-                        text = stringResource(R.string.wallet__send_available),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = when (uiState.payMethod) {
-                            SendMethod.ONCHAIN -> moneyString(balances.totalOnchainSats.toLong())
-                            SendMethod.LIGHTNING -> moneyString(balances.totalLightningSats.toLong())
-                        }
-                    )
-                }
+                val balances = LocalBalances.current
+                BodySSB(
+                    text = "₿",
+                    color = Colors.White64,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                BodySSB(
+                    text = when (uiState.payMethod) {
+                        SendMethod.ONCHAIN ->balances.totalOnchainSats.toLong().toString()
+                        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong().toString()
+                    },
+                    color = Colors.White
+                )
+
                 Spacer(modifier = Modifier.weight(1f))
                 OutlinedColorButton(
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
