@@ -26,14 +26,11 @@ import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
