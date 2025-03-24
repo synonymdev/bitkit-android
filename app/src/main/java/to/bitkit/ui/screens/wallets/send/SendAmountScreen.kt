@@ -87,22 +87,29 @@ fun SendAmountScreen(
                     color = when (uiState.payMethod) {
                         SendMethod.ONCHAIN -> Colors.Brand
                         SendMethod.LIGHTNING -> Colors.Purple
-                    }
+                    },
+                    modifier = Modifier.height(28.dp)
                 ) {
-                    Text(
+                    Text13Up(
                         text = when (uiState.payMethod) {
                             SendMethod.ONCHAIN -> stringResource(R.string.savings)
                             SendMethod.LIGHTNING -> stringResource(R.string.spending)
+                        },
+                        color = when (uiState.payMethod) {
+                            SendMethod.ONCHAIN -> Colors.Brand
+                            SendMethod.LIGHTNING -> Colors.Purple
                         }
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                UnitButton()
+                UnitButton(
+                    modifier = Modifier.height(28.dp)
+                )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 32.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             Keyboard(
                 onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
