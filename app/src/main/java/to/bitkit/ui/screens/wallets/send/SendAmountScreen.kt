@@ -16,25 +16,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
+
 @Composable
 fun SendAmountScreen(
     uiState: SendUiState,
+    currencyUiState: CurrencyUiState = LocalCurrencies.current,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
@@ -95,7 +102,7 @@ fun SendAmountScreen(
 
             Keyboard(
                 onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
-                isDecimal = false, //TODO UPDATE IN OTHER PR
+                isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
                 modifier = Modifier.fillMaxWidth(),
             )
 
