@@ -7,23 +7,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
@@ -31,7 +24,6 @@ import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.DarkModePreview
-import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.SendEvent
@@ -54,25 +46,12 @@ fun SendAmountScreen(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            val focusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            BalanceHeaderView(sats = uiState.amountInput.toLong(), modifier = Modifier.fillMaxWidth())
 
-            TextField( //TODO UPDATE IN OTHER PR
-                placeholder = { Text(stringResource(R.string.amount_placeholder)) },
-                readOnly = true,
-                value = uiState.amountInput,
-                onValueChange = {  },
-                colors = AppTextFieldDefaults.noIndicatorColors,
-                shape = MaterialTheme.shapes.small,
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-            )
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(
                 verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.padding(vertical = 8.dp)
             ) {
                 Column {
                     val balances = LocalBalances.current
