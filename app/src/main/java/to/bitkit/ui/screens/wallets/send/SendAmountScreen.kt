@@ -19,8 +19,8 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Keyboard
+import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
@@ -29,7 +29,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.formatStringWithSeparator
 import to.bitkit.viewmodels.CurrencyUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -67,21 +66,14 @@ fun SendAmountScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val balances = LocalBalances.current
-                BodySSB(
-                    text = "₿",
-                    color = Colors.White64,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-
-                BodySSB(
-                    text = when (uiState.payMethod) {
-                        SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong().formatStringWithSeparator()
-                        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong().formatStringWithSeparator()
-                    },
-                    color = Colors.White
-                )
+                val availableAmount = when (uiState.payMethod) {
+                    SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
+                    SendMethod.LIGHTNING -> balances.totalLightningSats.toLong()
+                }
+                MoneySSB(sats = availableAmount.toLong())
 
                 Spacer(modifier = Modifier.weight(1f))
+
                 OutlinedColorButton(
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     enabled = uiState.isUnified,
