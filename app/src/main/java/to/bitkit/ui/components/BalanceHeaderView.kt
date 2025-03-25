@@ -41,30 +41,13 @@ fun BalanceHeaderView(
                         text = "${converted.symbol} ${converted.formatted}"
                     )
 
-                    // large row
                     val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.height(62.dp)
-                    ) {
-                        if (prefix != null) {
-                            Display(
-                                text = prefix,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        if (showBitcoinSymbol) {
-                            Display(
-                                text = btcComponents.symbol,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        Display(text = btcComponents.value)
-                    }
+                    LargeRow(
+                        prefix = prefix,
+                        text = btcComponents.value,
+                        symbol = btcComponents.symbol,
+                        showSymbol = showBitcoinSymbol
+                    )
                 }
             } else {
                 Column {
@@ -73,31 +56,41 @@ fun BalanceHeaderView(
                         prefix = prefix,
                         text = "${btcComponents.symbol} ${btcComponents.value}"
                     )
-
-                    // large row
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.height(62.dp)
-                    ) {
-                        if (prefix != null) {
-                            Display(
-                                text = prefix,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        Display(
-                            text = converted.symbol,
-                            modifier = Modifier
-                                .alpha(0.6f)
-                                .padding(end = 8.dp)
-                        )
-                        Display(text = converted.formatted)
-                    }
+                    LargeRow(
+                        prefix = prefix,
+                        text = converted.formatted,
+                        symbol = converted.symbol,
+                        showSymbol = true
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.height(62.dp)
+    ) {
+        if (prefix != null) {
+            Display(
+                text = prefix,
+                modifier = Modifier
+                    .alpha(0.6f)
+                    .padding(end = 8.dp)
+            )
+        }
+        if (showSymbol) {
+            Display(
+                text = symbol,
+                modifier = Modifier
+                    .alpha(0.6f)
+                    .padding(end = 8.dp)
+            )
+        }
+        Display(text = text)
     }
 }
 
