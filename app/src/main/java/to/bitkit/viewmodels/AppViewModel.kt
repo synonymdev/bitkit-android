@@ -99,6 +99,25 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val isUnlockRequired: StateFlow<Boolean> = settingsStore.isUnlockRequired
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setIsUnlockRequired(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsUnlockRequired(value)
+        }
+    }
+
+    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setIsBiometricEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsBiometricEnabled(value)
+        }
+    }
+
+    // TODO if !unlockRequired && !isBiometricEnabled -> init true
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(
