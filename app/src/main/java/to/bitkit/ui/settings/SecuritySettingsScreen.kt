@@ -86,7 +86,7 @@ private fun SecuritySettingsContent(
                     onClick = onUseBioClick,
                 )
             }
-            if (isUnlockRequired && isBiometrySupported) {
+            if (isPinEnabled && isBiometrySupported) {
                 BodyS(
                     text = let {
                         val bioTypeName = stringResource(R.string.security__bio)
