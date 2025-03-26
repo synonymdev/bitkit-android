@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +27,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +40,8 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
@@ -162,6 +169,7 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun HomeContentView(
     rootNavController: NavController,
@@ -182,7 +190,28 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-        Box(modifier = Modifier.fillMaxSize()) {
+
+        val scope = rememberCoroutineScope()
+        var isRefreshing by remember { mutableStateOf(false) }
+
+        fun refresh() = scope.launch {
+            // TODO use viewmodel state?!
+            isRefreshing = true
+            onRefresh()
+            delay(1500)
+            isRefreshing = false
+        }
+
+        val pullRefreshState = rememberPullRefreshState(
+            refreshing = isRefreshing,
+            onRefresh = ::refresh
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(pullRefreshState)
+        ) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
@@ -235,6 +264,12 @@ private fun HomeContentView(
                         .align(Alignment.BottomCenter)
                 )
             }
+
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
