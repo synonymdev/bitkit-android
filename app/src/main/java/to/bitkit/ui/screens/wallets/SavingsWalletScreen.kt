@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
@@ -47,7 +49,12 @@ fun SavingsWalletScreen(
     val showEmptyState by remember(balances.totalOnchainSats) {
         mutableStateOf(balances.totalOnchainSats == 0uL) // TODO use && hasOnchainActivity
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Colors.Black)
+    ) {
         Image(
             painter = painterResource(id = R.drawable.piggybank),
             contentDescription = null,
@@ -57,7 +64,7 @@ fun SavingsWalletScreen(
                 .offset(x = (120).dp)
                 .size(268.dp)
         )
-        ScreenColumn {
+        ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__savings__title),
                 icon = painterResource(R.drawable.ic_btc_circle),
