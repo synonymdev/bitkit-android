@@ -160,6 +160,7 @@ class CurrencyViewModel @Inject constructor(
     }
 
     // UI Helpers
+    /**Convert sats fo fiat*/
     fun convert(sats: Long, currency: String? = null): ConvertedAmount? {
         val targetCurrency = currency ?: uiState.value.selectedCurrency
         val rate = currencyService.getCurrentRate(targetCurrency, uiState.value.rates)

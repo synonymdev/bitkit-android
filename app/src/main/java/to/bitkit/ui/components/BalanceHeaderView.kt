@@ -9,16 +9,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.ldk.structs.Amount.currency
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
@@ -45,7 +43,8 @@ fun BalanceHeaderView(
             BalanceHeader(
                 modifier = modifier,
                 smallRowPrefix = prefix,
-                smallRowText = "${converted.symbol} ${converted.formatted}",
+                smallRowSymbol = converted.symbol,
+                smallRowText = converted.formatted,
                 largeRowPrefix = prefix,
                 largeRowText = btcComponents.value,
                 largeRowSymbol = btcComponents.symbol,
@@ -56,7 +55,8 @@ fun BalanceHeaderView(
             BalanceHeader(
                 modifier = modifier,
                 smallRowPrefix = prefix,
-                smallRowText = "${btcComponents.symbol} ${btcComponents.value}",
+                smallRowSymbol = btcComponents.symbol,
+                smallRowText = btcComponents.value,
                 largeRowPrefix = prefix,
                 largeRowText = converted.formatted,
                 largeRowSymbol = converted.symbol,
@@ -91,51 +91,43 @@ fun BalanceHeaderEditable(
 
 
 
-    // Effect to handle input and display unit changes
-    LaunchedEffect(input, primaryDisplay) {
+    LaunchedEffect(input) { //TODO HANDLE PRIMARY DISPLAY CHANGE
         when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
-                // When primary display is Bitcoin
                 satsValue += input
-//                largeRowText = input
 
-                // Convert sats to fiat for small row
                 val sats = satsValue.toLongOrNull() ?: 0L
 
                 val converted = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
                 converted?.let {
                     val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    smallRowSymbol = it.symbol
-                    smallRowText = "${smallRowSymbol} ${converted.formatted}"
-                    largeRowText = btcComponents.value
+                    smallRowSymbol = converted.symbol
+                    smallRowText = converted.formatted
                     largeRowSymbol = btcComponents.symbol
+                    largeRowText = btcComponents.value
                 }
             }
             PrimaryDisplay.FIAT -> {
-                // When primary display is Fiat
                 fiatValue += input
-
                 val converted = if (rates.isNotEmpty()) currency.convertFiatToSats(fiatAmount = (fiatValue + input).toDoubleOrNull() ?: 0.0) else null
                 converted?.let {
-                    largeRowText = fiatValue
-                    largeRowSymbol = "$"
-
-                    // Convert fiat to sats for small row
                     satsValue = it.toString()
                     smallRowSymbol = "B"
-                    smallRowText = "$smallRowSymbol $satsValue"
+                    smallRowText = satsValue
 
+                    largeRowSymbol = "$"
+                    largeRowText = fiatValue
                 }
             }
         }
 
-        // Trigger callback with sats value
         onSatsChanged(satsValue)
     }
 
     BalanceHeader(
         modifier = modifier,
         smallRowPrefix = smallRowPrefix,
+        smallRowSymbol = smallRowSymbol,
         smallRowText = smallRowText,
         largeRowPrefix = largeRowPrefix,
         largeRowText = largeRowText,
@@ -148,6 +140,7 @@ fun BalanceHeaderEditable(
 @Composable
 fun BalanceHeader(
     smallRowPrefix: String? = null,
+    smallRowSymbol: String? = null,
     smallRowText: String,
     largeRowPrefix: String? = null,
     largeRowText: String,
@@ -163,6 +156,7 @@ fun BalanceHeader(
     ) {
         SmallRow(
             prefix = smallRowPrefix,
+            symbol = smallRowSymbol,
             text = smallRowText
         )
 
@@ -201,7 +195,7 @@ fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean)
 }
 
 @Composable
-private fun SmallRow(prefix: String?, text: String) {
+private fun SmallRow(prefix: String?, symbol: String?, text: String) {
     Row(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -209,6 +203,12 @@ private fun SmallRow(prefix: String?, text: String) {
         if (prefix != null) {
             Caption13Up(
                 text = prefix,
+                color = Colors.White64,
+            )
+        }
+        if (symbol != null) {
+            Caption13Up(
+                text = symbol,
                 color = Colors.White64,
             )
         }

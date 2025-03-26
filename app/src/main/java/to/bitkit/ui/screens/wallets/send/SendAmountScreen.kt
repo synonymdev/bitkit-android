@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -18,6 +22,7 @@ import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.BalanceHeaderEditable
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.MoneySSB
@@ -49,10 +54,17 @@ fun SendAmountScreen(
             onEvent(SendEvent.AmountReset)
             onBack()
         }
+
+        var input: String by remember { mutableStateOf("") }
+
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            BalanceHeaderView(sats = uiState.amountInput.toLong(), modifier = Modifier.fillMaxWidth())
+            BalanceHeaderEditable(
+                input = input,
+                onSatsChanged = { number -> onEvent(SendEvent.AmountChange(number)) },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -105,7 +117,7 @@ fun SendAmountScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             Keyboard(
-                onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
+                onClick = { number -> input = number },
                 isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
                 modifier = Modifier.fillMaxWidth(),
             )
