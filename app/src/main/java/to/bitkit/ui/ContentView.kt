@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -185,7 +186,7 @@ fun ContentView(
             walletViewModel.isRestoringWallet = false
         }
     } else {
-        val balance by walletViewModel.balanceState.collectAsState()
+        val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
         val currencies by currencyViewModel.uiState.collectAsState()
 
         CompositionLocalProvider(

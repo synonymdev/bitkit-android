@@ -61,7 +61,7 @@ class WalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _balanceState = MutableStateFlow(BalanceState())
+    private val _balanceState = MutableStateFlow(appStorage.loadBalance() ?: BalanceState())
     val balanceState = _balanceState.asStateFlow()
 
     private var _nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
@@ -195,13 +195,15 @@ class WalletViewModel @Inject constructor(
         lightningService.balances?.let { balance ->
             _uiState.update { it.copy(balanceDetails = balance) }
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
-            _balanceState.update {
-                it.copy(
-                    totalOnchainSats = balance.totalOnchainBalanceSats,
-                    totalLightningSats = balance.totalLightningBalanceSats,
-                    totalSats = totalSats,
-                )
-            }
+
+            val newBalance = BalanceState(
+                totalOnchainSats = balance.totalOnchainBalanceSats,
+                totalLightningSats = balance.totalLightningBalanceSats,
+                totalSats = totalSats,
+            )
+            _balanceState.update { newBalance }
+            appStorage.cacheBalance(newBalance)
+
             if (totalSats > 0u) {
                 viewModelScope.launch {
                     settingsStore.setShowEmptyState(false)
