@@ -8,11 +8,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import org.ldk.structs.Amount.currency
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
@@ -59,6 +65,80 @@ fun BalanceHeaderView(
             )
         }
     }
+}
+
+
+@Composable
+fun BalanceHeaderEditable(
+    input: String,
+    showBitcoinSymbol: Boolean = true,
+    onSatsChanged: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+    val currency = currencyViewModel ?: return
+
+    var satsValue: String by remember { mutableStateOf("") }
+    var fiatValue: String by remember { mutableStateOf("") }
+
+    var smallRowPrefix: String by remember { mutableStateOf("") }
+    var smallRowText: String by remember { mutableStateOf("") }
+
+    var largeRowPrefix: String by remember { mutableStateOf("") }
+    var largeRowText: String by remember { mutableStateOf("") }
+    var largeRowSymbol: String by remember { mutableStateOf("") }
+
+
+
+    // Effect to handle input and display unit changes
+    LaunchedEffect(input, primaryDisplay) {
+        when (primaryDisplay) {
+            PrimaryDisplay.BITCOIN -> {
+                // When primary display is Bitcoin
+                satsValue += input
+//                largeRowText = input
+
+                // Convert sats to fiat for small row
+                val sats = satsValue.toLongOrNull() ?: 0L
+
+                val converted = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
+                converted?.let {
+                    val btcComponents = converted.bitcoinDisplay(displayUnit)
+                    smallRowPrefix = it.symbol
+                    smallRowText = "${converted.symbol} ${converted.formatted}"
+                    largeRowText = btcComponents.value
+                    largeRowSymbol = btcComponents.symbol
+                }
+            }
+            PrimaryDisplay.FIAT -> {
+                // When primary display is Fiat
+                val converted = if (rates.isNotEmpty()) currency.convert(sats = input.toLongOrNull() ?: 0L) else null
+                converted?.let {
+                    fiatValue = it.formatted
+                    largeRowText = converted.formatted
+                    largeRowSymbol = it.symbol
+
+                    // Convert fiat to sats for small row
+                    satsValue = it.sats.toString()
+                    smallRowText = it.sats.toString()
+                }
+            }
+        }
+
+        // Trigger callback with sats value
+        onSatsChanged(satsValue)
+    }
+
+    BalanceHeader(
+        modifier = modifier,
+        smallRowPrefix = smallRowPrefix,
+        smallRowText = smallRowText,
+        largeRowPrefix = largeRowPrefix,
+        largeRowText = largeRowText,
+        largeRowSymbol = largeRowSymbol,
+        showSymbol = showBitcoinSymbol,
+        onClick = {  }
+    )
 }
 
 @Composable
