@@ -38,6 +38,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
     signingConfigs {
         getByName("debug") {
