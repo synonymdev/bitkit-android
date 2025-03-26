@@ -51,7 +51,7 @@ fun CreateWalletScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(264.dp)
                 .align(Alignment.BottomCenter),
         ) {
             Display(text = stringResource(R.string.onboarding__slide4_header).withAccent())
@@ -79,6 +79,7 @@ fun CreateWalletScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

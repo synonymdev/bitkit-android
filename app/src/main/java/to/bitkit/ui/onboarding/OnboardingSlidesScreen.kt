@@ -203,7 +203,7 @@ fun OnboardingTab(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(264.dp)
                 .align(Alignment.BottomCenter),
         ) {
             Display(text = title.withAccent(accentColor = titleAccentColor))
