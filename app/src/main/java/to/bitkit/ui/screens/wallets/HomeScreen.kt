@@ -61,6 +61,8 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.screenSlideIn
+import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.WalletViewModel
@@ -110,7 +112,10 @@ fun HomeScreen(
                         onRefresh = walletViewModel::refreshState,
                     )
                 }
-                composable<HomeRoutes.Savings> {
+                composable<HomeRoutes.Savings>(
+                    enterTransition = { screenSlideIn },
+                    exitTransition = { screenSlideOut },
+                ) {
                     val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
@@ -125,7 +130,10 @@ fun HomeScreen(
                         onBackClick = { walletNavController.popBackStack() },
                     )
                 }
-                composable<HomeRoutes.Spending> {
+                composable<HomeRoutes.Spending>(
+                    enterTransition = { screenSlideIn },
+                    exitTransition = { screenSlideOut },
+                ) {
                     val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
                     SpendingWalletScreen(
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },

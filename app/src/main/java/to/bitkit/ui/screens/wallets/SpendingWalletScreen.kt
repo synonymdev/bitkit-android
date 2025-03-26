@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -53,7 +54,11 @@ fun SpendingWalletScreen(
         mutableStateOf(balances.totalLightningSats > 0uL)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Colors.Black)
+    ) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),
             contentDescription = null,
@@ -63,7 +68,7 @@ fun SpendingWalletScreen(
                 .offset(x = (155).dp, y = (-35).dp)
                 .size(330.dp)
         )
-        ScreenColumn {
+        ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
                 icon = painterResource(R.drawable.ic_ln_circle),
