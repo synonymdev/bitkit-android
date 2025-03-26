@@ -7,7 +7,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,10 +24,11 @@ fun SplashScreen(isVisible: Boolean = true) {
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(),
-        exit = fadeOut(animationSpec = tween(
-            durationMillis = 300,
-            easing = EaseOut,
-        )
+        exit = fadeOut(
+            animationSpec = tween(
+                durationMillis = 300,
+                easing = EaseOut,
+            )
         )
     ) {
         Box(
