@@ -118,6 +118,13 @@ class AppViewModel @Inject constructor(
     }
 
     // TODO if !unlockRequired && !isBiometricEnabled -> init true
+    var isAuthenticated by mutableStateOf<Boolean>(false)
+        private set
+
+    fun setIsAuthenticated(value: Boolean) {
+        isAuthenticated = value
+    }
+
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(

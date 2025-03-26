@@ -20,48 +20,11 @@ import to.bitkit.R
 import to.bitkit.utils.Logger
 
 @Composable
-fun BiometricButton(
-    onSuccess: (() -> Unit)? = null,
-    onFailure: (() -> Unit)? = null,
-) {
-    var isAuthenticated by rememberSaveable { mutableStateOf(false) }
-
-    var showBiometricPrompt by rememberSaveable { mutableStateOf(false) }
-    if (showBiometricPrompt) {
-        BiometricPrompt(
-            onSuccess = {
-                showBiometricPrompt = false
-                isAuthenticated = true
-                onSuccess?.invoke()
-            },
-            onDismiss = {
-                showBiometricPrompt = false
-            },
-            onError = {
-                onFailure?.invoke()
-                showBiometricPrompt = false
-            },
-            onUnsupported = {
-                showBiometricPrompt = false
-            },
-        )
-    }
-
-    if (!isAuthenticated) {
-        Button(onClick = { showBiometricPrompt = true }) {
-            Text("Show Biometric Prompt")
-        }
-    } else {
-        Text("Biometric authenticated")
-    }
-}
-
-@Composable
 fun BiometricPrompt(
     onSuccess: () -> Unit,
-    onDismiss: () -> Unit,
-    onUnsupported: () -> Unit,
-    onError: () -> Unit,
+    onFailed: (() -> Unit)? = null,
+    onError: (() -> Unit)? = null,
+    onUnsupported: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
 
@@ -75,21 +38,20 @@ fun BiometricPrompt(
             activity = context,
             title = title,
             onAuthSucceeded = {
-                Logger.debug("Biometric Auth Succeeded")
-                onDismiss()
+                Logger.debug("Biometric auth succeeded")
                 onSuccess()
             },
-            onAuthError = { errorCode, errorMessage ->
-                Logger.debug("Biometric Auth Error: code = $errorCode, message = $errorMessage")
-                onDismiss()
-                onError()
-            },
             onAuthFailed = {
-                Logger.debug(" Biometric Auth Failed")
+                Logger.debug(" Biometric auth failed")
+                onFailed?.invoke()
+            },
+            onAuthError = { errorCode, errorMessage ->
+                Logger.debug("Biometric auth error: code = '$errorCode', message = '$errorMessage'")
+                onError?.invoke()
             },
             onUnsupported = {
-                Logger.debug("Biometric Auth Unsupported")
-                onUnsupported()
+                Logger.debug("Biometric auth unsupported")
+                onUnsupported?.invoke()
             }
         )
     }

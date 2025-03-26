@@ -13,6 +13,7 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -128,14 +129,22 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
-                    ContentView(
-                        appViewModel = appViewModel,
-                        walletViewModel = walletViewModel,
-                        blocktankViewModel = blocktankViewModel,
-                        currencyViewModel = currencyViewModel,
-                        activityListViewModel = activityListViewModel,
-                        transferViewModel = transferViewModel,
-                    )
+                    val isAuthenticated = appViewModel.isAuthenticated
+
+                    if (!isAuthenticated) {
+                        AuthCheckView(
+                            onSuccess = { appViewModel.setIsAuthenticated(true) }
+                        )
+                    } else {
+                        ContentView(
+                            appViewModel = appViewModel,
+                            walletViewModel = walletViewModel,
+                            blocktankViewModel = blocktankViewModel,
+                            currencyViewModel = currencyViewModel,
+                            activityListViewModel = activityListViewModel,
+                            transferViewModel = transferViewModel,
+                        )
+                    }
                 }
 
                 ToastOverlay(
