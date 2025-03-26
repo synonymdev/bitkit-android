@@ -69,6 +69,10 @@ import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.ui.utils.screenScaleIn
+import to.bitkit.ui.utils.screenScaleOut
+import to.bitkit.ui.utils.screenSlideIn
+import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -323,7 +327,7 @@ fun ContentView(
                                 } else {
                                     navController.navigateToTransferSpendingAmount()
                                 }
-                             },
+                            },
                             onFund = {
                                 scope.launch {
                                     // TODO show receive sheet -> ReceiveAmount
@@ -367,7 +371,7 @@ private fun NavGraphBuilder.home(
         HomeScreen(
             walletViewModel = viewModel,
             appViewModel = appViewModel,
-            rootNavController = navController
+            rootNavController = navController,
         )
     }
 }
@@ -376,7 +380,12 @@ private fun NavGraphBuilder.settings(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.Settings> {
+    composable<Routes.Settings>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenScaleOut },
+        popEnterTransition = { screenScaleIn },
+        popExitTransition = { screenSlideOut },
+    ) {
         SettingsScreen(viewModel, navController)
     }
 }
@@ -385,7 +394,10 @@ private fun NavGraphBuilder.nodeState(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.NodeState> {
+    composable<Routes.NodeState>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
         NodeStateScreen(viewModel, navController)
     }
 }
@@ -503,7 +515,12 @@ private fun NavGraphBuilder.allActivity(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.AllActivity> {
+    composable<Routes.AllActivity>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenScaleOut },
+        popEnterTransition = { screenScaleIn },
+        popExitTransition = { screenSlideOut },
+    ) {
         AllActivityScreen(
             viewModel = viewModel,
             onBackCLick = { navController.popBackStack() },
@@ -516,7 +533,12 @@ private fun NavGraphBuilder.activityItem(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.ActivityItem> { navBackEntry ->
+    composable<Routes.ActivityItem>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenScaleOut },
+        popEnterTransition = { screenScaleIn },
+        popExitTransition = { screenSlideOut },
+    ) { navBackEntry ->
         ActivityItemScreen(
             viewModel = viewModel,
             activityItem = navBackEntry.toRoute(),
@@ -530,18 +552,8 @@ private fun NavGraphBuilder.qrScanner(
     navController: NavHostController,
 ) {
     composable<Routes.QrScanner>(
-        enterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { it },
-                animationSpec = tween(durationMillis = 300)
-            )
-        },
-        exitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { it },
-                animationSpec = tween(durationMillis = 300)
-            )
-        },
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
     ) {
         QrScanningScreen(navController = navController) { qrCode ->
             navController.popBackStack()
