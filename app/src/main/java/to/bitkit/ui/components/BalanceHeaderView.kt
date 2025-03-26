@@ -83,6 +83,7 @@ fun BalanceHeaderEditable(
 
     var smallRowPrefix: String by remember { mutableStateOf("") }
     var smallRowText: String by remember { mutableStateOf("") }
+    var smallRowSymbol: String by remember { mutableStateOf("") }
 
     var largeRowPrefix: String by remember { mutableStateOf("") }
     var largeRowText: String by remember { mutableStateOf("") }
@@ -104,23 +105,26 @@ fun BalanceHeaderEditable(
                 val converted = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
                 converted?.let {
                     val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    smallRowPrefix = it.symbol
-                    smallRowText = "${converted.symbol} ${converted.formatted}"
+                    smallRowSymbol = it.symbol
+                    smallRowText = "${smallRowSymbol} ${converted.formatted}"
                     largeRowText = btcComponents.value
                     largeRowSymbol = btcComponents.symbol
                 }
             }
             PrimaryDisplay.FIAT -> {
                 // When primary display is Fiat
-                val converted = if (rates.isNotEmpty()) currency.convert(sats = input.toLongOrNull() ?: 0L) else null
+                fiatValue += input
+
+                val converted = if (rates.isNotEmpty()) currency.convertFiatToSats(fiatAmount = (fiatValue + input).toDoubleOrNull() ?: 0.0) else null
                 converted?.let {
-                    fiatValue = it.formatted
-                    largeRowText = converted.formatted
-                    largeRowSymbol = it.symbol
+                    largeRowText = fiatValue
+                    largeRowSymbol = "$"
 
                     // Convert fiat to sats for small row
-                    satsValue = it.sats.toString()
-                    smallRowText = it.sats.toString()
+                    satsValue = it.toString()
+                    smallRowSymbol = "B"
+                    smallRowText = "$smallRowSymbol $satsValue"
+
                 }
             }
         }
