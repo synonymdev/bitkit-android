@@ -180,7 +180,7 @@ private fun HomeContentView(
 ) {
     AppScaffold(
         navController = rootNavController,
-        titleText = "Your Name",
+        titleText = stringResource(R.string.slashtags__your_name_capital),
     ) {
         RequestNotificationPermissions()
         val balances = LocalBalances.current
