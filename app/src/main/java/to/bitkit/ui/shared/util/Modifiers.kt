@@ -1,5 +1,6 @@
 package to.bitkit.ui.shared.util
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -7,7 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import to.bitkit.ui.theme.Colors
 
 /**
  * Adjusts the alpha of a composable when it is pressed and makes it clickable.
@@ -30,4 +34,13 @@ fun Modifier.clickableAlpha(
             interactionSource = interactionSource,
             indication = null,
         )
+}
+
+
+fun Modifier.gradientBackground(): Modifier {
+    return Modifier.background(
+        brush = Brush.verticalGradient(
+            colors = listOf(Color(0xFF1A1A1A), Colors.Black)
+        )
+    )
 }
