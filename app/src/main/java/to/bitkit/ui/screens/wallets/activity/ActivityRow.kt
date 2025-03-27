@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,14 +28,15 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.shared.util.DarkModePreview
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.models.PrimaryDisplay
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
@@ -75,8 +75,8 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { onClick(id) })
-            .padding(horizontal = 0.dp, vertical = 16.dp)
+            .clickableAlpha { onClick(id) }
+            .padding(vertical = 16.dp)
     ) {
         TransactionIcon(item)
         Spacer(modifier = Modifier.width(12.dp))
