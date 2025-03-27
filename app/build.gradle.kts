@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,15 +12,27 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.room)
 }
+
+// https://developer.android.com/studio/publish/app-signing#secure-key
+// Init keystoreProperties variable from keystore.properties file
+val keystoreProperties by lazy {
+    val keystoreFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystoreFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystoreFile))
+    }
+    keystoreProperties
+}
+
 android {
     namespace = "to.bitkit"
     compileSdk = 35
     defaultConfig {
-        applicationId = "to.bitkit"
+        applicationId = "to.bitkit.dev"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.0.1"
         resourceConfigurations += listOf(
             "en",        // Default (English)
             "ar",        // Arabic
@@ -49,18 +63,26 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("release") {
+            storeFile = rootProject.file(keystoreProperties.getProperty("storeFile") as String)
+            storePassword = keystoreProperties.getProperty("storePassword") as String
+            keyAlias = keystoreProperties.getProperty("keyAlias") as String
+            keyPassword = keystoreProperties.getProperty("keyPassword") as String
+        }
     }
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
-            applicationIdSuffix = ".dev"
+            // applicationIdSuffix = ".dev"
         }
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
