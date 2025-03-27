@@ -15,6 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +71,7 @@ import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -73,7 +80,7 @@ fun HomeScreen(
     appViewModel: AppViewModel,
     rootNavController: NavController,
 ) {
-    val uiState by walletViewModel.uiState.collectAsState()
+    val uiState: MainUiState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
     SheetHost(
         shouldExpand = currentSheet != null,
@@ -103,13 +110,14 @@ fun HomeScreen(
             val walletNavController = rememberNavController()
             NavHost(
                 navController = walletNavController,
-                startDestination = HomeRoutes.Home
+                startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
                     HomeContentView(
+                        uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
-                        onRefresh = walletViewModel::refreshState,
+                        onRefresh = walletViewModel::onPullToRefresh,
                     )
                 }
                 composable<HomeRoutes.Savings>(
@@ -162,8 +170,10 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun HomeContentView(
+    uiState: MainUiState,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -171,7 +181,6 @@ private fun HomeContentView(
     AppScaffold(
         navController = rootNavController,
         titleText = "Your Name",
-        onRefresh = onRefresh,
     ) {
         RequestNotificationPermissions()
         val balances = LocalBalances.current
@@ -182,11 +191,18 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-        Box(modifier = Modifier.fillMaxSize()) {
+        val pullRefreshState = rememberPullRefreshState(refreshing = uiState.isRefreshing, onRefresh = onRefresh)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(pullRefreshState)
+        ) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
                 BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
                 if (!showEmptyState) {
@@ -235,6 +251,12 @@ private fun HomeContentView(
                         .align(Alignment.BottomCenter)
                 )
             }
+
+            PullRefreshIndicator(
+                refreshing = uiState.isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
@@ -275,6 +297,7 @@ object HomeRoutes {
 private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
+            uiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
