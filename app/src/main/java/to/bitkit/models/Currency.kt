@@ -2,6 +2,7 @@ package to.bitkit.models
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import to.bitkit.models.ConvertedAmount.BitcoinDisplayComponents
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -78,6 +79,31 @@ data class ConvertedAmount(
         )
     }
 }
+
+/** Format sats to modern or classic format*/
+fun Long.formatSats(unit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN): BitcoinDisplayComponents {
+    val symbol = "₿"
+    val spaceSeparator = ' '
+    val formattedValue = when (unit) {
+        BitcoinDisplayUnit.MODERN -> {
+            this.formatToModernDisplay()
+        }
+
+        BitcoinDisplayUnit.CLASSIC -> {
+            val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+                groupingSeparator = spaceSeparator
+            }
+            val formatter = DecimalFormat("#,###.########", formatSymbols)
+            val btcValue: BigDecimal = BigDecimal(this).divide(BigDecimal(100_000_000))
+            formatter.format(btcValue)
+        }
+    }
+    return BitcoinDisplayComponents(
+        symbol = symbol,
+        value = formattedValue,
+    )
+}
+
 
 fun Long.formatToModernDisplay(): String {
     val sats = this
