@@ -4,7 +4,6 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -65,6 +64,7 @@ import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.screenSlideIn
@@ -217,7 +217,7 @@ private fun HomeContentView(
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
                             modifier = Modifier
-                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Savings) })
+                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Savings) }
                                 .padding(vertical = 4.dp)
                         )
                         VerticalDivider()
@@ -226,7 +226,7 @@ private fun HomeContentView(
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
                             modifier = Modifier
-                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Spending) })
+                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .padding(start = 16.dp)
                         )
