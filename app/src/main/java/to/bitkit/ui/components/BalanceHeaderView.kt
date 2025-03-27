@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -19,11 +22,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.formatSats
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.formatFiat
 
 @Composable
 fun BalanceHeaderView(
@@ -78,8 +83,8 @@ fun BalanceHeaderEditable(
     val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val currency = currencyViewModel ?: return
 
-    var satsValue: String by remember { mutableStateOf("") }
-    var fiatValue: String by remember { mutableStateOf("") }
+    var satsValue: Long by remember { mutableLongStateOf(0L) }
+    var fiatValue: Double by remember { mutableDoubleStateOf(0.0) }
 
     var smallRowPrefix: String by remember { mutableStateOf("") }
     var smallRowText: String by remember { mutableStateOf("") }
@@ -89,18 +94,17 @@ fun BalanceHeaderEditable(
     var largeRowText: String by remember { mutableStateOf("") }
     var largeRowSymbol: String by remember { mutableStateOf("") }
 
-
-
     LaunchedEffect(input) { //TODO HANDLE PRIMARY DISPLAY CHANGE
         when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
-                satsValue += input
 
-                val sats = satsValue.toLongOrNull() ?: 0L
+                (satsValue.toString() + input).toLongOrNull()?.let { updatedValue ->
+                    satsValue = updatedValue
+                }
 
-                val converted = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
+                val converted = currency.convert(sats = satsValue)
                 converted?.let {
-                    val btcComponents = converted.bitcoinDisplay(displayUnit)
+                    val btcComponents = satsValue.formatSats(displayUnit)
                     smallRowSymbol = converted.symbol
                     smallRowText = converted.formatted
                     largeRowSymbol = btcComponents.symbol
@@ -108,20 +112,24 @@ fun BalanceHeaderEditable(
                 }
             }
             PrimaryDisplay.FIAT -> {
-                fiatValue += input
-                val converted = if (rates.isNotEmpty()) currency.convertFiatToSats(fiatAmount = (fiatValue + input).toDoubleOrNull() ?: 0.0) else null
+                //CHECK IF HAS VALUE AFTER DOTS
+                (if (fiatValue == 0.0) input else (fiatValue.toString() + input)).toDoubleOrNull()?.let { updatedValue ->
+                    fiatValue = updatedValue
+                }
+                val converted = currency.convertFiatToSats(fiatAmount = fiatValue)
                 converted?.let {
-                    satsValue = it.toString()
-                    smallRowSymbol = "B"
-                    smallRowText = satsValue
+                    val btcValues = converted.formatSats()
+                    satsValue = it
+                    smallRowSymbol = btcValues.symbol
+                    smallRowText = btcValues.value
 
                     largeRowSymbol = "$"
-                    largeRowText = fiatValue
+                    largeRowText = fiatValue.toString()
                 }
             }
         }
 
-        onSatsChanged(satsValue)
+        onSatsChanged(satsValue.toString())
     }
 
     BalanceHeader(
