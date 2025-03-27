@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,7 +25,6 @@ import to.bitkit.ui.navigateToSettings
 fun AppScaffold(
     navController: NavController,
     titleText: String,
-    onRefresh: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Scaffold(
@@ -37,12 +35,6 @@ fun AppScaffold(
                     Title(text = titleText)
                 },
                 actions = {
-                    IconButton(onRefresh) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.sync),
-                        )
-                    }
                     IconButton(onClick = navController::navigateToNodeState) {
                         Icon(
                             imageVector = Icons.Default.Bolt,

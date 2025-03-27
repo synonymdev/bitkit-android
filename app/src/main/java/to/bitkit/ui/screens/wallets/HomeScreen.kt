@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -27,7 +29,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,8 +41,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
@@ -72,6 +71,7 @@ import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -80,7 +80,7 @@ fun HomeScreen(
     appViewModel: AppViewModel,
     rootNavController: NavController,
 ) {
-    val uiState by walletViewModel.uiState.collectAsState()
+    val uiState: MainUiState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
     SheetHost(
         shouldExpand = currentSheet != null,
@@ -110,13 +110,14 @@ fun HomeScreen(
             val walletNavController = rememberNavController()
             NavHost(
                 navController = walletNavController,
-                startDestination = HomeRoutes.Home
+                startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
                     HomeContentView(
+                        uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
-                        onRefresh = walletViewModel::refreshState,
+                        onRefresh = walletViewModel::onPullToRefresh,
                     )
                 }
                 composable<HomeRoutes.Savings>(
@@ -172,6 +173,7 @@ fun HomeScreen(
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun HomeContentView(
+    uiState: MainUiState,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -179,7 +181,6 @@ private fun HomeContentView(
     AppScaffold(
         navController = rootNavController,
         titleText = "Your Name",
-        onRefresh = onRefresh,
     ) {
         RequestNotificationPermissions()
         val balances = LocalBalances.current
@@ -190,22 +191,7 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-
-        val scope = rememberCoroutineScope()
-        var isRefreshing by remember { mutableStateOf(false) }
-
-        fun refresh() = scope.launch {
-            // TODO use viewmodel state?!
-            isRefreshing = true
-            onRefresh()
-            delay(1500)
-            isRefreshing = false
-        }
-
-        val pullRefreshState = rememberPullRefreshState(
-            refreshing = isRefreshing,
-            onRefresh = ::refresh
-        )
+        val pullRefreshState = rememberPullRefreshState(refreshing = uiState.isRefreshing, onRefresh = onRefresh)
 
         Box(
             modifier = Modifier
@@ -216,6 +202,7 @@ private fun HomeContentView(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
                 BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
                 if (!showEmptyState) {
@@ -266,7 +253,7 @@ private fun HomeContentView(
             }
 
             PullRefreshIndicator(
-                refreshing = isRefreshing,
+                refreshing = uiState.isRefreshing,
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
@@ -310,6 +297,7 @@ object HomeRoutes {
 private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
+            uiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},

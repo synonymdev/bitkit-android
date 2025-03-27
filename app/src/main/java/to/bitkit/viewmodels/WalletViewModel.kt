@@ -218,6 +218,19 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun onPullToRefresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            try {
+                sync()
+            } catch (e: Throwable) {
+                ToastEventBus.send(e)
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
+        }
+    }
+
     private suspend fun registerForNotificationsIfNeeded() {
         val token = firebaseMessaging.token.await()
         val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
@@ -483,6 +496,7 @@ data class MainUiState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
+    val isRefreshing: Boolean = false,
 )
 
 // endregion
