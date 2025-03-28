@@ -2,7 +2,9 @@
 activityCompose = "1.10.1"
 agp = "8.9.1"
 appcompat = "1.7.0"
+barcodeScanning = "17.3.0"
 bouncyCastle = "1.79"
+camera = "1.4.2"
 composeBom = "2025.03.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
 coreKtx = "1.15.0"
 coreSplashscreen = "1.0.1"
@@ -30,11 +32,16 @@ slf4j = "1.7.36"
 testAndroidx = "1.6.1"
 turbine = "1.0.0"
 workRuntimeKtx = "2.10.0"
+zxing = "3.5.2"
 
 [libraries]
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
@@ -89,6 +96,7 @@ test-mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.re
 test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
+zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
