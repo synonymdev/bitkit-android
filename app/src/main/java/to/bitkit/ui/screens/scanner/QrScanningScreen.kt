@@ -51,6 +51,7 @@ import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -137,7 +138,7 @@ fun QrScanningScreen(
             )
         },
         grantedContent = {
-            ScreenColumn {
+            ScreenColumn(modifier = Modifier.gradientBackground()) {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
                 Content(previewView = previewView)
             }

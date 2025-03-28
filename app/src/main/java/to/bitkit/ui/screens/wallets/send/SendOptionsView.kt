@@ -36,6 +36,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Colors.Black25
@@ -53,7 +54,6 @@ fun SendOptionsView(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(.875f)
-            .background(Black25)
             .imePadding()
     ) {
         val navController = rememberNavController()
@@ -132,10 +132,11 @@ private fun SendOptionsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Black25)
+            .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
+        Spacer(Modifier.height(32.dp))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(16.dp))
 

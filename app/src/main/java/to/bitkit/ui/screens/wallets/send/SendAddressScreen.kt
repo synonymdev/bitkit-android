@@ -40,6 +40,9 @@ fun SendAddressScreen(
             onEvent(SendEvent.AddressReset)
             onBack()
         }
+
+        Spacer(Modifier.height(32.dp))
+
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
