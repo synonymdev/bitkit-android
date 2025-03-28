@@ -172,7 +172,7 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     implementation("com.google.accompanist:accompanist-pager-indicators:0.36.0")
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
-    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.0")
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.1")
 
     // Compose Navigation
     implementation(libs.navigation.compose)
