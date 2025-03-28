@@ -40,7 +40,7 @@ fun TagSelectorSheet(
     ) {
         SheetTopBar(stringResource(R.string.wallet__tags_filter_title))
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         FlowRow(
             modifier = Modifier
