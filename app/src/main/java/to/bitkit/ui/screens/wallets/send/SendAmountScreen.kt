@@ -49,6 +49,9 @@ fun SendAmountScreen(
             onEvent(SendEvent.AmountReset)
             onBack()
         }
+
+        Spacer(Modifier.height(16.dp))
+
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {

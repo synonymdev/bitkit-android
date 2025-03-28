@@ -81,6 +81,8 @@ fun ReceiveQRScreen(
     ) {
         SheetTopBar(stringResource(R.string.title_receive))
 
+        Spacer(Modifier.height(16.dp))
+
         val navController = rememberNavController()
         NavHost(
             navController = navController,
