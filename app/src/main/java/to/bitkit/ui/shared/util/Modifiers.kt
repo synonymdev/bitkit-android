@@ -39,7 +39,7 @@ fun Modifier.clickableAlpha(
 fun Modifier.gradientBackground(): Modifier {
     return Modifier.background(
         brush = Brush.verticalGradient(
-            colors = listOf(Colors.Gray7, Colors.Black)
+            colors = listOf(Colors.Gray6, Colors.Black)
         )
     )
 }
