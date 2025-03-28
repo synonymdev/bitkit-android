@@ -16,11 +16,18 @@ plugins {
 // https://developer.android.com/studio/publish/app-signing#secure-key
 // Init keystoreProperties variable from keystore.properties file
 val keystoreProperties by lazy {
-    val keystoreFile = rootProject.file("keystore.properties")
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keystoreProperties = Properties()
-    if (keystoreFile.exists()) {
-        keystoreProperties.load(FileInputStream(keystoreFile))
+
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    } else {
+        keystoreProperties["storeFile"] = System.getenv("KEYSTORE_FILE") ?: ""
+        keystoreProperties["storePassword"] = System.getenv("KEYSTORE_PASSWORD") ?: ""
+        keystoreProperties["keyAlias"] = System.getenv("KEY_ALIAS") ?: ""
+        keystoreProperties["keyPassword"] = System.getenv("KEY_PASSWORD") ?: ""
     }
+
     keystoreProperties
 }
 
@@ -64,10 +71,13 @@ android {
             keyPassword = "android"
         }
         create("release") {
-            storeFile = rootProject.file(keystoreProperties.getProperty("storeFile") as String)
-            storePassword = keystoreProperties.getProperty("storePassword") as String
-            keyAlias = keystoreProperties.getProperty("keyAlias") as String
-            keyPassword = keystoreProperties.getProperty("keyPassword") as String
+            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
+            storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
+            // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
         }
     }
     buildTypes {
