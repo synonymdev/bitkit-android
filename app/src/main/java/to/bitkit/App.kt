@@ -9,7 +9,6 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.env.Env
-import to.bitkit.utils.ResourceProvider
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -24,7 +23,6 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        ResourceProvider.init(this)
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
 
         Env.initAppStoragePath(filesDir.absolutePath)

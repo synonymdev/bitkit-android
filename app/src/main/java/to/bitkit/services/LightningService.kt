@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
+import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
@@ -227,6 +228,26 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun connectPeer(peer: LnPeer): Result<Unit> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            try {
+                Logger.debug("Connecting peer: $peer")
+
+                node.connect(peer.nodeId, peer.address, persist = true)
+
+                Logger.info("Peer connected: $peer")
+
+                Result.success(Unit)
+            } catch (e: NodeException) {
+                val error = LdkError(e)
+                Logger.error("Peer connect error: $peer", error)
+                Result.failure(error)
+            }
+        }
+    }
+
     suspend fun disconnectPeer(peer: LnPeer) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
         Logger.debug("Disconnecting peer: $peer")
@@ -238,25 +259,36 @@ class LightningService @Inject constructor(
         } catch (e: NodeException) {
             Logger.warn("Peer disconnect error: $peer", LdkError(e))
         }
-    }
-    // endregion
+    } // endregion
 
     // region channels
-    suspend fun openChannel(peer: LnPeer, channelAmountSats: ULong, pushToCounterpartySats: ULong? = null) {
-        val node = this@LightningService.node ?: throw ServiceError.NodeNotSetup
+    suspend fun openChannel(
+        peer: LnPeer,
+        channelAmountSats: ULong,
+        pushToCounterpartySats: ULong? = null,
+    ) : Result<UserChannelId> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        try {
-            ServiceQueue.LDK.background {
-                node.openChannel(
+        return ServiceQueue.LDK.background {
+            try {
+                Logger.debug("Initiating channel open (sats: $channelAmountSats) with peer: $peer")
+
+                val userChannelId = node.openChannel(
                     nodeId = peer.nodeId,
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
                     pushToCounterpartyMsat = pushToCounterpartySats?.millis,
                     channelConfig = null,
                 )
+
+                Logger.info("Channel open initiated, userChannelId: $userChannelId")
+
+                Result.success(userChannelId)
+            } catch (e: NodeException) {
+                val error = LdkError(e)
+                Logger.error("Error initiating channel open", error)
+                Result.failure(error)
             }
-        } catch (e: NodeException) {
-            throw LdkError(e)
         }
     }
 

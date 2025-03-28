@@ -364,7 +364,7 @@ fun Caption13Up(
             fontWeight = FontWeight.Medium,
             fontSize = 13.sp,
             lineHeight = 18.sp,
-            letterSpacing = 0.4.sp,
+            letterSpacing = 0.8.sp,
             fontFamily = InterFontFamily,
             color = color,
             textAlign = TextAlign.Start,

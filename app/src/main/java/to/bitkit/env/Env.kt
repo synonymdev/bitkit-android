@@ -105,17 +105,5 @@ internal object Env {
             nodeId = "028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc",
             address = "34.65.86.104:9400",
         )
-        val btStagingOld = LnPeer(
-            nodeId = "03b9a456fb45d5ac98c02040d39aec77fa3eeb41fd22cf40b862b393bcfc43473a",
-            address = "35.233.47.252:9400",
-        )
-        val polarToRegtest = LnPeer(
-            nodeId = "023f6e310ff049d68c64a0eb97440b998aa15fd99162317d6743d7023519862e23",
-            address = "10.0.2.2:9735",
-        )
-        val local = LnPeer(
-            nodeId = "02faf2d1f5dc153e8931d8444c4439e46a81cb7eeadba8562e7fec3690c261ce87",
-            address = "10.0.2.2:9738",
-        )
     }
 }

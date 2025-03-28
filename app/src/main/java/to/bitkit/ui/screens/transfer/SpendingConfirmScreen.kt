@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -16,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -36,11 +33,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.ButtonSize
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.LightningChannel
-import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.AppTopBar
@@ -81,7 +77,6 @@ fun SpendingConfirmScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-
         ) {
             val clientBalance = order.clientBalanceSat
             val networkFee = order.networkFeeSat
@@ -92,6 +87,7 @@ fun SpendingConfirmScreen(
             Spacer(modifier = Modifier.height(32.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(8.dp))
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.height(IntrinsicSize.Min)
@@ -183,28 +179,5 @@ fun SpendingConfirmScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-}
-
-@Composable
-private fun RowScope.FeeInfo(
-    label: String,
-    amount: Long,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .weight(1f)
-            .padding(top = 16.dp)
-    ) {
-        Caption13Up(
-            text = label,
-            color = Colors.White64,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        MoneySSB(sats = amount)
-        Spacer(modifier = Modifier.weight(1f))
-        HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
     }
 }
