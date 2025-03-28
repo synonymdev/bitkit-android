@@ -136,6 +136,7 @@ private fun SendOptionsContent(
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
+        Spacer(Modifier.height(32.dp))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(16.dp))
 
