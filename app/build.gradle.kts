@@ -40,26 +40,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.0.1"
-        resourceConfigurations += listOf(
-            "en",        // Default (English)
-            "ar",        // Arabic
-            "ca",        // Catalan
-            "cs",        // Czech
-            "de",        // German
-            "el",        // Greek
-            "es",        // Spanish (Spain)
-            "fr",        // French
-            "it",        // Italian
-            "nl",        // Dutch
-            "pl",        // Polish
-            "pt",        // Portuguese (Portugal)
-            "ru",        // Russian
-        )
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
         ndk {
+            //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
         }
     }
@@ -104,6 +90,10 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+    }
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        localeFilters.addAll(listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru"))
     }
     packaging {
         resources {
