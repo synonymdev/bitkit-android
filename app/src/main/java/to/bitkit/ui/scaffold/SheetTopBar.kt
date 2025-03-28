@@ -1,11 +1,11 @@
 package to.bitkit.ui.scaffold
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -31,7 +31,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 @OptIn(ExperimentalMaterial3Api::class)
 fun SheetTopBar(
     titleText: String,
-    actions: @Composable (RowScope.() -> Unit) = {},
     onBack: (() -> Unit)? = null,
 ) {
     Box(
@@ -44,6 +43,7 @@ fun SheetTopBar(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 24.dp)
                 .align(Alignment.Center),
         )
 

@@ -66,7 +66,7 @@ fun SheetHost(
             sheetPeekHeight = 0.dp,
             sheetShape = AppShapes.sheet,
             sheetContent = sheets,
-            sheetContainerColor = Colors.Gray7,
+            sheetContainerColor = Colors.Gray6,
             sheetContentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             content()
