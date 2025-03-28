@@ -28,6 +28,7 @@ fun TransferAnimationView(
     @DrawableRes largeCircleRes: Int,
     @DrawableRes smallCircleRes: Int,
     @DrawableRes contentRes: Int = R.drawable.transfer,
+    rotateContent: Boolean = true
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -79,7 +80,11 @@ fun TransferAnimationView(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth()
-                .rotate(rotationArrows)
+                .apply {
+                    if (rotateContent) {
+                        rotate(rotationArrows)
+                    }
+                }
         )
     }
 }

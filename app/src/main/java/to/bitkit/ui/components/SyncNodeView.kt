@@ -33,7 +33,8 @@ fun SyncNodeView(modifier: Modifier) {
         TransferAnimationView(
             largeCircleRes = R.drawable.ln_sync_large,
             smallCircleRes = R.drawable.ln_sync_small,
-            contentRes = R.drawable.lightning
+            contentRes = R.drawable.lightning,
+            rotateContent = false
         )
 
         Spacer(modifier = Modifier.weight(1f))
