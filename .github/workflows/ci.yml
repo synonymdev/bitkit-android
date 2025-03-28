@@ -34,7 +34,7 @@ jobs:
       - name: gradle wrapper
         run:  gradle wrapper
 
-      - name: Build for Debug with Gradle
+      - name: Build for debug with gradle
         run: ./gradlew assembleDebug
 
       - name: Run tests
