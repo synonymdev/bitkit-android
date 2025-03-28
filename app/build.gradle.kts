@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,15 +12,34 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.room)
 }
+
+// https://developer.android.com/studio/publish/app-signing#secure-key
+// Init keystoreProperties variable from keystore.properties file
+val keystoreProperties by lazy {
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    } else {
+        keystoreProperties["storeFile"] = System.getenv("KEYSTORE_FILE") ?: ""
+        keystoreProperties["storePassword"] = System.getenv("KEYSTORE_PASSWORD") ?: ""
+        keystoreProperties["keyAlias"] = System.getenv("KEY_ALIAS") ?: ""
+        keystoreProperties["keyPassword"] = System.getenv("KEY_PASSWORD") ?: ""
+    }
+
+    keystoreProperties
+}
+
 android {
     namespace = "to.bitkit"
     compileSdk = 35
     defaultConfig {
-        applicationId = "to.bitkit"
+        applicationId = "to.bitkit.dev"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.0.1"
         resourceConfigurations += listOf(
             "en",        // Default (English)
             "ar",        // Arabic
@@ -49,18 +70,29 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("release") {
+            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
+            storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
+            // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+        }
     }
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
-            applicationIdSuffix = ".dev"
+            // applicationIdSuffix = ".dev"
         }
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
