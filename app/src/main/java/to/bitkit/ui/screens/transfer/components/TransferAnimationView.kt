@@ -27,6 +27,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun TransferAnimationView(
     @DrawableRes largeCircleRes: Int,
     @DrawableRes smallCircleRes: Int,
+    @DrawableRes contentRes: Int = R.drawable.transfer,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -73,7 +74,7 @@ fun TransferAnimationView(
                 .rotate(rotationSmall)
         )
         Image(
-            painter = painterResource(R.drawable.transfer),
+            painter = painterResource(contentRes),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
