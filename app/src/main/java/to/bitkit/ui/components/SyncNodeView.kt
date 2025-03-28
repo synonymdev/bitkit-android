@@ -28,6 +28,12 @@ fun SyncNodeView(modifier: Modifier) {
         SheetTopBar(stringResource(R.string.title_send))
         Spacer(Modifier.height(32.dp))
 
+        BodyM(
+            text = stringResource(R.string.lightning__wait_text_top),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
         Spacer(modifier = Modifier.weight(1f))
 
         TransferAnimationView(
