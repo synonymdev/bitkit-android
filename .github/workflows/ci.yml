@@ -37,8 +37,11 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build
 
+      - name: Build for Debug with Gradle
+        run: ./gradlew assembleDebug
+
       - name: Run tests
-        run: ./gradlew test
+        run: ./gradlew testDebugUnitTest
 
     # TODO ADD COMPOSE TESTS STEP
 
