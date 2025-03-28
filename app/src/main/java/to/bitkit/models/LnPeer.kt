@@ -17,6 +17,7 @@ data class LnPeer(
     )
 
     val address get() = "$host:$port"
+
     override fun toString() = "$nodeId@${address}"
 
     companion object {
@@ -24,5 +25,31 @@ data class LnPeer(
             nodeId = nodeId,
             address = address,
         )
+
+        fun parseUri(string: String): Result<LnPeer> {
+            val uri = string.split("@")
+            val nodeId = uri[0]
+
+            if (uri.size != 2) {
+                return Result.failure(Exception("Invalid peer uri"))
+            }
+
+            val address = uri[1].split(":")
+
+            if (address.size < 2) {
+                return Result.failure(Exception("Invalid peer uri"))
+            }
+
+            val ip = address[0]
+            val port = address[1]
+
+            return Result.success(
+                LnPeer(
+                    nodeId = nodeId,
+                    host = ip,
+                    port = port,
+                )
+            )
+        }
     }
 }

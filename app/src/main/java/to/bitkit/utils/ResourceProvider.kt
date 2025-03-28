@@ -1,17 +1,15 @@
 package to.bitkit.utils
 
-import android.annotation.SuppressLint
 import android.content.Context
 import androidx.annotation.StringRes
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
-// TODO find a better way ?!
-@SuppressLint("StaticFieldLeak")
-object ResourceProvider {
-    private lateinit var context: Context
-
-    fun init(appContext: Context) {
-        context = appContext.applicationContext
-    }
+@Singleton
+class ResourceProvider @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
 
     fun getString(@StringRes resId: Int): String {
         return context.getString(resId)
