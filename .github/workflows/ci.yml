@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -23,22 +22,29 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
 
+      - name: Cache gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Decode google-services.json
         run: echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
         env:
-            GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: gradle wrapper
-        run:  gradle wrapper
-
-      - name: Build with Gradle
-        run: ./gradlew build
+      - name: Build for debug with gradle
+        run: ./gradlew assembleDebug
 
       - name: Run tests
-        run: ./gradlew test
+        run: ./gradlew testDebugUnitTest
 
     # TODO ADD COMPOSE TESTS STEP
 
