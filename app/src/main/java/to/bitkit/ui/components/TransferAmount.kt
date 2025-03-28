@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -35,6 +36,12 @@ fun TransferAmount(
     overrideSats: Long? = null,
     onSatsChange: (Long) -> Unit,
 ) {
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) {
+        MoneyDisplay(defaultValue)
+        return
+    }
+
     val currency = currencyViewModel ?: return
 
     var satsAmount by rememberSaveable(stateSaver = TextFieldValue.Saver) {

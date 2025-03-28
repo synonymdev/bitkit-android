@@ -10,11 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.StopCircle
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.models.LnPeer
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Green500
 
 @Composable
@@ -73,9 +73,9 @@ internal fun Peers(
                         .clip(CircleShape)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.StopCircle,
-                        contentDescription = stringResource(R.string.close),
-                        tint = colorScheme.primary,
+                        imageVector = Icons.Default.RemoveCircleOutline,
+                        contentDescription = stringResource(R.string.common__close),
+                        tint = Colors.Red,
                         modifier = Modifier.size(16.dp)
                     )
                 }
