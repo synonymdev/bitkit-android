@@ -15,6 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import kotlinx.coroutines.delay
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -52,6 +54,7 @@ fun SettingUpScreen(
     onContinueClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
+    val app = appViewModel ?: return
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -68,6 +71,14 @@ fun SettingUpScreen(
             } catch (e: Throwable) {
                 Logger.error("Failed to mine block: $e", context = "SettingUpScreen")
             }
+        }
+    }
+
+    // Effect to disable new transaction sheet for channel purchase
+    DisposableEffect(Unit) {
+        app.setNewTransactionSheetEnabled(false)
+        onDispose {
+            app.setNewTransactionSheetEnabled(true)
         }
     }
 
