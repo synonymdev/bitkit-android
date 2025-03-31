@@ -15,6 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -26,7 +27,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
@@ -38,7 +42,9 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
+import uniffi.bitkitcore.regtestMine
 
 @Composable
 fun SettingUpScreen(
@@ -47,6 +53,24 @@ fun SettingUpScreen(
     onCloseClick: () -> Unit = {},
 ) {
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
+
+    LaunchedEffect(Unit) {
+        Logger.debug("SettingUp view appeared - TransferViewModel is handling order updates")
+
+        // Auto-mine a block on regtest after a 5-seconds delay
+        if (Env.network == Network.REGTEST) {
+            delay(5000)
+
+            try {
+                Logger.debug("Auto-mining a block", context = "SettingUpScreen")
+                regtestMine(1u)
+                Logger.debug("Successfully mined a block", context = "SettingUpView")
+            } catch (e: Throwable) {
+                Logger.error("Failed to mine block: $e", context = "SettingUpScreen")
+            }
+        }
+    }
+
     SettingUpScreen(
         lightningSetupStep = lightningSetupStep,
         onContinueClick = {
