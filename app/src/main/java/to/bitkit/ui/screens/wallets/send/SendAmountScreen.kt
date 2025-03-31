@@ -30,6 +30,7 @@ import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -38,6 +39,7 @@ import to.bitkit.viewmodels.SendUiState
 @Composable
 fun SendAmountScreen(
     uiState: SendUiState,
+    walletUiState: MainUiState,
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -134,6 +136,7 @@ private fun SendAmountViewPreview() {
             uiState = SendUiState(
                 payMethod = SendMethod.LIGHTNING,
             ),
+            walletUiState = MainUiState(),
             onBack = {},
             onEvent = {},
         )
