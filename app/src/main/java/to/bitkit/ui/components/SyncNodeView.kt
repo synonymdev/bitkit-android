@@ -45,7 +45,7 @@ fun SyncNodeView(modifier: Modifier) {
 
         BodySSB(text = stringResource(R.string.lightning__wait_text_bottom), color = Colors.White32)
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
