@@ -40,26 +40,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.0.1"
-        resourceConfigurations += listOf(
-            "en",        // Default (English)
-            "ar",        // Arabic
-            "ca",        // Catalan
-            "cs",        // Czech
-            "de",        // German
-            "el",        // Greek
-            "es",        // Spanish (Spain)
-            "fr",        // French
-            "it",        // Italian
-            "nl",        // Dutch
-            "pl",        // Polish
-            "pt",        // Portuguese (Portugal)
-            "ru",        // Russian
-        )
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
         ndk {
+            //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
         }
     }
@@ -105,12 +91,16 @@ android {
         buildConfig = true
         compose = true
     }
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        localeFilters.addAll(listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru"))
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
-    @Suppress("UnstableApiUsage")
     testOptions {
         unitTests {
             isReturnDefaultValues = true     // mockito
@@ -139,12 +129,12 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
-    implementation("com.google.zxing:core:3.5.2")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation(libs.zxing)
+    implementation(libs.barcode.scanning)
     // CameraX
-    implementation("androidx.camera:camera-camera2:1.4.1")
-    implementation("androidx.camera:camera-lifecycle:1.4.1")
-    implementation("androidx.camera:camera-view:1.4.1")
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android)
@@ -170,9 +160,9 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.compose.ui.test.junit4)
-    implementation("com.google.accompanist:accompanist-pager-indicators:0.36.0")
-    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
-    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.0")
+    implementation(libs.accompanist.pager.indicators)
+    implementation(libs.accompanist.permissions)
+    implementation(libs.constraintlayout.compose)
 
     // Compose Navigation
     implementation(libs.navigation.compose)
