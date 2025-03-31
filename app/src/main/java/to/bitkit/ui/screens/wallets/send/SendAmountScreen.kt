@@ -48,7 +48,9 @@ fun SendAmountScreen(
     onEvent: (SendEvent) -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().gradientBackground()
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
     ) {
         SheetTopBar(stringResource(R.string.title_send_amount)) {
             onEvent(SendEvent.AmountReset)
@@ -130,7 +132,9 @@ fun SendAmountScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         } else {
-            SyncNodeView(modifier = Modifier.fillMaxWidth().weight(1f))
+            SyncNodeView(modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f))
         }
     }
 }
