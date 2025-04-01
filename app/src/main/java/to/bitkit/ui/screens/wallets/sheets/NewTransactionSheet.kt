@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.sheets
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,69 +80,84 @@ private fun NewTransactionSheetView(
     onCloseClick: () -> Unit,
     onDetailClick: () -> Unit,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
     ) {
-        val titleText = when (details.type) {
-            NewTransactionSheetType.LIGHTNING -> when (details.direction) {
-                NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
-                else -> stringResource(R.string.wallet__payment_received)
-            }
 
-            NewTransactionSheetType.ONCHAIN -> when (details.direction) {
-                NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
-                else -> stringResource(R.string.wallet__payment_received)
-            }
-        }
-
-        SheetTopBar(titleText)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
-
-        if (details.direction == NewTransactionSheetDirection.SENT) {
-            Spacer(modifier = Modifier.weight(1f))
-
+        if (details.direction == NewTransactionSheetDirection.RECEIVED) {
             Image(
-                painter = painterResource(R.drawable.check),
+                painter = painterResource(R.drawable.coin_stack), //TODO IMPLEMENT CORRECT IMAGE
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 32.dp, bottom = 32.dp).align(Alignment.BottomEnd)
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        ) {
+            val titleText = when (details.type) {
+                NewTransactionSheetType.LIGHTNING -> when (details.direction) {
+                    NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                    else -> stringResource(R.string.wallet__payment_received)
+                }
 
-        if (details.direction == NewTransactionSheetDirection.SENT) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.wallet__send_details),
-                    onClick = onDetailClick,
-                    fullWidth = false,
-                    modifier = Modifier.weight(1f)
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.common__close),
-                    onClick = onCloseClick,
-                    fullWidth = false,
-                    modifier = Modifier.weight(1f)
+                NewTransactionSheetType.ONCHAIN -> when (details.direction) {
+                    NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                    else -> stringResource(R.string.wallet__payment_received)
+                }
+            }
+
+            SheetTopBar(titleText)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
+
+            if (details.direction == NewTransactionSheetDirection.SENT) {
+                Spacer(modifier = Modifier.weight(1f))
+
+                Image(
+                    painter = painterResource(R.drawable.check),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
                 )
             }
-        } else {
-            PrimaryButton(
-                text = stringResource(R.string.common__close), //TODO get correct text
-                onClick = onCloseClick,
-            )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
+
+            if (details.direction == NewTransactionSheetDirection.SENT) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SecondaryButton(
+                        text = stringResource(R.string.wallet__send_details),
+                        onClick = onDetailClick,
+                        fullWidth = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.common__close),
+                        onClick = onCloseClick,
+                        fullWidth = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                PrimaryButton(
+                    text = stringResource(R.string.common__close), //TODO get correct text
+                    onClick = onCloseClick,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 
