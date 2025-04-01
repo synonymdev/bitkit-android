@@ -87,10 +87,10 @@ private fun NewTransactionSheetView(
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
             Image(
-                painter = painterResource(R.drawable.coin_stack), //TODO IMPLEMENT CORRECT IMAGE
+                painter = painterResource(R.drawable.coin_stack_5),
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth().padding(start = 32.dp, bottom = 32.dp).align(Alignment.BottomEnd)
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomEnd)
             )
         }
 
