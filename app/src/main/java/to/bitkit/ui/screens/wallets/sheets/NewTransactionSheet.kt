@@ -1,8 +1,11 @@
 package to.bitkit.ui.screens.wallets.sheets
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -23,12 +26,16 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SendEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +49,9 @@ fun NewTransactionSheet(
         sheetState = sheetState,
         shape = AppShapes.sheet,
         containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxSize().gradientBackground()
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
     ) {
         NewTransactionSheetView(
             details = appViewModel.newTransaction,
@@ -81,20 +90,33 @@ private fun NewTransactionSheetView(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(
-            text = moneyString(details.sats),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.align(Alignment.Start)
-        )
+        BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
 
         Spacer(modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.weight(1f))
 
-        Button(
-            onClick = onCloseClick,
-        ) {
-            Text(stringResource(R.string.close))
+        if (details.direction == NewTransactionSheetDirection.SENT) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__close), //get correct text
+                    onClick = onCloseClick,
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.common__close), //get correct text
+                    onClick = onCloseClick,
+                    fullWidth = false
+                )
+            }
+        } else {
+            PrimaryButton(
+                text = stringResource(R.string.common__close), //get correct text
+                onClick = onCloseClick,
+            )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 /*
