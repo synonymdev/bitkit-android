@@ -100,18 +100,21 @@ private fun NewTransactionSheetView(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 SecondaryButton(
-                    text = stringResource(R.string.common__close), //get correct text
+                    text = stringResource(R.string.wallet__send_details),
                     onClick = onCloseClick,
+                    fullWidth = false,
+                    modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
-                    text = stringResource(R.string.common__close), //get correct text
+                    text = stringResource(R.string.common__close),
                     onClick = onCloseClick,
-                    fullWidth = false
+                    fullWidth = false,
+                    modifier = Modifier.weight(1f)
                 )
             }
         } else {
             PrimaryButton(
-                text = stringResource(R.string.common__close), //get correct text
+                text = stringResource(R.string.common__close), //TODO get correct text
                 onClick = onCloseClick,
             )
         }
