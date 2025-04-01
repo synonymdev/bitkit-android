@@ -16,6 +16,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -23,6 +24,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -89,9 +93,20 @@ private fun NewTransactionSheetView(
                 painter = painterResource(R.drawable.coin_stack_5),
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth().align(Alignment.BottomEnd)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomEnd)
             )
         }
+
+        val composition by rememberLottieComposition(
+            if (details.type == NewTransactionSheetType.ONCHAIN) {
+                LottieCompositionSpec.RawRes(R.raw.confetti_orange)
+            } else {
+                LottieCompositionSpec.RawRes(R.raw.confetti_purple)
+            }
+        )
+        LottieAnimation(composition, modifier = Modifier.fillMaxSize())
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
