@@ -164,6 +164,8 @@ dependencies {
     implementation(libs.accompanist.permissions)
     implementation(libs.constraintlayout.compose)
 
+    implementation(libs.lottie)
+
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)
