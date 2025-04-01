@@ -81,8 +81,7 @@ private fun NewTransactionSheetView(
     onDetailClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
@@ -125,7 +124,7 @@ private fun NewTransactionSheetView(
                     painter = painterResource(R.drawable.check),
                     contentDescription = null,
                     contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
