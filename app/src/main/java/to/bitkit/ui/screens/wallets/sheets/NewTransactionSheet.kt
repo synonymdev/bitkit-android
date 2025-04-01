@@ -103,7 +103,11 @@ private fun NewTransactionSheetView(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .align(Alignment.Center)
+
             )
         }
 
@@ -171,7 +175,7 @@ private fun NewTransactionSheetView(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
