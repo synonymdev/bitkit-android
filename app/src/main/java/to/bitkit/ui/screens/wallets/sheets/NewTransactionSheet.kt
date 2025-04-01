@@ -23,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
@@ -62,22 +63,21 @@ private fun NewTransactionSheetView(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
     ) {
-        Text(
-            text = when (details.type) {
-                NewTransactionSheetType.LIGHTNING -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Instant Bitcoin"
-                    else -> "Received Instant Bitcoin"
-                }
+        val titleText = when (details.type) {
+            NewTransactionSheetType.LIGHTNING -> when (details.direction) {
+                NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                else -> stringResource(R.string.wallet__payment_received)
+            }
 
-                NewTransactionSheetType.ONCHAIN -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Bitcoin"
-                    else -> "Received Bitcoin"
-                }
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
+            NewTransactionSheetType.ONCHAIN -> when (details.direction) {
+                NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                else -> stringResource(R.string.wallet__payment_received)
+            }
+        }
+
+        SheetTopBar(titleText)
 
         Spacer(modifier = Modifier.height(24.dp))
 
