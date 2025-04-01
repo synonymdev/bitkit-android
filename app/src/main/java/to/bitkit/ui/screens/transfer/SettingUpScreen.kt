@@ -67,7 +67,7 @@ fun SettingUpScreen(
             try {
                 Logger.debug("Auto-mining a block", context = "SettingUpScreen")
                 regtestMine(1u)
-                Logger.debug("Successfully mined a block", context = "SettingUpView")
+                Logger.debug("Successfully mined a block", context = "SettingUpScreen")
             } catch (e: Throwable) {
                 Logger.error("Failed to mine block: $e", context = "SettingUpScreen")
             }

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.serialization.encodeToString
 import to.bitkit.di.json
 import to.bitkit.models.BalanceState
 import to.bitkit.utils.Logger
