@@ -98,6 +98,13 @@ private fun NewTransactionSheetView(
                     .fillMaxWidth()
                     .align(Alignment.BottomEnd)
             )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         val composition by rememberLottieComposition(
@@ -136,17 +143,6 @@ private fun NewTransactionSheetView(
             Spacer(modifier = Modifier.height(24.dp))
 
             BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
-
-            if (details.direction == NewTransactionSheetDirection.SENT) {
-                Spacer(modifier = Modifier.weight(1f))
-
-                Image(
-                    painter = painterResource(R.drawable.check),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
             Spacer(modifier = Modifier.weight(1f))
 
