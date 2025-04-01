@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -24,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -38,11 +42,14 @@ import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.MainUiState
 
@@ -52,7 +59,7 @@ private object Routes {
 }
 
 @Composable
-fun ReceiveQRScreen(
+fun ReceiveQrSheet(
     walletState: MainUiState,
     modifier: Modifier = Modifier,
 ) {
@@ -81,7 +88,7 @@ fun ReceiveQRScreen(
     ) {
         SheetTopBar(stringResource(R.string.title_receive))
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(24.dp))
 
         val navController = rememberNavController()
         NavHost(
@@ -89,7 +96,7 @@ fun ReceiveQRScreen(
             startDestination = Routes.QR,
         ) {
             composable(Routes.QR) {
-                ContentView(
+                ReceiveQrScreen(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
                     navController = navController,
@@ -100,9 +107,7 @@ fun ReceiveQRScreen(
                 ReceiveCjitScreen(
                     onCjitCreated = { invoice ->
                         cjitInvoice.value = invoice
-                        navController.navigate(Routes.QR) {
-                            popUpTo(Routes.QR) { inclusive = true }
-                        }
+                        navController.navigate(Routes.QR) { popUpTo(Routes.QR) }
                     },
                     onDismiss = { cjitActive.value = !cjitInvoice.value.isNullOrBlank() }
                 )
@@ -112,7 +117,7 @@ fun ReceiveQRScreen(
 }
 
 @Composable
-private fun ContentView(
+private fun ReceiveQrScreen(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
     navController: NavHostController,
@@ -185,47 +190,65 @@ private fun ReceiveLightningFunds(
 private fun ReceiveQrSlide(
     uri: String,
 ) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        QrCodeImage(uri)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row {
-            val buttonColors = ButtonDefaults.textButtonColors(
-                contentColor = MaterialTheme.colorScheme.onSurface,
+        QrCodeImage(content = uri)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.common__edit),
+                size = ButtonSize.Small,
+                onClick = { /* TODO : edit amount */ },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pencil_simple),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             )
-            TextButton(
-                onClick = { /*TODO*/ },
-                colors = buttonColors,
-            ) {
-                Text("Edit")
-            }
-            val clipboard = LocalClipboardManager.current
-            TextButton(
-                onClick = { clipboard.setText(AnnotatedString((uri))) },
-                colors = buttonColors,
-            ) {
-                Text("Copy")
-            }
-            val context = LocalContext.current
-            TextButton(
+            PrimaryButton(
+                text = stringResource(R.string.common__copy),
+                size = ButtonSize.Small,
+                onClick = { clipboard.setText(AnnotatedString(uri)) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__share),
+                size = ButtonSize.Small,
                 onClick = { shareText(context, uri) },
-                colors = buttonColors,
-            ) {
-                Text("Share")
-            }
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
         }
     }
 }
-
-// TODO fix preview with viewModel
-// @Preview(showBackground = true)
-// @Composable
-// private fun ReceiveQRScreenPreview() {
-//     AppThemeSurface {
-//         ReceiveQRScreen()
-//     }
-// }
 
 @Composable
 private fun CopyValuesSlide(
@@ -302,6 +325,21 @@ private fun CopyAddressCard(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ReceiveQRScreenPreview() {
+    AppThemeSurface {
+        ReceiveQrScreen(
+            cjitInvoice = remember { mutableStateOf(null) },
+            cjitActive = remember { mutableStateOf(false) },
+            navController = rememberNavController(),
+            walletState = MainUiState(
+                nodeLifecycleState = NodeLifecycleState.Running,
+            ),
+        )
     }
 }
 
