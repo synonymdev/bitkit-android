@@ -145,6 +145,7 @@ fun HomeScreen(
                 ) {
                     val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
                     SpendingWalletScreen(
+                        uiState = uiState,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferToSavingsClick = {

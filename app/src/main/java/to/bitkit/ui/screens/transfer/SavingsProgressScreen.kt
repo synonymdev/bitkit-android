@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.transfer
 
+import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +54,7 @@ fun SavingsProgressScreen(
     onContinueClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
+    val window = LocalActivity.current?.window
     val transfer = transferViewModel ?: return
     val wallet = walletViewModel ?: return
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
@@ -60,6 +64,8 @@ fun SavingsProgressScreen(
         val channelsFailedToCoopClose = transfer.closeSelectedChannels()
 
         if (channelsFailedToCoopClose.isEmpty()) {
+            window?.clearFlags(FLAG_KEEP_SCREEN_ON)
+
             wallet.refreshState()
             delay(5000)
             progressState = SavingsProgressState.SUCCESS
@@ -67,6 +73,14 @@ fun SavingsProgressScreen(
             transfer.startCoopCloseRetries(channelsFailedToCoopClose, System.currentTimeMillis())
             delay(2500)
             progressState = SavingsProgressState.INTERRUPTED
+        }
+    }
+
+    // Keeps screen on while this view is active
+    DisposableEffect(Unit) {
+        window?.addFlags(FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(FLAG_KEEP_SCREEN_ON)
         }
     }
 

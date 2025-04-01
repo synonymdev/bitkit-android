@@ -3,7 +3,6 @@ package to.bitkit.models
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import to.bitkit.data.APP_PREFS
 import to.bitkit.di.json
 import to.bitkit.utils.Logger

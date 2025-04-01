@@ -618,6 +618,9 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region TxSheet
+    var isNewTransactionSheetEnabled = true
+        private set
+
     var showNewTransaction by mutableStateOf(false)
         private set
 
@@ -629,7 +632,16 @@ class AppViewModel @Inject constructor(
         )
     )
 
+    fun setNewTransactionSheetEnabled(enabled: Boolean) {
+        isNewTransactionSheetEnabled = enabled
+    }
+
     fun showNewTransactionSheet(details: NewTransactionSheetDetails) {
+        if (!isNewTransactionSheetEnabled) {
+            Logger.debug("NewTransactionSheet display blocked by isNewTransactionSheetEnabled=false")
+            return
+        }
+
         newTransaction = details
         showNewTransaction = true
     }
