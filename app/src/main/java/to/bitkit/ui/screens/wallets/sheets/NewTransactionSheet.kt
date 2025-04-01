@@ -9,12 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,22 +30,34 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.viewmodels.SendEvent
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTransactionSheet(
     appViewModel: AppViewModel,
 ) {
+
+    NewTransactionSheet(
+        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+        details = appViewModel.newTransaction,
+        onCloseClick = { appViewModel.hideNewTransactionSheet() }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NewTransactionSheet(
+    onDismissRequest: () -> Unit,
+    details: NewTransactionSheetDetails,
+    onCloseClick: () -> Unit
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+        onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = AppShapes.sheet,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -57,19 +66,18 @@ fun NewTransactionSheet(
             .gradientBackground()
     ) {
         NewTransactionSheetView(
-            details = appViewModel.newTransaction,
-            sheetState = sheetState,
-            onCloseClick = { appViewModel.hideNewTransactionSheet() }
+            details = details,
+            onCloseClick = onCloseClick,
+            onDetailClick = onCloseClick //TODO IMPLEMENT
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewTransactionSheetView(
     details: NewTransactionSheetDetails,
-    sheetState: SheetState,
     onCloseClick: () -> Unit,
+    onDetailClick: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -115,7 +123,7 @@ private fun NewTransactionSheetView(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_details),
-                    onClick = onCloseClick, //TODO IMPLEMENT
+                    onClick = onDetailClick,
                     fullWidth = false,
                     modifier = Modifier.weight(1f)
                 )
@@ -136,53 +144,6 @@ private fun NewTransactionSheetView(
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
-/*
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun NewTransactionSheetView(
-    details: NewTransactionSheetDetails,
-    sheetState: SheetState,
-    onCloseClick: () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-    ) {
-        Text(
-            text = when (details.type) {
-                NewTransactionSheetType.LIGHTNING -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Instant Bitcoin"
-                    else -> "Received Instant Bitcoin"
-                }
-
-                NewTransactionSheetType.ONCHAIN -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Bitcoin"
-                    else -> "Received Bitcoin"
-                }
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = moneyString(details.sats),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.align(Alignment.Start)
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.weight(1f))
-
-        Button(
-            onClick = onCloseClick,
-        ) {
-            Text(stringResource(R.string.close))
-        }
-    }
-}*/
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
@@ -200,8 +161,8 @@ private fun Preview() {
                 direction = NewTransactionSheetDirection.SENT,
                 sats = 123456789,
             ),
-            sheetState,
             onCloseClick = {},
+            onDetailClick = {},
         )
     }
 }
@@ -222,8 +183,8 @@ private fun Preview2() {
                 direction = NewTransactionSheetDirection.SENT,
                 sats = 123456789,
             ),
-            sheetState,
             onCloseClick = {},
+            onDetailClick = {},
         )
     }
 }
@@ -244,8 +205,8 @@ private fun Preview3() {
                 direction = NewTransactionSheetDirection.RECEIVED,
                 sats = 123456789,
             ),
-            sheetState,
             onCloseClick = {},
+            onDetailClick = {},
         )
     }
 }
@@ -266,8 +227,8 @@ private fun Preview4() {
                 direction = NewTransactionSheetDirection.RECEIVED,
                 sats = 123456789,
             ),
-            sheetState,
             onCloseClick = {},
+            onDetailClick = {},
         )
     }
 }
