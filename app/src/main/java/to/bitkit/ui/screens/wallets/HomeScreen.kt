@@ -90,6 +90,7 @@ fun HomeScreen(
                 is BottomSheetType.Send -> {
                     SendOptionsView(
                         appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
                         startDestination = sheet.route,
                         onComplete = { txSheet ->
                             appViewModel.hideSheet()
