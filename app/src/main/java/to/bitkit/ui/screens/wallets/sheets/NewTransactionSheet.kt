@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.sheets
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -92,6 +95,17 @@ private fun NewTransactionSheetView(
 
         BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
 
+        if (details.direction == NewTransactionSheetDirection.SENT) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         if (details.direction == NewTransactionSheetDirection.SENT) {
@@ -101,7 +115,7 @@ private fun NewTransactionSheetView(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__send_details),
-                    onClick = onCloseClick,
+                    onClick = onCloseClick, //TODO IMPLEMENT
                     fullWidth = false,
                     modifier = Modifier.weight(1f)
                 )
