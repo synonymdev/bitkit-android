@@ -29,6 +29,8 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toTxType
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
@@ -502,6 +504,22 @@ class AppViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun onClickActivityDetail() {
+        val filter = newTransaction.type.toActivityFilter()
+        val paymentType = newTransaction.direction.toTxType()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val activity = coreService.activity.get(filter = filter, txType = paymentType, limit = 1u).firstOrNull()
+
+            if (activity == null) {
+                Logger.error(msg = "Activity not found")
+                return@launch
+            }
+
+            //TODO NAVIGATION
         }
     }
 
