@@ -179,6 +179,7 @@ class AppViewModel @Inject constructor(
                         }
 
                         is Event.PaymentSuccessful -> {
+                            // TODO: fee is not the sats sent. Need to get this amount from elsewhere like send flow or something.
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,

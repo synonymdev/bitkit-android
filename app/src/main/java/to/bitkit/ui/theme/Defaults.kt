@@ -94,4 +94,21 @@ object AppSwitchDefaults {
             uncheckedBorderColor = Colors.Gray4,
             uncheckedIconColor = Colors.Gray4,
         )
+
+    @Stable
+    val colorsPurple: SwitchColors
+        @Composable
+        get() = SwitchDefaults.colors(
+            // When checked (ON state)
+            checkedThumbColor = Colors.White,
+            checkedTrackColor = Colors.Purple,
+            checkedBorderColor = Colors.Purple,
+            checkedIconColor = Colors.Purple,
+
+            // When unchecked (OFF state)
+            uncheckedThumbColor = Colors.White,
+            uncheckedTrackColor = Colors.Gray4,
+            uncheckedBorderColor = Colors.Gray4,
+            uncheckedIconColor = Colors.Gray4,
+        )
 }

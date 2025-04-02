@@ -54,6 +54,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
+import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -205,6 +206,7 @@ private fun ReceiveLightningFunds(
             Switch(
                 checked = cjitActive.value,
                 onCheckedChange = onCjitToggle,
+                colors = AppSwitchDefaults.colorsPurple,
             )
         }
     }
