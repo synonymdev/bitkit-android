@@ -172,7 +172,7 @@ private fun NewTransactionSheetView(
                 }
             } else {
                 PrimaryButton(
-                    text = stringResource(R.string.common__close), //TODO get correct text
+                    text = stringResource(R.string.common__ok_random).split("\n").random(),
                     onClick = onCloseClick,
                 )
             }
