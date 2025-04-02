@@ -1,158 +1,255 @@
 package to.bitkit.ui.screens.wallets.sheets
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieClipSpec
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.ui.shared.moneyString
+import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
-import kotlin.math.roundToInt
+import to.bitkit.ui.utils.localizedRandom
+import to.bitkit.viewmodels.AppViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTransactionSheet(
     appViewModel: AppViewModel,
 ) {
+
+    NewTransactionSheet(
+        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+        details = appViewModel.newTransaction,
+        onCloseClick = { appViewModel.hideNewTransactionSheet() }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NewTransactionSheet(
+    onDismissRequest: () -> Unit,
+    details: NewTransactionSheetDetails,
+    onCloseClick: () -> Unit
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+        onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = AppShapes.sheet,
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier
-            .fillMaxHeight()
+            .fillMaxSize()
             .padding(top = 100.dp)
+            .gradientBackground()
     ) {
         NewTransactionSheetView(
-            details = appViewModel.newTransaction,
-            sheetState = sheetState,
-            onCloseClick = { appViewModel.hideNewTransactionSheet() }
+            details = details,
+            onCloseClick = onCloseClick,
+            onDetailClick = onCloseClick //TODO IMPLEMENT
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NewTransactionSheetView(
+fun NewTransactionSheetView(
     details: NewTransactionSheetDetails,
-    sheetState: SheetState,
     onCloseClick: () -> Unit,
+    onDetailClick: () -> Unit,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .testTag("new_transaction_sheet")
     ) {
-        Text(
-            text = when (details.type) {
+
+        if (details.direction == NewTransactionSheetDirection.RECEIVED) {
+            Image(
+                painter = painterResource(R.drawable.coin_stack_5),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("transaction_received_image")
+                    .align(Alignment.BottomEnd)
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("transaction_sent_image")
+                    .align(Alignment.Center)
+            )
+        }
+
+        val composition by rememberLottieComposition(
+            if (details.type == NewTransactionSheetType.ONCHAIN) {
+                LottieCompositionSpec.RawRes(R.raw.confetti_orange)
+            } else {
+                LottieCompositionSpec.RawRes(R.raw.confetti_purple)
+            }
+        )
+        LottieAnimation(
+            composition = composition,
+            contentScale = ContentScale.FillBounds,
+            iterations = 100,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("confetti_animation")
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("transaction_content_column")
+                .padding(horizontal = 16.dp),
+        ) {
+            val titleText = when (details.type) {
                 NewTransactionSheetType.LIGHTNING -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Instant Bitcoin"
-                    else -> "Received Instant Bitcoin"
+                    NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                    else -> stringResource(R.string.wallet__payment_received)
                 }
 
                 NewTransactionSheetType.ONCHAIN -> when (details.direction) {
-                    NewTransactionSheetDirection.SENT -> "Sent Bitcoin"
-                    else -> "Received Bitcoin"
+                    NewTransactionSheetDirection.SENT -> stringResource(R.string.wallet__send_sent)
+                    else -> stringResource(R.string.wallet__payment_received)
                 }
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
+            }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            SheetTopBar(titleText)
 
-        Text(
-            text = moneyString(details.sats),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.align(Alignment.Start)
-        )
+            Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.weight(1f))
-        ConfettiAnimation(sheetState)
-        Spacer(modifier = Modifier.weight(1f))
+            BalanceHeaderView(
+                sats = details.sats,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("balance_header")
+            )
 
-        Button(
-            onClick = onCloseClick,
-        ) {
-            Text(stringResource(R.string.close))
-        }
-    }
-}
+            Spacer(modifier = Modifier.weight(1f))
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ConfettiAnimation(sheetState: SheetState) {
-    val rotateAnim = remember { Animatable(0f) }
-    val offsetYAnim = remember { Animatable(0f) }
-
-    // Confetti Animation
-    LaunchedEffect(sheetState.isVisible) {
-        if (sheetState.isVisible) {
-            launch {
-                rotateAnim.animateTo(
-                    targetValue = 360f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(3_200, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
+            if (details.direction == NewTransactionSheetDirection.SENT) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sent_buttons_row")
+                ) {
+                    SecondaryButton(
+                        text = stringResource(R.string.wallet__send_details),
+                        onClick = onDetailClick,
+                        fullWidth = false,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("details_button")
                     )
+                    PrimaryButton(
+                        text = stringResource(R.string.common__close),
+                        onClick = onCloseClick,
+                        fullWidth = false,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("close_button")
+                    )
+                }
+            } else {
+                PrimaryButton(
+                    text = localizedRandom(R.string.common__ok_random),
+                    onClick = onCloseClick,
+                    modifier = Modifier.testTag("ok_button")
                 )
             }
-            launch {
-                offsetYAnim.animateTo(
-                    targetValue = 100f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(10_000, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse,
-                    )
-                )
-            }
+
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
-    Text(
-        text = "🎉",
-        modifier = Modifier
-            .rotate(rotateAnim.value)
-            .offset { IntOffset(x = 0, y = offsetYAnim.value.roundToInt()) }
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
-private fun PreviewNewTransactionSheetView() {
+private fun Preview() {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    LaunchedEffect(Unit) {
+        sheetState.show()
+    }
+
+    AppThemeSurface {
+        NewTransactionSheetView(
+            details = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.SENT,
+                sats = 123456789,
+            ),
+            onCloseClick = {},
+            onDetailClick = {},
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
+@Composable
+private fun Preview2() {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    LaunchedEffect(Unit) {
+        sheetState.show()
+    }
+
+    AppThemeSurface {
+        NewTransactionSheetView(
+            details = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                sats = 123456789,
+            ),
+            onCloseClick = {},
+            onDetailClick = {},
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
+@Composable
+private fun Preview3() {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(Unit) {
         sheetState.show()
@@ -165,8 +262,30 @@ private fun PreviewNewTransactionSheetView() {
                 direction = NewTransactionSheetDirection.RECEIVED,
                 sats = 123456789,
             ),
-            sheetState,
             onCloseClick = {},
+            onDetailClick = {},
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
+@Composable
+private fun Preview4() {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    LaunchedEffect(Unit) {
+        sheetState.show()
+    }
+
+    AppThemeSurface {
+        NewTransactionSheetView(
+            details = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                sats = 123456789,
+            ),
+            onCloseClick = {},
+            onDetailClick = {},
         )
     }
 }

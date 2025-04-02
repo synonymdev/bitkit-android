@@ -94,6 +94,7 @@ fun SecondaryButton(
     isLoading: Boolean = false,
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
+    fullWidth: Boolean = true,
 ) {
     OutlinedButton(
         onClick = onClick,
@@ -102,7 +103,7 @@ fun SecondaryButton(
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         border = BorderStroke(2.dp, if (enabled) Colors.White16 else Color.Transparent),
         modifier = Modifier
-            .fillMaxWidth()
+            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(size.height)
             .then(modifier)
     ) {
