@@ -21,10 +21,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -71,6 +74,8 @@ fun ReceiveQrSheet(
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
 
+    val navController = rememberNavController()
+
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
 
@@ -93,11 +98,10 @@ fun ReceiveQrSheet(
             .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(stringResource(R.string.title_receive))
+        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
 
         Spacer(Modifier.height(24.dp))
 
-        val navController = rememberNavController()
         NavHost(
             navController = navController,
             startDestination = Routes.QR,
@@ -139,6 +143,15 @@ private fun ReceiveQrScreen(
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
 ) {
+    val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
+        val resId = when {
+            cjitInvoice.value?.isNotEmpty() == true -> R.drawable.ic_ln_circle
+            walletState.bolt11.isNotEmpty() && walletState.onchainAddress.isNotEmpty() -> R.drawable.ic_unified_circle
+            else -> R.drawable.ic_btc_circle
+        }
+        mutableIntStateOf(resId)
+    }
+
     Column {
         val onchainAddress = walletState.onchainAddress
         val uri = cjitInvoice.value ?: walletState.bip21
@@ -149,7 +162,11 @@ private fun ReceiveQrScreen(
             val pagerState = rememberPagerState(initialPage = 0) { 2 }
             PagerWithIndicator(pagerState) {
                 when (it) {
-                    0 -> ReceiveQrSlide(uri)
+                    0 -> ReceiveQrSlide(
+                        uri = uri,
+                        qrLogoPainter = painterResource(qrLogoImageRes),
+                    )
+
                     1 -> CopyValuesSlide(
                         onchainAddress = onchainAddress,
                         bolt11 = walletState.bolt11,
@@ -196,13 +213,17 @@ private fun ReceiveLightningFunds(
 @Composable
 private fun ReceiveQrSlide(
     uri: String,
+    qrLogoPainter: Painter,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        QrCodeImage(content = uri)
+        QrCodeImage(
+            content = uri,
+            logoPainter = qrLogoPainter,
+        )
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
