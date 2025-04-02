@@ -39,6 +39,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.viewmodels.AppViewModel
 
 @Composable
@@ -172,7 +173,7 @@ private fun NewTransactionSheetView(
                 }
             } else {
                 PrimaryButton(
-                    text = stringResource(R.string.common__ok_random).split("\n").random(),
+                    text = localizedRandom(R.string.common__ok_random),
                     onClick = onCloseClick,
                 )
             }
