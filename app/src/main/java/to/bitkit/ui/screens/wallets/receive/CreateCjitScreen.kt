@@ -38,7 +38,7 @@ import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
 @Composable
-fun ReceiveCjitScreen(
+fun CreateCjitScreen(
     modifier: Modifier = Modifier,
     onCjitCreated: (String) -> Unit,
     onDismiss: () -> Unit,

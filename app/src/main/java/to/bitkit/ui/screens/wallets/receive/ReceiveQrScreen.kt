@@ -119,7 +119,7 @@ fun ReceiveQrSheet(
                 )
             }
             composable(Routes.CJIT) {
-                ReceiveCjitScreen(
+                CreateCjitScreen(
                     onCjitCreated = { invoice ->
                         cjitInvoice.value = invoice
                         navController.navigate(Routes.QR) { popUpTo(Routes.QR) }
