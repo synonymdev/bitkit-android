@@ -87,7 +87,7 @@ fun Payments(
             FullWidthTextButton(
                 onClick = {
                     amountToReceive.toULongOrNull()?.let {
-                        val bolt11 = viewModel.createInvoice(it)
+                        val bolt11 = viewModel.createInvoice(amountSats = it, description = "Bitkit")
                         clipboard.setText(AnnotatedString(bolt11))
                     }
                 },

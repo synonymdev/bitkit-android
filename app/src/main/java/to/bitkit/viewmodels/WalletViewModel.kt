@@ -41,7 +41,10 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import javax.inject.Inject
 
 @HiltViewModel
@@ -57,6 +60,7 @@ class WalletViewModel @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
+    private val addressChecker: AddressChecker,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
@@ -254,29 +258,40 @@ class WalletViewModel @Inject constructor(
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress()
         } else {
-            // TODO: check if onchain has been used and generate new on if it has
+            // Check if current address has been used
+            val addressInfo = addressChecker.getAddressInfo(_onchainAddress)
+            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
+
+            if (hasTransactions) {
+                // Address has been used, generate a new one
+                _onchainAddress = lightningService.newAddress()
+            }
         }
 
-        _bip21 = "bitcoin:$_onchainAddress"
+        var newBip21 = "bitcoin:$_onchainAddress"
 
         val hasChannels = lightningService.channels?.isNotEmpty() == true
-        if (!hasChannels) {
+        if (hasChannels) {
+            if (_bolt11.isEmpty()) {
+                _bolt11 = this.createInvoice(description = "Bitkit")
+            } else {
+                // Check if existing invoice has expired and create a new one if so
+                decode(invoice = _bolt11).let { decoded ->
+                    if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
+                        _bolt11 = this.createInvoice(description = "Bitkit")
+                    }
+                }
+            }
+        } else {
             _bolt11 = ""
         }
 
         if (_bolt11.isNotEmpty()) {
-            _bip21 += "?lightning=$_bolt11"
+            newBip21 += "?lightning=$_bolt11"
         }
 
-        // TODO: check current bolt11 for expiry and/or if it's been used
+        _bip21 = newBip21
 
-        val hasIncomingLightingCapacity = (incomingLightningCapacitySats ?: 0u) > 0u
-        if (hasChannels && hasIncomingLightingCapacity) {
-            // Append lightning invoice if we have incoming capacity
-            _bolt11 = lightningService.receive(description = "Bitkit")
-
-            _bip21 = "bitcoin:$_onchainAddress?lightning=$_bolt11"
-        }
         syncState()
     }
 
@@ -304,7 +319,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun createInvoice(amountSats: ULong, description: String = "Bitkit", expirySeconds: UInt = 7200u): String {
+    fun createInvoice(
+        amountSats: ULong? = null,
+        description: String,
+        expirySeconds: UInt = 86_400u, // 1 day
+    ): String {
         return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
     }
 

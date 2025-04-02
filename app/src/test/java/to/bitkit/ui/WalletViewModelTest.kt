@@ -75,6 +75,7 @@ class WalletViewModelTest : BaseUnitTest() {
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
             settingsStore = settingsStore,
+            addressChecker = mock(),
         )
     }
 
