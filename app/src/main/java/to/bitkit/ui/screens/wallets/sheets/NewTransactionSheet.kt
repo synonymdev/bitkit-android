@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -88,7 +89,9 @@ private fun NewTransactionSheetView(
     onDetailClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("new_transaction_sheet")
     ) {
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
@@ -98,6 +101,7 @@ private fun NewTransactionSheetView(
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("transaction_received_image")
                     .align(Alignment.BottomEnd)
             )
         } else {
@@ -108,8 +112,8 @@ private fun NewTransactionSheetView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
+                    .testTag("transaction_sent_image")
                     .align(Alignment.Center)
-
             )
         }
 
@@ -124,13 +128,16 @@ private fun NewTransactionSheetView(
             composition = composition,
             contentScale = ContentScale.FillBounds,
             iterations = 100,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("confetti_animation")
         )
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("transaction_content_column")
                 .padding(horizontal = 16.dp),
         ) {
             val titleText = when (details.type) {
@@ -149,32 +156,44 @@ private fun NewTransactionSheetView(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            BalanceHeaderView(sats = details.sats, modifier = Modifier.fillMaxWidth())
+            BalanceHeaderView(
+                sats = details.sats,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("balance_header")
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
             if (details.direction == NewTransactionSheetDirection.SENT) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sent_buttons_row")
                 ) {
                     SecondaryButton(
                         text = stringResource(R.string.wallet__send_details),
                         onClick = onDetailClick,
                         fullWidth = false,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("details_button")
                     )
                     PrimaryButton(
                         text = stringResource(R.string.common__close),
                         onClick = onCloseClick,
                         fullWidth = false,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("close_button")
                     )
                 }
             } else {
                 PrimaryButton(
                     text = localizedRandom(R.string.common__ok_random),
                     onClick = onCloseClick,
+                    modifier = Modifier.testTag("ok_button")
                 )
             }
 
