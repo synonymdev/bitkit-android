@@ -63,10 +63,12 @@ enum class NewTransactionSheetDirection {
     SENT, RECEIVED
 }
 
-fun NewTransactionSheetDirection.toTxType(): PaymentType = if (this == NewTransactionSheetDirection.SENT) {
-    PaymentType.SENT
-} else {
-    PaymentType.RECEIVED
+fun NewTransactionSheetDirection.toTxType(): PaymentType {
+    return if (this == NewTransactionSheetDirection.SENT) {
+        PaymentType.SENT
+    } else {
+        PaymentType.RECEIVED
+    }
 }
 
 fun NewTransactionSheetType.toActivityFilter(): ActivityFilter {
