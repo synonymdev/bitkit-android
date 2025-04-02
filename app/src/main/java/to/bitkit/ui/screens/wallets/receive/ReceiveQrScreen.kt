@@ -33,14 +33,14 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.NodeLifecycleState.Running
+import to.bitkit.models.NodeLifecycleState.Starting
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
@@ -50,6 +50,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.PagerWithIndicator
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -72,7 +73,7 @@ fun ReceiveQrSheet(
     val blocktank = blocktankViewModel ?: return
 
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
-    val cjitActive = remember { mutableStateOf(false) }
+    val showCreateCjit = remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -90,7 +91,8 @@ fun ReceiveQrSheet(
             .fillMaxWidth()
             .fillMaxHeight(.875f)
             .imePadding()
-            .padding(horizontal = 16.dp),
+            .gradientBackground()
+            .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_receive))
 
@@ -104,9 +106,16 @@ fun ReceiveQrSheet(
             composable(Routes.QR) {
                 ReceiveQrScreen(
                     cjitInvoice = cjitInvoice,
-                    cjitActive = cjitActive,
-                    navController = navController,
+                    cjitActive = showCreateCjit,
                     walletState = walletState,
+                    onCjitToggle = { active ->
+                        showCreateCjit.value = active
+                        if (!active) {
+                            cjitInvoice.value = null
+                        } else if (cjitInvoice.value == null) {
+                            navController.navigate(Routes.CJIT)
+                        }
+                    }
                 )
             }
             composable(Routes.CJIT) {
@@ -115,7 +124,9 @@ fun ReceiveQrSheet(
                         cjitInvoice.value = invoice
                         navController.navigate(Routes.QR) { popUpTo(Routes.QR) }
                     },
-                    onDismiss = { cjitActive.value = !cjitInvoice.value.isNullOrBlank() }
+                    onDismiss = {
+                        showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
+                    }
                 )
             }
         }
@@ -126,8 +137,8 @@ fun ReceiveQrSheet(
 private fun ReceiveQrScreen(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
-    navController: NavHostController,
     walletState: MainUiState,
+    onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
         val onchainAddress = walletState.onchainAddress
@@ -149,15 +160,14 @@ private fun ReceiveQrScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        if (walletState.nodeLifecycleState == NodeLifecycleState.Running && walletState.channels.isEmpty()) {
-            ReceiveLightningFunds(cjitInvoice, cjitActive) {
-                cjitActive.value = it
-                if (it) {
-                    navController.navigate(Routes.CJIT)
-                } else {
-                    cjitInvoice.value = null
-                }
-            }
+        if ((walletState.nodeLifecycleState == Running || walletState.nodeLifecycleState == Starting) &&
+            walletState.channels.isEmpty()
+        ) {
+            ReceiveLightningFunds(
+                cjitInvoice = cjitInvoice,
+                cjitActive = cjitActive,
+                onCjitToggle = onCjitToggle,
+            )
         }
         Spacer(modifier = Modifier.height(24.dp))
     }
@@ -167,7 +177,7 @@ private fun ReceiveQrScreen(
 private fun ReceiveLightningFunds(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
-    onCheckedChange: (Boolean) -> Unit,
+    onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
         if (cjitInvoice.value == null) {
@@ -180,7 +190,7 @@ private fun ReceiveLightningFunds(
             Spacer(modifier = Modifier.weight(1f))
             Switch(
                 checked = cjitActive.value,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = onCjitToggle,
             )
         }
     }
@@ -335,10 +345,10 @@ private fun ReceiveQRScreenPreview() {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
-            navController = rememberNavController(),
             walletState = MainUiState(
-                nodeLifecycleState = NodeLifecycleState.Running,
+                nodeLifecycleState = Running,
             ),
+            onCjitToggle = { },
         )
     }
 }
