@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
@@ -58,6 +59,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
+import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
@@ -81,6 +83,8 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
+import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -136,6 +140,14 @@ fun ContentView(
 
     LaunchedEffect(Unit) {
         walletViewModel.observeLdkWallet()
+    }
+
+    LaunchedEffect(appViewModel.mainScreenEffect) {
+        appViewModel.mainScreenEffect.collect {
+            when (it) {
+                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityItem(it.activityId))
+            }
+        }
     }
 
     val walletUiState by walletViewModel.uiState.collectAsState()

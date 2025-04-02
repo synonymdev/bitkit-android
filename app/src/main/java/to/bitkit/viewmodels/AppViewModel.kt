@@ -71,6 +71,10 @@ class AppViewModel @Inject constructor(
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
 
+    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(replay = 0, extraBufferCapacity = 1)
+    val mainScreenEffect = _mainScreenEffect.asSharedFlow()
+    private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
+
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
@@ -519,7 +523,12 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            //TODO NAVIGATION
+            val id = when(activity) {
+                is Activity.Lightning -> activity.v1.id
+                is Activity.Onchain -> activity.v1.id
+            }
+
+            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(id))
         }
     }
 
@@ -746,6 +755,10 @@ sealed class SendEffect {
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
+}
+
+sealed class MainScreenEffect {
+    data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
 }
 
 sealed class SendEvent {
