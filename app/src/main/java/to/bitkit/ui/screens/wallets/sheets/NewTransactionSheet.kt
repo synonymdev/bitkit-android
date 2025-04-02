@@ -83,7 +83,7 @@ fun NewTransactionSheet(
 }
 
 @Composable
-private fun NewTransactionSheetView(
+fun NewTransactionSheetView(
     details: NewTransactionSheetDetails,
     onCloseClick: () -> Unit,
     onDetailClick: () -> Unit,
