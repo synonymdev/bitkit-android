@@ -27,8 +27,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.Caption13Up
@@ -56,7 +60,7 @@ fun CreateCjitScreen(
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
-    val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
+    val walletState by wallet.uiState.collectAsStateWithLifecycle()
 
     var amount by remember { mutableStateOf("") }
     var isCreatingInvoice by remember { mutableStateOf(false) }
@@ -113,22 +117,39 @@ fun CreateCjitScreen(
         PrimaryButton(
             text = stringResource(R.string.common__continue),
             onClick = {
-                if (walletUiState.nodeId.isEmpty()) return@PrimaryButton
-                amount.toULongOrNull()?.let { amountValue ->
-                    scope.launch {
-                        isCreatingInvoice = true
+                val amountValue = amount.toULongOrNull() ?: return@PrimaryButton
+
+                scope.launch {
+                    isCreatingInvoice = true
+
+                    if (walletState.nodeLifecycleState == NodeLifecycleState.Starting) {
+                        while (walletState.nodeLifecycleState == NodeLifecycleState.Starting && isActive) {
+                            delay(500) // 0.5 second delay
+                        }
+                    }
+
+                    if (walletState.nodeLifecycleState == NodeLifecycleState.Running) {
                         try {
                             val entry = blocktank.createCjit(amountSats = amountValue, description = "Bitkit")
                             onCjitCreated(entry.invoice.request)
                         } catch (e: Exception) {
-                            Logger.error("Failed to create cjit", e)
                             app.toast(e)
+                            Logger.error("Failed to create cjit", e)
                         } finally {
                             isCreatingInvoice = false
                         }
+                    } else {
+                        app.toast(
+                            type = Toast.ToastType.WARNING,
+                            title = "Lightning not ready",
+                            description = "Lightning node must be running to create an invoice",
+                        )
+                        isCreatingInvoice = false
                     }
                 }
-            }
+            },
+            isLoading = isCreatingInvoice,
+            enabled = !isCreatingInvoice, // TODO if amount is valid
         )
         Spacer(modifier = Modifier.height(16.dp))
     }

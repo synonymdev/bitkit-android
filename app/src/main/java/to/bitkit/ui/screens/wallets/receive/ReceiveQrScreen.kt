@@ -40,7 +40,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState.Running
-import to.bitkit.models.NodeLifecycleState.Starting
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
@@ -160,9 +159,7 @@ private fun ReceiveQrScreen(
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        if ((walletState.nodeLifecycleState == Running || walletState.nodeLifecycleState == Starting) &&
-            walletState.channels.isEmpty()
-        ) {
+        if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
             ReceiveLightningFunds(
                 cjitInvoice = cjitInvoice,
                 cjitActive = cjitActive,
