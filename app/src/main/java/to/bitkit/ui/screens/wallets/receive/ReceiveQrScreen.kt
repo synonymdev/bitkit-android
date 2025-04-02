@@ -37,12 +37,15 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -50,6 +53,7 @@ import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.MainUiState
 
@@ -72,8 +76,10 @@ fun ReceiveQrSheet(
 
     LaunchedEffect(Unit) {
         try {
-            launch { wallet.refreshBip21() }
-            launch { blocktank.refreshInfo() }
+            coroutineScope {
+                launch { wallet.refreshBip21() }
+                launch { blocktank.refreshInfo() }
+            }
         } catch (e: Exception) {
             app.toast(e)
         }
@@ -165,18 +171,12 @@ private fun ReceiveLightningFunds(
 ) {
     Column {
         if (cjitInvoice.value == null) {
-            Text(
-                text = "Want to receive lighting funds?",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Normal,
+            Headline(
+                text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
             )
         }
-        Row {
-            Text(
-                text = "Receive on Spending Balance",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.CenterVertically)
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BodyM(text = stringResource(R.string.wallet__receive_spending))
             Spacer(modifier = Modifier.weight(1f))
             Switch(
                 checked = cjitActive.value,
