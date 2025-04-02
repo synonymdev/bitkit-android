@@ -121,6 +121,7 @@ private fun NewTransactionSheetView(
         LottieAnimation(
             composition = composition,
             contentScale = ContentScale.FillBounds,
+            iterations = 100,
             modifier = Modifier.fillMaxSize()
         )
 
