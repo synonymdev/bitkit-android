@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -29,11 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ext.formatWithDotSeparator
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
-import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
@@ -48,6 +52,7 @@ fun CreateCjitScreen(
             onDismiss()
         }
     }
+
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
@@ -79,53 +84,36 @@ fun CreateCjitScreen(
 
         blocktank.info?.let { info ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // Min amount view
                 Column(
                     modifier = Modifier
-                        .clickable {
+                        .clickableAlpha {
                             amount = (info.options.minChannelSizeSat / 2u).toString()
                         }
                 ) {
-                    Text(
-                        text = "Minimum",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    Caption13Up(
+                        text = stringResource(R.string.wallet__minimum),
+                        color = Colors.White64,
                     )
-                    Text(
-                        text = (info.options.minChannelSizeSat / 2u).formatWithDotSeparator(),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MoneySSB(sats = (info.options.minChannelSizeSat / 2u).toLong())
                 }
 
-                // Max amount view
-                Column(
-                    modifier = Modifier
-                        .clickable {
-                            amount = (info.options.maxChannelSizeSat / 2u).toString()
-                        }
-                ) {
-                    Text(
-                        text = "Maximum",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    )
-                    Text(
-                        text = (info.options.maxChannelSizeSat / 2u).formatWithDotSeparator(),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-                // TODO: switch to USD
+                UnitButton()
             }
         }
-
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
-        FullWidthTextButton(
+
+        Spacer(modifier = Modifier.height(16.dp))
+        PrimaryButton(
+            text = stringResource(R.string.common__continue),
             onClick = {
-                if (walletUiState.nodeId.isEmpty()) return@FullWidthTextButton
+                if (walletUiState.nodeId.isEmpty()) return@PrimaryButton
                 amount.toULongOrNull()?.let { amountValue ->
                     scope.launch {
                         isCreatingInvoice = true
@@ -140,12 +128,8 @@ fun CreateCjitScreen(
                         }
                     }
                 }
-            },
-            enabled = !isCreatingInvoice,
-            loading = isCreatingInvoice,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Text(stringResource(R.string.continue_button))
-        }
+            }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
