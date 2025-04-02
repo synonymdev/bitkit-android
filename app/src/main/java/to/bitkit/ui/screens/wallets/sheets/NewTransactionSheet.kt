@@ -69,6 +69,7 @@ fun NewTransactionSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxSize()
+            .padding(top = 100.dp)
             .gradientBackground()
     ) {
         NewTransactionSheetView(
@@ -86,7 +87,7 @@ private fun NewTransactionSheetView(
     onDetailClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxWidth()
     ) {
 
         if (details.direction == NewTransactionSheetDirection.RECEIVED) {
