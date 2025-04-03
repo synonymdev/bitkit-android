@@ -11,13 +11,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -33,7 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -42,11 +38,14 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState.Running
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
@@ -54,6 +53,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -286,74 +286,87 @@ private fun CopyValuesSlide(
     bolt11: String,
     cjitInvoice: String?,
 ) {
-    Column {
-        if (onchainAddress.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            CopyAddressCard(
-                title = "On-chain Address",
-                address = onchainAddress,
-            )
-        }
-        if (bolt11.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            CopyAddressCard(
-                title = "Lightning Invoice",
-                address = bolt11,
-            )
-        } else if (cjitInvoice != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            CopyAddressCard(
-                title = "Lightning Invoice",
-                address = cjitInvoice,
-            )
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Colors.White10),
+        shape = AppShapes.small,
+    ) {
+        Column {
+            if (onchainAddress.isNotEmpty()) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_bitcoin_invoice),
+                    address = onchainAddress,
+                    type = CopyAddressType.ONCHAIN,
+                )
+            }
+            if (bolt11.isNotEmpty()) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_lightning_invoice),
+                    address = bolt11,
+                    type = CopyAddressType.LIGHTNING,
+                )
+            } else if (cjitInvoice != null) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_lightning_invoice),
+                    address = cjitInvoice,
+                    type = CopyAddressType.LIGHTNING,
+                )
+            }
         }
     }
 }
+
+enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
 @Composable
 private fun CopyAddressCard(
     title: String,
     address: String,
+    type: CopyAddressType,
 ) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     Column(
-        modifier = Modifier,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
     ) {
-        Card {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp, start = 20.dp, end = 20.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Normal,
-                )
-                Row {
-                    val buttonColors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
+        Caption13Up(text = title, color = Colors.White64)
+        Spacer(modifier = Modifier.height(16.dp))
+        BodyS(text = address.truncate(32).uppercase())
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.common__copy),
+                size = ButtonSize.Small,
+                onClick = { clipboard.setText(AnnotatedString(address)) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = null,
+                        tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
+                        modifier = Modifier.size(18.dp)
                     )
-                    val clipboard = LocalClipboardManager.current
-                    TextButton(
-                        onClick = { clipboard.setText(AnnotatedString((address))) },
-                        colors = buttonColors,
-                    ) {
-                        Text("Copy")
-                    }
-                    val context = LocalContext.current
-                    TextButton(
-                        onClick = { shareText(context, address) },
-                        colors = buttonColors,
-                    ) {
-                        Text("Share")
-                    }
                 }
-            }
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__share),
+                size = ButtonSize.Small,
+                onClick = { shareText(context, address) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
         }
     }
 }
@@ -373,13 +386,19 @@ private fun ReceiveQRScreenPreview() {
     }
 }
 
+@Suppress("SpellCheckingInspection")
 @Preview(showBackground = true)
 @Composable
-private fun CopyAddressCardPreview() {
+private fun CopyValuesSlidePreview() {
     AppThemeSurface {
-        CopyAddressCard(
-            title = "On-chain Address",
-            address = "any bitcoin address"
-        )
+        Column(
+            modifier = Modifier.padding(16.dp),
+        ) {
+            CopyValuesSlide(
+                onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
+                bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
+                cjitInvoice = null,
+            )
+        }
     }
 }
