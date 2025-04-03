@@ -73,6 +73,7 @@ fun CreateCjitScreen(
 
         AmountInput(
             primaryDisplay = currencies.primaryDisplay,
+            showConversion = true,
             overrideSats = overrideSats,
             onSatsChange = { sats ->
                 satsAmount = sats
