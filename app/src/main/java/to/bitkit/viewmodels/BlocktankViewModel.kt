@@ -44,6 +44,9 @@ class BlocktankViewModel @Inject constructor(
 
     private var isRefreshing = false
 
+    private val defaultChannelExpiryWeeks = 6u
+    private val defaultSource = "bitkit-android"
+
     private val pollingFlow: Flow<Unit>
         get() = flow {
             while (currentCoroutineContext().isActive) {
@@ -112,19 +115,19 @@ class BlocktankViewModel @Inject constructor(
             invoiceSat = amountSats,
             invoiceDescription = description,
             nodeId = nodeId,
-            channelExpiryWeeks = 2u, // TODO: check default value in RN app
-            options = CreateCjitOptions(source = "bitkit-android", discountCode = null)
+            channelExpiryWeeks = defaultChannelExpiryWeeks,
+            options = CreateCjitOptions(source = defaultSource, discountCode = null)
         )
     }
 
     suspend fun createOrder(
         spendingBalanceSats: ULong,
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
-        channelExpiryWeeks: UInt = 6u,
+        channelExpiryWeeks: UInt = defaultChannelExpiryWeeks,
     ): IBtOrder {
         val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
-        Logger.info("Buying channel with these options: $options")
+        Logger.info("Buying channel with lspBalanceSat: $receivingBalanceSats, channelExpiryWeeks: $channelExpiryWeeks, options: $options")
 
         return coreService.blocktank.newOrder(
             lspBalanceSat = receivingBalanceSats,
@@ -136,7 +139,7 @@ class BlocktankViewModel @Inject constructor(
     suspend fun estimateOrderFee(
         spendingBalanceSats: ULong,
         receivingBalanceSats: ULong,
-        channelExpiryWeeks: UInt = 6u,
+        channelExpiryWeeks: UInt = defaultChannelExpiryWeeks,
     ): IBtEstimateFeeResponse2 {
         val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
@@ -167,7 +170,7 @@ class BlocktankViewModel @Inject constructor(
             clientBalanceSat = clientBalanceSat,
             lspNodeId = null,
             couponCode = "",
-            source = "bitkit-android",
+            source = defaultSource,
             discountCode = null,
             zeroConf = true,
             zeroConfPayment = false,
