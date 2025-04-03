@@ -270,11 +270,12 @@ class AppViewModel @Inject constructor(
 
     private fun onAmountChange(value: String) {
         val newInput = if (_sendUiState.value.amountInput == "0") value else _sendUiState.value.amountInput + value
-        val isAmountValid = validateAmount(newInput)
-        if (isAmountValid) {
-            _sendUiState.update { it.copy( amountInput = newInput,) }
+        _sendUiState.update {
+            it.copy(
+                amountInput = newInput,
+                isAmountInputValid = validateAmount(newInput)
+            )
         }
-        _sendUiState.update { it.copy(isAmountInputValid = isAmountValid,) }
     }
 
     private fun onPaymentMethodSwitch() {
