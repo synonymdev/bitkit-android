@@ -30,7 +30,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
-fun TransferAmount(
+fun AmountInput(
     defaultValue: Long = 0,
     primaryDisplay: PrimaryDisplay,
     overrideSats: Long? = null,

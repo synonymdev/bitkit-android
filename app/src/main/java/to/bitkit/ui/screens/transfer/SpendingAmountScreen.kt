@@ -39,7 +39,7 @@ import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
-import to.bitkit.ui.components.TransferAmount
+import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -125,7 +125,7 @@ fun SpendingAmountScreen(
             Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(32.dp))
 
-            TransferAmount(
+            AmountInput(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
                 onSatsChange = { sats ->
