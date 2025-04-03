@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -66,6 +68,10 @@ fun CreateCjitScreen(
     var isCreatingInvoice by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(Unit) {
+        blocktank.refreshMinCjitSats()
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         val focusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -89,24 +95,23 @@ fun CreateCjitScreen(
         blocktank.info?.let { info ->
             Row(
                 verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // Min amount view
-                Column(
-                    modifier = Modifier
-                        .clickableAlpha {
-                            amount = (info.options.minChannelSizeSat / 2u).toString()
-                        }
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__minimum),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = (info.options.minChannelSizeSat / 2u).toLong())
-                }
-
+                blocktank.minCjitSats?.let { minSats ->
+                    Column(
+                        modifier = Modifier
+                            .clickableAlpha { amount = minSats.toString() }
+                    ) {
+                        Caption13Up(
+                            text = stringResource(R.string.wallet__minimum),
+                            color = Colors.White64,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        MoneySSB(sats = minSats.toLong())
+                    }
+                } ?: CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.weight(1f))
                 UnitButton()
             }
         }

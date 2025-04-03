@@ -18,6 +18,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.services.CoreService
+import to.bitkit.services.CurrencyService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -27,19 +28,25 @@ import uniffi.bitkitcore.IBtEstimateFeeResponse2
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
 import uniffi.bitkitcore.IcJitEntry
+import java.math.BigDecimal
 import javax.inject.Inject
+import kotlin.math.ceil
+import kotlin.math.min
 
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningService: LightningService,
+    private val currencyService: CurrencyService,
 ) : ViewModel() {
     var orders = mutableListOf<IBtOrder>()
         private set
     var cJitEntries = mutableListOf<IcJitEntry>()
         private set
     var info by mutableStateOf<IBtInfo?>(null)
+        private set
+    var minCjitSats by mutableStateOf<Int?>(null) // TODO: cache
         private set
 
     private var isRefreshing = false
@@ -110,8 +117,11 @@ class BlocktankViewModel @Inject constructor(
     suspend fun createCjit(amountSats: ULong, description: String): IcJitEntry {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
+        val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
+        val channelSizeSat = amountSats + lspBalance
+
         return coreService.blocktank.createCjit(
-            channelSizeSat = amountSats * 2u, // TODO: confirm default from RN app
+            channelSizeSat = channelSizeSat,
             invoiceSat = amountSats,
             invoiceDescription = description,
             nodeId = nodeId,
@@ -181,5 +191,59 @@ class BlocktankViewModel @Inject constructor(
             refundOnchainAddress = null,
             announceChannel = false,
         )
+    }
+
+    private suspend fun getDefaultLspBalance(clientBalance: ULong): ULong {
+        if (info == null) {
+            refreshInfo()
+        }
+        val maxLspBalance = info?.options?.maxChannelSizeSat ?: 0uL
+
+        // Get current fx rates
+        val rates = currencyService.loadCachedRates()
+        val eurRate = rates?.let { currencyService.getCurrentRate("EUR", it) }
+        if (eurRate == null) {
+            Logger.error("Failed to get rates for lspBalance calculation", context = "BlocktankViewModel")
+            throw ServiceError.CurrencyRateUnavailable
+        }
+
+        // Calculate thresholds in sats
+        val threshold1 = currencyService.convertFiatToSats(BigDecimal("225"), eurRate)
+        val threshold2 = currencyService.convertFiatToSats(BigDecimal("495"), eurRate)
+        val defaultLspBalanceSats = currencyService.convertFiatToSats(BigDecimal("450"), eurRate)
+
+        Logger.debug("getDefaultLspBalance - clientBalance: $clientBalance")
+        Logger.debug("getDefaultLspBalance - maxLspBalance: $maxLspBalance")
+        Logger.debug("getDefaultLspBalance - defaultLspBalance: $defaultLspBalanceSats")
+
+        // Safely calculate lspBalance to avoid arithmetic overflow
+        var lspBalance: ULong = 0u
+        if (defaultLspBalanceSats > clientBalance) {
+            lspBalance = defaultLspBalanceSats - clientBalance
+        }
+        if (clientBalance > threshold1) {
+            lspBalance = clientBalance
+        }
+        if (clientBalance > threshold2) {
+            lspBalance = maxLspBalance
+        }
+
+        return min(lspBalance, maxLspBalance)
+    }
+
+    suspend fun refreshMinCjitSats() {
+        try {
+            val lspBalance = getDefaultLspBalance(clientBalance = 0u)
+
+            // Get fees and calculate minimum
+            val fees = estimateOrderFee(spendingBalanceSats = 0u, receivingBalanceSats = lspBalance)
+            val minimum = (ceil(fees.feeSat.toDouble() * 1.1 / 1000) * 1000).toInt()
+
+            minCjitSats = minimum
+            Logger.debug("Updated minCjitSats to: $minimum")
+        } catch (e: Throwable) {
+            Logger.error("Failed to refresh minCjitSats", e)
+            throw e
+        }
     }
 }
