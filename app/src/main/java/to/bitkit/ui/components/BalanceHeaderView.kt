@@ -3,18 +3,22 @@ package to.bitkit.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun BalanceHeaderView(
@@ -27,97 +31,132 @@ fun BalanceHeaderView(
     val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.Start,
-        modifier = modifier
-            .clickableAlpha { currency.togglePrimaryDisplay() }
-    ) {
-        converted?.let { converted ->
-            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                Column {
-                    SmallRow(
-                        prefix = prefix,
-                        text = "${converted.symbol} ${converted.formatted}"
-                    )
+    converted?.let { converted ->
+        val btcComponents = converted.bitcoinDisplay(displayUnit)
 
-                    // large row
-                    val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.height(62.dp)
-                    ) {
-                        if (prefix != null) {
-                            Display(
-                                text = prefix,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        if (showBitcoinSymbol) {
-                            Display(
-                                text = btcComponents.symbol,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        Display(text = btcComponents.value)
-                    }
-                }
-            } else {
-                Column {
-                    val btcComponents = converted.bitcoinDisplay(displayUnit)
-                    SmallRow(
-                        prefix = prefix,
-                        text = "${btcComponents.symbol} ${btcComponents.value}"
-                    )
-
-                    // large row
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.height(62.dp)
-                    ) {
-                        if (prefix != null) {
-                            Display(
-                                text = prefix,
-                                modifier = Modifier
-                                    .alpha(0.6f)
-                                    .padding(end = 8.dp)
-                            )
-                        }
-                        Display(
-                            text = converted.symbol,
-                            modifier = Modifier
-                                .alpha(0.6f)
-                                .padding(end = 8.dp)
-                        )
-                        Display(text = converted.formatted)
-                    }
-                }
-            }
+        if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+            BalanceHeader(
+                modifier = modifier,
+                smallRowPrefix = prefix,
+                smallRowSymbol = converted.symbol,
+                smallRowText = converted.formatted,
+                largeRowPrefix = prefix,
+                largeRowText = btcComponents.value,
+                largeRowSymbol = btcComponents.symbol,
+                showSymbol = showBitcoinSymbol,
+                onClick = { currency.togglePrimaryDisplay() }
+            )
+        } else {
+            BalanceHeader(
+                modifier = modifier,
+                smallRowPrefix = prefix,
+                smallRowSymbol = btcComponents.symbol,
+                smallRowText = btcComponents.value,
+                largeRowPrefix = prefix,
+                largeRowText = converted.formatted,
+                largeRowSymbol = converted.symbol,
+                showSymbol = true,
+                onClick = { currency.togglePrimaryDisplay() }
+            )
         }
     }
 }
 
 @Composable
-private fun SmallRow(prefix: String?, text: String) {
+fun BalanceHeader(
+    modifier: Modifier = Modifier,
+    smallRowPrefix: String? = null,
+    smallRowSymbol: String? = null,
+    smallRowText: String,
+    largeRowPrefix: String? = null,
+    largeRowText: String,
+    largeRowSymbol: String,
+    showSymbol: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start,
+        modifier = modifier.clickableAlpha { onClick() }
+    ) {
+        SmallRow(
+            prefix = smallRowPrefix,
+            symbol = smallRowSymbol,
+            text = smallRowText
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LargeRow(
+            prefix = largeRowPrefix,
+            text = largeRowText,
+            symbol = largeRowSymbol,
+            showSymbol = showSymbol
+        )
+    }
+}
+
+@Composable
+fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .height(24.dp)
-            .padding(bottom = 4.dp)
+    ) {
+        if (prefix != null) {
+            Display(
+                text = prefix,
+                color = Colors.White64,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
+        if (showSymbol) {
+            Display(
+                text = symbol,
+                color = Colors.White64,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
+        Display(text = text)
+    }
+}
+
+@Composable
+private fun SmallRow(prefix: String?, symbol: String?, text: String) {
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (prefix != null) {
             Caption13Up(
                 text = prefix,
-                modifier = Modifier.alpha(0.6f)
+                color = Colors.White64,
+            )
+        }
+        if (symbol != null) {
+            Caption13Up(
+                text = symbol,
+                color = Colors.White64,
             )
         }
         Caption13Up(
             text = text,
-            modifier = Modifier.alpha(0.6f)
+            color = Colors.White64,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BalanceHeader(
+            smallRowPrefix = "$",
+            smallRowText = "27.36",
+            largeRowPrefix = "₿",
+            largeRowText = "136 825",
+            largeRowSymbol = "sats",
+            showSymbol = false,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {}
         )
     }
 }

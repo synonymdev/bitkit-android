@@ -81,6 +81,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
+import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -136,6 +137,14 @@ fun ContentView(
 
     LaunchedEffect(Unit) {
         walletViewModel.observeLdkWallet()
+    }
+
+    LaunchedEffect(appViewModel) {
+        appViewModel.mainScreenEffect.collect {
+            when (it) {
+                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityItem(it.activityId))
+            }
+        }
     }
 
     val walletUiState by walletViewModel.uiState.collectAsState()

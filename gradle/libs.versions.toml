@@ -35,6 +35,7 @@ testAndroidx = "1.6.1"
 turbine = "1.0.0"
 workRuntimeKtx = "2.10.0"
 zxing = "3.5.2"
+lottieVersion = "6.6.4"
 
 [libraries]
 accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version.ref = "accompanistPermissions" }
@@ -102,6 +103,7 @@ test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robo
 test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
+lottie = { module = "com.airbnb.android:lottie-compose", version.ref = "lottieVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

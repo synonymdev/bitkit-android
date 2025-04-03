@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
@@ -63,7 +64,7 @@ fun SendAmountScreen(
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                BalanceHeaderView(sats = uiState.amountInput.toLong(), modifier = Modifier.fillMaxWidth())
+                BalanceHeaderView(sats = uiState.amountInput.toLongOrDefault(0), modifier = Modifier.fillMaxWidth())
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -117,6 +118,7 @@ fun SendAmountScreen(
 
                 Keyboard(
                     onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
+                    onClickBackspace = { onEvent(SendEvent.BackSpaceClick) },
                     isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
                     modifier = Modifier.fillMaxWidth(),
                 )
