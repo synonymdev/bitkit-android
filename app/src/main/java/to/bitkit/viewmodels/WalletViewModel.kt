@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
@@ -112,6 +113,8 @@ class WalletViewModel @Inject constructor(
                 lightningService.start { event ->
                     syncState()
                     ldkNodeEventBus.emit(event)
+
+                    refreshBip21ForEvent(event)
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
@@ -135,6 +138,13 @@ class WalletViewModel @Inject constructor(
 
             launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
+        }
+    }
+
+    private suspend fun refreshBip21ForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
         }
     }
 

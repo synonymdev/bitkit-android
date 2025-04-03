@@ -90,7 +90,7 @@ fun SpendingWalletScreen(
                     if (canTransfer) {
                         SecondaryButton(
                             onClick = onTransferToSavingsClick,
-                            text = "Transfer To Savings",
+                            text = stringResource(R.string.lightning__savings_confirm__label),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
