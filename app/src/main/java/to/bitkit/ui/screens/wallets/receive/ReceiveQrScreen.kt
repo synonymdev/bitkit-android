@@ -64,6 +64,7 @@ import to.bitkit.viewmodels.MainUiState
 private object Routes {
     const val QR = "qr_screen"
     const val CJIT = "cjit_screen"
+    const val CJIT_CONFIRM = "cjit_confirm"
 }
 
 @Composable
@@ -79,6 +80,7 @@ fun ReceiveQrSheet(
 
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
+    val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -100,7 +102,6 @@ fun ReceiveQrSheet(
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
-
         Spacer(Modifier.height(24.dp))
 
         NavHost(
@@ -108,6 +109,9 @@ fun ReceiveQrSheet(
             startDestination = Routes.QR,
         ) {
             composable(Routes.QR) {
+                LaunchedEffect(cjitInvoice.value) {
+                    showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
+                }
                 ReceiveQrScreen(
                     cjitInvoice = cjitInvoice,
                     cjitActive = showCreateCjit,
@@ -124,14 +128,22 @@ fun ReceiveQrSheet(
             }
             composable(Routes.CJIT) {
                 CreateCjitScreen(
-                    onCjitCreated = { invoice ->
-                        cjitInvoice.value = invoice
-                        navController.navigate(Routes.QR) { popUpTo(Routes.QR) }
-                    },
-                    onDismiss = {
-                        showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
+                    onCjitCreated = { entry ->
+                        cjitEntryDetails.value = entry
+                        navController.navigate(Routes.CJIT_CONFIRM)
                     }
                 )
+            }
+            composable(Routes.CJIT_CONFIRM) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ConfirmCjitScreen(
+                        entry = entryDetails,
+                        onContinue = { invoice ->
+                            cjitInvoice.value = invoice
+                            navController.navigate(Routes.QR) { popUpTo(Routes.QR) { inclusive = true } }
+                        }
+                    )
+                }
             }
         }
     }
@@ -392,7 +404,7 @@ private fun ReceiveQRScreenPreview() {
 private fun CopyValuesSlidePreview() {
     AppThemeSurface {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.gradientBackground().padding(16.dp),
         ) {
             CopyValuesSlide(
                 onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",

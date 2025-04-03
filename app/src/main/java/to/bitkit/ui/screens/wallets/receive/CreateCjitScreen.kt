@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,23 +44,15 @@ import to.bitkit.utils.Logger
 
 @Composable
 fun CreateCjitScreen(
-    modifier: Modifier = Modifier,
-    onCjitCreated: (String) -> Unit,
-    onDismiss: () -> Unit,
+    onCjitCreated: (CjitEntryDetails) -> Unit,
 ) {
-    DisposableEffect(Unit) {
-        onDispose {
-            onDismiss()
-        }
-    }
-
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     val blocktank = blocktankViewModel ?: return
     val walletState by wallet.uiState.collectAsStateWithLifecycle()
     val currencies = LocalCurrencies.current
 
-    var satsAmount by remember { mutableLongStateOf(0) }
+    var satsAmount by rememberSaveable { mutableLongStateOf(0) }
     var overrideSats: Long? by remember { mutableStateOf(null) }
 
     var isCreatingInvoice by remember { mutableStateOf(false) }
@@ -69,7 +62,7 @@ fun CreateCjitScreen(
         blocktank.refreshMinCjitSats()
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
 
         AmountInput(
             primaryDisplay = currencies.primaryDisplay,
@@ -126,7 +119,15 @@ fun CreateCjitScreen(
                     if (walletState.nodeLifecycleState == NodeLifecycleState.Running) {
                         try {
                             val entry = blocktank.createCjit(amountSats = sats, description = "Bitkit")
-                            onCjitCreated(entry.invoice.request)
+                            onCjitCreated(
+                                CjitEntryDetails(
+                                    networkFeeSat = entry.networkFeeSat.toLong(),
+                                    serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                    feeSat = entry.feeSat.toLong(),
+                                    receiveAmountSats = satsAmount,
+                                    invoice = entry.invoice.request,
+                                )
+                            )
                         } catch (e: Exception) {
                             app.toast(e)
                             Logger.error("Failed to create cjit", e)
