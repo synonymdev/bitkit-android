@@ -25,7 +25,7 @@ class KeyboardTest {
     @Test
     fun keyboard_displaysAllButtons() {
         composeTestRule.setContent {
-            Keyboard(onClick = {})
+            Keyboard(onClick = {}, onClickBackspace = {})
         }
 
         composeTestRule.onNodeWithTag("KeyboardButton_1").assertIsDisplayed()
@@ -39,13 +39,13 @@ class KeyboardTest {
         composeTestRule.onNodeWithTag("KeyboardButton_9").assertIsDisplayed()
         composeTestRule.onNodeWithTag("KeyboardButton_.").assertIsDisplayed()
         composeTestRule.onNodeWithTag("KeyboardButton_0").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("KeyboardButton_").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("KeyboardButton_backspace").assertIsDisplayed()
     }
 
     @Test
     fun keyboard_tripleZero_when_not_decimal() {
         composeTestRule.setContent {
-            Keyboard(onClick = {}, isDecimal = false)
+            Keyboard(onClick = {}, isDecimal = false, onClickBackspace = {})
         }
         composeTestRule.onNodeWithTag("KeyboardButton_000").assertIsDisplayed()
     }
@@ -53,7 +53,7 @@ class KeyboardTest {
     @Test
     fun keyboard_decimal_when_decimal() {
         composeTestRule.setContent {
-            Keyboard(onClick = {}, isDecimal = true)
+            Keyboard(onClick = {}, isDecimal = true, onClickBackspace = {})
         }
         composeTestRule.onNodeWithTag("KeyboardButton_.").assertIsDisplayed()
     }
@@ -62,7 +62,7 @@ class KeyboardTest {
     fun keyboard_button_click_triggers_callback() {
         var clickedValue = ""
         composeTestRule.setContent {
-            Keyboard(onClick = { clickedValue = it })
+            Keyboard(onClick = { clickedValue = it }, onClickBackspace = {})
         }
 
         composeTestRule.onNodeWithTag("KeyboardButton_5").performClick()
@@ -80,7 +80,7 @@ class KeyboardTest {
     fun keyboard_button_click_tripleZero() {
         var clickedValue = ""
         composeTestRule.setContent {
-            Keyboard(onClick = { clickedValue = it }, isDecimal = false)
+            Keyboard(onClick = { clickedValue = it }, onClickBackspace = {}, isDecimal = false)
         }
 
         composeTestRule.onNodeWithTag("KeyboardButton_000").performClick()

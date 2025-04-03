@@ -6,12 +6,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -19,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
@@ -26,8 +31,9 @@ import to.bitkit.ui.theme.InterFontFamily
 @Composable
 fun Keyboard(
     onClick: (String) -> Unit,
-    isDecimal: Boolean = true,
-    modifier: Modifier = Modifier
+    onClickBackspace: () -> Unit,
+    modifier: Modifier = Modifier,
+    isDecimal: Boolean = true
 ) {
     LazyVerticalGrid(
         verticalArrangement = Arrangement.spacedBy(34.dp),
@@ -45,7 +51,17 @@ fun Keyboard(
         item { KeyboardButton(text = "9", onClick = onClick) }
         item { KeyboardButton(text = if (isDecimal) "." else "000", onClick = onClick) }
         item { KeyboardButton(text = "0", onClick = onClick) }
-        item { KeyboardButton(text = "", onClick = onClick) }
+        item {
+            Icon(
+                painter = painterResource(R.drawable.ic_backspace),
+                contentDescription = stringResource(R.string.common__delete),
+                modifier = Modifier
+                    .sizeIn(minHeight = 30.dp)
+                    .padding(vertical = 4.dp)
+                    .clickable(onClick = onClickBackspace)
+                    .testTag("KeyboardButton_backspace")
+            )
+        }
     }
 }
 
@@ -65,12 +81,14 @@ private fun KeyboardButton(
             textAlign = TextAlign.Center,
             color = Colors.White,
         ),
-        modifier = Modifier.clickable(
-            onClick = {
-                onClick(text)
-            },
-            onClickLabel = text
-        ).testTag("KeyboardButton_$text"),
+        modifier = Modifier
+            .clickable(
+                onClick = {
+                    onClick(text)
+                },
+                onClickLabel = text
+            )
+            .testTag("KeyboardButton_$text"),
     )
 }
 
@@ -79,7 +97,10 @@ private fun KeyboardButton(
 private fun Preview() {
     AppThemeSurface {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-            Keyboard(modifier = Modifier.fillMaxWidth().padding(41.dp), onClick = {})
+            Keyboard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(41.dp), onClick = {}, onClickBackspace = {})
         }
     }
 }
@@ -89,7 +110,13 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-            Keyboard(isDecimal = false, modifier = Modifier.fillMaxWidth().padding(41.dp), onClick = {})
+            Keyboard(
+                isDecimal = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(41.dp),
+                onClick = {},
+                onClickBackspace = {})
         }
     }
 }
@@ -99,7 +126,13 @@ private fun Preview2() {
 private fun Preview3() {
     AppThemeSurface {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-            Keyboard(isDecimal = false, modifier = Modifier.fillMaxWidth().padding(41.dp), onClick = {})
+            Keyboard(
+                isDecimal = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(41.dp),
+                onClick = {},
+                onClickBackspace = {})
         }
     }
 }
