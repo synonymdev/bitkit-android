@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,21 +37,10 @@ fun NumberPadTextField(
     val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val currency = currencyViewModel ?: return
 
-    val satoshis by remember {
-        derivedStateOf {
-            val result = if (primaryDisplay == PrimaryDisplay.FIAT) {
-                currency.convertFiatToSats(fiatAmount = input.toDoubleOrNull() ?: 0.0 ).toString()
-            } else {
-                input
-            }
-            result
-        }
-    }
-
-    val convertedAmount by remember {
-        derivedStateOf {
-            if (rates.isNotEmpty()) currency.convert(sats = satoshis.toLongOrNull() ?: 0L) else null
-        }
+    val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
+        currency.convertFiatToSats(fiatAmount = input.toDoubleOrNull() ?: 0.0 ).toString()
+    } else {
+        input
     }
 
     var placeholder: String by remember { mutableStateOf("0") }
@@ -101,7 +91,7 @@ fun NumberPadTextField(
         unit = primaryDisplay,
         placeholder = placeholder,
         showPlaceholder = true,
-        satoshis = satoshis.toIntOrNull() ?: 0,
+        satoshis = satoshis.toLongOrNull() ?: 0,
     )
 }
 
@@ -112,7 +102,7 @@ fun MoneyAmount(
     unit: PrimaryDisplay,
     placeholder: String,
     showPlaceholder: Boolean,
-    satoshis: Int,
+    satoshis: Long,
     onPress: () -> Unit = {},
     style: TextStyle = TextStyle.Default,
 ) {
@@ -123,7 +113,7 @@ fun MoneyAmount(
         horizontalAlignment = Alignment.Start
     ) {
 
-        MoneySSB(sats = satoshis.toLong(), reversed = true)
+        MoneySSB(sats = satoshis, reversed = true)
 
         Row(
             verticalAlignment = Alignment.CenterVertically
