@@ -27,6 +27,9 @@ import to.bitkit.viewmodels.MainUiState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
+import to.bitkit.utils.AddressChecker
+import to.bitkit.utils.AddressInfo
+import to.bitkit.utils.AddressStats
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 
@@ -42,6 +45,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var appStorage: AppStorage = mock()
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
     private val settingsStore: SettingsStore = mock()
+    private val addressChecker: AddressChecker = mock()
 
     private lateinit var sut: WalletViewModel
 
@@ -75,7 +79,7 @@ class WalletViewModelTest : BaseUnitTest() {
             firebaseMessaging = firebaseMessaging,
             ldkNodeEventBus = ldkNodeEventBus,
             settingsStore = settingsStore,
-            addressChecker = mock(),
+            addressChecker = addressChecker,
         )
     }
 
@@ -142,5 +146,24 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(appStorage.onchainAddress).thenReturn("onchainAddress")
         whenever(appStorage.bolt11).thenReturn("bolt11")
         whenever(appStorage.bip21).thenReturn("bitcoin:onchainAddress")
+        wheneverBlocking { addressChecker.getAddressInfo(anyString()) }.thenReturn(mockAddressInfo)
     }
 }
+
+val mockAddressInfo = AddressInfo(
+    address = "bc1qar...",
+    chain_stats = AddressStats(
+        funded_txo_count = 15,
+        funded_txo_sum = 0,
+        spent_txo_count = 10,
+        spent_txo_sum = 0,
+        tx_count = 25
+    ),
+    mempool_stats = AddressStats(
+        funded_txo_count = 1,
+        funded_txo_sum = 100000,
+        spent_txo_count = 0,
+        spent_txo_sum = 0,
+        tx_count = 1
+    )
+)
