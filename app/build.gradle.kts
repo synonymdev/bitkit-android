@@ -110,6 +110,15 @@ android {
     lint {
         abortOnError = false
     }
+    applicationVariants.all {
+        val variant = this
+        outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val apkName = "bitkit-android-${defaultConfig.versionCode}-${variant.name}.apk"
+                output.outputFileName = apkName
+            }
+    }
 }
 composeCompiler {
     featureFlags = setOf(
