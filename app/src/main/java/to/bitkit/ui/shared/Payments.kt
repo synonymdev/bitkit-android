@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -35,6 +37,7 @@ import to.bitkit.viewmodels.WalletViewModel
 fun Payments(
     viewModel: WalletViewModel,
 ) {
+    val scope = rememberCoroutineScope()
     Column {
         OutlinedCard {
             Text(
@@ -86,9 +89,11 @@ fun Payments(
             val clipboard = LocalClipboardManager.current
             FullWidthTextButton(
                 onClick = {
-                    amountToReceive.toULongOrNull()?.let {
-                        val bolt11 = viewModel.createInvoice(amountSats = it, description = "Bitkit")
-                        clipboard.setText(AnnotatedString(bolt11))
+                    scope.launch {
+                        amountToReceive.toULongOrNull()?.let {
+                            val bolt11 = viewModel.createInvoice(amountSats = it, description = "Bitkit")
+                            clipboard.setText(AnnotatedString(bolt11))
+                        }
                     }
                 },
                 enabled = amountToReceive.toULongOrNull() != null,

@@ -310,8 +310,10 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             if (sat != null) {
+                Logger.debug("Creating bolt11 for $sat sats")
                 node.bolt11Payment().receive(sat.millis, description, expirySecs)
             } else {
+                Logger.debug("Creating bolt11 for variable amount")
                 node.bolt11Payment().receiveVariableAmount(description, expirySecs)
             }
         }

@@ -265,6 +265,7 @@ class WalletViewModel @Inject constructor(
         get() = lightningService.channels?.sumOf { it.inboundCapacityMsat / 1000u }
 
     suspend fun refreshBip21() {
+        Logger.debug("Refreshing bip21", context = "WalletViewModel")
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress()
         } else {
@@ -282,16 +283,20 @@ class WalletViewModel @Inject constructor(
 
         val hasChannels = lightningService.channels?.isNotEmpty() == true
         if (hasChannels) {
-            if (_bolt11.isEmpty()) {
-                _bolt11 = this.createInvoice(description = "Bitkit")
-            } else {
-                // Check if existing invoice has expired and create a new one if so
-                decode(invoice = _bolt11).let { decoded ->
-                    if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
-                        _bolt11 = this.createInvoice(description = "Bitkit")
-                    }
-                }
-            }
+
+            // TODO: check current bolt11 for expiry (fix payments not working with commented code & rm next line):
+            _bolt11 = createInvoice(description = "Bitkit")
+
+            // if (_bolt11.isEmpty()) {
+            //     _bolt11 = createInvoice(description = "Bitkit")
+            // } else {
+            //     // Check if existing invoice has expired and create a new one if so
+            //     decode(invoice = _bolt11).let { decoded ->
+            //         if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
+            //             _bolt11 = createInvoice(description = "Bitkit")
+            //         }
+            //     }
+            // }
         } else {
             _bolt11 = ""
         }
@@ -329,12 +334,12 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun createInvoice(
+    suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = 86_400u, // 1 day
     ): String {
-        return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
+        return lightningService.receive(amountSats, description, expirySeconds)
     }
 
     fun openChannel() {
