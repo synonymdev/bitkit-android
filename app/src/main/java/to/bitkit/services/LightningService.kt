@@ -84,7 +84,7 @@ class LightningService @Inject constructor(
                     config = EsploraSyncConfig(
                         onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                         lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.feeRateCacheUpdateIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                     ),
                 )
                 if (Env.ldkRgsServerUrl != null) {
@@ -447,7 +447,7 @@ class LightningService @Inject constructor(
     fun syncFlow(): Flow<Unit> = flow {
         while (currentCoroutineContext().isActive) {
             emit(Unit)
-            delay(Env.walletSyncIntervalSecs.toLong().seconds)
+            delay(Env.ldkNodeSyncIntervalSecs.toLong().seconds)
         }
     }.flowOn(bgDispatcher)
     // endregion
