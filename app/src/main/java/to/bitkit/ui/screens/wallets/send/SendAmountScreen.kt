@@ -10,20 +10,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SyncNodeView
@@ -48,6 +51,8 @@ fun SendAmountScreen(
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
+    var input: String by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -64,7 +69,7 @@ fun SendAmountScreen(
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                BalanceHeaderView(sats = uiState.amountInput.toLongOrDefault(0), modifier = Modifier.fillMaxWidth())
+                NumberPadTextField(input = input, modifier = Modifier.fillMaxWidth())
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -117,8 +122,14 @@ fun SendAmountScreen(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
                 Keyboard(
-                    onClick = { number -> onEvent(SendEvent.AmountChange(number)) },
-                    onClickBackspace = { onEvent(SendEvent.BackSpaceClick) },
+                    onClick = { number ->
+                        if (input == "0") input = number else input+=number
+                        onEvent(SendEvent.AmountChange(number))
+                    },
+                    onClickBackspace = {
+                        input = if (input.length > 1) input.dropLast(1) else "0"
+                        onEvent(SendEvent.BackSpaceClick)
+                    },
                     isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -134,9 +145,11 @@ fun SendAmountScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         } else {
-            SyncNodeView(modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f))
+            SyncNodeView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
         }
     }
 }
