@@ -83,6 +83,7 @@ fun BalanceHeaderEditable(
 
     var placeholder: String by remember { mutableStateOf("0") }
     var placeholderFractional: String by remember { mutableStateOf("") }
+    var value: String by remember { mutableStateOf("") }
 
     if (displayUnit == BitcoinDisplayUnit.CLASSIC) {
         placeholderFractional = "00000000"
@@ -96,14 +97,36 @@ fun BalanceHeaderEditable(
         placeholder = "0.$placeholderFractional"
     }
 
+    if (input.isNotEmpty()) {
+
+        val whole = input.split(".").firstOrNull().orEmpty().removeSpaces()
+        val fraction = input.split(".").getOrNull(1).orEmpty().removeSpaces()
+
+        if (primaryDisplay == PrimaryDisplay.FIAT) {
+            value = whole //TODO FORMAT FIAT
+        }
+
+        if (input.contains(".")) {
+            placeholder = fraction //TODO GET FRACTIONAL LENGTH
+
+            // truncate to 2 decimals for fiat
+            if (primaryDisplay == PrimaryDisplay.FIAT) {
+
+                value = "$whole.$fraction" //TODO FORMAT MONEY
+            }
+        } else {
+            if (displayUnit == BitcoinDisplayUnit.MODERN && primaryDisplay == PrimaryDisplay.BITCOIN) {
+                value = input //TODO FORMAT SATOSHI
+                placeholder = ""
+            } else {
+                placeholder = ".$placeholderFractional"
+            }
+        }
+    }
+
     var smallRowPrefix: String by remember { mutableStateOf("") }
     var smallRowText: String by remember { mutableStateOf("") }
     var smallRowSymbol: String by remember { mutableStateOf("") }
-
-    var largeRowPrefix: String by remember { mutableStateOf("") }
-    var largeRowText: String by remember { mutableStateOf("") }
-    var largeRowSymbol: String by remember { mutableStateOf("") }
-
 
     BalanceHeader(
         modifier = modifier,
