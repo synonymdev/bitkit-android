@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +35,9 @@ fun SheetTopBar(
     onBack: (() -> Unit)? = null,
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
     ) {
         Text(
             text = titleText,
@@ -48,10 +51,13 @@ fun SheetTopBar(
         )
 
         onBack?.let { callback ->
-            IconButton(onClick = callback, modifier = Modifier.align(Alignment.CenterStart)) {
+            IconButton(
+                onClick = callback,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
+                    contentDescription = stringResource(R.string.common__back),
                     modifier = Modifier
                         .size(24.dp)
                         .windowInsetsPadding(
@@ -65,10 +71,20 @@ fun SheetTopBar(
 
 @Preview(showBackground = true)
 @Composable
-private fun SheetTopBarPreview() {
+private fun Preview() {
     AppThemeSurface {
         SheetTopBar(
             titleText = "Sheet Top Bar",
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewWithBack() {
+    AppThemeSurface {
+        SheetTopBar(
+            titleText = "Sheet Top Bar With Back",
             onBack = {},
         )
     }
