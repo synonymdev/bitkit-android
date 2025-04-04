@@ -30,6 +30,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -51,6 +52,7 @@ fun ConfirmCjitScreen(
     entry: CjitEntryDetails,
     onLearnMore: () -> Unit,
     onContinue: (String) -> Unit,
+    onBack: () -> Unit,
 ) {
     val currency = currencyViewModel ?: return
     val currencies = LocalCurrencies.current
@@ -89,6 +91,7 @@ fun ConfirmCjitScreen(
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
         onContinueClick = { onContinue(entry.invoice) },
+        onBackClick = onBack,
     )
 }
 
@@ -100,51 +103,63 @@ private fun ConfirmCjitContent(
     receiveAmountFormatted: String,
     onLearnMoreClick: () -> Unit,
     onContinueClick: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        BalanceHeaderView(
-            sats = receiveSats,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        BodyM(
-            text = stringResource(R.string.wallet__receive_connect_initial)
-                .replace("{networkFee}", networkFeeFormatted)
-                .replace("{serviceFee}", serviceFeeFormatted)
-                .withAccent(
-                    defaultColor = Colors.White64,
-                    accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+    ) {
+        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBackClick)
+        Spacer(Modifier.height(24.dp))
+
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            BalanceHeaderView(
+                sats = receiveSats,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            BodyM(
+                text = stringResource(R.string.wallet__receive_connect_initial)
+                    .replace("{networkFee}", networkFeeFormatted)
+                    .replace("{serviceFee}", serviceFeeFormatted)
+                    .withAccent(
+                        defaultColor = Colors.White64,
+                        accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)
+                    )
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Column {
+                Caption13Up(text = stringResource(R.string.wallet__receive_will), color = Colors.White64)
+                Spacer(Modifier.height(4.dp))
+                Title(text = receiveAmountFormatted)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Image(
+                painter = painterResource(R.drawable.lightning),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .heightIn(max = 256.dp)
+                    .fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__learn_more),
+                    onClick = onLearnMoreClick,
+                    modifier = Modifier.weight(1f)
                 )
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-        Column {
-            Caption13Up(text = stringResource(R.string.wallet__receive_will), color = Colors.White64)
-            Spacer(Modifier.height(4.dp))
-            Title(text = receiveAmountFormatted)
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    onClick = onContinueClick,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
-        Spacer(modifier = Modifier.weight(1f))
-        Image(
-            painter = painterResource(R.drawable.lightning),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .heightIn(max = 256.dp)
-                .fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            SecondaryButton(
-                text = stringResource(R.string.common__learn_more),
-                onClick = onLearnMoreClick,
-                modifier = Modifier.weight(1f)
-            )
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onContinueClick,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -152,19 +167,14 @@ private fun ConfirmCjitContent(
 @Composable
 private fun ConfirmCjitContentPreview() {
     AppThemeSurface {
-        Column(
-            modifier = Modifier
-                .gradientBackground()
-                .padding(16.dp)
-        ) {
-            ConfirmCjitContent(
-                receiveSats = 12500L,
-                networkFeeFormatted = "$0.50",
-                serviceFeeFormatted = "$1.00",
-                receiveAmountFormatted = "$100.00",
-                onLearnMoreClick = {},
-                onContinueClick = {},
-            )
-        }
+        ConfirmCjitContent(
+            receiveSats = 12500L,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+        )
     }
 }

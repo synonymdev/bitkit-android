@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -36,7 +37,9 @@ import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
@@ -44,6 +47,7 @@ import to.bitkit.utils.Logger
 @Composable
 fun CreateCjitScreen(
     onCjitCreated: (CjitEntryDetails) -> Unit,
+    onBack: () -> Unit,
 ) {
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
@@ -61,92 +65,102 @@ fun CreateCjitScreen(
         blocktank.refreshMinCjitSats()
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+    ) {
+        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBack)
+        Spacer(Modifier.height(24.dp))
 
-        AmountInput(
-            primaryDisplay = currencies.primaryDisplay,
-            showConversion = true,
-            overrideSats = overrideSats,
-            onSatsChange = { sats ->
-                satsAmount = sats
-                overrideSats = null
-            },
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Actions
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            // Min amount view
-            blocktank.minCjitSats?.let { minCjitSats ->
-                Column(
-                    modifier = Modifier.clickableAlpha { overrideSats = minCjitSats.toLong() }
-                ) {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__minimum),
-                        color = Colors.White64,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = minCjitSats.toLong())
-                }
-            } ?: CircularProgressIndicator(modifier = Modifier.size(18.dp))
+            AmountInput(
+                primaryDisplay = currencies.primaryDisplay,
+                showConversion = true,
+                overrideSats = overrideSats,
+                onSatsChange = { sats ->
+                    satsAmount = sats
+                    overrideSats = null
+                },
+            )
+
             Spacer(modifier = Modifier.weight(1f))
-            UnitButton()
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-
-        Spacer(modifier = Modifier.height(16.dp))
-        PrimaryButton(
-            text = stringResource(R.string.common__continue),
-            onClick = {
-                val sats = satsAmount.toULong()
-
-                scope.launch {
-                    isCreatingInvoice = true
-
-                    if (walletState.nodeLifecycleState == NodeLifecycleState.Starting) {
-                        while (walletState.nodeLifecycleState == NodeLifecycleState.Starting && isActive) {
-                            delay(500) // 0.5 second delay
-                        }
+            // Actions
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Min amount view
+                blocktank.minCjitSats?.let { minCjitSats ->
+                    Column(
+                        modifier = Modifier.clickableAlpha { overrideSats = minCjitSats.toLong() }
+                    ) {
+                        Caption13Up(
+                            text = stringResource(R.string.wallet__minimum),
+                            color = Colors.White64,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        MoneySSB(sats = minCjitSats.toLong())
                     }
+                } ?: CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.weight(1f))
+                UnitButton()
+            }
 
-                    if (walletState.nodeLifecycleState == NodeLifecycleState.Running) {
-                        try {
-                            val entry = blocktank.createCjit(amountSats = sats, description = "Bitkit")
-                            onCjitCreated(
-                                CjitEntryDetails(
-                                    networkFeeSat = entry.networkFeeSat.toLong(),
-                                    serviceFeeSat = entry.serviceFeeSat.toLong(),
-                                    channelSizeSat = entry.channelSizeSat.toLong(),
-                                    feeSat = entry.feeSat.toLong(),
-                                    receiveAmountSats = satsAmount,
-                                    invoice = entry.invoice.request,
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+
+            Spacer(modifier = Modifier.height(16.dp))
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = {
+                    val sats = satsAmount.toULong()
+
+                    scope.launch {
+                        isCreatingInvoice = true
+
+                        if (walletState.nodeLifecycleState == NodeLifecycleState.Starting) {
+                            while (walletState.nodeLifecycleState == NodeLifecycleState.Starting && isActive) {
+                                delay(500) // 0.5 second delay
+                            }
+                        }
+
+                        if (walletState.nodeLifecycleState == NodeLifecycleState.Running) {
+                            try {
+                                val entry = blocktank.createCjit(amountSats = sats, description = "Bitkit")
+                                onCjitCreated(
+                                    CjitEntryDetails(
+                                        networkFeeSat = entry.networkFeeSat.toLong(),
+                                        serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                        channelSizeSat = entry.channelSizeSat.toLong(),
+                                        feeSat = entry.feeSat.toLong(),
+                                        receiveAmountSats = satsAmount,
+                                        invoice = entry.invoice.request,
+                                    )
                                 )
+                            } catch (e: Exception) {
+                                app.toast(e)
+                                Logger.error("Failed to create cjit", e)
+                            } finally {
+                                isCreatingInvoice = false
+                            }
+                        } else {
+                            app.toast(
+                                type = Toast.ToastType.WARNING,
+                                title = "Lightning not ready",
+                                description = "Lightning node must be running to create an invoice",
                             )
-                        } catch (e: Exception) {
-                            app.toast(e)
-                            Logger.error("Failed to create cjit", e)
-                        } finally {
                             isCreatingInvoice = false
                         }
-                    } else {
-                        app.toast(
-                            type = Toast.ToastType.WARNING,
-                            title = "Lightning not ready",
-                            description = "Lightning node must be running to create an invoice",
-                        )
-                        isCreatingInvoice = false
                     }
-                }
-            },
-            enabled = !isCreatingInvoice && satsAmount != 0L, // TODO if amount is valid
-            isLoading = isCreatingInvoice,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+                },
+                enabled = !isCreatingInvoice && satsAmount != 0L, // TODO if amount is valid
+                isLoading = isCreatingInvoice,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }

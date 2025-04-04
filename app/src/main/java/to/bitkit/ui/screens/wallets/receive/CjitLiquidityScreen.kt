@@ -17,6 +17,7 @@ import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -26,6 +27,7 @@ import kotlin.math.round
 fun CjitLiquidityScreen(
     entry: CjitEntryDetails,
     onContinue: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val channelSize = entry.channelSizeSat
     val localBalance = entry.receiveAmountSats - entry.feeSat
@@ -34,30 +36,39 @@ fun CjitLiquidityScreen(
         val remoteReserve = channelSize / 100.0
         round(channelSize - localBalance - remoteReserve).toLong()
     }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+    ) {
+        SheetTopBar(stringResource(R.string.wallet__receive_liquidity__nav_title), onBack = onBack)
+        Spacer(Modifier.height(24.dp))
 
-    // TODO fix title to use: wallet__receive_liquidity__nav_title
-    Column(modifier = Modifier.fillMaxWidth()) {
-        BodyM(text = stringResource(R.string.lightning__liquidity__text), color = Colors.White64)
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            BodyM(text = stringResource(R.string.wallet__receive_liquidity__text), color = Colors.White64)
 
-        Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
 
-        BodyMB(text = stringResource(R.string.lightning__liquidity__label))
-        Spacer(modifier = Modifier.height(16.dp))
+            BodyMB(text = stringResource(R.string.wallet__receive_liquidity__label))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        LightningChannel(
-            capacity = channelSize,
-            localBalance = localBalance,
-            remoteBalance = remoteBalance,
-            status = ChannelStatusUi.OPEN,
-            showLabels = true,
-        )
+            LightningChannel(
+                capacity = channelSize,
+                localBalance = localBalance,
+                remoteBalance = remoteBalance,
+                status = ChannelStatusUi.OPEN,
+                showLabels = true,
+            )
 
-        Spacer(modifier = Modifier.height(32.dp))
-        PrimaryButton(
-            text = stringResource(R.string.common__understood),
-            onClick = onContinue,
-        )
-        Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+            PrimaryButton(
+                text = stringResource(R.string.common__understood),
+                onClick = onContinue,
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+        }
     }
 }
 
@@ -65,22 +76,17 @@ fun CjitLiquidityScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Column(
-            modifier = Modifier
-                .gradientBackground()
-                .padding(16.dp)
-        ) {
-            CjitLiquidityScreen(
-                entry = CjitEntryDetails(
-                    channelSizeSat = 200_000L,
-                    receiveAmountSats = 50_000L,
-                    feeSat = 10_000L,
-                    networkFeeSat = 5_000L,
-                    serviceFeeSat = 150_000L,
-                    invoice = "",
-                ),
-                onContinue = {},
-            )
-        }
+        CjitLiquidityScreen(
+            entry = CjitEntryDetails(
+                channelSizeSat = 200_000L,
+                receiveAmountSats = 50_000L,
+                feeSat = 10_000L,
+                networkFeeSat = 5_000L,
+                serviceFeeSat = 150_000L,
+                invoice = "",
+            ),
+            onContinue = {},
+            onBack = {},
+        )
     }
 }

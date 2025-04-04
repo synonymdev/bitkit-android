@@ -99,12 +99,7 @@ fun ReceiveQrSheet(
             .fillMaxWidth()
             .fillMaxHeight(.875f)
             .imePadding()
-            .gradientBackground()
-            .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
-        Spacer(Modifier.height(24.dp))
-
         NavHost(
             navController = navController,
             startDestination = Routes.QR,
@@ -132,7 +127,8 @@ fun ReceiveQrSheet(
                     onCjitCreated = { entry ->
                         cjitEntryDetails.value = entry
                         navController.navigate(Routes.CJIT_CONFIRM)
-                    }
+                    },
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(Routes.CJIT_CONFIRM) {
@@ -143,7 +139,8 @@ fun ReceiveQrSheet(
                         onContinue = { invoice ->
                             cjitInvoice.value = invoice
                             navController.navigate(Routes.QR) { popUpTo(Routes.QR) { inclusive = true } }
-                        }
+                        },
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }
@@ -152,6 +149,7 @@ fun ReceiveQrSheet(
                     CjitLiquidityScreen(
                         entry = entryDetails,
                         onContinue = { navController.popBackStack() },
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }
@@ -175,38 +173,50 @@ private fun ReceiveQrScreen(
         mutableIntStateOf(resId)
     }
 
-    Column {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+    ) {
+        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
+        Spacer(Modifier.height(24.dp))
+
         val onchainAddress = walletState.onchainAddress
         val uri = cjitInvoice.value ?: walletState.bip21
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.weight(1f)
-        ) {
-            val pagerState = rememberPagerState(initialPage = 0) { 2 }
-            PagerWithIndicator(pagerState) {
-                when (it) {
-                    0 -> ReceiveQrSlide(
-                        uri = uri,
-                        qrLogoPainter = painterResource(qrLogoImageRes),
-                    )
 
-                    1 -> CopyValuesSlide(
-                        onchainAddress = onchainAddress,
-                        bolt11 = walletState.bolt11,
-                        cjitInvoice = cjitInvoice.value,
-                    )
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f)
+            ) {
+                val pagerState = rememberPagerState(initialPage = 0) { 2 }
+                PagerWithIndicator(pagerState) {
+                    when (it) {
+                        0 -> ReceiveQrSlide(
+                            uri = uri,
+                            qrLogoPainter = painterResource(qrLogoImageRes),
+                        )
+
+                        1 -> CopyValuesSlide(
+                            onchainAddress = onchainAddress,
+                            bolt11 = walletState.bolt11,
+                            cjitInvoice = cjitInvoice.value,
+                        )
+                    }
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
+            if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
+                ReceiveLightningFunds(
+                    cjitInvoice = cjitInvoice,
+                    cjitActive = cjitActive,
+                    onCjitToggle = onCjitToggle,
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
-            ReceiveLightningFunds(
-                cjitInvoice = cjitInvoice,
-                cjitActive = cjitActive,
-                onCjitToggle = onCjitToggle,
-            )
-        }
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
