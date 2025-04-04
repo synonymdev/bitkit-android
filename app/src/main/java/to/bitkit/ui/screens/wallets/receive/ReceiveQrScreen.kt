@@ -61,11 +61,11 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.MainUiState
 
-private object Routes {
-    const val QR = "qr_screen"
-    const val CJIT = "cjit_screen"
-    const val CJIT_CONFIRM = "cjit_confirm"
-    const val CJIT_LIQUIDITY = "cjit_liquidity"
+private object ReceiveRoutes {
+    const val QR = "qr"
+    const val AMOUNT = "amount"
+    const val CONFIRM = "confirm"
+    const val LIQUIDITY = "liquidity"
 }
 
 @Composable
@@ -102,9 +102,9 @@ fun ReceiveQrSheet(
     ) {
         NavHost(
             navController = navController,
-            startDestination = Routes.QR,
+            startDestination = ReceiveRoutes.QR,
         ) {
-            composable(Routes.QR) {
+            composable(ReceiveRoutes.QR) {
                 LaunchedEffect(cjitInvoice.value) {
                     showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
                 }
@@ -117,36 +117,36 @@ fun ReceiveQrSheet(
                         if (!active) {
                             cjitInvoice.value = null
                         } else if (cjitInvoice.value == null) {
-                            navController.navigate(Routes.CJIT)
+                            navController.navigate(ReceiveRoutes.AMOUNT)
                         }
                     }
                 )
             }
-            composable(Routes.CJIT) {
-                CreateCjitScreen(
+            composable(ReceiveRoutes.AMOUNT) {
+                ReceiveAmountScreen(
                     onCjitCreated = { entry ->
                         cjitEntryDetails.value = entry
-                        navController.navigate(Routes.CJIT_CONFIRM)
+                        navController.navigate(ReceiveRoutes.CONFIRM)
                     },
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(Routes.CJIT_CONFIRM) {
+            composable(ReceiveRoutes.CONFIRM) {
                 cjitEntryDetails.value?.let { entryDetails ->
-                    ConfirmCjitScreen(
+                    ReceiveConfirmScreen(
                         entry = entryDetails,
-                        onLearnMore = { navController.navigate(Routes.CJIT_LIQUIDITY) },
+                        onLearnMore = { navController.navigate(ReceiveRoutes.LIQUIDITY) },
                         onContinue = { invoice ->
                             cjitInvoice.value = invoice
-                            navController.navigate(Routes.QR) { popUpTo(Routes.QR) { inclusive = true } }
+                            navController.navigate(ReceiveRoutes.QR) { popUpTo(ReceiveRoutes.QR) { inclusive = true } }
                         },
                         onBack = { navController.popBackStack() },
                     )
                 }
             }
-            composable(Routes.CJIT_LIQUIDITY) {
+            composable(ReceiveRoutes.LIQUIDITY) {
                 cjitEntryDetails.value?.let { entryDetails ->
-                    CjitLiquidityScreen(
+                    ReceiveLiquidityScreen(
                         entry = entryDetails,
                         onContinue = { navController.popBackStack() },
                         onBack = { navController.popBackStack() },
@@ -405,7 +405,7 @@ private fun CopyAddressCard(
 
 @Preview(showBackground = true)
 @Composable
-private fun ReceiveQRScreenPreview() {
+private fun ReceiveQrScreenPreview() {
     AppThemeSurface {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },

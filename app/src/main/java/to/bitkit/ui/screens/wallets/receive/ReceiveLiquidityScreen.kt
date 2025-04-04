@@ -24,7 +24,7 @@ import to.bitkit.ui.theme.Colors
 import kotlin.math.round
 
 @Composable
-fun CjitLiquidityScreen(
+fun ReceiveLiquidityScreen(
     entry: CjitEntryDetails,
     onContinue: () -> Unit,
     onBack: () -> Unit,
@@ -76,7 +76,7 @@ fun CjitLiquidityScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        CjitLiquidityScreen(
+        ReceiveLiquidityScreen(
             entry = CjitEntryDetails(
                 channelSizeSat = 200_000L,
                 receiveAmountSats = 50_000L,

@@ -45,7 +45,7 @@ import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
 @Composable
-fun CreateCjitScreen(
+fun ReceiveAmountScreen(
     onCjitCreated: (CjitEntryDetails) -> Unit,
     onBack: () -> Unit,
 ) {

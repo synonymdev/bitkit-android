@@ -36,7 +36,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-// TODO pass these to nav
+// TODO pass these to nav?
 @Serializable
 data class CjitEntryDetails(
     val networkFeeSat: Long,
@@ -48,7 +48,7 @@ data class CjitEntryDetails(
 )
 
 @Composable
-fun ConfirmCjitScreen(
+fun ReceiveConfirmScreen(
     entry: CjitEntryDetails,
     onLearnMore: () -> Unit,
     onContinue: (String) -> Unit,
@@ -84,7 +84,7 @@ fun ConfirmCjitScreen(
         } ?: sats.toString()
     }
 
-    ConfirmCjitContent(
+    ReceiveConfirmContent(
         receiveSats = entry.receiveAmountSats,
         networkFeeFormatted = networkFeeFormatted,
         serviceFeeFormatted = serviceFeeFormatted,
@@ -96,7 +96,7 @@ fun ConfirmCjitScreen(
 }
 
 @Composable
-private fun ConfirmCjitContent(
+private fun ReceiveConfirmContent(
     receiveSats: Long,
     networkFeeFormatted: String,
     serviceFeeFormatted: String,
@@ -165,9 +165,9 @@ private fun ConfirmCjitContent(
 
 @Preview(showBackground = true)
 @Composable
-private fun ConfirmCjitContentPreview() {
+private fun Preview() {
     AppThemeSurface {
-        ConfirmCjitContent(
+        ReceiveConfirmContent(
             receiveSats = 12500L,
             networkFeeFormatted = "$0.50",
             serviceFeeFormatted = "$1.00",
