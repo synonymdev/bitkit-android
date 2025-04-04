@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -123,6 +122,7 @@ fun CreateCjitScreen(
                                 CjitEntryDetails(
                                     networkFeeSat = entry.networkFeeSat.toLong(),
                                     serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                    channelSizeSat = entry.channelSizeSat.toLong(),
                                     feeSat = entry.feeSat.toLong(),
                                     receiveAmountSats = satsAmount,
                                     invoice = entry.invoice.request,

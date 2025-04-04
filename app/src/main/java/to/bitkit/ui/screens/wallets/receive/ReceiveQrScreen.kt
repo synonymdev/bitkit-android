@@ -65,6 +65,7 @@ private object Routes {
     const val QR = "qr_screen"
     const val CJIT = "cjit_screen"
     const val CJIT_CONFIRM = "cjit_confirm"
+    const val CJIT_LIQUIDITY = "cjit_liquidity"
 }
 
 @Composable
@@ -138,10 +139,19 @@ fun ReceiveQrSheet(
                 cjitEntryDetails.value?.let { entryDetails ->
                     ConfirmCjitScreen(
                         entry = entryDetails,
+                        onLearnMore = { navController.navigate(Routes.CJIT_LIQUIDITY) },
                         onContinue = { invoice ->
                             cjitInvoice.value = invoice
                             navController.navigate(Routes.QR) { popUpTo(Routes.QR) { inclusive = true } }
                         }
+                    )
+                }
+            }
+            composable(Routes.CJIT_LIQUIDITY) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    CjitLiquidityScreen(
+                        entry = entryDetails,
+                        onContinue = { navController.popBackStack() },
                     )
                 }
             }
@@ -404,7 +414,9 @@ private fun ReceiveQRScreenPreview() {
 private fun CopyValuesSlidePreview() {
     AppThemeSurface {
         Column(
-            modifier = Modifier.gradientBackground().padding(16.dp),
+            modifier = Modifier
+                .gradientBackground()
+                .padding(16.dp),
         ) {
             CopyValuesSlide(
                 onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",

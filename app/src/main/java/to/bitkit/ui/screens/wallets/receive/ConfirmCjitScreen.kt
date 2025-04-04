@@ -1,7 +1,9 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +27,7 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.shared.util.gradientBackground
@@ -37,6 +40,7 @@ import to.bitkit.ui.utils.withAccent
 data class CjitEntryDetails(
     val networkFeeSat: Long,
     val serviceFeeSat: Long,
+    val channelSizeSat: Long,
     val feeSat: Long,
     val receiveAmountSats: Long,
     val invoice: String,
@@ -45,6 +49,7 @@ data class CjitEntryDetails(
 @Composable
 fun ConfirmCjitScreen(
     entry: CjitEntryDetails,
+    onLearnMore: () -> Unit,
     onContinue: (String) -> Unit,
 ) {
     val currency = currencyViewModel ?: return
@@ -82,7 +87,8 @@ fun ConfirmCjitScreen(
         networkFeeFormatted = networkFeeFormatted,
         serviceFeeFormatted = serviceFeeFormatted,
         receiveAmountFormatted = receiveAmountFormatted,
-        onContinueClick = { onContinue(entry.invoice) }
+        onLearnMoreClick = onLearnMore,
+        onContinueClick = { onContinue(entry.invoice) },
     )
 }
 
@@ -92,6 +98,7 @@ private fun ConfirmCjitContent(
     networkFeeFormatted: String,
     serviceFeeFormatted: String,
     receiveAmountFormatted: String,
+    onLearnMoreClick: () -> Unit,
     onContinueClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -125,10 +132,18 @@ private fun ConfirmCjitContent(
                 .fillMaxWidth()
         )
         Spacer(modifier = Modifier.weight(1f))
-        PrimaryButton(
-            text = stringResource(R.string.common__continue),
-            onClick = onContinueClick
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SecondaryButton(
+                text = stringResource(R.string.common__learn_more),
+                onClick = onLearnMoreClick,
+                modifier = Modifier.weight(1f)
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = onContinueClick,
+                modifier = Modifier.weight(1f)
+            )
+        }
         Spacer(modifier = Modifier.height(32.dp))
     }
 }
@@ -147,7 +162,8 @@ private fun ConfirmCjitContentPreview() {
                 networkFeeFormatted = "$0.50",
                 serviceFeeFormatted = "$1.00",
                 receiveAmountFormatted = "$100.00",
-                onContinueClick = {}
+                onLearnMoreClick = {},
+                onContinueClick = {},
             )
         }
     }
