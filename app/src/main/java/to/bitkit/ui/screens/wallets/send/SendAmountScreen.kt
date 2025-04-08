@@ -67,6 +67,7 @@ fun SendAmountScreen(
                 BalanceHeaderView(sats = uiState.amountInput.toLongOrDefault(0), modifier = Modifier.fillMaxWidth())
 
                 Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 Text13Up(
                     text = stringResource(R.string.wallet__send_available),
@@ -111,8 +112,6 @@ fun SendAmountScreen(
                         modifier = Modifier.height(28.dp)
                     )
                 }
-
-                Spacer(modifier = Modifier.weight(1f))
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
