@@ -35,9 +35,11 @@ fun WarningMultipleDevicesScreen(
     onBackClick: () -> Unit,
     onConfirmClick: () -> Unit,
 ) {
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
+
         TopAppBar(
             title = {},
             navigationIcon = {
@@ -51,31 +53,40 @@ fun WarningMultipleDevicesScreen(
             },
         )
 
-        Image(
-            painter = painterResource(id = R.drawable.phone),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth().weight(1f)
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.phone),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
 
-        Display(
-            text = stringResource(R.string.onboarding__multiple_header).withAccent(accentColor = Colors.Yellow),
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
+            Display(
+                text = stringResource(R.string.onboarding__multiple_header).withAccent(accentColor = Colors.Yellow),
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        BodyM(
-            text = stringResource(R.string.onboarding__multiple_text),
-            color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
+            BodyM(
+                text = stringResource(R.string.onboarding__multiple_text),
+                color = Colors.White64,
+            )
 
-        PrimaryButton(
-            text = stringResource(R.string.common__understood),
-            onClick = onConfirmClick,
-            modifier = Modifier.padding(32.dp)
-        )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            PrimaryButton(
+                text = stringResource(R.string.common__understood),
+                onClick = onConfirmClick,
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 
