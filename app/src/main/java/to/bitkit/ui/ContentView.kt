@@ -1,5 +1,8 @@
 package to.bitkit.ui
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -16,9 +19,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
@@ -28,6 +35,8 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import kotlin.reflect.KType
+import kotlin.reflect.typeOf
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.BottomSheetType
@@ -67,6 +76,7 @@ import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.NodeStateScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
@@ -439,12 +449,7 @@ private fun NavGraphBuilder.settings(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.Settings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(viewModel, navController)
     }
 }
@@ -462,12 +467,7 @@ private fun NavGraphBuilder.nodeState(
 }
 
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
-    composable<Routes.GeneralSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
     }
 }
@@ -476,12 +476,7 @@ private fun NavGraphBuilder.defaultUnitSettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.DefaultUnitSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.DefaultUnitSettings> {
         DefaultUnitSettingsScreen(currencyViewModel, navController)
     }
 }
@@ -490,12 +485,7 @@ private fun NavGraphBuilder.localCurrencySettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.LocalCurrencySettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.LocalCurrencySettings> {
         LocalCurrencySettingsScreen(currencyViewModel, navController)
     }
 }
@@ -503,12 +493,7 @@ private fun NavGraphBuilder.localCurrencySettings(
 private fun NavGraphBuilder.backupSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.BackupSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.BackupSettings> {
         BackupSettingsScreen(navController)
     }
 }
@@ -516,12 +501,7 @@ private fun NavGraphBuilder.backupSettings(
 private fun NavGraphBuilder.backupWalletSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.BackupWalletSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.BackupWalletSettings> {
         BackupWalletScreen(navController)
     }
 }
@@ -529,12 +509,7 @@ private fun NavGraphBuilder.backupWalletSettings(
 private fun NavGraphBuilder.restoreWalletSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.RestoreWalletSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.RestoreWalletSettings> {
         RestoreWalletScreen(navController)
     }
 }
@@ -542,12 +517,7 @@ private fun NavGraphBuilder.restoreWalletSettings(
 private fun NavGraphBuilder.channelOrdersSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.ChannelOrdersSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.ChannelOrdersSettings> {
         ChannelOrdersScreen(
             onBackClick = { navController.popBackStack() },
             onOrderItemClick = { navController.navigateToOrderDetail(it) },
@@ -559,12 +529,7 @@ private fun NavGraphBuilder.channelOrdersSettings(
 private fun NavGraphBuilder.orderDetailSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.OrderDetail>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) { navBackEntry ->
+    composableWithDefaultTransitions<Routes.OrderDetail> { navBackEntry ->
         OrderDetailScreen(
             orderItem = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -575,12 +540,7 @@ private fun NavGraphBuilder.orderDetailSettings(
 private fun NavGraphBuilder.cjitDetailSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.CjitDetail>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) { navBackEntry ->
+    composableWithDefaultTransitions<Routes.CjitDetail> { navBackEntry ->
         CJitDetailScreen(
             cjitItem = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -592,12 +552,7 @@ private fun NavGraphBuilder.lightning(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.Lightning>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.Lightning> {
         LightningSettingsScreen(viewModel, navController)
     }
 }
@@ -606,12 +561,7 @@ private fun NavGraphBuilder.devSettings(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.DevSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(viewModel, navController)
     }
 }
@@ -619,12 +569,7 @@ private fun NavGraphBuilder.devSettings(
 private fun NavGraphBuilder.regtestSettings(
     navController: NavHostController,
 ) {
-    composable<Routes.RegtestSettings>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.RegtestSettings> {
         val viewModel = hiltViewModel<BlocktankRegtestViewModel>()
         BlocktankRegtestScreen(viewModel, navController)
     }
@@ -634,12 +579,7 @@ private fun NavGraphBuilder.allActivity(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.AllActivity>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) {
+    composableWithDefaultTransitions<Routes.AllActivity> {
         AllActivityScreen(
             viewModel = viewModel,
             onBackCLick = { navController.popBackStack() },
@@ -652,12 +592,7 @@ private fun NavGraphBuilder.activityItem(
     viewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composable<Routes.ActivityItem>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenScaleOut },
-        popEnterTransition = { screenScaleIn },
-        popExitTransition = { screenSlideOut },
-    ) { navBackEntry ->
+    composableWithDefaultTransitions<Routes.ActivityItem> { navBackEntry ->
         ActivityItemScreen(
             viewModel = viewModel,
             activityItem = navBackEntry.toRoute(),
@@ -684,6 +619,42 @@ private fun NavGraphBuilder.qrScanner(
     }
 }
 // endregion
+
+/**
+ * Adds the [Composable] to the [NavGraphBuilder] with default screen transitions.
+ *
+ * @param typeMap map of destination arguments' kotlin type [KType] to its respective custom
+ * [NavType]. May be empty if destination does not receive arguments.
+ * @param deepLinks list of deep links to associate with the destinations.
+ * @param enterTransition callback to determine the destination's enter transition
+ * @param exitTransition callback to determine the destination's exit transition
+ * @param popEnterTransition callback to determine the destination's popEnter transition
+ * @param popExitTransition callback to determine the destination's popExit transition
+ * @param content composable for the destination
+ */
+inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
+    typeMap: Map<KType, NavType<*>> = emptyMap(),
+    deepLinks: List<NavDeepLink> = emptyList(),
+    noinline enterTransition: (@JvmSuppressWildcards
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = { screenSlideIn },
+    noinline exitTransition: (@JvmSuppressWildcards
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = { screenScaleOut },
+    noinline popEnterTransition: (@JvmSuppressWildcards
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = { screenScaleIn },
+    noinline popExitTransition: (@JvmSuppressWildcards
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = { screenSlideOut },
+    noinline content: @Composable AnimatedContentTransitionScope.(NavBackStackEntry) -> Unit,
+) {
+    composable<T>(
+        typeMap = typeMap,
+        deepLinks = deepLinks,
+        enterTransition = enterTransition,
+        exitTransition = exitTransition,
+        popEnterTransition = popEnterTransition,
+        popExitTransition = popExitTransition,
+        content = content,
+    )
+}
 
 // region events
 fun NavController.navigateToHome() = navigate(
