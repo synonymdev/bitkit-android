@@ -68,18 +68,19 @@ fun WarningMultipleDevicesScreen(
             text = stringResource(R.string.onboarding__multiple_header).withAccent(accentColor = Colors.Yellow),
             modifier = Modifier.padding(horizontal = 32.dp)
         )
+
         Spacer(modifier = Modifier.height(8.dp))
+
         BodyM(
             text = stringResource(R.string.onboarding__multiple_text),
             color = Colors.White64,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
+
         PrimaryButton(
             text = stringResource(R.string.common__understood),
             onClick = onConfirmClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(32.dp)
+            modifier = Modifier.padding(32.dp)
         )
     }
 }
