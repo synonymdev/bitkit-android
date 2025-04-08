@@ -36,9 +36,7 @@ fun WarningMultipleDevicesScreen(
     onConfirmClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .height(264.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         TopAppBar(
             title = {},
@@ -53,16 +51,12 @@ fun WarningMultipleDevicesScreen(
             },
         )
 
-        Spacer(modifier = Modifier.weight(1f))
-
         Image(
             painter = painterResource(id = R.drawable.phone),
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().weight(1f)
         )
-
-        Spacer(modifier = Modifier.weight(1f))
 
         Display(
             text = stringResource(R.string.onboarding__multiple_header).withAccent(accentColor = Colors.Yellow),
