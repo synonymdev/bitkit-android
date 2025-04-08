@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.transfer.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.InfiniteRepeatableSpec
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -28,51 +29,46 @@ fun TransferAnimationView(
     @DrawableRes largeCircleRes: Int,
     @DrawableRes smallCircleRes: Int,
     @DrawableRes contentRes: Int = R.drawable.transfer,
-    rotateContent: Boolean = true
+    rotateContent: Boolean = true,
 ) {
+    val animationSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
+        animation = tween(durationMillis = 3000, easing = EaseInOut),
+        repeatMode = RepeatMode.Reverse,
+    )
+
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.padding(horizontal = 16.dp)
+        modifier = Modifier.padding(horizontal = 16.dp),
     ) {
         val infiniteTransition = rememberInfiniteTransition("transition")
+
         val rotationLarge by infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = -180f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 3000, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "rotationLarge"
+            targetValue = -90f,
+            animationSpec = animationSpec,
+            label = "rotationLarge",
         )
         val rotationSmall by infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = 120f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 3000, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "rotationSmall"
+            targetValue = 60f,
+            animationSpec = animationSpec,
+            label = "rotationSmall",
         )
         val rotationArrows by infiniteTransition.animateFloat(
             initialValue = 0f,
             targetValue = 70f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 3000, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "rotationArrows"
+            animationSpec = animationSpec,
+            label = "rotationArrows",
         )
         Image(
             painter = painterResource(largeCircleRes),
             contentDescription = null,
-            modifier = Modifier
-                .rotate(rotationLarge)
+            modifier = Modifier.rotate(rotationLarge),
         )
         Image(
             painter = painterResource(smallCircleRes),
             contentDescription = null,
-            modifier = Modifier
-                .rotate(rotationSmall)
+            modifier = Modifier.rotate(rotationSmall),
         )
         Image(
             painter = painterResource(contentRes),
@@ -80,22 +76,39 @@ fun TransferAnimationView(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth()
-                .apply {
+                .then(
                     if (rotateContent) {
-                        rotate(rotationArrows)
-                    }
-                }
+                        Modifier.rotate(rotationArrows)
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }
 
 @Preview
 @Composable
-private fun Preview() {
+private fun PreviewSyncing() {
     AppThemeSurface {
         TransferAnimationView(
             largeCircleRes = R.drawable.ln_sync_large,
             smallCircleRes = R.drawable.ln_sync_small,
+            contentRes = R.drawable.transfer,
+            rotateContent = true,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewNoContentRotation() {
+    AppThemeSurface {
+        TransferAnimationView(
+            largeCircleRes = R.drawable.ln_sync_large,
+            smallCircleRes = R.drawable.ln_sync_small,
+            contentRes = R.drawable.transfer,
+            rotateContent = false,
         )
     }
 }
