@@ -40,7 +40,11 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build for debug with gradle
-        run: ./gradlew assembleDebug assembleAndroidTest
+        run: |
+          ./gradlew assembleDebug assembleAndroidTest -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
+          # Verify APKs were built for x86_64
+          ls -la app/build/outputs/apk/debug/
+          ls -la app/build/outputs/apk/androidTest/debug/
 
       - name: Enable KVM
         run: |
@@ -63,6 +67,7 @@ jobs:
         with:
           api-level: 29
           arch: x86_64
+          profile: pixel_4
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
@@ -72,13 +77,25 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
-          arch: x86_64
+          arch: arm64-v8a
+          profile: pixel_4
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            ./gradlew installDebug
-            ./gradlew connectedDebugAndroidTest
+            # Wait for emulator to be fully ready
+            adb wait-for-device
+            while [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != "1" ]; do
+              echo "Waiting for boot to complete..."
+              sleep 10
+            done
+
+            # Verify emulator architecture
+            adb shell getprop ro.product.cpu.abi
+
+            # Install and run tests
+            ./gradlew installDebug -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
+            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
 
       - name: Upload UI test report
         if: always()
@@ -88,4 +105,6 @@ jobs:
           path: |
             app/build/reports/androidTests/connected/**/*
             app/build/outputs/androidTest-results/connected/**/*
+            app/build/outputs/androidTest-results/**/*
+            app/build/outputs/**/androidTest-results/**/*
           if-no-files-found: warn
