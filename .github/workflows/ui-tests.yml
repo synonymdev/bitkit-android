@@ -1,83 +1,23 @@
-name: UI Tests
+name: Compose UI Tests
 
 on:
   workflow_run:
     workflows: ["CI"]
     types:
       - completed
-    branches:
-      - "master"
+    branches: [ "master" ]
 
 jobs:
-  check-conditions:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    outputs:
-      should_run: ${{ steps.check-pr-status.outputs.should_run }}
-      pr_number: ${{ steps.find-pr.outputs.pr_number }}
-
-    steps:
-      - name: Find associated pull request
-        id: find-pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const commitSha = '${{ github.event.workflow_run.head_sha }}';
-            const { data: pullRequests } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 100
-            });
-
-            for (const pr of pullRequests) {
-              if (pr.head.sha === commitSha) {
-                console.log(`Found matching PR: #${pr.number}`);
-                core.setOutput('pr_number', pr.number);
-                return;
-              }
-            }
-
-            console.log('No matching PR found for this commit');
-            core.setOutput('pr_number', '');
-
-      - name: Check PR draft status
-        id: check-pr-status
-        if: steps.find-pr.outputs.pr_number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = parseInt('${{ steps.find-pr.outputs.pr_number }}');
-            if (!prNumber) {
-              console.log('No PR number found, skipping UI tests');
-              core.setOutput('should_run', 'false');
-              return;
-            }
-
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber
-            });
-
-            const shouldRun = !pr.draft;
-            console.log(`PR #${prNumber} draft status: ${pr.draft}`);
-            console.log(`Should run UI tests: ${shouldRun}`);
-
-            core.setOutput('should_run', shouldRun.toString());
-
-  ui-tests:
-    needs: check-conditions
-    if: ${{ needs.check-conditions.outputs.should_run == 'true' }}
+  compose-tests:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].draft == false
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -103,33 +43,23 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build for debug with gradle
+      - name: Build debug APK
         run: ./gradlew assembleDebug
 
-      - name: Start Android Emulator for Compose Tests
-        run: |
-          docker run -d --name nexus \
-            -p 4723:4723 -p 6080:6080 \
-            --privileged \
-            budtmo/docker-android-x86-7.1.1:1.8-p2
+      - name: Start Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          arch: x86_64
+          profile: Nexus 6
+          script: ./gradlew connectedDebugAndroidTest
 
-          # Wait for the emulator to be fully started
-          echo "Waiting for emulator to start..."
-          sleep 60
+      - name: Run Compose UI tests
+        run: ./gradlew connectedDebugAndroidTest
 
-          # Check if emulator is running
-          docker exec nexus adb devices
-
-      - name: Run Jetpack Compose UI Tests
-        run: ./gradlew connectedAndroidTest
-
-      - name: Stop Android Emulator
-        if: always()
-        run: docker stop nexus && docker rm nexus
-
-      - name: Upload UI test report
-        if: always()
+      - name: Upload test reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: compose_test_report
-          path: app/build/reports/androidTests/
+          path: app/build/reports/androidTests/connected/
