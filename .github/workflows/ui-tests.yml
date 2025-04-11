@@ -1,10 +1,7 @@
 name: UI Tests
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
     branches: [ "master" ]
   workflow_dispatch:
 
@@ -13,63 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check-pr-status.outputs.should_run }}
-      pr_number: ${{ steps.find-pr.outputs.pr_number }}
-
-    steps:
-      - name: Find associated pull request
-        id: find-pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const commitSha = '${{ github.event.workflow_run.head_sha }}';
-            const { data: pullRequests } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 100
-            });
-
-            for (const pr of pullRequests) {
-              if (pr.head.sha === commitSha) {
-                console.log(`Found matching PR: #${pr.number}`);
-                core.setOutput('pr_number', pr.number);
-                return;
-              }
-            }
-
-            console.log('No matching PR found for this commit');
-            core.setOutput('pr_number', '');
-
-      - name: Check PR draft status
-        id: check-pr-status
-        if: steps.find-pr.outputs.pr_number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = parseInt('${{ steps.find-pr.outputs.pr_number }}');
-            if (!prNumber) {
-              console.log('No PR number found, skipping UI tests');
-              core.setOutput('should_run', 'false');
-              return;
-            }
-
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber
-            });
-
-            const shouldRun = !pr.draft;
-            console.log(`PR #${prNumber} draft status: ${pr.draft}`);
-            console.log(`Should run UI tests: ${shouldRun}`);
-
-            core.setOutput('should_run', shouldRun.toString());
 
   ui-tests:
-    needs: check-conditions
-    if: ${{ needs.check-conditions.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
