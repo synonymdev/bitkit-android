@@ -5,7 +5,6 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-
   workflow_dispatch:
 
 jobs:
@@ -53,15 +52,16 @@ jobs:
           # Pull the Android emulator image
           docker pull budtmo/docker-android:emulator_13.0_v2.16.2-p0
 
-          # Run the container
+          # Run the container with environment variables for faster boot
           docker run -d --name android-container \
             -p 4723:4723 -p 6080:6080 -p 5554:5554 -p 5555:5555 \
+            -e EMULATOR_ARGS="-no-snapshot-save -no-audio -no-boot-anim -no-window -gpu swiftshader_indirect -accel on" \
             --privileged \
             budtmo/docker-android:emulator_13.0_v2.16.2-p0
 
           # Wait for container to fully initialize
           echo "Waiting for Android container to initialize..."
-          sleep 90
+          sleep 120  # Increased from 90 to 120 seconds
 
           # Check container status
           docker ps
@@ -84,29 +84,33 @@ jobs:
           # Connect to the emulator
           adb connect $CONTAINER_IP:5555
 
-          # Wait for device to be fully booted
+          # Wait for device to be fully booted (increased time)
           echo "Waiting for device to fully boot..."
+          adb wait-for-device
           sleep 30
+
+          # Check boot completion
+          while true; do
+            boot_completed=$(adb shell getprop sys.boot_completed | tr -d '\r')
+            if [ "$boot_completed" == "1" ]; then
+              break
+            fi
+            echo "Waiting for boot to complete..."
+            sleep 10
+          done
 
           # Check connected devices
           adb devices -l
 
           # Disable animations
-          adb shell settings put global window_animation_scale 0.0 || echo "Could not disable window animations"
-          adb shell settings put global transition_animation_scale 0.0 || echo "Could not disable transition animations"
-          adb shell settings put global animator_duration_scale 0.0 || echo "Could not disable animator duration"
+          adb shell settings put global window_animation_scale 0.0
+          adb shell settings put global transition_animation_scale 0.0
+          adb shell settings put global animator_duration_scale 0.0
 
       - name: Run UI Tests
         run: |
-          # Check if device is connected
-          DEVICE_COUNT=$(adb devices | grep -c device)
-          if [ $DEVICE_COUNT -le 1 ]; then
-            echo "No devices connected. Trying to reconnect..."
-            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' android-container)
-            adb connect $CONTAINER_IP:5555
-            sleep 10
-            adb devices -l
-          fi
+          # Verify device is online
+          adb devices
 
           # Install app
           ./gradlew installDebug
@@ -127,5 +131,6 @@ jobs:
         with:
           name: compose_test_report
           path: |
-            app/build/reports/androidTests/connected/
-            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/**/*
+            app/build/outputs/androidTest-results/connected/**/*
+          if-no-files-found: warn
