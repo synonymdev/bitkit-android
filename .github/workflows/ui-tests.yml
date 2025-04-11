@@ -1,15 +1,10 @@
-name: CI
+name: UI Tests
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
-
   workflow_dispatch:
 
 jobs:
-  build:
+  ui-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -43,11 +38,30 @@ jobs:
       - name: Build for debug with gradle
         run: ./gradlew assembleDebug
 
-      - name: Run tests
-        run: ./gradlew testDebugUnitTest
+      - name: Start Android Emulator for Compose Tests
+        run: |
+          docker run -d --name nexus \
+            -p 4723:4723 -p 6080:6080 \
+            --privileged \
+            budtmo/docker-android-x86-7.1.1:1.8-p2
 
-      - name: Upload test report
+          # Wait for the emulator to be fully started
+          echo "Waiting for emulator to start..."
+          sleep 60
+
+          # Check if emulator is running
+          docker exec nexus adb devices
+
+      - name: Run Jetpack Compose UI Tests
+        run: ./gradlew connectedAndroidTest
+
+      - name: Stop Android Emulator
+        if: always()
+        run: docker stop nexus && docker rm nexus
+
+      - name: Upload UI test report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit_test_report
-          path: app/build/reports/tests/testDebugUnitTest/
+          name: compose_test_report
+          path: app/build/reports/androidTests/
