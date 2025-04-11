@@ -3,14 +3,12 @@ name: UI Tests
 on:
   push:
     branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
   workflow_dispatch:
 
 jobs:
-  check-conditions:
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check-pr-status.outputs.should_run }}
-
   ui-tests:
     runs-on: ubuntu-latest
 
