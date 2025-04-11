@@ -61,7 +61,7 @@ import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
-import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
+import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -100,7 +100,7 @@ fun HomeScreen(
                 }
 
                 is BottomSheetType.Receive -> {
-                    ReceiveQRScreen(uiState)
+                    ReceiveQrSheet(uiState)
                 }
 
                 null -> Unit

@@ -57,8 +57,8 @@ private fun Preview() {
         SyncNodeView(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
                 .gradientBackground()
+                .padding(horizontal = 16.dp)
         )
     }
 }

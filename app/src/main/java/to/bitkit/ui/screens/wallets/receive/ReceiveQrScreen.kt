@@ -1,0 +1,438 @@
+package to.bitkit.ui.screens.wallets.receive
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import to.bitkit.R
+import to.bitkit.ext.truncate
+import to.bitkit.models.NodeLifecycleState.Running
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.PagerWithIndicator
+import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.shared.util.shareText
+import to.bitkit.ui.theme.AppShapes
+import to.bitkit.ui.theme.AppSwitchDefaults
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.MainUiState
+
+private object ReceiveRoutes {
+    const val QR = "qr"
+    const val AMOUNT = "amount"
+    const val CONFIRM = "confirm"
+    const val LIQUIDITY = "liquidity"
+}
+
+@Composable
+fun ReceiveQrSheet(
+    walletState: MainUiState,
+    modifier: Modifier = Modifier,
+) {
+    val app = appViewModel ?: return
+    val wallet = walletViewModel ?: return
+    val blocktank = blocktankViewModel ?: return
+
+    val navController = rememberNavController()
+
+    val cjitInvoice = remember { mutableStateOf<String?>(null) }
+    val showCreateCjit = remember { mutableStateOf(false) }
+    val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            coroutineScope {
+                launch { wallet.refreshBip21() }
+                launch { blocktank.refreshInfo() }
+            }
+        } catch (e: Exception) {
+            app.toast(e)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight(.875f)
+            .imePadding()
+    ) {
+        NavHost(
+            navController = navController,
+            startDestination = ReceiveRoutes.QR,
+        ) {
+            composable(ReceiveRoutes.QR) {
+                LaunchedEffect(cjitInvoice.value) {
+                    showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
+                }
+                ReceiveQrScreen(
+                    cjitInvoice = cjitInvoice,
+                    cjitActive = showCreateCjit,
+                    walletState = walletState,
+                    onCjitToggle = { active ->
+                        showCreateCjit.value = active
+                        if (!active) {
+                            cjitInvoice.value = null
+                        } else if (cjitInvoice.value == null) {
+                            navController.navigate(ReceiveRoutes.AMOUNT)
+                        }
+                    }
+                )
+            }
+            composable(ReceiveRoutes.AMOUNT) {
+                ReceiveAmountScreen(
+                    onCjitCreated = { entry ->
+                        cjitEntryDetails.value = entry
+                        navController.navigate(ReceiveRoutes.CONFIRM)
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(ReceiveRoutes.CONFIRM) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ReceiveConfirmScreen(
+                        entry = entryDetails,
+                        onLearnMore = { navController.navigate(ReceiveRoutes.LIQUIDITY) },
+                        onContinue = { invoice ->
+                            cjitInvoice.value = invoice
+                            navController.navigate(ReceiveRoutes.QR) { popUpTo(ReceiveRoutes.QR) { inclusive = true } }
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(ReceiveRoutes.LIQUIDITY) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ReceiveLiquidityScreen(
+                        entry = entryDetails,
+                        onContinue = { navController.popBackStack() },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceiveQrScreen(
+    cjitInvoice: MutableState<String?>,
+    cjitActive: MutableState<Boolean>,
+    walletState: MainUiState,
+    onCjitToggle: (Boolean) -> Unit,
+) {
+    val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
+        val resId = when {
+            cjitInvoice.value?.isNotEmpty() == true -> R.drawable.ic_ln_circle
+            walletState.bolt11.isNotEmpty() && walletState.onchainAddress.isNotEmpty() -> R.drawable.ic_unified_circle
+            else -> R.drawable.ic_btc_circle
+        }
+        mutableIntStateOf(resId)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
+    ) {
+        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
+        Spacer(Modifier.height(24.dp))
+
+        val onchainAddress = walletState.onchainAddress
+        val uri = cjitInvoice.value ?: walletState.bip21
+
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f)
+            ) {
+                val pagerState = rememberPagerState(initialPage = 0) { 2 }
+                PagerWithIndicator(pagerState) {
+                    when (it) {
+                        0 -> ReceiveQrSlide(
+                            uri = uri,
+                            qrLogoPainter = painterResource(qrLogoImageRes),
+                        )
+
+                        1 -> CopyValuesSlide(
+                            onchainAddress = onchainAddress,
+                            bolt11 = walletState.bolt11,
+                            cjitInvoice = cjitInvoice.value,
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+            if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
+                ReceiveLightningFunds(
+                    cjitInvoice = cjitInvoice,
+                    cjitActive = cjitActive,
+                    onCjitToggle = onCjitToggle,
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ReceiveLightningFunds(
+    cjitInvoice: MutableState<String?>,
+    cjitActive: MutableState<Boolean>,
+    onCjitToggle: (Boolean) -> Unit,
+) {
+    Column {
+        if (cjitInvoice.value == null) {
+            Headline(
+                text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BodyM(text = stringResource(R.string.wallet__receive_spending))
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(
+                checked = cjitActive.value,
+                onCheckedChange = onCjitToggle,
+                colors = AppSwitchDefaults.colorsPurple,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReceiveQrSlide(
+    uri: String,
+    qrLogoPainter: Painter,
+) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        QrCodeImage(
+            content = uri,
+            logoPainter = qrLogoPainter,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.common__edit),
+                size = ButtonSize.Small,
+                onClick = { /* TODO : edit amount */ },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pencil_simple),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__copy),
+                size = ButtonSize.Small,
+                onClick = { clipboard.setText(AnnotatedString(uri)) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__share),
+                size = ButtonSize.Small,
+                onClick = { shareText(context, uri) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CopyValuesSlide(
+    onchainAddress: String,
+    bolt11: String,
+    cjitInvoice: String?,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Colors.White10),
+        shape = AppShapes.small,
+    ) {
+        Column {
+            if (onchainAddress.isNotEmpty()) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_bitcoin_invoice),
+                    address = onchainAddress,
+                    type = CopyAddressType.ONCHAIN,
+                )
+            }
+            if (bolt11.isNotEmpty()) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_lightning_invoice),
+                    address = bolt11,
+                    type = CopyAddressType.LIGHTNING,
+                )
+            } else if (cjitInvoice != null) {
+                CopyAddressCard(
+                    title = stringResource(R.string.wallet__receive_lightning_invoice),
+                    address = cjitInvoice,
+                    type = CopyAddressType.LIGHTNING,
+                )
+            }
+        }
+    }
+}
+
+enum class CopyAddressType { ONCHAIN, LIGHTNING }
+
+@Composable
+private fun CopyAddressCard(
+    title: String,
+    address: String,
+    type: CopyAddressType,
+) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+    ) {
+        Caption13Up(text = title, color = Colors.White64)
+        Spacer(modifier = Modifier.height(16.dp))
+        BodyS(text = address.truncate(32).uppercase())
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PrimaryButton(
+                text = stringResource(R.string.common__copy),
+                size = ButtonSize.Small,
+                onClick = { clipboard.setText(AnnotatedString(address)) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_copy),
+                        contentDescription = null,
+                        tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__share),
+                size = ButtonSize.Small,
+                onClick = { shareText(context, address) },
+                fullWidth = false,
+                color = Colors.White10,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ReceiveQrScreenPreview() {
+    AppThemeSurface {
+        ReceiveQrScreen(
+            cjitInvoice = remember { mutableStateOf(null) },
+            cjitActive = remember { mutableStateOf(false) },
+            walletState = MainUiState(
+                nodeLifecycleState = Running,
+            ),
+            onCjitToggle = { },
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview(showBackground = true)
+@Composable
+private fun CopyValuesSlidePreview() {
+    AppThemeSurface {
+        Column(
+            modifier = Modifier
+                .gradientBackground()
+                .padding(16.dp),
+        ) {
+            CopyValuesSlide(
+                onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
+                bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
+                cjitInvoice = null,
+            )
+        }
+    }
+}
