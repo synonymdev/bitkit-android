@@ -19,6 +19,7 @@ import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletView
 import to.bitkit.ui.onboarding.TermsOfUseScreen
+import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -102,7 +103,22 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 },
-                                onRestoreClick = { startupNavController.navigate(StartupRoutes.Restore) },
+                                onRestoreClick = { startupNavController.navigate(StartupRoutes.WarningMultipleDevices) },
+                            )
+                        }
+                        composable<StartupRoutes.WarningMultipleDevices>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) {
+                            WarningMultipleDevicesScreen(
+                                onBackClick = {
+                                    startupNavController.popBackStack()
+                                },
+                                onConfirmClick = {
+                                    startupNavController.navigate(StartupRoutes.Restore)
+                                }
                             )
                         }
                         composable<StartupRoutes.Restore>(
@@ -194,4 +210,7 @@ private object StartupRoutes {
 
     @Serializable
     data object Advanced
+
+    @Serializable
+    data object WarningMultipleDevices
 }
