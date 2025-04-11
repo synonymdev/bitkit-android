@@ -43,13 +43,10 @@ jobs:
       - name: Build for debug with gradle
         run: ./gradlew assembleDebug assembleAndroidTest
 
-      - name: Install Docker
+      - name: Check Docker version
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
-          sudo systemctl enable docker
-          sudo usermod -aG docker $USER
+          docker --version
+          docker ps
 
       - name: Start Docker Android Container
         run: |
@@ -64,11 +61,16 @@ jobs:
 
           # Check container status
           docker ps
-          docker logs android-container
+          docker logs android-container --tail 50
+
+      - name: Install Android tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y android-tools-adb
+          adb version
 
       - name: Set up ADB and connect to device
         run: |
-          sudo apt-get install -y android-tools-adb
           adb start-server
 
           # Get container IP
@@ -86,12 +88,22 @@ jobs:
           adb devices -l
 
           # Disable animations
-          adb shell settings put global window_animation_scale 0.0
-          adb shell settings put global transition_animation_scale 0.0
-          adb shell settings put global animator_duration_scale 0.0
+          adb shell settings put global window_animation_scale 0.0 || echo "Could not disable window animations"
+          adb shell settings put global transition_animation_scale 0.0 || echo "Could not disable transition animations"
+          adb shell settings put global animator_duration_scale 0.0 || echo "Could not disable animator duration"
 
       - name: Run UI Tests
         run: |
+          # Check if device is connected
+          DEVICE_COUNT=$(adb devices | grep -c device)
+          if [ $DEVICE_COUNT -le 1 ]; then
+            echo "No devices connected. Trying to reconnect..."
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' android-container)
+            adb connect $CONTAINER_IP:5555
+            sleep 10
+            adb devices -l
+          fi
+
           # Install app
           ./gradlew installDebug
 
