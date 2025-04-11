@@ -6,6 +6,7 @@ on:
     types:
       - completed
     branches: [ "master" ]
+  workflow_dispatch:
 
 jobs:
   check-conditions:
