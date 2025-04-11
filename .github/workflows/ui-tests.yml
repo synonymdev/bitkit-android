@@ -5,7 +5,6 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-
   workflow_dispatch:
 
 jobs:
@@ -41,22 +40,31 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build for debug with gradle
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug assembleAndroidTest
 
-      - name: Start Android Emulator
+      - name: Start Android Emulator and Run Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 31
           arch: x86_64
           profile: Nexus 6
+          disable-animations: true
           script: ./gradlew connectedDebugAndroidTest
-
-      - name: Run Compose UI tests
-        run: ./gradlew connectedDebugAndroidTest
+          pre-emulator-launch: |
+            adb devices
+            echo "Emulator will start now..."
+          post-emulator-launch: |
+            adb devices
+            adb shell settings put global window_animation_scale 0.0
+            adb shell settings put global transition_animation_scale 0.0
+            adb shell settings put global animator_duration_scale 0.0
+            adb shell input keyevent 82
 
       - name: Upload UI test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: compose_test_report
-          path: app/build/reports/androidTests/connected/
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
