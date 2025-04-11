@@ -50,10 +50,14 @@ jobs:
 
       - name: Start Docker Android Container
         run: |
+          # Pull the Android emulator image
+          docker pull budtmo/docker-android:android-7.1.1
+
+          # Run the container
           docker run -d --name android-container \
             -p 4723:4723 -p 6080:6080 -p 5554:5554 -p 5555:5555 \
             --privileged \
-            budtmo/docker-android-x86-7.1.1:1.8-p2
+            budtmo/docker-android:android-7.1.1
 
           # Wait for container to fully initialize
           echo "Waiting for Android container to initialize..."
