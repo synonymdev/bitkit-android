@@ -51,13 +51,13 @@ jobs:
       - name: Start Docker Android Container
         run: |
           # Pull the Android emulator image
-          docker pull budtmo/docker-android:android-7.1.1
+          docker pull budtmo/docker-android:emulator_13.0_v2.16.2-p0
 
           # Run the container
           docker run -d --name android-container \
             -p 4723:4723 -p 6080:6080 -p 5554:5554 -p 5555:5555 \
             --privileged \
-            budtmo/docker-android:android-7.1.1
+            budtmo/docker-android:emulator_13.0_v2.16.2-p0
 
           # Wait for container to fully initialize
           echo "Waiting for Android container to initialize..."
@@ -120,7 +120,7 @@ jobs:
           adb kill-server
           docker stop android-container
           docker rm android-container
-#test
+
       - name: Upload UI test report
         if: always()
         uses: actions/upload-artifact@v4
