@@ -5,6 +5,7 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
+
   workflow_dispatch:
 
 jobs:
@@ -42,23 +43,67 @@ jobs:
       - name: Build for debug with gradle
         run: ./gradlew assembleDebug assembleAndroidTest
 
-      - name: Start Android Emulator and Run Tests
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 31
-          arch: x86_64
-          profile: Nexus 6
-          disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest
-          pre-emulator-launch: |
-            adb devices
-            echo "Emulator will start now..."
-          post-emulator-launch: |
-            adb devices
-            adb shell settings put global window_animation_scale 0.0
-            adb shell settings put global transition_animation_scale 0.0
-            adb shell settings put global animator_duration_scale 0.0
-            adb shell input keyevent 82
+      - name: Install Docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+          sudo systemctl start docker
+          sudo systemctl enable docker
+          sudo usermod -aG docker $USER
+
+      - name: Start Docker Android Container
+        run: |
+          docker run -d --name android-container \
+            -p 4723:4723 -p 6080:6080 -p 5554:5554 -p 5555:5555 \
+            --privileged \
+            budtmo/docker-android-x86-7.1.1:1.8-p2
+
+          # Wait for container to fully initialize
+          echo "Waiting for Android container to initialize..."
+          sleep 90
+
+          # Check container status
+          docker ps
+          docker logs android-container
+
+      - name: Set up ADB and connect to device
+        run: |
+          sudo apt-get install -y android-tools-adb
+          adb start-server
+
+          # Get container IP
+          CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' android-container)
+          echo "Container IP: $CONTAINER_IP"
+
+          # Connect to the emulator
+          adb connect $CONTAINER_IP:5555
+
+          # Wait for device to be fully booted
+          echo "Waiting for device to fully boot..."
+          sleep 30
+
+          # Check connected devices
+          adb devices -l
+
+          # Disable animations
+          adb shell settings put global window_animation_scale 0.0
+          adb shell settings put global transition_animation_scale 0.0
+          adb shell settings put global animator_duration_scale 0.0
+
+      - name: Run UI Tests
+        run: |
+          # Install app
+          ./gradlew installDebug
+
+          # Run tests
+          ./gradlew connectedDebugAndroidTest
+
+      - name: Cleanup Docker Container
+        if: always()
+        run: |
+          adb kill-server
+          docker stop android-container
+          docker rm android-container
 
       - name: Upload UI test report
         if: always()
