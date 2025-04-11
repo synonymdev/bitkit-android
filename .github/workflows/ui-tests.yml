@@ -120,7 +120,7 @@ jobs:
           adb kill-server
           docker stop android-container
           docker rm android-container
-
+#test
       - name: Upload UI test report
         if: always()
         uses: actions/upload-artifact@v4
