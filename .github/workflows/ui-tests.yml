@@ -41,8 +41,7 @@ jobs:
 
       - name: Build for debug with gradle
         run: |
-          ./gradlew assembleDebug assembleAndroidTest -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
-          # Verify APKs were built for x86_64
+          ./gradlew assembleDebug assembleAndroidTest
           ls -la app/build/outputs/apk/debug/
           ls -la app/build/outputs/apk/androidTest/debug/
 
@@ -85,17 +84,19 @@ jobs:
           script: |
             # Wait for emulator to be fully ready
             adb wait-for-device
-            while [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != "1" ]; do
-              echo "Waiting for boot to complete..."
-              sleep 10
-            done
+            echo "Waiting for boot to complete..."
+            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+            sleep 10
 
-            # Verify emulator architecture
-            adb shell getprop ro.product.cpu.abi
+            # Verify emulator
+            echo "Emulator properties:"
+            adb shell getprop
+            echo "APK info:"
+            adb shell pm list packages
 
             # Install and run tests
-            ./gradlew installDebug -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.enable=true
+            ./gradlew installDebug
+            ./gradlew connectedDebugAndroidTest
 
       - name: Upload UI test report
         if: always()
@@ -105,6 +106,4 @@ jobs:
           path: |
             app/build/reports/androidTests/connected/**/*
             app/build/outputs/androidTest-results/connected/**/*
-            app/build/outputs/androidTest-results/**/*
-            app/build/outputs/**/androidTest-results/**/*
           if-no-files-found: warn
