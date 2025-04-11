@@ -7,6 +7,12 @@ on:
     branches: [ "master" ]
 
   workflow_dispatch:
+    inputs:
+      run_compose_tests:
+        description: 'Run Jetpack Compose UI Tests'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -46,10 +52,38 @@ jobs:
       - name: Run tests
         run: ./gradlew testDebugUnitTest
 
-    # TODO ADD COMPOSE TESTS STEP
+      - name: Start Android Emulator for Compose Tests
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_compose_tests }}
+        run: |
+          docker run -d --name nexus \
+            -p 4723:4723 -p 6080:6080 \
+            --privileged \
+            budtmo/docker-android-x86-7.1.1:1.8-p2
+
+          # Wait for the emulator to be fully started
+          echo "Waiting for emulator to start..."
+          sleep 60
+
+          # Check if emulator is running
+          docker exec nexus adb devices
+
+      - name: Run Jetpack Compose UI Tests
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_compose_tests }}
+        run: ./gradlew connectedAndroidTest
+
+      - name: Stop Android Emulator
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_compose_tests }}
+        run: docker stop nexus && docker rm nexus
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
         with:
           name: unit_test_report
           path: app/build/reports/tests/testDebugUnitTest/
+
+      - name: Upload UI test report
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_compose_tests }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose_test_report
+          path: app/build/reports/androidTests/
