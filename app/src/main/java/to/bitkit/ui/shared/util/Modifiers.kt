@@ -1,5 +1,6 @@
 package to.bitkit.ui.shared.util
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,9 +25,10 @@ fun Modifier.clickableAlpha(
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val alpha by animateFloatAsState(targetValue = if (isPressed) 0.7f else 1f)
 
     this
-        .graphicsLayer { this.alpha = if (isPressed) 0.7f else 1f }
+        .graphicsLayer { this.alpha = alpha }
         .clickable(
             enabled = onClick != null,
             onClick = { onClick?.invoke() },
@@ -34,7 +36,6 @@ fun Modifier.clickableAlpha(
             indication = null,
         )
 }
-
 
 fun Modifier.gradientBackground(): Modifier {
     return this.background(
