@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -105,12 +106,21 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    val isPinOnLaunchRequired: StateFlow<Boolean> = settingsStore.isPinOnLaunchRequired
+    val isPinEnabled: StateFlow<Boolean> = settingsStore.isPinEnabled
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    fun setIsPinOnLaunchRequired(value: Boolean) {
+    fun setIsPinEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsPinOnLaunchRequired(value)
+            settingsStore.setIsPinEnabled(value)
+        }
+    }
+
+    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.isPinOnLaunchEnabled
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setIsPinOnLaunchEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsPinOnLaunchEnabled(value)
         }
     }
 
@@ -123,12 +133,27 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    // TODO if !isPinOnLaunchRequired && !isBiometricEnabled -> init true
-    var isAuthenticated by mutableStateOf<Boolean>(false)
-        private set
+    private val _isAuthenticated = MutableStateFlow(false)
+
+    val isAuthenticated = combine(
+        isPinEnabled,
+        isPinOnLaunchEnabled,
+        _isAuthenticated,
+    ) { isPinEnabled, isPinOnLaunchEnabled, isAuthenticated ->
+        val needsAuth = isPinEnabled && isPinOnLaunchEnabled
+        if (!needsAuth) {
+            true
+        } else {
+            isAuthenticated
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = false
+    )
 
     fun setIsAuthenticated(value: Boolean) {
-        isAuthenticated = value
+        _isAuthenticated.value = value
     }
 
     fun addTagToSelected(newTag: String) {

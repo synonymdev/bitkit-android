@@ -27,7 +27,7 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 @Composable
 fun AuthCheckView(
     onSuccess: (() -> Unit)? = null,
-    isBiometricAvailable: Boolean = rememberBiometricAuthSupported(),
+    isBiometrySupported: Boolean = rememberBiometricAuthSupported(),
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -38,7 +38,7 @@ fun AuthCheckView(
         ) {
             var showBio by rememberSaveable { mutableStateOf(true) }
 
-            if (showBio && isBiometricAvailable) {
+            if (showBio && isBiometrySupported) {
                 BiometricPrompt(
                     onSuccess = { onSuccess?.invoke() },
                     onError = { showBio = false },
@@ -58,7 +58,7 @@ fun AuthCheckView(
             } else {
                 Subtitle(text = "TODO: Pin code auth")
                 PrimaryButton(
-                    text = "Skip",
+                    text = stringResource(R.string.common__skip),
                     onClick = { onSuccess?.invoke() },
                     fullWidth = false,
                     modifier = Modifier.padding(top = 24.dp),
@@ -74,7 +74,7 @@ fun AuthCheckPreview() {
     AppThemeSurface {
         AuthCheckView(
             onSuccess = {},
-            isBiometricAvailable = true,
+            isBiometrySupported = true,
         )
     }
 }

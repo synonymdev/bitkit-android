@@ -473,7 +473,7 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composable<Routes.SecuritySettings> {
+    composableWithDefaultTransitions<Routes.SecuritySettings> {
         SecuritySettingsScreen(navController)
     }
 }

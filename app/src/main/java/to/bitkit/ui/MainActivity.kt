@@ -3,9 +3,11 @@ package to.bitkit.ui
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -169,7 +171,7 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
-                    val isAuthenticated = appViewModel.isAuthenticated
+                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
 
                     if (!isAuthenticated) {
                         AuthCheckView(

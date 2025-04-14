@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +15,8 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.SettingsToggleRow
+import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -30,16 +30,17 @@ fun SecuritySettingsScreen(
     navController: NavController,
 ) {
     val app = appViewModel ?: return
-    val isPinEnabled = true // TODO add actual logic
-    val isPinOnLaunchRequired by app.isPinOnLaunchRequired.collectAsStateWithLifecycle()
+    val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
+    val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
 
     SecuritySettingsContent(
         isPinEnabled = isPinEnabled,
-        isPinOnLaunchRequired = isPinOnLaunchRequired,
+        isPinOnLaunchEnabled = isPinOnLaunchEnabled,
         isBiometricEnabled = isBiometricEnabled,
         isBiometrySupported = rememberBiometricAuthSupported(),
-        onPinOnLaunchClick = { app.setIsPinOnLaunchRequired(!isPinOnLaunchRequired) }, // TODO auth check
+        onPinClick = { app.setIsPinEnabled(!isPinEnabled) }, // TODO auth check
+        onPinOnLaunchClick = { app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled) }, // TODO auth check
         onUseBiometricsClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
@@ -49,36 +50,43 @@ fun SecuritySettingsScreen(
 @Composable
 private fun SecuritySettingsContent(
     isPinEnabled: Boolean,
-    isPinOnLaunchRequired: Boolean,
+    isPinOnLaunchEnabled: Boolean,
     isBiometricEnabled: Boolean,
     isBiometrySupported: Boolean,
+    onPinClick: () -> Unit = {},
     onPinOnLaunchClick: () -> Unit = {},
     onUseBiometricsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
-    ScreenColumn {
+    ScreenColumn(
+        modifier = Modifier.verticalScroll(rememberScrollState())
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.settings__security_title),
             onBackClick = onBackClick,
             actions = { CloseNavIcon(onClick = onCloseClick) },
         )
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__security__pin),
+                value = stringResource(
+                    if (isPinEnabled) R.string.settings__security__pin_enabled else R.string.settings__security__pin_disabled
+                ),
+                onClick = onPinClick,
+            )
             if (isPinEnabled) {
-                SettingsToggleRow(
-                    label = stringResource(R.string.settings__security__pin_launch),
-                    isChecked = isPinOnLaunchRequired,
+                SettingsSwitchRow(
+                    title = stringResource(R.string.settings__security__pin_launch),
+                    isChecked = isPinOnLaunchEnabled,
                     onClick = onPinOnLaunchClick,
                 )
             }
             if (isPinEnabled && isBiometrySupported) {
-                SettingsToggleRow(
-                    label = let {
+                SettingsSwitchRow(
+                    title = let {
                         val bioTypeName = stringResource(R.string.security__bio)
                         stringResource(R.string.settings__security__use_bio).replace("{biometryTypeName}", bioTypeName)
                     },
@@ -106,8 +114,8 @@ fun Preview() {
     AppThemeSurface {
         SecuritySettingsContent(
             isPinEnabled = true,
-            isPinOnLaunchRequired = true,
-            isBiometricEnabled = true,
+            isPinOnLaunchEnabled = true,
+            isBiometricEnabled = false,
             isBiometrySupported = true,
         )
     }
