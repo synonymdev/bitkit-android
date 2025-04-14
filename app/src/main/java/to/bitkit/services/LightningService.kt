@@ -84,7 +84,7 @@ class LightningService @Inject constructor(
                     config = EsploraSyncConfig(
                         onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                         lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.feeRateCacheUpdateIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                     ),
                 )
                 if (Env.ldkRgsServerUrl != null) {
@@ -310,8 +310,10 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             if (sat != null) {
+                Logger.debug("Creating bolt11 for $sat sats")
                 node.bolt11Payment().receive(sat.millis, description, expirySecs)
             } else {
+                Logger.debug("Creating bolt11 for variable amount")
                 node.bolt11Payment().receiveVariableAmount(description, expirySecs)
             }
         }
@@ -447,7 +449,7 @@ class LightningService @Inject constructor(
     fun syncFlow(): Flow<Unit> = flow {
         while (currentCoroutineContext().isActive) {
             emit(Unit)
-            delay(Env.walletSyncIntervalSecs.toLong().seconds)
+            delay(Env.ldkNodeSyncIntervalSecs.toLong().seconds)
         }
     }.flowOn(bgDispatcher)
     // endregion

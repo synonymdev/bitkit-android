@@ -8,6 +8,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+.cursor
 
 # Secrets
 google-services.json
+*.keystore
+!debug.keystore
+keystore.properties

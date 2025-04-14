@@ -20,10 +20,15 @@ import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletView
 import to.bitkit.ui.onboarding.TermsOfUseScreen
+import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.screens.wallets.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.enableAppEdgeToEdge
+import to.bitkit.ui.utils.screenScaleIn
+import to.bitkit.ui.utils.screenScaleOut
+import to.bitkit.ui.utils.screenSlideIn
+import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
@@ -62,7 +67,12 @@ class MainActivity : FragmentActivity() {
                                 }
                             )
                         }
-                        composable<StartupRoutes.Intro> {
+                        composable<StartupRoutes.Intro>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) {
                             IntroScreen(
                                 onStartClick = {
                                     startupNavController.navigate(StartupRoutes.Slides())
@@ -72,7 +82,12 @@ class MainActivity : FragmentActivity() {
                                 },
                             )
                         }
-                        composable<StartupRoutes.Slides> { navBackEntry ->
+                        composable<StartupRoutes.Slides>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) { navBackEntry ->
                             val route = navBackEntry.toRoute<StartupRoutes.Slides>()
                             OnboardingSlidesScreen(
                                 currentTab = route.tab,
@@ -89,10 +104,30 @@ class MainActivity : FragmentActivity() {
                                         }
                                     }
                                 },
-                                onRestoreClick = { startupNavController.navigate(StartupRoutes.Restore) },
+                                onRestoreClick = { startupNavController.navigate(StartupRoutes.WarningMultipleDevices) },
                             )
                         }
-                        composable<StartupRoutes.Restore> {
+                        composable<StartupRoutes.WarningMultipleDevices>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) {
+                            WarningMultipleDevicesScreen(
+                                onBackClick = {
+                                    startupNavController.popBackStack()
+                                },
+                                onConfirmClick = {
+                                    startupNavController.navigate(StartupRoutes.Restore)
+                                }
+                            )
+                        }
+                        composable<StartupRoutes.Restore>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) {
                             RestoreWalletView(
                                 onBackClick = { startupNavController.popBackStack() },
                                 onRestoreClick = { mnemonic, passphrase ->
@@ -110,7 +145,12 @@ class MainActivity : FragmentActivity() {
                                 }
                             )
                         }
-                        composable<StartupRoutes.Advanced> {
+                        composable<StartupRoutes.Advanced>(
+                            enterTransition = { screenSlideIn },
+                            exitTransition = { screenScaleOut },
+                            popEnterTransition = { screenScaleIn },
+                            popExitTransition = { screenSlideOut },
+                        ) {
                             CreateWalletWithPassphraseScreen(
                                 onBackClick = { startupNavController.popBackStack() },
                                 onCreateClick = { passphrase ->
@@ -179,4 +219,7 @@ private object StartupRoutes {
 
     @Serializable
     data object Advanced
+
+    @Serializable
+    data object WarningMultipleDevices
 }

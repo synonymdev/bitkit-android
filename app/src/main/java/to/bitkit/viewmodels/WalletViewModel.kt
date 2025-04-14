@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
@@ -41,7 +42,10 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import javax.inject.Inject
 
 @HiltViewModel
@@ -57,11 +61,12 @@ class WalletViewModel @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
+    private val addressChecker: AddressChecker,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _balanceState = MutableStateFlow(BalanceState())
+    private val _balanceState = MutableStateFlow(appStorage.loadBalance() ?: BalanceState())
     val balanceState = _balanceState.asStateFlow()
 
     private var _nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
@@ -108,6 +113,8 @@ class WalletViewModel @Inject constructor(
                 lightningService.start { event ->
                     syncState()
                     ldkNodeEventBus.emit(event)
+
+                    refreshBip21ForEvent(event)
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
@@ -131,6 +138,13 @@ class WalletViewModel @Inject constructor(
 
             launch(bgDispatcher) { registerForNotificationsIfNeeded() }
             launch(bgDispatcher) { observeDbConfig() }
+        }
+    }
+
+    private suspend fun refreshBip21ForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
         }
     }
 
@@ -195,13 +209,15 @@ class WalletViewModel @Inject constructor(
         lightningService.balances?.let { balance ->
             _uiState.update { it.copy(balanceDetails = balance) }
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
-            _balanceState.update {
-                it.copy(
-                    totalOnchainSats = balance.totalOnchainBalanceSats,
-                    totalLightningSats = balance.totalLightningBalanceSats,
-                    totalSats = totalSats,
-                )
-            }
+
+            val newBalance = BalanceState(
+                totalOnchainSats = balance.totalOnchainBalanceSats,
+                totalLightningSats = balance.totalLightningBalanceSats,
+                totalSats = totalSats,
+            )
+            _balanceState.update { newBalance }
+            appStorage.cacheBalance(newBalance)
+
             if (totalSats > 0u) {
                 viewModelScope.launch {
                     settingsStore.setShowEmptyState(false)
@@ -213,6 +229,19 @@ class WalletViewModel @Inject constructor(
     fun refreshState() {
         viewModelScope.launch {
             sync()
+        }
+    }
+
+    fun onPullToRefresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            try {
+                sync()
+            } catch (e: Throwable) {
+                ToastEventBus.send(e)
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
         }
     }
 
@@ -236,32 +265,48 @@ class WalletViewModel @Inject constructor(
         get() = lightningService.channels?.sumOf { it.inboundCapacityMsat / 1000u }
 
     suspend fun refreshBip21() {
+        Logger.debug("Refreshing bip21", context = "WalletViewModel")
         if (_onchainAddress.isEmpty()) {
             _onchainAddress = lightningService.newAddress()
         } else {
-            // TODO: check if onchain has been used and generate new on if it has
+            // Check if current address has been used
+            val addressInfo = addressChecker.getAddressInfo(_onchainAddress)
+            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
+
+            if (hasTransactions) {
+                // Address has been used, generate a new one
+                _onchainAddress = lightningService.newAddress()
+            }
         }
 
-        _bip21 = "bitcoin:$_onchainAddress"
+        var newBip21 = "bitcoin:$_onchainAddress"
 
         val hasChannels = lightningService.channels?.isNotEmpty() == true
-        if (!hasChannels) {
+        if (hasChannels) {
+
+            // TODO: check current bolt11 for expiry (fix payments not working with commented code & rm next line):
+            _bolt11 = createInvoice(description = "Bitkit")
+
+            // if (_bolt11.isEmpty()) {
+            //     _bolt11 = createInvoice(description = "Bitkit")
+            // } else {
+            //     // Check if existing invoice has expired and create a new one if so
+            //     decode(invoice = _bolt11).let { decoded ->
+            //         if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
+            //             _bolt11 = createInvoice(description = "Bitkit")
+            //         }
+            //     }
+            // }
+        } else {
             _bolt11 = ""
         }
 
         if (_bolt11.isNotEmpty()) {
-            _bip21 += "?lightning=$_bolt11"
+            newBip21 += "?lightning=$_bolt11"
         }
 
-        // TODO: check current bolt11 for expiry and/or if it's been used
+        _bip21 = newBip21
 
-        val hasIncomingLightingCapacity = (incomingLightningCapacitySats ?: 0u) > 0u
-        if (hasChannels && hasIncomingLightingCapacity) {
-            // Append lightning invoice if we have incoming capacity
-            _bolt11 = lightningService.receive(description = "Bitkit")
-
-            _bip21 = "bitcoin:$_onchainAddress?lightning=$_bolt11"
-        }
         syncState()
     }
 
@@ -289,8 +334,12 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun createInvoice(amountSats: ULong, description: String = "Bitkit", expirySeconds: UInt = 7200u): String {
-        return runBlocking { lightningService.receive(amountSats, description, expirySeconds) }
+    suspend fun createInvoice(
+        amountSats: ULong? = null,
+        description: String,
+        expirySeconds: UInt = 86_400u, // 1 day
+    ): String {
+        return lightningService.receive(amountSats, description, expirySeconds)
     }
 
     fun openChannel() {
@@ -481,6 +530,7 @@ data class MainUiState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
+    val isRefreshing: Boolean = false,
 )
 
 // endregion

@@ -38,13 +38,13 @@ object HttpModule {
     fun provideHttpClient(json: Json): HttpClient {
         return HttpClient {
             install(HttpTimeout) {
-                requestTimeoutMillis = 60_000 // 30 seconds
-                connectTimeoutMillis = 30_000 // 10 seconds
-                socketTimeoutMillis = 30_000  // 10 seconds
+                requestTimeoutMillis = 60_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 30_000
             }
             install(Logging) {
                 logger = Logger.ANDROID
-                level = LogLevel.BODY
+                level = LogLevel.INFO
             }
             install(ContentNegotiation) {
                 json(json = json)

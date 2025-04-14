@@ -54,11 +54,12 @@ fun PrimaryButton(
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
     fullWidth: Boolean = true,
+    color: Color = Colors.White16,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.primaryColors,
+        colors = AppButtonDefaults.primaryColors.copy(containerColor = color),
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
@@ -94,6 +95,7 @@ fun SecondaryButton(
     isLoading: Boolean = false,
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
+    fullWidth: Boolean = true,
 ) {
     OutlinedButton(
         onClick = onClick,
@@ -102,7 +104,7 @@ fun SecondaryButton(
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         border = BorderStroke(2.dp, if (enabled) Colors.White16 else Color.Transparent),
         modifier = Modifier
-            .fillMaxWidth()
+            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(size.height)
             .then(modifier)
     ) {
@@ -204,6 +206,13 @@ private fun PrimaryButtonPreview() {
                 text = "Primary Small",
                 size = ButtonSize.Small,
                 onClick = {},
+            )
+            PrimaryButton(
+                text = "Primary Small Color Not Full",
+                size = ButtonSize.Small,
+                onClick = {},
+                fullWidth = false,
+                color = Colors.Brand,
             )
             PrimaryButton(
                 text = "Primary Small Loading",

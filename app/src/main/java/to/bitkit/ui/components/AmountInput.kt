@@ -1,7 +1,10 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.TextField
@@ -30,9 +33,10 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
 @Composable
-fun TransferAmount(
+fun AmountInput(
     defaultValue: Long = 0,
     primaryDisplay: PrimaryDisplay,
+    showConversion: Boolean = false,
     overrideSats: Long? = null,
     onSatsChange: (Long) -> Unit,
 ) {
@@ -184,18 +188,25 @@ fun TransferAmount(
 
         // Visible balance display
         currency.convert(sats)?.let { converted ->
-            val displayText = if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                val btcComponents = converted.bitcoinDisplay(displayUnit)
-                "<accent>${btcComponents.symbol}</accent> ${btcComponents.value}"
-            } else {
-                "<accent>${converted.symbol}</accent> ${fiatAmount.text.ifEmpty { "0" }}"
+            Column(modifier = Modifier.clickableAlpha { currency.togglePrimaryDisplay() }) {
+                if (showConversion) {
+                    val captionText = if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                        "${converted.symbol} ${converted.formatted}"
+                    } else {
+                        val btcComponents = converted.bitcoinDisplay(displayUnit)
+                        "${btcComponents.symbol} ${btcComponents.value}"
+                    }
+                    Caption13Up(text = captionText, color = Colors.White64)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                val displayText = if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                    val btcComponents = converted.bitcoinDisplay(displayUnit)
+                    "<accent>${btcComponents.symbol}</accent> ${btcComponents.value}"
+                } else {
+                    "<accent>${converted.symbol}</accent> ${fiatAmount.text.ifEmpty { "0" }}"
+                }
+                Display(text = displayText.withAccent(accentColor = Colors.White64))
             }
-
-            Display(
-                text = displayText.withAccent(accentColor = Colors.White64),
-                modifier = Modifier
-                    .clickableAlpha { currency.togglePrimaryDisplay() }
-            )
         }
     }
 }

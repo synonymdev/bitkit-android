@@ -1,42 +1,54 @@
 [versions]
-activityCompose = "1.9.2"
-agp = "8.7.2"
+accompanistPermissions = "0.36.0"
+activityCompose = "1.10.1"
+agp = "8.9.1"
 appcompat = "1.7.0"
+barcodeScanning = "17.3.0"
 biometric = "1.4.0-alpha02"
-bouncyCastle = "1.78.1"
-composeBom = "2024.12.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
+bouncyCastle = "1.79"
+camera = "1.4.2"
+composeBom = "2025.03.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
+constraintlayoutCompose = "1.1.1"
 coreKtx = "1.15.0"
 coreSplashscreen = "1.0.1"
-datastorePrefs = "1.1.1"
+datastorePrefs = "1.1.4"
 espressoCore = "3.6.1"
-firebaseBom = "33.2.0"
+firebaseBom = "33.11.0"
 googleServices = "4.4.2"
-hilt = "2.51.1"
+hilt = "2.55"
 hiltAndroidx = "1.2.0"
 jna = "5.14.0"
 junit = "4.13.2"
 junitExt = "1.2.1"
-kotlin = "2.0.20"
-kotlinxDatetime = "0.6.1"
-ksp = "2.0.20-1.0.25"
-ktor = "2.3.12"
-ldkNode = "0.4.2" # LDK_DB_VERSION in MirationService should match lib's sqlite DB version
-lifecycle = "2.8.5"
+kotlin = "2.1.10"
+kotlinxDatetime = "0.6.2"
+ksp = "2.1.10-1.0.31"
+ktor = "3.1.1"
+ldkNode = "0.4.2" # LDK_DB_VERSION in MigrationService should match lib's sqlite DB version
+lifecycle = "2.8.7"
 material = "1.12.0"
 mockitoKotlin = "5.4.0"
-navCompose = "2.8.0"
+navCompose = "2.8.9"
 robolectric = "4.14.1"
 room = "2.6.1"
 slf4j = "1.7.36"
 testAndroidx = "1.6.1"
 turbine = "1.0.0"
-workRuntimeKtx = "2.9.1"
+workRuntimeKtx = "2.10.0"
+zxing = "3.5.2"
+lottieVersion = "6.6.4"
 
 [libraries]
+accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version.ref = "accompanistPermissions" }
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
 biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
@@ -46,6 +58,7 @@ compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+constraintlayout-compose = { module = "androidx.constraintlayout:constraintlayout-compose", version.ref = "constraintlayoutCompose" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePrefs" }
@@ -91,6 +104,8 @@ test-mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.re
 test-robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 test-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
+zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
+lottie = { module = "com.airbnb.android:lottie-compose", version.ref = "lottieVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

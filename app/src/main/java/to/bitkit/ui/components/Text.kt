@@ -63,13 +63,13 @@ fun Display(
 
 @Composable
 fun Headline(
-    text: String,
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     lineHeight: TextUnit = 30.sp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
-        text = text.uppercase(),
+        text = text.toUpperCase(),
         style = TextStyle(
             fontWeight = FontWeight.Black,
             fontSize = 30.sp,

@@ -32,8 +32,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
 
-const val RETRY_INTERVAL = 5 * 60 * 1000L // 5 minutes in ms
-const val GIVE_UP = 30 * 60 * 1000L // 30 minutes in ms
+const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
+const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
@@ -300,12 +300,12 @@ class TransferViewModel @Inject constructor(
     private var coopCloseRetryJob: Job? = null
 
     /** Retry to coop close the channel(s) for 30 min */
-    fun startCoopCloseRetries(channels: List<ChannelDetails>, startTime: Long) {
+    fun startCoopCloseRetries(channels: List<ChannelDetails>, startTimeMs: Long) {
         channelsToClose = channels
         coopCloseRetryJob?.cancel()
 
         coopCloseRetryJob = viewModelScope.launch {
-            val giveUpTime = startTime + GIVE_UP
+            val giveUpTime = startTimeMs + GIVE_UP_MS
 
             while (isActive && System.currentTimeMillis() < giveUpTime) {
                 Logger.info("Trying coop close...")
@@ -320,7 +320,7 @@ class TransferViewModel @Inject constructor(
                     Logger.info("Coop close failed: ${channelsFailedToCoopClose.map { it.channelId }}")
                 }
 
-                delay(RETRY_INTERVAL)
+                delay(RETRY_INTERVAL_MS)
             }
 
             Logger.info("Giving up on coop close.")

@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -36,9 +37,11 @@ import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.MainUiState
 
 @Composable
 fun SpendingWalletScreen(
+    uiState: MainUiState,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onTransferToSavingsClick: () -> Unit,
@@ -49,11 +52,18 @@ fun SpendingWalletScreen(
         // TODO use && hasLnActivity + LN spendingSats
         mutableStateOf(balances.totalLightningSats == 0uL)
     }
-    val canTransfer by remember(balances.totalLightningSats) {
-        mutableStateOf(balances.totalLightningSats > 0uL)
+    val canTransfer by remember(balances.totalLightningSats, uiState.channels.size) {
+        val hasLnBalance = balances.totalLightningSats > 0uL
+        val hasChannels = uiState.channels.isNotEmpty()
+
+        mutableStateOf(hasLnBalance && hasChannels)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Colors.Black)
+    ) {
         Image(
             painter = painterResource(id = R.drawable.coin_stack_x_2),
             contentDescription = null,
@@ -63,7 +73,7 @@ fun SpendingWalletScreen(
                 .offset(x = (155).dp, y = (-35).dp)
                 .size(330.dp)
         )
-        ScreenColumn {
+        ScreenColumn(noBackground = true) {
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
                 icon = painterResource(R.drawable.ic_ln_circle),
@@ -80,7 +90,7 @@ fun SpendingWalletScreen(
                     if (canTransfer) {
                         SecondaryButton(
                             onClick = onTransferToSavingsClick,
-                            text = "Transfer To Savings",
+                            text = stringResource(R.string.lightning__savings_confirm__label),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
@@ -119,6 +129,7 @@ fun SpendingWalletScreen(
 private fun SpendingWalletScreenPreview() {
     AppThemeSurface {
         SpendingWalletScreen(
+            uiState = MainUiState(),
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
             onTransferToSavingsClick = {},

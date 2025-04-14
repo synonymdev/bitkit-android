@@ -29,6 +29,8 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toTxType
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
@@ -68,6 +70,10 @@ class AppViewModel @Inject constructor(
     private val _sendEffect = MutableSharedFlow<SendEffect>(replay = 0, extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
+
+    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(replay = 0, extraBufferCapacity = 1)
+    val mainScreenEffect = _mainScreenEffect.asSharedFlow()
+    private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
 
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
@@ -205,6 +211,7 @@ class AppViewModel @Inject constructor(
                         }
 
                         is Event.PaymentSuccessful -> {
+                            // TODO: fee is not the sats sent. Need to get this amount from elsewhere like send flow or something.
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -254,6 +261,7 @@ class AppViewModel @Inject constructor(
 
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onPay()
+                    SendEvent.BackSpaceClick -> onClickBackspace()
                 }
             }
         }
@@ -296,11 +304,22 @@ class AppViewModel @Inject constructor(
 
     private fun onAmountChange(value: String) {
         val newInput = if (_sendUiState.value.amountInput == "0") value else _sendUiState.value.amountInput + value
-        val isAmountValid = validateAmount(newInput)
-        if (isAmountValid) {
-            _sendUiState.update { it.copy( amountInput = newInput,) }
+        _sendUiState.update {
+            it.copy(
+                amountInput = newInput,
+                isAmountInputValid = validateAmount(newInput)
+            )
         }
-        _sendUiState.update { it.copy(isAmountInputValid = isAmountValid,) }
+    }
+
+    private fun onClickBackspace() {
+        val newInput = if (_sendUiState.value.amountInput.length <= 1) "0" else _sendUiState.value.amountInput.dropLast(1)
+        _sendUiState.update {
+            it.copy(
+                amountInput = newInput,
+                isAmountInputValid = validateAmount(newInput)
+            )
+        }
     }
 
     private fun onPaymentMethodSwitch() {
@@ -531,6 +550,27 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun onClickActivityDetail() {
+        val filter = newTransaction.type.toActivityFilter()
+        val paymentType = newTransaction.direction.toTxType()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val activity = coreService.activity.get(filter = filter, txType = paymentType, limit = 1u).firstOrNull()
+
+            if (activity == null) {
+                Logger.error(msg = "Activity not found")
+                return@launch
+            }
+
+            val id = when(activity) {
+                is Activity.Lightning -> activity.v1.id
+                is Activity.Onchain -> activity.v1.id
+            }
+
+            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(id))
+        }
+    }
+
     private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
         val tags = _sendUiState.value.selectedTags
         Logger.debug("attachTagsToActivity $tags")
@@ -644,6 +684,9 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region TxSheet
+    var isNewTransactionSheetEnabled = true
+        private set
+
     var showNewTransaction by mutableStateOf(false)
         private set
 
@@ -655,7 +698,16 @@ class AppViewModel @Inject constructor(
         )
     )
 
+    fun setNewTransactionSheetEnabled(enabled: Boolean) {
+        isNewTransactionSheetEnabled = enabled
+    }
+
     fun showNewTransactionSheet(details: NewTransactionSheetDetails) {
+        if (!isNewTransactionSheetEnabled) {
+            Logger.debug("NewTransactionSheet display blocked by isNewTransactionSheetEnabled=false")
+            return
+        }
+
         newTransaction = details
         showNewTransaction = true
     }
@@ -744,6 +796,10 @@ sealed class SendEffect {
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
+sealed class MainScreenEffect {
+    data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
+}
+
 sealed class SendEvent {
     data object EnterManually : SendEvent()
     data class Paste(val data: String) : SendEvent()
@@ -756,6 +812,7 @@ sealed class SendEvent {
     data object AmountReset : SendEvent()
     data class AmountContinue(val amount: String) : SendEvent()
     data class AmountChange(val value: String) : SendEvent()
+    data object BackSpaceClick : SendEvent()
 
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()

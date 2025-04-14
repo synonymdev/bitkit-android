@@ -70,6 +70,9 @@ fun SendAndReviewScreen(
         SheetTopBar(stringResource(R.string.title_send_review)) {
             onBack()
         }
+
+        Spacer(Modifier.height(16.dp))
+
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)

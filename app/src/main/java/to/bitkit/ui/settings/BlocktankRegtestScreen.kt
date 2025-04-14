@@ -124,6 +124,7 @@ fun BlocktankRegtestScreen(
                             )
                         } finally {
                             isDepositing = false
+                            wallet.refreshState()
                         }
                     }
                 },

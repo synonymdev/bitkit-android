@@ -3,10 +3,11 @@ package to.bitkit.models
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import to.bitkit.data.APP_PREFS
 import to.bitkit.di.json
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.PaymentType
 
 @Serializable
 data class NewTransactionSheetDetails(
@@ -61,3 +62,20 @@ enum class NewTransactionSheetType {
 enum class NewTransactionSheetDirection {
     SENT, RECEIVED
 }
+
+fun NewTransactionSheetDirection.toTxType(): PaymentType {
+    return if (this == NewTransactionSheetDirection.SENT) {
+        PaymentType.SENT
+    } else {
+        PaymentType.RECEIVED
+    }
+}
+
+fun NewTransactionSheetType.toActivityFilter(): ActivityFilter {
+    return if (this == NewTransactionSheetType.ONCHAIN) {
+        ActivityFilter.ONCHAIN
+    } else {
+        ActivityFilter.LIGHTNING
+    }
+}
+

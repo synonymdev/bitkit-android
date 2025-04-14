@@ -28,6 +28,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     data object MnemonicNotFound : ServiceError("Mnemonic not found")
     data object NodeStillRunning : ServiceError("Node is still running")
     data object InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
+    data object CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
 }
 
 sealed class KeychainError(message: String) : AppError(message) {

@@ -16,3 +16,16 @@ Bitkit Android Native app.
 
 ## Localization
 See repo: https://github.com/synonymdev/bitkit-transifex-sync
+
+## Build for Release
+
+Setup the signing config:
+- Add the keystore file to root, eg. `./release.keystore`
+- Add `keystore.properties` to root of the project (see `keystore.properties.template`)
+
+Run:
+```sh
+./gradlew assembleRelease
+```
+
+APK is generated in `app/build/outputs/apk/release/`

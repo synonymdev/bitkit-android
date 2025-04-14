@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,16 +35,18 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Colors.Black25
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun SendOptionsView(
     appViewModel: AppViewModel,
+    walletViewModel: WalletViewModel,
     startDestination: SendRoute = SendRoute.Options,
     onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
@@ -53,7 +54,6 @@ fun SendOptionsView(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(.875f)
-            .background(Black25)
             .imePadding()
     ) {
         val navController = rememberNavController()
@@ -88,8 +88,10 @@ fun SendOptionsView(
             }
             composable<SendRoute.Amount> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
                 SendAmountScreen(
                     uiState = uiState,
+                    walletUiState = walletUiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { appViewModel.setSendEvent(it) }
                 )
@@ -132,10 +134,11 @@ private fun SendOptionsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Black25)
+            .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.title_send))
+        Spacer(Modifier.height(32.dp))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(16.dp))
 

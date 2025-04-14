@@ -14,17 +14,13 @@ internal object Env {
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
     val defaultWalletWordCount = 12
-    val onchainWalletStopGap = 20_UL
-    val walletSyncIntervalSecs = 60_UL
-    val feeRateCacheUpdateIntervalSecs = 60_UL
+    val walletSyncIntervalSecs = 10_uL // TODO review
+    val ldkNodeSyncIntervalSecs = 60_uL // TODO review
     val esploraParallelRequests = 6
     val trustedLnPeers
         get() = when (network) {
             Network.REGTEST -> listOf(
                 Peers.btStaging,
-                // Peers.btStagingOld,
-                // Peers.polarToRegtest,
-                // Peers.local,
             )
 
             else -> TODO("Not yet implemented")

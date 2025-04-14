@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,33 +12,41 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.room)
 }
+
+// https://developer.android.com/studio/publish/app-signing#secure-key
+// Init keystoreProperties variable from keystore.properties file
+val keystoreProperties by lazy {
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    } else {
+        keystoreProperties["storeFile"] = System.getenv("KEYSTORE_FILE") ?: ""
+        keystoreProperties["storePassword"] = System.getenv("KEYSTORE_PASSWORD") ?: ""
+        keystoreProperties["keyAlias"] = System.getenv("KEY_ALIAS") ?: ""
+        keystoreProperties["keyPassword"] = System.getenv("KEY_PASSWORD") ?: ""
+    }
+
+    keystoreProperties
+}
+
 android {
     namespace = "to.bitkit"
     compileSdk = 35
     defaultConfig {
-        applicationId = "to.bitkit"
+        applicationId = "to.bitkit.dev"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
-        resourceConfigurations += listOf(
-            "en",        // Default (English)
-            "ar",        // Arabic
-            "ca",        // Catalan
-            "cs",        // Czech
-            "de",        // German
-            "el",        // Greek
-            "es",        // Spanish (Spain)
-            "fr",        // French
-            "it",        // Italian
-            "nl",        // Dutch
-            "pl",        // Polish
-            "pt",        // Portuguese (Portugal)
-            "ru",        // Russian
-        )
+        versionName = "0.0.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
     }
     signingConfigs {
@@ -46,18 +56,28 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("release") {
+            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
+            storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
+            // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+        }
     }
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
-            applicationIdSuffix = ".dev"
         }
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -71,12 +91,16 @@ android {
         buildConfig = true
         compose = true
     }
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        localeFilters.addAll(listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl", "pl", "pt", "ru"))
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
-    @Suppress("UnstableApiUsage")
     testOptions {
         unitTests {
             isReturnDefaultValues = true     // mockito
@@ -85,6 +109,15 @@ android {
     }
     lint {
         abortOnError = false
+    }
+    applicationVariants.all {
+        val variant = this
+        outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val apkName = "bitkit-android-${defaultConfig.versionCode}-${variant.name}.apk"
+                output.outputFileName = apkName
+            }
     }
 }
 composeCompiler {
@@ -106,12 +139,12 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
     implementation(libs.biometric)
-    implementation("com.google.zxing:core:3.5.2")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation(libs.zxing)
+    implementation(libs.barcode.scanning)
     // CameraX
-    implementation("androidx.camera:camera-camera2:1.4.1")
-    implementation("androidx.camera:camera-lifecycle:1.4.1")
-    implementation("androidx.camera:camera-view:1.4.1")
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android)
@@ -137,9 +170,11 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.compose.ui.test.junit4)
-    implementation("com.google.accompanist:accompanist-pager-indicators:0.36.0")
-    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
-    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.0")
+    implementation(libs.accompanist.pager.indicators)
+    implementation(libs.accompanist.permissions)
+    implementation(libs.constraintlayout.compose)
+
+    implementation(libs.lottie)
 
     // Compose Navigation
     implementation(libs.navigation.compose)

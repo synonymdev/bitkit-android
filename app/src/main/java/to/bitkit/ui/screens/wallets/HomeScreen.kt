@@ -4,7 +4,6 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -15,6 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,13 +61,17 @@ import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
-import to.bitkit.ui.screens.wallets.receive.ReceiveQRScreen
+import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.screenSlideIn
+import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -71,7 +80,7 @@ fun HomeScreen(
     appViewModel: AppViewModel,
     rootNavController: NavController,
 ) {
-    val uiState by walletViewModel.uiState.collectAsState()
+    val uiState: MainUiState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
     SheetHost(
         shouldExpand = currentSheet != null,
@@ -81,6 +90,7 @@ fun HomeScreen(
                 is BottomSheetType.Send -> {
                     SendOptionsView(
                         appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
                         startDestination = sheet.route,
                         onComplete = { txSheet ->
                             appViewModel.hideSheet()
@@ -90,7 +100,7 @@ fun HomeScreen(
                 }
 
                 is BottomSheetType.Receive -> {
-                    ReceiveQRScreen(uiState)
+                    ReceiveQrSheet(uiState)
                 }
 
                 null -> Unit
@@ -101,16 +111,20 @@ fun HomeScreen(
             val walletNavController = rememberNavController()
             NavHost(
                 navController = walletNavController,
-                startDestination = HomeRoutes.Home
+                startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
                     HomeContentView(
+                        uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
-                        onRefresh = walletViewModel::refreshState,
+                        onRefresh = walletViewModel::onPullToRefresh,
                     )
                 }
-                composable<HomeRoutes.Savings> {
+                composable<HomeRoutes.Savings>(
+                    enterTransition = { screenSlideIn },
+                    exitTransition = { screenSlideOut },
+                ) {
                     val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
@@ -125,9 +139,13 @@ fun HomeScreen(
                         onBackClick = { walletNavController.popBackStack() },
                     )
                 }
-                composable<HomeRoutes.Spending> {
+                composable<HomeRoutes.Spending>(
+                    enterTransition = { screenSlideIn },
+                    exitTransition = { screenSlideOut },
+                ) {
                     val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
                     SpendingWalletScreen(
+                        uiState = uiState,
                         onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferToSavingsClick = {
@@ -154,16 +172,17 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun HomeContentView(
+    uiState: MainUiState,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
 ) {
     AppScaffold(
         navController = rootNavController,
-        titleText = "Your Name",
-        onRefresh = onRefresh,
+        titleText = stringResource(R.string.slashtags__your_name_capital),
     ) {
         RequestNotificationPermissions()
         val balances = LocalBalances.current
@@ -174,11 +193,18 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-        Box(modifier = Modifier.fillMaxSize()) {
+        val pullRefreshState = rememberPullRefreshState(refreshing = uiState.isRefreshing, onRefresh = onRefresh)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(pullRefreshState)
+        ) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
                 BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
                 if (!showEmptyState) {
@@ -193,7 +219,7 @@ private fun HomeContentView(
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
                             modifier = Modifier
-                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Savings) })
+                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Savings) }
                                 .padding(vertical = 4.dp)
                         )
                         VerticalDivider()
@@ -202,7 +228,7 @@ private fun HomeContentView(
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
                             modifier = Modifier
-                                .clickable(onClick = { walletNavController.navigate(HomeRoutes.Spending) })
+                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .padding(start = 16.dp)
                         )
@@ -227,6 +253,12 @@ private fun HomeContentView(
                         .align(Alignment.BottomCenter)
                 )
             }
+
+            PullRefreshIndicator(
+                refreshing = uiState.isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
@@ -267,6 +299,7 @@ object HomeRoutes {
 private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
+            uiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
