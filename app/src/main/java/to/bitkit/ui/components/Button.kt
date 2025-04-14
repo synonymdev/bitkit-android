@@ -54,11 +54,12 @@ fun PrimaryButton(
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
     fullWidth: Boolean = true,
+    color: Color = Colors.White16,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.primaryColors,
+        colors = AppButtonDefaults.primaryColors.copy(containerColor = color),
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
@@ -205,6 +206,13 @@ private fun PrimaryButtonPreview() {
                 text = "Primary Small",
                 size = ButtonSize.Small,
                 onClick = {},
+            )
+            PrimaryButton(
+                text = "Primary Small Color Not Full",
+                size = ButtonSize.Small,
+                onClick = {},
+                fullWidth = false,
+                color = Colors.Brand,
             )
             PrimaryButton(
                 text = "Primary Small Loading",

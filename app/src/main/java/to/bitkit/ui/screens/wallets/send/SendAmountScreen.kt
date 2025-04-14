@@ -73,6 +73,8 @@ fun SendAmountScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                Spacer(modifier = Modifier.weight(1f))
+
                 Text13Up(
                     text = stringResource(R.string.wallet__send_available),
                     color = Colors.White64,
@@ -116,8 +118,6 @@ fun SendAmountScreen(
                         modifier = Modifier.height(28.dp)
                     )
                 }
-
-                Spacer(modifier = Modifier.weight(1f))
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 

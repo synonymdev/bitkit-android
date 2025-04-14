@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,8 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
@@ -30,18 +37,23 @@ import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import to.bitkit.R
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import androidx.core.graphics.createBitmap
 
 @Composable
 fun QrCodeImage(
     content: String,
     modifier: Modifier = Modifier,
+    logoPainter: Painter? = null,
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
 ) {
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(Color.White, RoundedCornerShape(8.dp))
             .aspectRatio(1f)
             .padding(16.dp)
     ) {
@@ -53,8 +65,27 @@ fun QrCodeImage(
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
             )
+            logoPainter?.let {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(68.dp)
+                        .background(Color.White, shape = CircleShape)
+                        .align(Alignment.Center)
+                ) {
+                    Image(
+                        painter = it,
+                        contentDescription = null,
+                        modifier = Modifier.size(50.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
         } else {
-            CircularProgressIndicator()
+            CircularProgressIndicator(
+                color = Colors.Black,
+                modifier = Modifier.align(Alignment.Center)
+            )
         }
     }
 }
@@ -84,17 +115,16 @@ private fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
                     sizePx,
                     encodeHints,
                 )
-            } catch (ex: WriterException) {
+            } catch (_: WriterException) {
                 null
             }
 
             val matrixWidth = bitmapMatrix?.width ?: sizePx
             val matrixHeight = bitmapMatrix?.height ?: sizePx
 
-            val newBitmap = Bitmap.createBitmap(
-                bitmapMatrix?.width ?: sizePx,
-                bitmapMatrix?.height ?: sizePx,
-                Bitmap.Config.ARGB_8888,
+            val newBitmap = createBitmap(
+                width = bitmapMatrix?.width ?: sizePx,
+                height = bitmapMatrix?.height ?: sizePx
             )
 
             val pixels = IntArray(matrixWidth * matrixHeight)
@@ -116,4 +146,16 @@ private fun rememberQrBitmap(content: String, size: Dp): Bitmap? {
         }
     }
     return bitmap
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        QrCodeImage(
+            content = "https://bitkit.to",
+            logoPainter = painterResource(R.drawable.ic_btc_circle),
+            modifier = Modifier.padding(16.dp)
+        )
+    }
 }

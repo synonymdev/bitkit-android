@@ -76,7 +76,7 @@ class Keychain @Inject constructor(
     fun observeExists(key: Key): Flow<Boolean> = context.keychain.data.map { it.contains(key.name.indexed) }
 
     suspend fun wipe() {
-        if (!Env.isDebug || Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
+        if (Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
 
         val keys = snapshot.asMap().keys
         context.keychain.edit { it.clear() }

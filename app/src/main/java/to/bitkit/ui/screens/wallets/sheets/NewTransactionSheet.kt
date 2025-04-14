@@ -75,8 +75,8 @@ fun NewTransactionSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 100.dp)
             .gradientBackground()
+            .padding(top = 100.dp)
     ) {
         NewTransactionSheetView(
             details = details,

@@ -44,7 +44,7 @@ object HttpModule {
             }
             install(Logging) {
                 logger = Logger.ANDROID
-                level = LogLevel.BODY
+                level = LogLevel.INFO
             }
             install(ContentNegotiation) {
                 json(json = json)

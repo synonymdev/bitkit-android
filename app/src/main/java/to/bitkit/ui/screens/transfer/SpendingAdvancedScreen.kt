@@ -41,7 +41,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.TransferAmount
+import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
@@ -120,7 +120,7 @@ fun SpendingAdvancedScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            TransferAmount(
+            AmountInput(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
                 onSatsChange = { sats ->
