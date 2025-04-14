@@ -44,10 +44,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        ndk {
-            //noinspection ChromeOsAbiSupport
-            abiFilters += "arm64-v8a"
-        }
     }
     signingConfigs {
         getByName("debug") {
@@ -69,6 +65,10 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
+            ndk {
+                //noinspection ChromeOsAbiSupport
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            }
         }
         release {
             isMinifyEnabled = false
@@ -78,6 +78,10 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
+            ndk {
+                //noinspection ChromeOsAbiSupport
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
         }
     }
     compileOptions {

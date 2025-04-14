@@ -46,8 +46,6 @@ jobs:
       - name: Run tests
         run: ./gradlew testDebugUnitTest
 
-    # TODO ADD COMPOSE TESTS STEP
-
       - name: Upload test report
         uses: actions/upload-artifact@v4
         with:

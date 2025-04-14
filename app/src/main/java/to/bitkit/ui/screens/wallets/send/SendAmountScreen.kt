@@ -42,7 +42,6 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 
-
 @Composable
 fun SendAmountScreen(
     uiState: SendUiState,
@@ -72,7 +71,6 @@ fun SendAmountScreen(
                 NumberPadTextField(input = input, modifier = Modifier.fillMaxWidth())
 
                 Spacer(modifier = Modifier.height(24.dp))
-
                 Spacer(modifier = Modifier.weight(1f))
 
                 Text13Up(
