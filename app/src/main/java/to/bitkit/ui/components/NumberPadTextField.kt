@@ -64,16 +64,15 @@ fun NumberPadTextField(
         val fraction = input.split(".").getOrNull(1).orEmpty().removeSpaces()
 
         if (primaryDisplay == PrimaryDisplay.FIAT) {
-            //todo replace the integer part with the whole fiat formated one like value = value.replace(whole, whole.formatted)
-            value = whole
+            //todo replace the integer part with the whole formated one
+            value = whole //TODO FORMAT FIAT
         }
 
         if (input.contains(".")) {
-            placeholder = placeholder.substring(2 + fraction.length)
+            placeholder = fraction //TODO GET FRACTIONAL LENGTH
 
             if (primaryDisplay == PrimaryDisplay.FIAT) {
-                // truncate to 2 decimals for fiat
-                value = "$whole.${fraction.substring(0, 2)}"
+                value = "$whole.$fraction" //TODO FORMAT MONEY
             }
         } else {
             if (displayUnit == BitcoinDisplayUnit.MODERN && primaryDisplay == PrimaryDisplay.BITCOIN) {

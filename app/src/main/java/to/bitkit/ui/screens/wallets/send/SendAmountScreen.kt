@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
@@ -32,6 +34,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -50,7 +53,21 @@ fun SendAmountScreen(
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
+    val currencyVM = currencyViewModel ?: return
+
     var input: String by remember { mutableStateOf("") }
+
+    LaunchedEffect(currencyUiState.primaryDisplay) {
+        input = when(currencyUiState.primaryDisplay) {
+            PrimaryDisplay.BITCOIN -> {
+                currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0).toString()
+            }
+
+            PrimaryDisplay.FIAT -> {
+                currencyVM.convert(input.toLongOrDefault(0L))?.formatted.toString().replace(".00", "")
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
