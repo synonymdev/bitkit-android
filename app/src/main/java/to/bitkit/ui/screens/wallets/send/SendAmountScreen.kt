@@ -44,6 +44,7 @@ import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import java.math.BigDecimal
 
 @Composable
 fun SendAmountScreen(
@@ -60,11 +61,13 @@ fun SendAmountScreen(
     LaunchedEffect(currencyUiState.primaryDisplay) {
         input = when(currencyUiState.primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
-                currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0).toString()
+                val amountLong = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0
+                if (amountLong > 0.0) amountLong.toString() else ""
             }
 
             PrimaryDisplay.FIAT -> {
-                currencyVM.convert(input.toLongOrDefault(0L))?.formatted.toString().replace(".00", "")
+                val convertedAmount = currencyVM.convert(input.toLongOrDefault(0L))
+                if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
             }
         }
     }
