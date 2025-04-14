@@ -1,4 +1,4 @@
-name: Integration Tests
+name: UI Tests
 
 on:
   workflow_run:
@@ -10,7 +10,6 @@ on:
 
 jobs:
   ui-tests:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
