@@ -68,16 +68,12 @@ class SettingsStore @Inject constructor(
     }
 
     // TODO secure
-    val isUnlockRequired: Flow<Boolean> = store.data.map { it[IS_UNLOCK_REQUIRED] == true }
-    suspend fun setIsUnlockRequired(value: Boolean) {
-        store.edit { it[IS_UNLOCK_REQUIRED] = value }
-    }
+    val isPinOnLaunchRequired: Flow<Boolean> = store.data.map { it[IS_PIN_ON_LAUNCH_REQUIRED] == true }
+    suspend fun setIsPinOnLaunchRequired(value: Boolean) { store.edit { it[IS_PIN_ON_LAUNCH_REQUIRED] = value } }
 
     // TODO secure
     val isBiometricEnabled: Flow<Boolean> = store.data.map { it[IS_BIOMETRIC_ENABLED] == true }
-    suspend fun setIsBiometricEnabled(value: Boolean) {
-        store.edit { it[IS_BIOMETRIC_ENABLED] = value }
-    }
+    suspend fun setIsBiometricEnabled(value: Boolean) { store.edit { it[IS_BIOMETRIC_ENABLED] = value } }
 
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
@@ -87,7 +83,7 @@ class SettingsStore @Inject constructor(
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
         private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")
         private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
-        private val IS_UNLOCK_REQUIRED = booleanPreferencesKey("is_unlock_required")
+        private val IS_PIN_ON_LAUNCH_REQUIRED = booleanPreferencesKey("is_pin_on_launch_required")
         private val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
     }
 }

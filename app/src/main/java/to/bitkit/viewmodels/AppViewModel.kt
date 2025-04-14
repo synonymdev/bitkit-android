@@ -105,12 +105,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    val isUnlockRequired: StateFlow<Boolean> = settingsStore.isUnlockRequired
+    val isPinOnLaunchRequired: StateFlow<Boolean> = settingsStore.isPinOnLaunchRequired
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    fun setIsUnlockRequired(value: Boolean) {
+    fun setIsPinOnLaunchRequired(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsUnlockRequired(value)
+            settingsStore.setIsPinOnLaunchRequired(value)
         }
     }
 
@@ -123,7 +123,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    // TODO if !unlockRequired && !isBiometricEnabled -> init true
+    // TODO if !isPinOnLaunchRequired && !isBiometricEnabled -> init true
     var isAuthenticated by mutableStateOf<Boolean>(false)
         private set
 

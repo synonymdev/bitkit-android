@@ -31,16 +31,16 @@ fun SecuritySettingsScreen(
 ) {
     val app = appViewModel ?: return
     val isPinEnabled = true // TODO add actual logic
-    val isUnlockRequired by app.isUnlockRequired.collectAsStateWithLifecycle()
+    val isPinOnLaunchRequired by app.isPinOnLaunchRequired.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
 
     SecuritySettingsContent(
         isPinEnabled = isPinEnabled,
-        isUnlockRequired = isUnlockRequired,
+        isPinOnLaunchRequired = isPinOnLaunchRequired,
         isBiometricEnabled = isBiometricEnabled,
         isBiometrySupported = rememberBiometricAuthSupported(),
-        onPinLaunchClick = { app.setIsUnlockRequired(!isUnlockRequired) }, // TODO auth check
-        onUseBioClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
+        onPinOnLaunchClick = { app.setIsPinOnLaunchRequired(!isPinOnLaunchRequired) }, // TODO auth check
+        onUseBiometricsClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
     )
@@ -49,11 +49,11 @@ fun SecuritySettingsScreen(
 @Composable
 private fun SecuritySettingsContent(
     isPinEnabled: Boolean,
-    isUnlockRequired: Boolean,
+    isPinOnLaunchRequired: Boolean,
     isBiometricEnabled: Boolean,
     isBiometrySupported: Boolean,
-    onPinLaunchClick: () -> Unit = {},
-    onUseBioClick: () -> Unit = {},
+    onPinOnLaunchClick: () -> Unit = {},
+    onUseBiometricsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -72,8 +72,8 @@ private fun SecuritySettingsContent(
             if (isPinEnabled) {
                 SettingsToggleRow(
                     label = stringResource(R.string.settings__security__pin_launch),
-                    isChecked = isUnlockRequired,
-                    onClick = onPinLaunchClick,
+                    isChecked = isPinOnLaunchRequired,
+                    onClick = onPinOnLaunchClick,
                 )
             }
             if (isPinEnabled && isBiometrySupported) {
@@ -83,7 +83,7 @@ private fun SecuritySettingsContent(
                         stringResource(R.string.settings__security__use_bio).replace("{biometryTypeName}", bioTypeName)
                     },
                     isChecked = isBiometricEnabled,
-                    onClick = onUseBioClick,
+                    onClick = onUseBiometricsClick,
                 )
             }
             if (isPinEnabled && isBiometrySupported) {
@@ -106,7 +106,7 @@ fun Preview() {
     AppThemeSurface {
         SecuritySettingsContent(
             isPinEnabled = true,
-            isUnlockRequired = true,
+            isPinOnLaunchRequired = true,
             isBiometricEnabled = true,
             isBiometrySupported = true,
         )
