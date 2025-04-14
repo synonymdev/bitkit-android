@@ -69,7 +69,10 @@ fun NumberPadTextField(
         }
 
         if (input.contains(".")) {
-            placeholder = fraction //TODO GET FRACTIONAL LENGTH
+            placeholder = ""
+            if (placeholderFractional.length >= fraction.length) {
+                placeholder = placeholderFractional.drop(fraction.length)
+            }
 
             if (primaryDisplay == PrimaryDisplay.FIAT) {
                 value = "$whole.$fraction" //TODO FORMAT MONEY
