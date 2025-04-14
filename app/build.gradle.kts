@@ -67,7 +67,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             ndk {
                 //noinspection ChromeOsAbiSupport
-                abiFilters += listOf("arm64-v8a", "x86_64")
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
             }
         }
         release {
@@ -80,7 +80,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
             ndk {
                 //noinspection ChromeOsAbiSupport
-                abiFilters += "arm64-v8a"
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
         }
     }
