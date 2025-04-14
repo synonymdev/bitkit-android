@@ -619,16 +619,7 @@ private fun NavGraphBuilder.qrScanner(
 // endregion
 
 /**
- * Adds the [Composable] to the [NavGraphBuilder] with default screen transitions.
- *
- * @param typeMap map of destination arguments' kotlin type [KType] to its respective custom
- * [NavType]. May be empty if destination does not receive arguments.
- * @param deepLinks list of deep links to associate with the destinations.
- * @param enterTransition callback to determine the destination's enter transition
- * @param exitTransition callback to determine the destination's exit transition
- * @param popEnterTransition callback to determine the destination's popEnter transition
- * @param popExitTransition callback to determine the destination's popExit transition
- * @param content composable for the destination
+ * Adds the [Composable] to the [NavGraphBuilder] with the default screen transitions.
  */
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
