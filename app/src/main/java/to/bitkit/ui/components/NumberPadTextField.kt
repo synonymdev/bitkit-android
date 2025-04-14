@@ -38,7 +38,7 @@ fun NumberPadTextField(
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
-        currency.convertFiatToSats(fiatAmount = input.toDoubleOrNull() ?: 0.0 ).toString()
+        currency.convertFiatToSats(fiatAmount = input.toDoubleOrNull() ?: 0.0).toString()
     } else {
         input
     }
@@ -64,16 +64,16 @@ fun NumberPadTextField(
         val fraction = input.split(".").getOrNull(1).orEmpty().removeSpaces()
 
         if (primaryDisplay == PrimaryDisplay.FIAT) {
-            value = whole //TODO FORMAT FIAT
+            //todo replace the integer part with the whole fiat formated one like value = value.replace(whole, whole.formatted)
+            value = whole
         }
 
         if (input.contains(".")) {
-            placeholder = fraction //TODO GET FRACTIONAL LENGTH
+            placeholder = placeholder.substring(2 + fraction.length)
 
-            // truncate to 2 decimals for fiat
             if (primaryDisplay == PrimaryDisplay.FIAT) {
-
-                value = "$whole.$fraction" //TODO FORMAT MONEY
+                // truncate to 2 decimals for fiat
+                value = "$whole.${fraction.substring(0, 2)}"
             }
         } else {
             if (displayUnit == BitcoinDisplayUnit.MODERN && primaryDisplay == PrimaryDisplay.BITCOIN) {
