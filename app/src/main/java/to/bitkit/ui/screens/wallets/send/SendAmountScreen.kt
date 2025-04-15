@@ -74,7 +74,7 @@ fun SendAmountScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(input) {
         val sats: String = when(currencyUiState.primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
                 if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
