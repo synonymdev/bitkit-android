@@ -22,7 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
-import to.bitkit.ext.removeSpaces
+import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
@@ -69,6 +69,30 @@ fun SendAmountScreen(
         currencyVM = currencyVM
     )
 
+    SendAmountContent(
+        input = input,
+        uiState = uiState,
+        walletUiState = walletUiState,
+        currencyUiState = currencyUiState,
+        onInputChanged = { input = it },
+        onEvent = onEvent,
+        onBack = onBack
+    )
+
+
+}
+
+@Composable
+private fun SendAmountContent(
+    input: String,
+    walletUiState: MainUiState,
+    uiState: SendUiState,
+    balances: BalanceState = LocalBalances.current,
+    currencyUiState: CurrencyUiState,
+    onInputChanged: (String) -> Unit,
+    onEvent: (SendEvent) -> Unit,
+    onBack: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -81,14 +105,16 @@ fun SendAmountScreen(
 
         when (walletUiState.nodeLifecycleState) {
             is NodeLifecycleState.Running -> {
-                SendAmountContent(
+                SendAmountNodeRunning(
                     input = input,
                     uiState = uiState,
                     currencyUiState = currencyUiState,
-                    onInputChanged = { input = it },
+                    onInputChanged = onInputChanged,
+                    balances = balances,
                     onEvent = onEvent
                 )
             }
+
             else -> {
                 SyncNodeView(
                     modifier = Modifier
@@ -101,14 +127,14 @@ fun SendAmountScreen(
 }
 
 @Composable
-private fun SendAmountContent(
+private fun SendAmountNodeRunning(
     input: String,
     uiState: SendUiState,
+    balances: BalanceState,
     currencyUiState: CurrencyUiState,
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
-    val balances = LocalBalances.current
     val availableAmount = when (uiState.payMethod) {
         SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
         SendMethod.LIGHTNING -> balances.totalLightningSats.toLong()
@@ -204,24 +230,28 @@ private fun AmountInputHandler(
     currencyVM: CurrencyViewModel
 ) {
     LaunchedEffect(primaryDisplay) {
-        val newInput = when(primaryDisplay) {
+        val newInput = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
                 val amountLong = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0
                 if (amountLong > 0.0) amountLong.toString() else ""
             }
+
             PrimaryDisplay.FIAT -> {
                 val convertedAmount = currencyVM.convert(input.toLongOrDefault(0L))
-                if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
+                if ((convertedAmount?.value
+                        ?: BigDecimal(0)) > BigDecimal(0)
+                ) convertedAmount?.formatted.toString() else ""
             }
         }
         onInputChanged(newInput)
     }
 
     LaunchedEffect(input) {
-        val sats = when(primaryDisplay) {
+        val sats = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
                 if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
             }
+
             PrimaryDisplay.FIAT -> {
                 val convertedAmount = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0L
                 convertedAmount.toString()
@@ -235,7 +265,7 @@ private fun AmountInputHandler(
 @Composable
 private fun PreviewRunningLightning() {
     AppThemeSurface {
-        SendAmountScreen(
+        SendAmountContent(
             uiState = SendUiState(
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
@@ -247,6 +277,9 @@ private fun PreviewRunningLightning() {
             ),
             onBack = {},
             onEvent = {},
+            input = "100",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
         )
     }
 }
@@ -255,7 +288,7 @@ private fun PreviewRunningLightning() {
 @Composable
 private fun PreviewRunningOnchain() {
     AppThemeSurface {
-        SendAmountScreen(
+        SendAmountContent(
             uiState = SendUiState(
                 payMethod = SendMethod.ONCHAIN,
                 amountInput = "5000",
@@ -267,6 +300,9 @@ private fun PreviewRunningOnchain() {
             ),
             onBack = {},
             onEvent = {},
+            input = "5000",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
         )
     }
 }
@@ -275,7 +311,7 @@ private fun PreviewRunningOnchain() {
 @Composable
 private fun PreviewInitializing() {
     AppThemeSurface {
-        SendAmountScreen(
+        SendAmountContent(
             uiState = SendUiState(
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100"
@@ -285,6 +321,9 @@ private fun PreviewInitializing() {
             ),
             onBack = {},
             onEvent = {},
+            input = "100",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
         )
     }
 }
