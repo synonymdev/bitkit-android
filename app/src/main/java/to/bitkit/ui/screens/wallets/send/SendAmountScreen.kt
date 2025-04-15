@@ -231,16 +231,14 @@ private fun AmountInputHandler(
 ) {
     LaunchedEffect(primaryDisplay) {
         val newInput = when (primaryDisplay) {
-            PrimaryDisplay.BITCOIN -> {
-                val amountLong = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0
+            PrimaryDisplay.BITCOIN -> { //Convert fiat to sats
+                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0
                 if (amountLong > 0.0) amountLong.toString() else ""
             }
 
-            PrimaryDisplay.FIAT -> {
+            PrimaryDisplay.FIAT -> { //Convert sats to fiat
                 val convertedAmount = currencyVM.convert(input.toLongOrDefault(0L))
-                if ((convertedAmount?.value
-                        ?: BigDecimal(0)) > BigDecimal(0)
-                ) convertedAmount?.formatted.toString() else ""
+                if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
             }
         }
         onInputChanged(newInput)
