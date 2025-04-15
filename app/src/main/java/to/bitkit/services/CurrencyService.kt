@@ -59,6 +59,7 @@ class CurrencyService @Inject constructor(
 
         val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
             decimalSeparator = '.'
+            groupingSeparator = ','
         }
         val formatter = DecimalFormat("#,##0.00", symbols).apply {
             minimumFractionDigits = 2
