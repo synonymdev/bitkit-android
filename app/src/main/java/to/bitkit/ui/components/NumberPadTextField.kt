@@ -38,7 +38,7 @@ fun NumberPadTextField(
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
         currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0).toString()
     } else {
-        input
+        input.removeSpaces()
     }
 
     var placeholder: String by remember { mutableStateOf("0") }
