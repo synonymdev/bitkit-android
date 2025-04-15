@@ -36,7 +36,7 @@ fun NumberPadTextField(
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
-        currency.convertFiatToSats(fiatAmount = input.toDoubleOrNull() ?: 0.0).toString()
+        currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0).toString()
     } else {
         input
     }
@@ -91,6 +91,7 @@ fun NumberPadTextField(
         placeholder = placeholder,
         showPlaceholder = true,
         satoshis = satoshis.toLongOrNull() ?: 0,
+        currencySymbol = currency.getCurrencySymbol()
     )
 }
 
@@ -102,6 +103,7 @@ fun MoneyAmount(
     placeholder: String,
     showPlaceholder: Boolean,
     satoshis: Long,
+    currencySymbol: String,
     style: TextStyle = TextStyle.Default,
 ) {
     Column(
@@ -115,7 +117,7 @@ fun MoneyAmount(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else "$",
+                text = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else currencySymbol,
                 style = style.copy(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 44.sp,

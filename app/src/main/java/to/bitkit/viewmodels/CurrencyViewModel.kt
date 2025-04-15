@@ -159,6 +159,12 @@ class CurrencyViewModel @Inject constructor(
         }
     }
 
+    fun getCurrencySymbol(): String {
+        val currentState = uiState.value
+        return currentState.rates.firstOrNull { it.quote == currentState.selectedCurrency }?.symbol ?: ""
+    }
+
+
     // UI Helpers
     fun convert(sats: Long, currency: String? = null): ConvertedAmount? {
         val targetCurrency = currency ?: uiState.value.selectedCurrency
