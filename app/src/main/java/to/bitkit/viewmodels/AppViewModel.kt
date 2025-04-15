@@ -125,7 +125,7 @@ class AppViewModel @Inject constructor(
     }
 
     val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setIsBiometricEnabled(value: Boolean) {
         viewModelScope.launch {
