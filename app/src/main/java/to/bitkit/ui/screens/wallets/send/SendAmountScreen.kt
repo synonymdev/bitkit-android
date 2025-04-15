@@ -256,7 +256,7 @@ private fun AmountInputHandler(
             }
 
             PrimaryDisplay.FIAT -> {
-                val convertedAmount = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0L
+                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0L
                 convertedAmount.toString()
             }
         }
