@@ -22,6 +22,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
+import to.bitkit.ext.removeSpaces
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
@@ -70,6 +72,20 @@ fun SendAmountScreen(
                 if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        val sats: String = when(currencyUiState.primaryDisplay) {
+            PrimaryDisplay.BITCOIN -> {
+                if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
+            }
+
+            PrimaryDisplay.FIAT -> {
+                val convertedAmount = currencyVM.convertFiatToSats(input.toDoubleOrNull() ?: 0.0) ?: 0L
+                convertedAmount.toString()
+            }
+        }
+        onEvent(SendEvent.AmountChange(value = sats))
     }
 
     Column(
@@ -142,11 +158,9 @@ fun SendAmountScreen(
                 Keyboard(
                     onClick = { number ->
                         if (input == "0") input = number else input+=number
-                        onEvent(SendEvent.AmountChange(number))
                     },
                     onClickBackspace = {
                         input = if (input.length > 1) input.dropLast(1) else "0"
-                        onEvent(SendEvent.BackSpaceClick)
                     },
                     isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
                     modifier = Modifier.fillMaxWidth(),
