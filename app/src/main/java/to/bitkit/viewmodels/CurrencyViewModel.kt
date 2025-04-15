@@ -161,7 +161,7 @@ class CurrencyViewModel @Inject constructor(
 
     fun getCurrencySymbol(): String {
         val currentState = uiState.value
-        return currentState.rates.firstOrNull { it.quote == currentState.selectedCurrency }?.symbol ?: ""
+        return currentState.rates.firstOrNull { it.quote == currentState.selectedCurrency }?.currencySymbol ?: ""
     }
 
 
