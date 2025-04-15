@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -83,7 +84,7 @@ fun SendAmountScreen(
 }
 
 @Composable
-private fun SendAmountContent(
+fun SendAmountContent(
     input: String,
     walletUiState: MainUiState,
     uiState: SendUiState,
@@ -97,6 +98,7 @@ private fun SendAmountContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .testTag("send_amount_screen")
     ) {
         SheetTopBar(stringResource(R.string.title_send_amount)) {
             onEvent(SendEvent.AmountReset)
@@ -120,6 +122,7 @@ private fun SendAmountContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
+                        .testTag("sync_node_view")
                 )
             }
         }
@@ -145,7 +148,7 @@ private fun SendAmountNodeRunning(
     ) {
         Spacer(Modifier.height(16.dp))
 
-        NumberPadTextField(input = input, modifier = Modifier.fillMaxWidth())
+        NumberPadTextField(input = input, modifier = Modifier.fillMaxWidth().testTag("amount_input_field"))
 
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
@@ -153,6 +156,7 @@ private fun SendAmountNodeRunning(
         Text13Up(
             text = stringResource(R.string.wallet__send_available),
             color = Colors.White64,
+            modifier = Modifier.testTag("available_balance")
         )
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -178,7 +182,7 @@ private fun SendAmountNodeRunning(
                 onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
             },
             isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("amount_keyboard"),
         )
 
         Spacer(modifier = Modifier.height(41.dp))
@@ -187,6 +191,7 @@ private fun SendAmountNodeRunning(
             text = stringResource(R.string.continue_button),
             enabled = uiState.isAmountInputValid,
             onClick = { onEvent(SendEvent.AmountContinue(uiState.amountInput)) },
+            modifier = Modifier.testTag("continue_button")
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -205,7 +210,7 @@ private fun PaymentMethodButton(
             SendMethod.ONCHAIN -> Colors.Brand
             SendMethod.LIGHTNING -> Colors.Purple
         },
-        modifier = Modifier.height(28.dp)
+        modifier = Modifier.height(28.dp).testTag("payment_method_button")
     ) {
         Text13Up(
             text = when (uiState.payMethod) {
