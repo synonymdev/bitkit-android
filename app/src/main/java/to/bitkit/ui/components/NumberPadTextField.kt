@@ -1,13 +1,10 @@
 package to.bitkit.ui.components
 
-import android.util.Log
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,9 +17,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import okhttp3.internal.toLongOrDefault
 import to.bitkit.ext.removeSpaces
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.Colors
@@ -30,9 +30,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun NumberPadTextField(
     input: String,
-//    onSatsChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
-    showBitcoinSymbol: Boolean = true,
 ) {
     val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val currency = currencyViewModel ?: return
@@ -64,8 +62,7 @@ fun NumberPadTextField(
         val fraction = input.split(".").getOrNull(1).orEmpty().removeSpaces()
 
         if (primaryDisplay == PrimaryDisplay.FIAT) {
-            //todo replace the integer part with the whole formated one
-            value = whole //TODO FORMAT FIAT
+            value = whole //TODO separate thousands with space
         }
 
         if (input.contains(".")) {
@@ -75,11 +72,11 @@ fun NumberPadTextField(
             }
 
             if (primaryDisplay == PrimaryDisplay.FIAT) {
-                value = "$whole.$fraction" //TODO FORMAT MONEY
+                value = "$whole.$fraction" //TODO separate thousands with space in the whole part
             }
         } else {
             if (displayUnit == BitcoinDisplayUnit.MODERN && primaryDisplay == PrimaryDisplay.BITCOIN) {
-                value = input //TODO FORMAT SATOSHI
+                value = input.toLongOrDefault(0L).formatToModernDisplay()
                 placeholder = ""
             } else {
                 placeholder = ".$placeholderFractional"
@@ -105,13 +102,10 @@ fun MoneyAmount(
     placeholder: String,
     showPlaceholder: Boolean,
     satoshis: Long,
-    onPress: () -> Unit = {},
     style: TextStyle = TextStyle.Default,
 ) {
     Column(
-        modifier = modifier
-            .clickable(onClick = onPress)
-            .semantics { contentDescription = value },
+        modifier = modifier.semantics { contentDescription = value },
         horizontalAlignment = Alignment.Start
     ) {
 
@@ -121,7 +115,7 @@ fun MoneyAmount(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (unit == PrimaryDisplay.BITCOIN) "₿" else "$",
+                text = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else "$",
                 style = style.copy(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 44.sp,

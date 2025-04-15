@@ -7,6 +7,8 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
+const val BITCOIN_SYMBOL = "₿"
+
 @Serializable
 data class FxRateResponse(
     val tickers: List<FxRate>,
@@ -57,7 +59,7 @@ data class ConvertedAmount(
     )
 
     fun bitcoinDisplay(unit: BitcoinDisplayUnit): BitcoinDisplayComponents {
-        val symbol = "₿"
+        val symbol = BITCOIN_SYMBOL
         val spaceSeparator = ' '
         val formattedValue = when (unit) {
             BitcoinDisplayUnit.MODERN -> {
