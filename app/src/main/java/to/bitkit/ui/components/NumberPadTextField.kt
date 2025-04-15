@@ -26,6 +26,7 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.formatCurrency
 
 @Composable
 fun NumberPadTextField(
@@ -62,7 +63,7 @@ fun NumberPadTextField(
         val fraction = input.split(".").getOrNull(1).orEmpty().removeSpaces()
 
         if (primaryDisplay == PrimaryDisplay.FIAT) {
-            value = whole //TODO separate thousands with space
+            value = whole
         }
 
         if (input.contains(".")) {
@@ -72,7 +73,7 @@ fun NumberPadTextField(
             }
 
             if (primaryDisplay == PrimaryDisplay.FIAT) {
-                value = "$whole.$fraction" //TODO separate thousands with space in the whole part
+                value = "$whole.$fraction"
             }
         } else {
             if (displayUnit == BitcoinDisplayUnit.MODERN && primaryDisplay == PrimaryDisplay.BITCOIN) {
