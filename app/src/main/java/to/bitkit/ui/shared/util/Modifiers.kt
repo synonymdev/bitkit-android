@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -25,13 +27,31 @@ fun Modifier.clickableAlpha(
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val alpha by animateFloatAsState(targetValue = if (isPressed) 0.7f else 1f)
+
+    val wasClicked = remember { mutableStateOf(false) }
+
+    LaunchedEffect(isPressed) {
+        if (!isPressed) {
+            wasClicked.value = false
+        }
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (isPressed || wasClicked.value) 0.7f else 1f,
+        finishedListener = {
+            // Reset the clicked state after animation completes
+            wasClicked.value = false
+        }
+    )
 
     this
         .graphicsLayer { this.alpha = alpha }
         .clickable(
             enabled = onClick != null,
-            onClick = { onClick?.invoke() },
+            onClick = {
+                wasClicked.value = true
+                onClick?.invoke()
+            },
             interactionSource = interactionSource,
             indication = null,
         )
