@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,16 +44,18 @@ fun NumberPadTextField(
     var placeholderFractional: String by remember { mutableStateOf("") }
     var value: String by remember { mutableStateOf("") }
 
-    if (displayUnit == BitcoinDisplayUnit.CLASSIC) {
-        placeholderFractional = "00000000"
-    }
+    LaunchedEffect (displayUnit, primaryDisplay) {
+        placeholderFractional = when {
+            displayUnit == BitcoinDisplayUnit.CLASSIC -> "00000000"
+            primaryDisplay == PrimaryDisplay.FIAT -> "00"
+            else -> ""
+        }
 
-    if (primaryDisplay == PrimaryDisplay.FIAT) {
-        placeholderFractional = "00"
-    }
-
-    if (placeholderFractional.isNotEmpty()) {
-        placeholder = "0.$placeholderFractional"
+        placeholder = if (placeholderFractional.isNotEmpty()) {
+            "0.$placeholderFractional"
+        } else {
+            ""
+        }
     }
 
     if (input.isNotEmpty()) {
@@ -80,6 +83,8 @@ fun NumberPadTextField(
                 placeholder = ".$placeholderFractional"
             }
         }
+    } else {
+        value = ""
     }
 
     MoneyAmount(
