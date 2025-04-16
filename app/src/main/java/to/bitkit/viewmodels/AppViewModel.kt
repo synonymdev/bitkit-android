@@ -235,7 +235,6 @@ class AppViewModel @Inject constructor(
 
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onPay()
-                    SendEvent.BackSpaceClick -> onClickBackspace()
                 }
             }
         }
@@ -277,21 +276,10 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onAmountChange(value: String) {
-        val newInput = if (_sendUiState.value.amountInput == "0") value else _sendUiState.value.amountInput + value
         _sendUiState.update {
             it.copy(
-                amountInput = newInput,
-                isAmountInputValid = validateAmount(newInput)
-            )
-        }
-    }
-
-    private fun onClickBackspace() {
-        val newInput = if (_sendUiState.value.amountInput.length <= 1) "0" else _sendUiState.value.amountInput.dropLast(1)
-        _sendUiState.update {
-            it.copy(
-                amountInput = newInput,
-                isAmountInputValid = validateAmount(newInput)
+                amountInput = value,
+                isAmountInputValid = validateAmount(value)
             )
         }
     }
@@ -786,7 +774,6 @@ sealed class SendEvent {
     data object AmountReset : SendEvent()
     data class AmountContinue(val amount: String) : SendEvent()
     data class AmountChange(val value: String) : SendEvent()
-    data object BackSpaceClick : SendEvent()
 
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()

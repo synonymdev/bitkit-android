@@ -5,12 +5,10 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.BlocktankHttpClient
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.utils.AppError
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
@@ -57,15 +55,7 @@ class CurrencyService @Inject constructor(
         val btcAmount = BigDecimal(sats).divide(BigDecimal(100_000_000))
         val value: BigDecimal = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
 
-        val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-            decimalSeparator = '.'
-        }
-        val formatter = DecimalFormat("#,##0.00", symbols).apply {
-            minimumFractionDigits = 2
-            maximumFractionDigits = 2
-        }
-
-        val formatted = runCatching { formatter.format(value) }.getOrNull() ?: return null
+        val formatted = value.formatCurrency() ?: return null
 
         return ConvertedAmount(
             value = value,

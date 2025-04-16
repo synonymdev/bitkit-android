@@ -27,8 +27,11 @@ fun MoneyDisplay(
 }
 
 @Composable
-fun MoneySSB(sats: Long) {
-    rememberMoneyText(sats)?.let { text ->
+fun MoneySSB(
+    sats: Long,
+    reversed: Boolean = false,
+) {
+    rememberMoneyText(sats = sats, reversed = reversed)?.let { text ->
         BodySSB(text = text.withAccent(accentColor = Colors.White64))
     }
 }
@@ -62,16 +65,20 @@ fun MoneyCaptionB(
     }
 }
 
+
+
 /**
  * Generates a formatted representation of a monetary value based on the provided amount in satoshis
  * and the current currency display settings. Can be either in bitcoin or fiat.
  *
  * @param sats The amount in satoshis to be formatted and displayed.
+ * @param reversed If true, swaps the primary and secondary display. Defaults to false.
  * @return A formatted string representation of the monetary value, or null if it cannot be generated.
  */
 @Composable
 fun rememberMoneyText(
     sats: Long,
+    reversed: Boolean = false,
 ): String? {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
@@ -81,10 +88,17 @@ fun rememberMoneyText(
     val currency = currencyViewModel ?: return null
     val currencies = LocalCurrencies.current
 
-    return remember(currencies, sats) {
+    return remember(currencies, sats, reversed) {
         val converted = currency.convert(sats) ?: return@remember null
 
-        if (currencies.primaryDisplay == PrimaryDisplay.BITCOIN) {
+        val secondaryDisplay = when(currencies.primaryDisplay) {
+            PrimaryDisplay.BITCOIN ->  PrimaryDisplay.FIAT
+            PrimaryDisplay.FIAT ->  PrimaryDisplay.BITCOIN
+        }
+
+        val primary = if (reversed) secondaryDisplay else currencies.primaryDisplay
+
+        if (primary == PrimaryDisplay.BITCOIN) {
             val btcComponents = converted.bitcoinDisplay(currencies.displayUnit)
             "<accent>${btcComponents.symbol}</accent> ${btcComponents.value}"
         } else {
