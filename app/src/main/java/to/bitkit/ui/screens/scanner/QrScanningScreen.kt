@@ -10,13 +10,19 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,15 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -49,9 +50,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -65,6 +68,7 @@ fun QrScanningScreen(
     // TODO maybe replace & drop accompanist permissions
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var isFlashlightOn by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -140,7 +144,10 @@ fun QrScanningScreen(
         grantedContent = {
             ScreenColumn(modifier = Modifier.gradientBackground()) {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
-                Content(previewView = previewView)
+                Content(previewView = previewView, onClickCamera = {
+                    isFlashlightOn = !isFlashlightOn
+                    camera?.cameraControl?.enableTorch(isFlashlightOn)
+                })
             }
         }
     )
@@ -149,46 +156,75 @@ fun QrScanningScreen(
 @Composable
 private fun Content(
     previewView: PreviewView,
+    onClickCamera : () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier
-                .fillMaxSize()
-                .clipToBounds(),
-            factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
-        )
-        val (widthInPx, heightInPx, radiusInPx) = with(LocalDensity.current) {
-            remember {
-                Triple(350.dp.toPx(), 350.dp.toPx(), 16.dp.toPx())
-            }
-        }
-
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = .5f)),
-            contentAlignment = Alignment.Center,
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .weight(1f)
         ) {
-            Canvas(
+            AndroidView(
                 modifier = Modifier
-                    .size(350.dp)
-                    .border(1.dp, Color.White, RoundedCornerShape(16.dp))
-            ) {
-                val offset = Offset(
-                    x = (size.width - widthInPx) / 2,
-                    y = (size.height - heightInPx) / 2,
-                )
-                val cutoutRect = Rect(offset, Size(widthInPx, heightInPx))
+                    .fillMaxSize()
+                    .clipToBounds(),
+                factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
+            )
 
-                drawRoundRect(
-                    topLeft = cutoutRect.topLeft,
-                    size = cutoutRect.size,
-                    cornerRadius = CornerRadius(radiusInPx, radiusInPx),
-                    color = Color.Transparent,
-                    blendMode = BlendMode.Clear
+            IconButton(
+                onClick = {}, //TODO IMPLEMENT
+                modifier = Modifier
+                    .padding(16.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Colors.White64
+                    )
+                    .size(48.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_image_square),
+                    contentDescription = null,
+                    tint = Colors.White
+                )
+            }
+
+            IconButton(
+                onClick = onClickCamera,
+                modifier = Modifier
+                    .padding(16.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Colors.White64
+                    )
+                    .size(48.dp)
+                    .align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_flashlight),
+                    contentDescription = null,
+                    tint = Colors.White
                 )
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        PrimaryButton(
+            icon = {
+                Icon(
+                    painterResource(R.drawable.ic_clipboard_text_simple),
+                    contentDescription = null,
+                    tint = Colors.White
+                )
+            },
+            text = stringResource(R.string.other__qr_paste),
+            onClick = {} //TODO IMPLEMENT
+        )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
