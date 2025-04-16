@@ -94,6 +94,7 @@ class Keychain @Inject constructor(
         PUSH_NOTIFICATION_TOKEN,
         PUSH_NOTIFICATION_PRIVATE_KEY,
         BIP39_MNEMONIC,
-        BIP39_PASSPHRASE;
+        BIP39_PASSPHRASE,
+        PIN,
     }
 }

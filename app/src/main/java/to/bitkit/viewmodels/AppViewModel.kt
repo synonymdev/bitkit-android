@@ -115,6 +115,18 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun validatePin(pin: String): Boolean {
+        return keychain.loadString(Keychain.Key.PIN.name) == pin
+    }
+
+    fun initTestPin() {
+        viewModelScope.launch {
+            if (!keychain.exists(Keychain.Key.PIN.name)) {
+                keychain.saveString(Keychain.Key.PIN.name, "1234")
+            }
+        }
+    }
+
     val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.isPinOnLaunchEnabled
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 

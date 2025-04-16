@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -46,11 +45,16 @@ fun AuthCheckView(
 ) {
     val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        appViewModel.initTestPin()
+    }
+
     AuthCheckViewContent(
         onSuccess = onSuccess,
         isBiometricsEnabled = isBiometricsEnabled,
         isBiometrySupported = isBiometrySupported,
         showLogoOnPin = showLogoOnPin,
+        validatePin = appViewModel::validatePin,
     )
 }
 
@@ -60,6 +64,7 @@ private fun AuthCheckViewContent(
     isBiometricsEnabled: Boolean,
     isBiometrySupported: Boolean,
     showLogoOnPin: Boolean,
+    validatePin: (String) -> Boolean,
 ) {
     var showBio by rememberSaveable { mutableStateOf(isBiometricsEnabled) }
 
@@ -78,6 +83,7 @@ private fun AuthCheckViewContent(
             } else {
                 PinPad(
                     showLogo = showLogoOnPin,
+                    validatePin = validatePin,
                     onSuccess = onSuccess,
                 )
             }
@@ -88,15 +94,16 @@ private fun AuthCheckViewContent(
 @Composable
 private fun PinPad(
     showLogo: Boolean = false,
+    validatePin: (String) -> Boolean,
     onSuccess: (() -> Unit)?,
 ) {
     var pin by remember { mutableStateOf("") }
 
     LaunchedEffect(pin) {
         if (pin.length == PIN_LENGTH) {
-            delay(500) // Simulate pin check delay
-            // TODO: Implement actual PIN verification logic here
-            onSuccess?.invoke()
+            if (validatePin(pin)) {
+                onSuccess?.invoke()
+            }
             pin = ""
         }
     }
@@ -168,6 +175,7 @@ private fun PreviewBio() {
             isBiometricsEnabled = true,
             isBiometrySupported = true,
             showLogoOnPin = true,
+            validatePin = { true },
         )
     }
 }
@@ -181,6 +189,7 @@ private fun PreviewPin() {
             isBiometricsEnabled = false,
             isBiometrySupported = true,
             showLogoOnPin = true,
+            validatePin = { true },
         )
     }
 }
