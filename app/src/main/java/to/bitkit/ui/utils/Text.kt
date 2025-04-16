@@ -140,8 +140,4 @@ fun BigDecimal.formatCurrency() : String? {
     return runCatching { formatter.format(this) }.getOrNull()
 }
 
-fun Double.formatCurrency() : String? {
-    return BigDecimal(this).formatCurrency()
-}
-
 
