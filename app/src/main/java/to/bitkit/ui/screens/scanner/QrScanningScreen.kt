@@ -4,7 +4,6 @@ package to.bitkit.ui.screens.scanner
 
 import android.Manifest
 import android.view.View.LAYER_TYPE_HARDWARE
-import android.widget.ImageButton
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -24,8 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
-import androidx.compose.material3.ShapeDefaults
-import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +68,7 @@ fun QrScanningScreen(
     // TODO maybe replace & drop accompanist permissions
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var isFlashlightOn by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -146,7 +144,10 @@ fun QrScanningScreen(
         grantedContent = {
             ScreenColumn(modifier = Modifier.gradientBackground()) {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
-                Content(previewView = previewView)
+                Content(previewView = previewView, onClickCamera = {
+                    isFlashlightOn = !isFlashlightOn
+                    camera?.cameraControl?.enableTorch(isFlashlightOn)
+                })
             }
         }
     )
@@ -155,6 +156,7 @@ fun QrScanningScreen(
 @Composable
 private fun Content(
     previewView: PreviewView,
+    onClickCamera : () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -194,7 +196,7 @@ private fun Content(
             }
 
             IconButton(
-                onClick = {}, //TODO IMPLEMENT
+                onClick = onClickCamera,
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
