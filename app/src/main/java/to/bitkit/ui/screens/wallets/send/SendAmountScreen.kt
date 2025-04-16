@@ -75,6 +75,8 @@ fun SendAmountScreen(
         uiState = uiState,
         walletUiState = walletUiState,
         currencyUiState = currencyUiState,
+        primaryDisplay = currencyUiState.primaryDisplay,
+        displayUnit = currencyUiState.displayUnit,
         onInputChanged = { input = it },
         onEvent = onEvent,
         onBack = onBack
@@ -89,6 +91,8 @@ fun SendAmountContent(
     walletUiState: MainUiState,
     uiState: SendUiState,
     balances: BalanceState = LocalBalances.current,
+    primaryDisplay: PrimaryDisplay,
+    displayUnit: BitcoinDisplayUnit,
     currencyUiState: CurrencyUiState,
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -113,6 +117,8 @@ fun SendAmountContent(
                     currencyUiState = currencyUiState,
                     onInputChanged = onInputChanged,
                     balances = balances,
+                    displayUnit = displayUnit,
+                    primaryDisplay = primaryDisplay,
                     onEvent = onEvent
                 )
             }
@@ -134,6 +140,8 @@ private fun SendAmountNodeRunning(
     input: String,
     uiState: SendUiState,
     balances: BalanceState,
+    primaryDisplay: PrimaryDisplay,
+    displayUnit: BitcoinDisplayUnit,
     currencyUiState: CurrencyUiState,
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -148,7 +156,10 @@ private fun SendAmountNodeRunning(
     ) {
         Spacer(Modifier.height(16.dp))
 
-        NumberPadTextField(input = input, modifier = Modifier.fillMaxWidth().testTag("amount_input_field"))
+        NumberPadTextField(input = input,
+            displayUnit = displayUnit,
+            primaryDisplay = primaryDisplay,
+            modifier = Modifier.fillMaxWidth().testTag("amount_input_field"))
 
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
@@ -281,6 +292,8 @@ private fun PreviewRunningLightning() {
             onBack = {},
             onEvent = {},
             input = "100",
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.FIAT,
             currencyUiState = CurrencyUiState(),
             onInputChanged = {}
         )
@@ -305,6 +318,8 @@ private fun PreviewRunningOnchain() {
             onEvent = {},
             input = "5000",
             currencyUiState = CurrencyUiState(),
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.BITCOIN,
             onInputChanged = {}
         )
     }
@@ -324,6 +339,8 @@ private fun PreviewInitializing() {
             ),
             onBack = {},
             onEvent = {},
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.BITCOIN,
             input = "100",
             currencyUiState = CurrencyUiState(),
             onInputChanged = {}

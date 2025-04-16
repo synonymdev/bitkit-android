@@ -21,16 +21,16 @@ import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
-import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun NumberPadTextField(
     input: String,
+    displayUnit: BitcoinDisplayUnit,
+    primaryDisplay: PrimaryDisplay,
     modifier: Modifier = Modifier,
 ) {
-    val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
