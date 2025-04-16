@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.viewmodels.CurrencyUiState
@@ -38,6 +39,8 @@ class SendAmountContentTest {
                 uiState = testUiState,
                 walletUiState = testWalletState,
                 currencyUiState = CurrencyUiState(primaryDisplay = PrimaryDisplay.BITCOIN),
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                primaryDisplay = PrimaryDisplay.BITCOIN,
                 onInputChanged = {},
                 onEvent = {},
                 onBack = {}
@@ -61,6 +64,8 @@ class SendAmountContentTest {
                 walletUiState = MainUiState(
                     nodeLifecycleState = NodeLifecycleState.Initializing
                 ),
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                primaryDisplay = PrimaryDisplay.BITCOIN,
                 currencyUiState = CurrencyUiState(),
                 onInputChanged = {},
                 onEvent = {},
@@ -87,6 +92,8 @@ class SendAmountContentTest {
                         eventTriggered = true
                     }
                 },
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                primaryDisplay = PrimaryDisplay.BITCOIN,
                 onBack = {}
             )
         }
@@ -112,6 +119,8 @@ class SendAmountContentTest {
                         eventTriggered = true
                     }
                 },
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                primaryDisplay = PrimaryDisplay.BITCOIN,
                 onBack = {}
             )
         }
@@ -132,6 +141,8 @@ class SendAmountContentTest {
                 currencyUiState = CurrencyUiState(),
                 onInputChanged = {},
                 onEvent = {},
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                primaryDisplay = PrimaryDisplay.BITCOIN,
                 onBack = {}
             )
         }
