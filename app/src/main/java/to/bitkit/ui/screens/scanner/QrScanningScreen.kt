@@ -10,6 +10,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -158,37 +159,5 @@ private fun Content(
                 .clipToBounds(),
             factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
         )
-        val (widthInPx, heightInPx, radiusInPx) = with(LocalDensity.current) {
-            remember {
-                Triple(350.dp.toPx(), 350.dp.toPx(), 16.dp.toPx())
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = .5f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(
-                modifier = Modifier
-                    .size(350.dp)
-                    .border(1.dp, Color.White, RoundedCornerShape(16.dp))
-            ) {
-                val offset = Offset(
-                    x = (size.width - widthInPx) / 2,
-                    y = (size.height - heightInPx) / 2,
-                )
-                val cutoutRect = Rect(offset, Size(widthInPx, heightInPx))
-
-                drawRoundRect(
-                    topLeft = cutoutRect.topLeft,
-                    size = cutoutRect.size,
-                    cornerRadius = CornerRadius(radiusInPx, radiusInPx),
-                    color = Color.Transparent,
-                    blendMode = BlendMode.Clear
-                )
-            }
-        }
     }
 }
