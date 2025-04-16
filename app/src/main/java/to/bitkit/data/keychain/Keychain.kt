@@ -96,5 +96,6 @@ class Keychain @Inject constructor(
         BIP39_MNEMONIC,
         BIP39_PASSPHRASE,
         PIN,
+        PIN_ATTEMPTS_REMAINING,
     }
 }

@@ -23,6 +23,7 @@ import to.bitkit.ui.theme.Colors
  * Analogue of `TouchableOpacity` in React Native.
  */
 fun Modifier.clickableAlpha(
+    pressedAlpha: Float = 0.7f,
     onClick: (() -> Unit)?,
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
@@ -37,7 +38,7 @@ fun Modifier.clickableAlpha(
     }
 
     val alpha by animateFloatAsState(
-        targetValue = if (isPressed || wasClicked.value) 0.7f else 1f,
+        targetValue = if (isPressed || wasClicked.value) pressedAlpha else 1f,
         finishedListener = {
             // Reset the clicked state after animation completes
             wasClicked.value = false

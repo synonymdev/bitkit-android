@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.watchUntil
@@ -115,14 +116,55 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private val _pinAttemptsRemaining = MutableStateFlow(Env.PIN_ATTEMPTS)
+    val pinAttemptsRemaining = _pinAttemptsRemaining.asStateFlow()
+
     fun validatePin(pin: String): Boolean {
-        return keychain.loadString(Keychain.Key.PIN.name) == pin
+        val storedPin = keychain.loadString(Keychain.Key.PIN.name)
+        val isValid = storedPin == pin
+
+        if (isValid) {
+            viewModelScope.launch {
+                _pinAttemptsRemaining.value = Env.PIN_ATTEMPTS
+
+                keychain.delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)
+                keychain.saveString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+            }
+            return true
+        }
+
+        viewModelScope.launch {
+            val newAttempts = _pinAttemptsRemaining.value - 1
+            _pinAttemptsRemaining.value = newAttempts
+
+            keychain.delete(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)
+            keychain.saveString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
+
+            if (newAttempts <= 0) {
+                // TODO: wipeApp() - return to onboarding
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = "App Wiped",
+                    description = "Too many incorrect PIN attempts. App data has been wiped.",
+                )
+            }
+        }
+        return false
     }
 
     fun initTestPin() {
         viewModelScope.launch {
             if (!keychain.exists(Keychain.Key.PIN.name)) {
                 keychain.saveString(Keychain.Key.PIN.name, "1234")
+            }
+
+            // TODO: init PIN_ATTEMPTS_REMAINING when adding/editing pin
+            if (!keychain.exists(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)) {
+                keychain.saveString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+            } else {
+                val attempts =
+                    keychain.loadString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)?.toIntOrNull() ?: Env.PIN_ATTEMPTS
+                _pinAttemptsRemaining.value = attempts
             }
         }
     }

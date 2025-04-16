@@ -102,4 +102,6 @@ internal object Env {
             address = "34.65.86.104:9400",
         )
     }
+
+    const val PIN_ATTEMPTS = 8
 }
