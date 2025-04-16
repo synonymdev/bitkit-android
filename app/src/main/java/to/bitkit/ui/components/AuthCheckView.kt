@@ -6,12 +6,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,6 +93,8 @@ private fun AuthCheckViewContent(
                     validatePin = validatePin,
                     onSuccess = onSuccess,
                     attemptsRemaining = attemptsRemaining,
+                    allowBiometrics = isBiometricsEnabled && isBiometrySupported,
+                    onShowBiometrics = { showBio = true },
                 )
             }
         }
@@ -103,6 +107,8 @@ private fun PinPad(
     validatePin: (String) -> Boolean,
     onSuccess: (() -> Unit)?,
     attemptsRemaining: Int,
+    allowBiometrics: Boolean,
+    onShowBiometrics: () -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
     val isLastAttempt = attemptsRemaining == 1
@@ -143,14 +149,35 @@ private fun PinPad(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             } else {
-                // TODO: show forgotPin sheet
+                // TODO: onClick: show forgotPin sheet
                 BodyS(
                     text = stringResource(R.string.security__pin_attempts).replace("{attemptsRemaining}", "$attemptsRemaining"),
                     color = Colors.Brand,
                     textAlign = TextAlign.Center,
                 )
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        if (allowBiometrics) {
+            val biometricsName = stringResource(R.string.security__bio)
+            PrimaryButton(
+                text = stringResource(R.string.security__pin_use_biometrics).replace("{biometricsName}", biometricsName),
+                onClick = onShowBiometrics,
+                fullWidth = false,
+                size = ButtonSize.Small,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_fingerprint),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         PinDots(
             pin = pin,
             modifier = Modifier.padding(vertical = 16.dp),
