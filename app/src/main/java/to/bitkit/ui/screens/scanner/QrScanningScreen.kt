@@ -177,5 +177,6 @@ private fun Content(
             text = stringResource(R.string.other__qr_paste),
             onClick = {}
         )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
