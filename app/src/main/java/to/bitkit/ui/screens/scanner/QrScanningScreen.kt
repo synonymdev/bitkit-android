@@ -3,6 +3,7 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
+import android.content.Context
 import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -57,6 +58,15 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 
 @Composable
 fun QrScanningScreen(
@@ -93,6 +103,17 @@ fun QrScanningScreen(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
         )
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let { processImageFromGallery(context, it, onScanSuccess) }
+        }
+    )
+
+    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { processImageFromGallery(context, it, onScanSuccess) }
     }
 
     LaunchedEffect(lensFacing) {
@@ -144,10 +165,20 @@ fun QrScanningScreen(
         grantedContent = {
             ScreenColumn(modifier = Modifier.gradientBackground()) {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
-                Content(previewView = previewView, onClickCamera = {
-                    isFlashlightOn = !isFlashlightOn
-                    camera?.cameraControl?.enableTorch(isFlashlightOn)
-                })
+                Content(
+                    previewView = previewView,
+                    onClickFlashlight = {
+                        isFlashlightOn = !isFlashlightOn
+                        camera?.cameraControl?.enableTorch(isFlashlightOn)
+                    },
+                    onClickGallery = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        } else {
+                            galleryLauncher.launch("image/*")
+                        }
+                    }
+                )
             }
         }
     )
@@ -156,7 +187,8 @@ fun QrScanningScreen(
 @Composable
 private fun Content(
     previewView: PreviewView,
-    onClickCamera : () -> Unit,
+    onClickFlashlight: () -> Unit,
+    onClickGallery: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -178,7 +210,7 @@ private fun Content(
             )
 
             IconButton(
-                onClick = {}, //TODO IMPLEMENT
+                onClick = onClickGallery,
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
@@ -196,7 +228,7 @@ private fun Content(
             }
 
             IconButton(
-                onClick = onClickCamera,
+                onClick = onClickFlashlight,
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
@@ -226,5 +258,36 @@ private fun Content(
             onClick = {} //TODO IMPLEMENT
         )
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+private fun processImageFromGallery(
+    context: Context,
+    uri: Uri,
+    onScanSuccess: (String) -> Unit,
+) {
+    try {
+        val image = InputImage.fromFilePath(context, uri)
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = BarcodeScanning.getClient(options)
+
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                for (barcode in barcodes) {
+                    barcode.rawValue?.let { qrCode ->
+                        onScanSuccess(qrCode)
+                        Logger.info("QR code found $qrCode")
+                        return@addOnSuccessListener
+                    }
+                }
+                Logger.error("No QR code found in the image")
+            }
+            .addOnFailureListener { e ->
+                Logger.error("Failed to scan QR code from gallery", e)
+            }
+    } catch (e: Exception) {
+        Logger.error("Failed to process image from gallery", e)
     }
 }
