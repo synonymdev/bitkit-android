@@ -4,16 +4,14 @@ package to.bitkit.ui.screens.scanner
 
 import android.Manifest
 import android.view.View.LAYER_TYPE_HARDWARE
+import android.widget.ImageButton
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,8 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material3.ShapeDefaults
+import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,14 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -63,7 +58,6 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Shapes
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -163,23 +157,71 @@ private fun Content(
     previewView: PreviewView,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Box(modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .weight(1f)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .weight(1f)
+        ) {
             AndroidView(
                 modifier = Modifier
                     .fillMaxSize()
                     .clipToBounds(),
                 factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
             )
+
+            IconButton(
+                onClick = {}, //TODO IMPLEMENT
+                modifier = Modifier
+                    .padding(16.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Colors.White64
+                    )
+                    .size(48.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_image_square),
+                    contentDescription = null,
+                    tint = Colors.White
+                )
+            }
+
+            IconButton(
+                onClick = {}, //TODO IMPLEMENT
+                modifier = Modifier
+                    .padding(16.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Colors.White64
+                    )
+                    .size(48.dp)
+                    .align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_flashlight),
+                    contentDescription = null,
+                    tint = Colors.White
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         PrimaryButton(
-            icon = { Icon(painterResource(R.drawable.ic_clipboard_text_simple), contentDescription = null, tint = Colors.White) },
+            icon = {
+                Icon(
+                    painterResource(R.drawable.ic_clipboard_text_simple),
+                    contentDescription = null,
+                    tint = Colors.White
+                )
+            },
             text = stringResource(R.string.other__qr_paste),
-            onClick = {}
+            onClick = {} //TODO IMPLEMENT
         )
         Spacer(modifier = Modifier.height(16.dp))
     }
