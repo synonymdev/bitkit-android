@@ -11,7 +11,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import to.bitkit.R
+import to.bitkit.utils.BiometricCrypto
 import to.bitkit.utils.Logger
+
+private val biometricCrypto = BiometricCrypto()
 
 @Composable
 fun BiometricPrompt(
@@ -43,16 +46,12 @@ fun BiometricPrompt(
             },
             onAuthError = { errorCode, errorMessage ->
                 Logger.debug("Biometric auth error: code = '$errorCode', message = '$errorMessage'")
-                // BIOMETRIC_ERROR_USER_CANCELED = 10
-                // BIOMETRIC_ERROR_NEGATIVE_BUTTON = 13
-                if (errorCode == 10 || errorCode == 13) {
-                    onError?.invoke()
-                }
+                onError?.invoke()
             },
             onUnsupported = {
                 Logger.debug("Biometric auth unsupported")
                 onUnsupported?.invoke()
-            }
+            },
         )
     }
 }
@@ -119,8 +118,11 @@ private fun launchBiometricPrompt(
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 super.onAuthenticationSucceeded(result)
-                // TODO check result.cryptoObject
-                onAuthSucceed()
+                if (biometricCrypto.validateCipher(result.cryptoObject)) {
+                    onAuthSucceed()
+                } else {
+                    onAuthFailed()
+                }
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -133,6 +135,11 @@ private fun launchBiometricPrompt(
         },
     )
 
-    // TODO Pass cryptoObject
-    biometricPrompt.authenticate(promptInfo)
+    try {
+        val cryptoObject = biometricCrypto.getCryptoObject()
+        biometricPrompt.authenticate(promptInfo, cryptoObject)
+    } catch (e: Exception) {
+        Logger.error("Failed to create crypto object", e)
+        onAuthError(-1, "Failed to initialize secure biometric prompt")
+    }
 }
