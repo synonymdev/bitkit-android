@@ -26,22 +26,28 @@ fun BiometricPrompt(
         val name = stringResource(R.string.security__bio)
         stringResource(R.string.security__bio_confirm).replace("{biometricsName}", name)
     }
+    val cancelButtonText = stringResource(R.string.security__use_pin)
 
     LaunchedEffect(Unit) {
         verifyBiometric(
             activity = context,
             title = title,
+            cancelButtonText = cancelButtonText,
             onAuthSucceeded = {
                 Logger.debug("Biometric auth succeeded")
                 onSuccess()
             },
             onAuthFailed = {
-                Logger.debug(" Biometric auth failed")
+                Logger.debug("Biometric auth failed")
                 onFailed?.invoke()
             },
             onAuthError = { errorCode, errorMessage ->
                 Logger.debug("Biometric auth error: code = '$errorCode', message = '$errorMessage'")
-                onError?.invoke()
+                // BIOMETRIC_ERROR_USER_CANCELED = 10
+                // BIOMETRIC_ERROR_NEGATIVE_BUTTON = 13
+                if (errorCode == 10 || errorCode == 13) {
+                    onError?.invoke()
+                }
             },
             onUnsupported = {
                 Logger.debug("Biometric auth unsupported")
@@ -54,6 +60,7 @@ fun BiometricPrompt(
 fun verifyBiometric(
     activity: Context,
     title: String,
+    cancelButtonText: String,
     onAuthSucceeded: () -> Unit,
     onAuthFailed: (() -> Unit),
     onAuthError: ((errorCode: Int, errString: CharSequence) -> Unit),
@@ -63,6 +70,7 @@ fun verifyBiometric(
         launchBiometricPrompt(
             activity = activity,
             title = title,
+            cancelButtonText = cancelButtonText,
             onAuthSucceed = onAuthSucceeded,
             onAuthFailed = onAuthFailed,
             onAuthError = onAuthError,
@@ -75,9 +83,7 @@ fun verifyBiometric(
 fun isBiometricAuthSupported(context: Context): Boolean {
     val biometricManager = BiometricManager.from(context)
     return when (
-        biometricManager.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-        )
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
     ) {
         BiometricManager.BIOMETRIC_SUCCESS -> true
         else -> false
@@ -92,6 +98,7 @@ fun rememberBiometricAuthSupported(context: Context = LocalContext.current): Boo
 private fun launchBiometricPrompt(
     activity: Context,
     title: String,
+    cancelButtonText: String,
     onAuthSucceed: () -> Unit,
     onAuthFailed: (() -> Unit),
     onAuthError: ((errorCode: Int, errString: CharSequence) -> Unit),
@@ -102,9 +109,8 @@ private fun launchBiometricPrompt(
         .setTitle(title)
         .setDescription(null)
         .setConfirmationRequired(true)
-        .setAllowedAuthenticators(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL,
-        )
+        .setNegativeButtonText(cancelButtonText)
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .build()
 
     val biometricPrompt = BiometricPrompt(
