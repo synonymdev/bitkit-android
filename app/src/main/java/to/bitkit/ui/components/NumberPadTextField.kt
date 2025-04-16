@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.ext.removeSpaces
@@ -23,6 +24,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 
@@ -154,5 +156,126 @@ fun MoneyAmount(
                 color = if (showPlaceholder) Colors.White50 else Colors.White,
             )
         }
+    }
+}
+
+
+@Preview(name = "FIAT - Empty", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountFiatEmpty() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "",
+            unit = PrimaryDisplay.FIAT,
+            placeholder = ".00",
+            showPlaceholder = true,
+            satoshis = 0,
+            currencySymbol = "$"
+        )
+    }
+}
+
+@Preview(name = "FIAT - With Value", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountFiatWithValue() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "125.50",
+            unit = PrimaryDisplay.FIAT,
+            placeholder = "",
+            showPlaceholder = true,
+            satoshis = 12550000000,
+            currencySymbol = "$"
+        )
+    }
+}
+
+@Preview(name = "BITCOIN - Modern Empty", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountBitcoinModernEmpty() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "",
+            unit = PrimaryDisplay.BITCOIN,
+            placeholder = ".00000000",
+            showPlaceholder = true,
+            satoshis = 0,
+            currencySymbol = "₿"
+        )
+    }
+}
+
+@Preview(name = "BITCOIN - Modern With Value", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountBitcoinModernWithValue() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "1.25",
+            unit = PrimaryDisplay.BITCOIN,
+            placeholder = "00000",
+            showPlaceholder = true,
+            satoshis = 125000000,
+            currencySymbol = "₿"
+        )
+    }
+}
+
+@Preview(name = "BITCOIN - Classic Empty", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountBitcoinClassicEmpty() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "",
+            unit = PrimaryDisplay.BITCOIN,
+            placeholder = ".00000000",
+            showPlaceholder = true,
+            satoshis = 0,
+            currencySymbol = "₿"
+        )
+    }
+}
+
+@Preview(name = "BITCOIN - Classic With Value", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountBitcoinClassicWithValue() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "125000000",
+            unit = PrimaryDisplay.BITCOIN,
+            placeholder = "",
+            showPlaceholder = true,
+            satoshis = 125000000,
+            currencySymbol = "₿"
+        )
+    }
+}
+
+@Preview(name = "FIAT - Partial Input", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountFiatPartial() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "125.",
+            unit = PrimaryDisplay.FIAT,
+            placeholder = "00",
+            showPlaceholder = true,
+            satoshis = 12500000000,
+            currencySymbol = "$"
+        )
+    }
+}
+
+@Preview(name = "BITCOIN - Partial Input", group = "MoneyAmount", showBackground = true)
+@Composable
+fun PreviewMoneyAmountBitcoinPartial() {
+    AppThemeSurface {
+        MoneyAmount(
+            value = "1.25",
+            unit = PrimaryDisplay.BITCOIN,
+            placeholder = "00000",
+            showPlaceholder = true,
+            satoshis = 125000000,
+            currencySymbol = "₿"
+        )
     }
 }
