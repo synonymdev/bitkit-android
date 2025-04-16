@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -61,6 +62,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Shapes
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -163,6 +165,7 @@ private fun Content(
     Column(modifier = modifier.fillMaxSize()) {
         Box(modifier = modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .weight(1f)) {
             AndroidView(
                 modifier = Modifier
