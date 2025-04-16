@@ -15,9 +15,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +42,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,9 +56,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
@@ -152,12 +160,22 @@ private fun Content(
     previewView: PreviewView,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier
-                .fillMaxSize()
-                .clipToBounds(),
-            factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
+    Column(modifier = modifier.fillMaxSize()) {
+        Box(modifier = modifier
+            .fillMaxWidth()
+            .weight(1f)) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds(),
+                factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } }
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        PrimaryButton(
+            icon = { Icon(painterResource(R.drawable.ic_clipboard_text_simple), contentDescription = null, tint = Colors.White) },
+            text = stringResource(R.string.other__qr_paste),
+            onClick = {}
         )
     }
 }
