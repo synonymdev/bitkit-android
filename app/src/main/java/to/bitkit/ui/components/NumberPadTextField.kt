@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,10 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -28,7 +24,6 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.formatCurrency
 
 @Composable
 fun NumberPadTextField(
@@ -107,7 +102,6 @@ fun MoneyAmount(
     showPlaceholder: Boolean,
     satoshis: Long,
     currencySymbol: String,
-    style: TextStyle = TextStyle.Default,
 ) {
     Column(
         modifier = modifier.semantics { contentDescription = value },
