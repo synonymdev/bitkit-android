@@ -2,6 +2,8 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -114,34 +116,25 @@ fun MoneyAmount(
 
         MoneySSB(sats = satoshis, reversed = true)
 
+        Spacer(modifier = Modifier.height(12.dp))
+
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
+            Display(
                 text = if (unit == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else currencySymbol,
-                style = style.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 44.sp,
-                    letterSpacing = (-1).sp
-                ),
-                color = Colors.White,
+                color = Colors.White64,
                 modifier = Modifier.padding(end = 6.dp)
             )
-            Text(
+
+            Display(
                 text = if (value != placeholder) value else "",
                 color = Colors.White,
-                style = style.copy(
-                    fontSize = 44.sp,
-                    letterSpacing = (-1).sp
-                )
             )
-            Text(
+
+            Display(
                 text = placeholder,
                 color = if (showPlaceholder) Colors.White50 else Colors.White,
-                style = style.copy(
-                    fontSize = 44.sp,
-                    letterSpacing = (-1).sp
-                )
             )
         }
     }
