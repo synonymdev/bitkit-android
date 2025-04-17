@@ -67,6 +67,8 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
+import android.content.ClipboardManager
+import android.content.ClipData
 
 @Composable
 fun QrScanningScreen(
@@ -177,6 +179,22 @@ fun QrScanningScreen(
                         } else {
                             galleryLauncher.launch("image/*")
                         }
+                    },
+                    onPasteFromClipboard = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        if (clipboard.hasPrimaryClip()) {
+                            val clipData: ClipData = clipboard.primaryClip ?: return@Content
+                            if (clipData.itemCount > 0) {
+                                val text = clipData.getItemAt(0).text.toString()
+                                if (text.isNotBlank()) {
+                                    onScanSuccess(text)
+                                } else {
+                                    app.toast(Exception("Clipboard is empty or doesn't contain text"))
+                                }
+                            }
+                        } else {
+                            app.toast(Exception("Clipboard is empty"))
+                        }
                     }
                 )
             }
@@ -189,6 +207,7 @@ private fun Content(
     previewView: PreviewView,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
+    onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -255,7 +274,7 @@ private fun Content(
                 )
             },
             text = stringResource(R.string.other__qr_paste),
-            onClick = {} //TODO IMPLEMENT
+            onClick = onPasteFromClipboard
         )
         Spacer(modifier = Modifier.height(16.dp))
     }
