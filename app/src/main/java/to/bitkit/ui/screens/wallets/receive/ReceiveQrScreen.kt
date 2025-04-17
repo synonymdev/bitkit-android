@@ -267,6 +267,7 @@ private fun ReceiveQrSlide(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
+            modifier = Modifier.weight(0.5f)
         ) {
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
