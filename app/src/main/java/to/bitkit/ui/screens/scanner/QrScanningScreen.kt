@@ -4,7 +4,12 @@ package to.bitkit.ui.screens.scanner
 
 import android.Manifest
 import android.content.Context
+import android.net.Uri
+import android.os.Build
 import android.view.View.LAYER_TYPE_HARDWARE
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -47,6 +52,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
@@ -58,15 +67,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
-import android.net.Uri
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 
 @Composable
 fun QrScanningScreen(
@@ -108,12 +108,12 @@ fun QrScanningScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { processImageFromGallery(context, it, onScanSuccess) }
+            uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
         }
     )
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { processImageFromGallery(context, it, onScanSuccess) }
+        uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
     }
 
     LaunchedEffect(lensFacing) {
@@ -265,6 +265,7 @@ private fun processImageFromGallery(
     context: Context,
     uri: Uri,
     onScanSuccess: (String) -> Unit,
+    onError: (Exception) -> Unit,
 ) {
     try {
         val image = InputImage.fromFilePath(context, uri)
@@ -283,11 +284,14 @@ private fun processImageFromGallery(
                     }
                 }
                 Logger.error("No QR code found in the image")
+                onError(Exception("No QR code found in the image"))
             }
             .addOnFailureListener { e ->
                 Logger.error("Failed to scan QR code from gallery", e)
+                onError(e)
             }
     } catch (e: Exception) {
         Logger.error("Failed to process image from gallery", e)
+        onError(e)
     }
 }
