@@ -198,7 +198,7 @@ private fun ReceiveQrScreen(
                         0 -> ReceiveQrSlide(
                             uri = uri,
                             qrLogoPainter = painterResource(qrLogoImageRes),
-                            modifier = Modifier.fillMaxWidth().weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         1 -> CopyValuesSlide(
@@ -261,12 +261,12 @@ private fun ReceiveQrSlide(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            modifier = Modifier.weight(1f).aspectRatio(1f)
+            modifier = Modifier.weight(1f)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
@@ -424,7 +424,7 @@ private fun ReceiveQrScreenPreview() {
     }
 }
 
-@Preview(showBackground = true, heightDp = 650)
+@Preview(showBackground = true, heightDp = 600)
 @Composable
 private fun ReceiveQrScreenPreviewSmallScreen() {
     AppThemeSurface {

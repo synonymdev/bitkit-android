@@ -53,6 +53,7 @@ fun QrCodeImage(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
             .background(Color.White, RoundedCornerShape(8.dp))
+            .aspectRatio(1f)
             .padding(8.dp)
     ) {
         val bitmap = rememberQrBitmap(content, size)
