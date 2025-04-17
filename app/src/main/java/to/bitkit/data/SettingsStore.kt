@@ -67,15 +67,15 @@ class SettingsStore @Inject constructor(
         store.edit { it[LIGHTNING_SETUP_STEP] = value }
     }
 
-    // TODO secure
+    // TODO secure?
     val isPinEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ENABLED] == true }
     suspend fun setIsPinEnabled(value: Boolean) { store.edit { it[IS_PIN_ENABLED] = value } }
 
-    // TODO secure
+    // TODO secure?
     val isPinOnLaunchEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ON_LAUNCH_ENABLED] == true }
     suspend fun setIsPinOnLaunchEnabled(value: Boolean) { store.edit { it[IS_PIN_ON_LAUNCH_ENABLED] = value } }
 
-    // TODO secure
+    // TODO secure?
     val isBiometricEnabled: Flow<Boolean> = store.data.map { it[IS_BIOMETRIC_ENABLED] == true }
     suspend fun setIsBiometricEnabled(value: Boolean) { store.edit { it[IS_BIOMETRIC_ENABLED] = value } }
 

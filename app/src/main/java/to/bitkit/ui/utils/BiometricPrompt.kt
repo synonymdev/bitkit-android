@@ -22,6 +22,7 @@ fun BiometricPrompt(
     onFailed: (() -> Unit)? = null,
     onError: (() -> Unit)? = null,
     onUnsupported: (() -> Unit)? = null,
+    cancelButtonText: String = stringResource(R.string.security__use_pin),
 ) {
     val context = LocalContext.current
 
@@ -29,7 +30,6 @@ fun BiometricPrompt(
         val name = stringResource(R.string.security__bio)
         stringResource(R.string.security__bio_confirm).replace("{biometricsName}", name)
     }
-    val cancelButtonText = stringResource(R.string.security__use_pin)
 
     LaunchedEffect(Unit) {
         verifyBiometric(
@@ -81,9 +81,7 @@ fun verifyBiometric(
 
 fun isBiometricAuthSupported(context: Context): Boolean {
     val biometricManager = BiometricManager.from(context)
-    return when (
-        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-    ) {
+    return when (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
         BiometricManager.BIOMETRIC_SUCCESS -> true
         else -> false
     }

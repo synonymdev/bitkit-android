@@ -103,5 +103,6 @@ internal object Env {
         )
     }
 
+    const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
 }

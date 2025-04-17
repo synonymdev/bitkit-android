@@ -6,6 +6,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,27 +27,43 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.ui.settings.pin.PinNavigationSheet
 
 @Composable
 fun SecuritySettingsScreen(
     navController: NavController,
 ) {
     val app = appViewModel ?: return
+
+    var showPinSheet by remember { mutableStateOf(false) }
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
 
-    SecuritySettingsContent(
-        isPinEnabled = isPinEnabled,
-        isPinOnLaunchEnabled = isPinOnLaunchEnabled,
-        isBiometricEnabled = isBiometricEnabled,
-        isBiometrySupported = rememberBiometricAuthSupported(),
-        onPinClick = { app.setIsPinEnabled(!isPinEnabled) }, // TODO auth check
-        onPinOnLaunchClick = { app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled) }, // TODO auth check
-        onUseBiometricsClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
-        onBackClick = { navController.popBackStack() },
-        onCloseClick = { navController.navigateToHome() },
-    )
+    PinNavigationSheet(
+        showSheet = showPinSheet,
+        showLaterButton = false,
+        onDismiss = { showPinSheet = false },
+    ) {
+        SecuritySettingsContent(
+            isPinEnabled = isPinEnabled,
+            isPinOnLaunchEnabled = isPinOnLaunchEnabled,
+            isBiometricEnabled = isBiometricEnabled,
+            isBiometrySupported = rememberBiometricAuthSupported(),
+            onPinClick = {
+                if (!isPinEnabled) {
+                    showPinSheet = true
+                } else {
+                    // TODO show Disable Pin screen
+                    app.removePin()
+                }
+            },
+            onPinOnLaunchClick = { app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled) }, // TODO auth check
+            onUseBiometricsClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
+            onBackClick = { navController.popBackStack() },
+            onCloseClick = { navController.navigateToHome() },
+        )
+    }
 }
 
 @Composable

@@ -23,7 +23,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,8 +37,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.AppViewModel
 
-private const val PIN_LENGTH = 4
-
 @Composable
 fun AuthCheckView(
     onSuccess: (() -> Unit)? = null,
@@ -49,10 +46,6 @@ fun AuthCheckView(
 ) {
     val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        appViewModel.initTestPin()
-    }
 
     AuthCheckViewContent(
         onSuccess = onSuccess,
@@ -74,6 +67,10 @@ private fun AuthCheckViewContent(
     attemptsRemaining: Int,
 ) {
     var showBio by rememberSaveable { mutableStateOf(isBiometricsEnabled) }
+
+    LaunchedEffect(isBiometricsEnabled) {
+        showBio = isBiometricsEnabled
+    }
 
     Box(
         contentAlignment = Alignment.Center,
@@ -114,7 +111,7 @@ private fun PinPad(
     val isLastAttempt = attemptsRemaining == 1
 
     LaunchedEffect(pin) {
-        if (pin.length == PIN_LENGTH) {
+        if (pin.length == Env.PIN_LENGTH) {
             if (validatePin(pin)) {
                 onSuccess?.invoke()
             }
@@ -189,32 +186,11 @@ private fun PinPad(
                     if (pin.isNotEmpty()) {
                         pin = pin.dropLast(1)
                     }
-                } else if (pin.length < PIN_LENGTH) {
+                } else if (pin.length < Env.PIN_LENGTH) {
                     pin += key
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun PinDots(
-    pin: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-    ) {
-        repeat(PIN_LENGTH) { index ->
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .border(1.dp, Colors.Brand, CircleShape)
-                    .background(if (index < pin.length) Colors.Brand else Colors.Brand08)
-            )
-        }
     }
 }
 

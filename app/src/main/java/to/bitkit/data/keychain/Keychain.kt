@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.lightningdevkit.ldknode.Network
@@ -32,7 +33,9 @@ class Keychain @Inject constructor(
     private val keyStore by lazy { AndroidKeyStore(alias) }
 
     private val Context.keychain by preferencesDataStore(alias, scope = this)
-    val snapshot get() = runBlocking(this.coroutineContext) { context.keychain.data.first() }
+    private val keychain = context.keychain
+
+    val snapshot get() = runBlocking(this.coroutineContext) { keychain.data.first() }
 
     fun loadString(key: String): String? = load(key)?.decodeToString()
 
@@ -41,7 +44,7 @@ class Keychain @Inject constructor(
             return snapshot[key.indexed]?.fromBase64()?.let {
                 keyStore.decrypt(it)
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             throw KeychainError.FailedToLoad(key)
         }
     }
@@ -53,8 +56,18 @@ class Keychain @Inject constructor(
 
         try {
             val encryptedValue = keyStore.encrypt(value)
-            context.keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-        } catch (e: Exception) {
+            keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
+        } catch (_: Exception) {
+            throw KeychainError.FailedToSave(key)
+        }
+        Logger.info("Saved to keychain: $key")
+    }
+
+    suspend fun replaceString(key: String, value: String) {
+        try {
+            val encryptedValue = keyStore.encrypt(value.toByteArray())
+            keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
+        } catch (_: Exception) {
             throw KeychainError.FailedToSave(key)
         }
         Logger.info("Saved to keychain: $key")
@@ -62,8 +75,8 @@ class Keychain @Inject constructor(
 
     suspend fun delete(key: String) {
         try {
-            context.keychain.edit { it.remove(key.indexed) }
-        } catch (e: Exception) {
+            keychain.edit { it.remove(key.indexed) }
+        } catch (_: Exception) {
             throw KeychainError.FailedToDelete(key)
         }
         Logger.debug("Deleted from keychain: $key")
@@ -73,13 +86,11 @@ class Keychain @Inject constructor(
         return snapshot.contains(key.indexed)
     }
 
-    fun observeExists(key: Key): Flow<Boolean> = context.keychain.data.map { it.contains(key.name.indexed) }
-
     suspend fun wipe() {
         if (Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
 
         val keys = snapshot.asMap().keys
-        context.keychain.edit { it.clear() }
+        keychain.edit { it.clear() }
 
         Logger.info("Deleted all keychain entries: ${keys.joinToString()}")
     }
@@ -89,6 +100,18 @@ class Keychain @Inject constructor(
             val walletIndex = runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
+
+    fun pinAttemptsRemaining(): Flow<Int?> {
+        return keychain.data
+            .map { it[Key.PIN_ATTEMPTS_REMAINING.name.indexed] }
+            .distinctUntilChanged()
+            .map { encrypted ->
+                encrypted?.fromBase64()?.let { bytes ->
+                    keyStore.decrypt(bytes).decodeToString()
+                }
+            }
+            .map { string -> string?.toIntOrNull() }
+    }
 
     enum class Key {
         PUSH_NOTIFICATION_TOKEN,
