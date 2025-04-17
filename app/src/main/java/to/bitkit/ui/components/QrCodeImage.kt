@@ -52,7 +52,6 @@ fun QrCodeImage(
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
-            .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(8.dp))
             .aspectRatio(1f)
             .padding(16.dp)

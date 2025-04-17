@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -209,6 +211,7 @@ private fun ReceiveQrScreen(
             }
             Spacer(modifier = Modifier.height(24.dp))
             if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
+                Spacer(modifier = Modifier.weight(1f))
                 ReceiveLightningFunds(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
@@ -253,10 +256,12 @@ private fun ReceiveQrSlide(
     val clipboard = LocalClipboardManager.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
     ) {
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
+            modifier = Modifier.weight(1f)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Row(
@@ -309,6 +314,7 @@ private fun ReceiveQrSlide(
                 }
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -406,6 +412,21 @@ private fun CopyAddressCard(
 @Preview(showBackground = true)
 @Composable
 private fun ReceiveQrScreenPreview() {
+    AppThemeSurface {
+        ReceiveQrScreen(
+            cjitInvoice = remember { mutableStateOf(null) },
+            cjitActive = remember { mutableStateOf(false) },
+            walletState = MainUiState(
+                nodeLifecycleState = Running,
+            ),
+            onCjitToggle = { },
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 650)
+@Composable
+private fun ReceiveQrScreenPreviewSmallScreen() {
     AppThemeSurface {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
