@@ -6,8 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.screens.wallets.send.AmountInputHandler
 import to.bitkit.viewmodels.CurrencyUiState
 
 @Composable
