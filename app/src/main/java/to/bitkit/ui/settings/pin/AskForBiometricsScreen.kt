@@ -2,6 +2,7 @@ package to.bitkit.ui.settings.pin
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,12 +47,15 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 
 @Composable
 fun AskForBiometricsScreen(
-    onContinue: () -> Unit,
+    onContinue: (isBioOn: Boolean) -> Unit,
     onSkip: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val app = appViewModel ?: return
     val isBiometrySupported = rememberBiometricAuthSupported()
     var showBiometricPrompt by remember { mutableStateOf(false) }
+
+    BackHandler { onBack() }
 
     AskForBiometricsContent(
         isBiometrySupported = isBiometrySupported,
@@ -60,7 +64,7 @@ fun AskForBiometricsScreen(
             if (shouldEnableBiometrics) {
                 showBiometricPrompt = true
             } else {
-                onContinue()
+                onContinue(false)
             }
         },
     )
@@ -69,7 +73,7 @@ fun AskForBiometricsScreen(
         BiometricPrompt(
             onSuccess = {
                 app.setIsBiometricEnabled(true)
-                onContinue()
+                onContinue(true)
             },
             onError = {
                 showBiometricPrompt = false
@@ -139,7 +143,6 @@ private fun AskForBiometricsContent(
                             stringResource(R.string.security__bio_use).replace("{biometricsName}", biometricsName)
                         },
                     )
-
                     Switch(
                         checked = shouldEnableBiometrics,
                         onCheckedChange = null, // handled by parent

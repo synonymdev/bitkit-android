@@ -66,8 +66,19 @@ fun PinNavigationSheet(
                     }
                     composable<PinRoute.AskForBiometrics> {
                         AskForBiometricsScreen(
-                            onContinue = { onDismiss() }, // TODO nav to result screen
-                            onSkip = onDismiss,
+                            onContinue = { isBioOn ->
+                                navController.navigate(PinRoute.Result(isBioOn))
+                            },
+                            onSkip = { navController.navigate(PinRoute.Result(isBioOn = false)) },
+                            onBack = onDismiss,
+                        )
+                    }
+                    composable<PinRoute.Result> { backStackEntry ->
+                        val route = backStackEntry.toRoute<PinRoute.Result>()
+                        PinResultScreen(
+                            isBioOn = route.isBioOn,
+                            onDismiss = onDismiss,
+                            onBack = onDismiss,
                         )
                     }
                 }
@@ -90,4 +101,7 @@ sealed class PinRoute {
 
     @Serializable
     data object AskForBiometrics : PinRoute()
+
+    @Serializable
+    data class Result(val isBioOn: Boolean) : PinRoute()
 }
