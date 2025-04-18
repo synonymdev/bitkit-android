@@ -237,7 +237,7 @@ private fun PaymentMethodButton(
 }
 
 @Composable
-private fun AmountInputHandler(
+fun AmountInputHandler(
     input: String,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
