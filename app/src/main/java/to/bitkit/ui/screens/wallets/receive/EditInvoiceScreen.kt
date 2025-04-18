@@ -27,6 +27,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
@@ -104,7 +105,7 @@ fun EditInvoiceContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             TextField(
-                placeholder = { Text(stringResource(R.string.wallet__receive_note_placeholder)) },
+                placeholder = { BodySSB(stringResource(R.string.wallet__receive_note_placeholder)) },
                 value = noteText,
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
                 minLines = 12,
