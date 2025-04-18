@@ -52,10 +52,9 @@ fun QrCodeImage(
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
-            .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(8.dp))
             .aspectRatio(1f)
-            .padding(16.dp)
+            .padding(8.dp)
     ) {
         val bitmap = rememberQrBitmap(content, size)
 
@@ -63,7 +62,7 @@ fun QrCodeImage(
             Image(
                 painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Inside,
             )
             logoPainter?.let {
                 Box(
