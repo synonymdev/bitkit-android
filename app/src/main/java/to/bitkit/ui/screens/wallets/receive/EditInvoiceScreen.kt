@@ -74,8 +74,8 @@ fun EditInvoiceContent(
     onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
 ){
-    val keyboardVisible by remember { mutableStateOf(false) }
-    val noteText by remember { mutableStateOf("") }
+    var keyboardVisible by remember { mutableStateOf(false) }
+    var noteText by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -107,7 +107,7 @@ fun EditInvoiceContent(
             TextField(
                 placeholder = { BodySSB(stringResource(R.string.wallet__receive_note_placeholder)) },
                 value = noteText,
-                onValueChange = { onEvent(SendEvent.AddressChange(it)) },
+                onValueChange = { noteText = it },
                 minLines = 4,
                 colors = AppTextFieldDefaults.noIndicatorColors,
                 shape = MaterialTheme.shapes.small,
