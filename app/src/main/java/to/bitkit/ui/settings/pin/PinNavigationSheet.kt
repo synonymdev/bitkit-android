@@ -58,8 +58,7 @@ fun PinNavigationSheet(
                         val route = backStackEntry.toRoute<PinRoute.ConfirmPin>()
                         ConfirmPinScreen(
                             originalPin = route.pin,
-                            onPinConfirmed = { pin ->
-                                app.addPin(pin)
+                            onPinConfirmed = {
                                 navController.navigate(PinRoute.AskForBiometrics)
                             },
                             onBack = { navController.popBackStack() },

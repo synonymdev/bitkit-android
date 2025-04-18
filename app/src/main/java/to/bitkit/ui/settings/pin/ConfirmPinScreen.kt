@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.pin
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.KEY_DELETE
@@ -34,16 +36,19 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun ConfirmPinScreen(
     originalPin: String,
-    onPinConfirmed: (String) -> Unit,
+    onPinConfirmed: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val app = appViewModel ?: return
+
     var pin by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
             if (pin == originalPin) {
-                onPinConfirmed(pin)
+                app.addPin(pin)
+                onPinConfirmed()
             } else {
                 showError = true
                 delay(500)
@@ -52,52 +57,74 @@ fun ConfirmPinScreen(
         }
     }
 
+    ConfirmPinContent(
+        pin = pin,
+        showError = showError,
+        onKeyPress = { key ->
+            if (key == KEY_DELETE) {
+                if (pin.isNotEmpty()) {
+                    pin = pin.dropLast(1)
+                }
+            } else if (pin.length < Env.PIN_LENGTH) {
+                pin = pin + key
+            }
+        },
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun ConfirmPinContent(
+    pin: String,
+    showError: Boolean,
+    onKeyPress: (String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .gradientBackground()
             .navigationBarsPadding()
     ) {
-            SheetTopBar(stringResource(R.string.security__pin_retype_header), onBack = onBack)
+        SheetTopBar(
+            stringResource(R.string.security__pin_retype_header),
+            onBack = onBack,
+        )
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            BodyM(
-                text = stringResource(R.string.security__pin_retype_text),
-                color = Colors.White64,
-                modifier = Modifier.padding(horizontal = 32.dp),
+        BodyM(
+            text = stringResource(R.string.security__pin_retype_text),
+            color = Colors.White64,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
+
+        AnimatedVisibility(visible = showError) {
+            BodyS(
+                text = stringResource(R.string.security__pin_not_match),
+                textAlign = TextAlign.Center,
+                color = Colors.Brand,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             )
+        }
 
-            Spacer(modifier = Modifier.height(32.dp))
-            Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            if (showError) {
-                BodyS(
-                    text = stringResource(R.string.security__pin_not_match),
-                    textAlign = TextAlign.Center,
-                    color = Colors.Brand,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+        PinDots(
+            pin = pin,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
 
-            PinDots(
-                pin = pin,
-                modifier = Modifier.padding(horizontal = 32.dp),
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         PinNumberPad(
-            onPress = { key ->
-                if (key == KEY_DELETE) {
-                    if (pin.isNotEmpty()) {
-                        pin = pin.dropLast(1)
-                    }
-                } else if (pin.length < Env.PIN_LENGTH) {
-                    pin += key
-                }
-            },
+            onPress = onKeyPress,
             modifier = Modifier
                 .height(350.dp)
                 .background(Colors.Black)
@@ -111,9 +138,23 @@ fun ConfirmPinScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ConfirmPinScreen(
-            originalPin = "",
-            onPinConfirmed = {},
+        ConfirmPinContent(
+            pin = "",
+            showError = false,
+            onKeyPress = {},
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewRetry() {
+    AppThemeSurface {
+        ConfirmPinContent(
+            pin = "123",
+            showError = true,
+            onKeyPress = {},
             onBack = {},
         )
     }
