@@ -175,9 +175,9 @@ class MainActivity : FragmentActivity() {
 
                     if (!isAuthenticated) {
                         AuthCheckView(
-                            onSuccess = { appViewModel.setIsAuthenticated(true) },
                             showLogoOnPin = true,
                             appViewModel = appViewModel,
+                            onSuccess = { appViewModel.setIsAuthenticated(true) },
                         )
                     } else {
                         ContentView(

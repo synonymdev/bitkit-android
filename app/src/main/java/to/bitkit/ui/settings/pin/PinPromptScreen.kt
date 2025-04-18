@@ -67,7 +67,6 @@ fun PinPromptScreen(
                 )
             }
 
-            // Title and description
             Display(text = stringResource(R.string.security__pin_security_title).withAccent(accentColor = Colors.Green))
 
             Spacer(modifier = Modifier.height(8.dp))

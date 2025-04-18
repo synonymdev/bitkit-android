@@ -1,18 +1,14 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,32 +35,32 @@ import to.bitkit.viewmodels.AppViewModel
 
 @Composable
 fun AuthCheckView(
-    onSuccess: (() -> Unit)? = null,
-    isBiometrySupported: Boolean = rememberBiometricAuthSupported(),
     showLogoOnPin: Boolean,
     appViewModel: AppViewModel,
+    isBiometrySupported: Boolean = rememberBiometricAuthSupported(),
+    onSuccess: (() -> Unit)? = null,
 ) {
     val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
 
     AuthCheckViewContent(
-        onSuccess = onSuccess,
         isBiometricsEnabled = isBiometricsEnabled,
         isBiometrySupported = isBiometrySupported,
         showLogoOnPin = showLogoOnPin,
-        validatePin = appViewModel::validatePin,
         attemptsRemaining = attemptsRemaining,
+        validatePin = appViewModel::validatePin,
+        onSuccess = onSuccess,
     )
 }
 
 @Composable
 private fun AuthCheckViewContent(
-    onSuccess: (() -> Unit)? = null,
     isBiometricsEnabled: Boolean,
     isBiometrySupported: Boolean,
     showLogoOnPin: Boolean,
-    validatePin: (String) -> Boolean,
     attemptsRemaining: Int,
+    validatePin: (String) -> Boolean,
+    onSuccess: (() -> Unit)? = null,
 ) {
     var showBio by rememberSaveable { mutableStateOf(isBiometricsEnabled) }
 
