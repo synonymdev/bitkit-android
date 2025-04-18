@@ -108,7 +108,7 @@ fun EditInvoiceContent(
                 placeholder = { BodySSB(stringResource(R.string.wallet__receive_note_placeholder)) },
                 value = noteText,
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
-                minLines = 12,
+                minLines = 4,
                 colors = AppTextFieldDefaults.noIndicatorColors,
                 shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 74.dp),
