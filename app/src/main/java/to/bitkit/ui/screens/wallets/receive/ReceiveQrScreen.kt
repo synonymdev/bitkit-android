@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -254,6 +253,7 @@ private fun ReceiveQrSlide(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -261,13 +261,13 @@ private fun ReceiveQrSlide(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f, fill = false)
         )
+
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
-            modifier = Modifier.weight(0.5f)
         ) {
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
