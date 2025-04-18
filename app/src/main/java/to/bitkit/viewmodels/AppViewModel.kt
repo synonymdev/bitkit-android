@@ -790,7 +790,7 @@ class AppViewModel @Inject constructor(
         return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
     }
 
-    // region Security
+    // region security
     fun validatePin(pin: String): Boolean {
         val storedPin = keychain.loadString(Keychain.Key.PIN.name)
         val isValid = storedPin == pin
@@ -807,11 +807,10 @@ class AppViewModel @Inject constructor(
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
 
             if (newAttempts <= 0) {
-                // TODO: wipeApp() - return to onboarding
+                // TODO: wipeStorage() & return to onboarding
                 toast(
                     type = Toast.ToastType.WARNING,
                     title = "TODO: Wipe App data",
-                    description = "Too many incorrect PIN attempts. App data has been wiped.",
                 )
             }
         }

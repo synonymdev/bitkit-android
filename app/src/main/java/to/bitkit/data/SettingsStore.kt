@@ -47,17 +47,17 @@ class SettingsStore @Inject constructor(
         store.edit { it[SELECTED_CURRENCY_KEY] = currency }
     }
 
-    val showEmptyState: Flow<Boolean> = store.data.map { it[SHOW_EMPTY_STATE] ?: false }
+    val showEmptyState: Flow<Boolean> = store.data.map { it[SHOW_EMPTY_STATE] == true }
     suspend fun setShowEmptyState(show: Boolean) {
         store.edit { it[SHOW_EMPTY_STATE] = show }
     }
 
-    val hasSeenSpendingIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SPENDING_INTRO] ?: false }
+    val hasSeenSpendingIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SPENDING_INTRO] == true }
     suspend fun setHasSeenSpendingIntro(value: Boolean) {
         store.edit { it[HAS_SEEN_SPENDING_INTRO] = value }
     }
 
-    val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] ?: false }
+    val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] == true }
     suspend fun setHasSeenSavingsIntro(value: Boolean) {
         store.edit { it[HAS_SEEN_SAVINGS_INTRO] = value }
     }
@@ -67,15 +67,12 @@ class SettingsStore @Inject constructor(
         store.edit { it[LIGHTNING_SETUP_STEP] = value }
     }
 
-    // TODO secure?
     val isPinEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ENABLED] == true }
     suspend fun setIsPinEnabled(value: Boolean) { store.edit { it[IS_PIN_ENABLED] = value } }
 
-    // TODO secure?
     val isPinOnLaunchEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ON_LAUNCH_ENABLED] == true }
     suspend fun setIsPinOnLaunchEnabled(value: Boolean) { store.edit { it[IS_PIN_ON_LAUNCH_ENABLED] = value } }
 
-    // TODO secure?
     val isBiometricEnabled: Flow<Boolean> = store.data.map { it[IS_BIOMETRIC_ENABLED] == true }
     suspend fun setIsBiometricEnabled(value: Boolean) { store.edit { it[IS_BIOMETRIC_ENABLED] = value } }
 
