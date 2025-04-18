@@ -63,14 +63,15 @@ class Keychain @Inject constructor(
         Logger.info("Saved to keychain: $key")
     }
 
-    suspend fun replaceString(key: String, value: String) {
+    /** Inserts or replaces a string value associated with a given key in the keychain. */
+    suspend fun upsertString(key: String, value: String) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
             keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
         } catch (_: Exception) {
             throw KeychainError.FailedToSave(key)
         }
-        Logger.info("Saved to keychain: $key")
+        Logger.info("Saved/updated in keychain: $key")
     }
 
     suspend fun delete(key: String) {

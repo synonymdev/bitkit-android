@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.PrimaryButton
@@ -48,6 +49,7 @@ fun AskForBiometricsScreen(
     onContinue: () -> Unit,
     onSkip: () -> Unit,
 ) {
+    val app = appViewModel ?: return
     val isBiometrySupported = rememberBiometricAuthSupported()
     var showBiometricPrompt by remember { mutableStateOf(false) }
 
@@ -57,7 +59,6 @@ fun AskForBiometricsScreen(
         onContinue = { shouldEnableBiometrics ->
             if (shouldEnableBiometrics) {
                 showBiometricPrompt = true
-                // onEnableBiometrics() TODO remove?
             } else {
                 onContinue()
             }
@@ -67,7 +68,7 @@ fun AskForBiometricsScreen(
     if (showBiometricPrompt) {
         BiometricPrompt(
             onSuccess = {
-                // TODO
+                app.setIsBiometricEnabled(true)
                 onContinue()
             },
             onError = {
@@ -101,8 +102,10 @@ private fun AskForBiometricsContent(
             var shouldEnableBiometrics by remember { mutableStateOf(false) }
 
             Column(
-                modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .weight(1f)
             ) {
                 BodyM(
                     text = run {
@@ -166,8 +169,10 @@ private fun ColumnScope.BioNotAvailableView(
     val context = LocalContext.current
 
     Column(
-        modifier = Modifier.weight(1f),
         horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .weight(1f)
     ) {
         BodyM(
             text = stringResource(R.string.security__bio_not_available),

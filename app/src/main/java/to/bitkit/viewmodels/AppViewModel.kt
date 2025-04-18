@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -799,14 +797,14 @@ class AppViewModel @Inject constructor(
 
         if (isValid) {
             viewModelScope.launch {
-                keychain.replaceString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+                keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
             }
             return true
         }
 
         viewModelScope.launch {
             val newAttempts = pinAttemptsRemaining.value - 1
-            keychain.replaceString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
 
             if (newAttempts <= 0) {
                 // TODO: wipeApp() - return to onboarding
@@ -824,18 +822,19 @@ class AppViewModel @Inject constructor(
         setIsPinEnabled(true)
 
         viewModelScope.launch {
-            keychain.replaceString(Keychain.Key.PIN.name, pin)
-            keychain.replaceString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+            keychain.upsertString(Keychain.Key.PIN.name, pin)
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }
 
     fun removePin() {
         setIsPinEnabled(false)
-        setIsPinOnLaunchEnabled(false)
+        setIsPinOnLaunchEnabled(true)
         setIsBiometricEnabled(false)
+
         viewModelScope.launch {
             keychain.delete(Keychain.Key.PIN.name)
-            keychain.replaceString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
 
     }

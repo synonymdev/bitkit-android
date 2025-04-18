@@ -37,7 +37,7 @@ fun PinNavigationSheet(
             ) {
                 NavHost(
                     navController = navController,
-                    startDestination = PinRoute.PinPrompt
+                    startDestination = PinRoute.PinPrompt,
                 ) {
                     composable<PinRoute.PinPrompt> {
                         PinPromptScreen(
@@ -59,7 +59,6 @@ fun PinNavigationSheet(
                         ConfirmPinScreen(
                             originalPin = route.pin,
                             onPinConfirmed = { pin ->
-                                // TODO nav to result screen
                                 app.addPin(pin)
                                 navController.navigate(PinRoute.AskForBiometrics)
                             },
@@ -68,7 +67,7 @@ fun PinNavigationSheet(
                     }
                     composable<PinRoute.AskForBiometrics> {
                         AskForBiometricsScreen(
-                            onContinue = { onDismiss() }, // TODO: logic if needed
+                            onContinue = { onDismiss() }, // TODO nav to result screen
                             onSkip = onDismiss,
                         )
                     }
