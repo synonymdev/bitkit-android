@@ -15,8 +15,7 @@ object Bip21Utils {
 
         // Add amount if specified (convert from sats to BTC)
         amountSats?.let {
-            val btcAmount = it.toDouble() / 100_000_000.0
-            queryParams.add("amount=${btcAmount.toString().removeSuffix(".0")}")
+            queryParams.add("amount=${formatBtcAmount(amountSats)}")
         }
 
         // Add optional parameters
@@ -37,7 +36,17 @@ object Bip21Utils {
         return builder.toString()
     }
 
+    private fun formatBtcAmount(sats: ULong): String {
+        val fullBtc = sats / 100_000_000uL
+        val remainderSats = sats % 100_000_000uL
+
+        return if (remainderSats == 0uL) {
+            fullBtc.toString()
+        } else {
+            val remainderStr = remainderSats.toString().padStart(8, '0')
+            "$fullBtc.${remainderStr.trimEnd('0')}"
+        }
+    }
 }
 
 fun String.encodeToUrl(): String = runCatching { java.net.URLEncoder.encode(this, "UTF-8") }.getOrElse { "" }
-
