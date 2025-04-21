@@ -43,6 +43,7 @@ import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -338,9 +339,16 @@ class WalletViewModel @Inject constructor(
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             _bolt11 = createInvoice(amountSats = amountSats, description= description)
-        }
+            val newBip21 = Bip21Utils.buildBip21Url(
+                bitcoinAddress = lightningService.newAddress(),
+                amountSats = amountSats,
+                message = description.ifBlank { "Bitkit" },
+                lightningInvoice = _bolt11
+            )
+            _bip21 = newBip21
 
-        //TODO UPDATE BIP21
+            syncState()
+        }
     }
 
 
