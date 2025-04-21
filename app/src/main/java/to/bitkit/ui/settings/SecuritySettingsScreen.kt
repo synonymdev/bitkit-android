@@ -17,9 +17,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.navigateToAuthCheck
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -58,8 +60,17 @@ fun SecuritySettingsScreen(
                     app.removePin()
                 }
             },
-            onPinOnLaunchClick = { app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled) }, // TODO auth check
-            onUseBiometricsClick = { app.setIsBiometricEnabled(!isBiometricEnabled) }, // TODO auth check
+            onPinOnLaunchClick = {
+                navController.navigateToAuthCheck(
+                    onSuccessAction = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH,
+                )
+            },
+            onUseBiometricsClick = {
+                navController.navigateToAuthCheck(
+                    requireBiometrics = true,
+                    onSuccessAction = AuthCheckAction.TOGGLE_BIOMETRICS,
+                )
+            },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )

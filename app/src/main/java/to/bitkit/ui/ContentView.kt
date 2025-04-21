@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
@@ -244,6 +245,7 @@ fun ContentView(
                 allActivity(activityListViewModel, navController)
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
+                authCheck(navController)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -624,6 +626,21 @@ private fun NavGraphBuilder.qrScanner(
         }
     }
 }
+
+private fun NavGraphBuilder.authCheck(
+    navController: NavHostController,
+) {
+    composable<Routes.AuthCheck>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) { navBackEntry ->
+        val route = navBackEntry.toRoute<Routes.AuthCheck>()
+        AuthCheckScreen(
+            route = route,
+            navController = navController,
+        )
+    }
+}
 // endregion
 
 /**
@@ -669,6 +686,20 @@ fun NavController.navigateToGeneralSettings() = navigate(
 
 fun NavController.navigateToSecuritySettings() = navigate(
     route = Routes.SecuritySettings,
+)
+
+fun NavController.navigateToAuthCheck(
+    showLogoOnPin: Boolean = false,
+    requirePin: Boolean = false,
+    requireBiometrics: Boolean = false,
+    onSuccessAction: String,
+) = navigate(
+    route = Routes.AuthCheck(
+        showLogoOnPin = showLogoOnPin,
+        requirePin = requirePin,
+        requireBiometrics = requireBiometrics,
+        onSuccessAction = onSuccessAction,
+    ),
 )
 
 fun NavController.navigateToDefaultUnitSettings() = navigate(
@@ -763,6 +794,14 @@ object Routes {
 
     @Serializable
     data object SecuritySettings
+
+    @Serializable
+    data class AuthCheck(
+        val showLogoOnPin: Boolean = false,
+        val requirePin: Boolean = false,
+        val requireBiometrics: Boolean = false,
+        val onSuccessAction: String,
+    )
 
     @Serializable
     data object DefaultUnitSettings

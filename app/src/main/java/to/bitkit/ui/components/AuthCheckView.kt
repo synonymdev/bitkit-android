@@ -35,9 +35,11 @@ import to.bitkit.viewmodels.AppViewModel
 
 @Composable
 fun AuthCheckView(
-    showLogoOnPin: Boolean,
+    showLogoOnPin: Boolean = false,
     appViewModel: AppViewModel,
     isBiometrySupported: Boolean = rememberBiometricAuthSupported(),
+    requireBiometrics: Boolean = false,
+    requirePin: Boolean = false,
     onSuccess: (() -> Unit)? = null,
 ) {
     val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
@@ -48,6 +50,8 @@ fun AuthCheckView(
         isBiometrySupported = isBiometrySupported,
         showLogoOnPin = showLogoOnPin,
         attemptsRemaining = attemptsRemaining,
+        requireBiometrics = requireBiometrics,
+        requirePin = requirePin,
         validatePin = appViewModel::validatePin,
         onSuccess = onSuccess,
     )
@@ -59,6 +63,8 @@ private fun AuthCheckViewContent(
     isBiometrySupported: Boolean,
     showLogoOnPin: Boolean,
     attemptsRemaining: Int,
+    requireBiometrics: Boolean = false,
+    requirePin: Boolean = false,
     validatePin: (String) -> Boolean,
     onSuccess: (() -> Unit)? = null,
 ) {
@@ -74,22 +80,20 @@ private fun AuthCheckViewContent(
             .fillMaxSize()
             .navigationBarsPadding()
     ) {
-        Column {
-            if (showBio && isBiometrySupported) {
-                BiometricsView(
-                    onSuccess = { onSuccess?.invoke() },
-                    onFailure = { showBio = false },
-                )
-            } else {
-                PinPad(
-                    showLogo = showLogoOnPin,
-                    validatePin = validatePin,
-                    onSuccess = onSuccess,
-                    attemptsRemaining = attemptsRemaining,
-                    allowBiometrics = isBiometricsEnabled && isBiometrySupported,
-                    onShowBiometrics = { showBio = true },
-                )
-            }
+        if ((showBio && isBiometrySupported && !requirePin) || requireBiometrics) {
+            BiometricsView(
+                onSuccess = { onSuccess?.invoke() },
+                onFailure = { showBio = false },
+            )
+        } else {
+            PinPad(
+                showLogo = showLogoOnPin,
+                validatePin = validatePin,
+                onSuccess = onSuccess,
+                attemptsRemaining = attemptsRemaining,
+                allowBiometrics = isBiometricsEnabled && isBiometrySupported && !requirePin,
+                onShowBiometrics = { showBio = true },
+            )
         }
     }
 }
