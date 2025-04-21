@@ -228,7 +228,7 @@ private fun PreviewPinAttempts() {
             onSuccess = {},
             isBiometricsEnabled = false,
             isBiometrySupported = true,
-            showLogoOnPin = true,
+            showLogoOnPin = false,
             validatePin = { true },
             attemptsRemaining = 6,
         )

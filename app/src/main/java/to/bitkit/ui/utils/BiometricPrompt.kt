@@ -7,14 +7,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import to.bitkit.R
 import to.bitkit.utils.BiometricCrypto
 import to.bitkit.utils.Logger
-
-private val biometricCrypto = BiometricCrypto()
 
 @Composable
 fun BiometricPrompt(
@@ -25,6 +24,8 @@ fun BiometricPrompt(
     cancelButtonText: String = stringResource(R.string.security__use_pin),
 ) {
     val context = LocalContext.current
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) return // no UI to preview here, it's all system UI
 
     val title = run {
         val name = stringResource(R.string.security__bio)
@@ -100,6 +101,7 @@ private fun launchBiometricPrompt(
     onAuthFailed: (() -> Unit),
     onAuthError: ((errorCode: Int, errString: CharSequence) -> Unit),
 ) {
+    val biometricCrypto = BiometricCrypto()
     val executor = ContextCompat.getMainExecutor(activity)
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
