@@ -119,7 +119,7 @@ private fun ExternalConfirmContent(
                         .fillMaxHeight()
                         .weight(1f)
                         .padding(top = 16.dp)
-                        .clickableAlpha(onNetworkFeeClick)
+                        .clickableAlpha(onClick = onNetworkFeeClick)
                 ) {
                     Caption13Up(
                         text = stringResource(R.string.lightning__spending_confirm__network_fee),

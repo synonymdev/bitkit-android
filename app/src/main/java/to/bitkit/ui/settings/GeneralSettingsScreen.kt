@@ -22,7 +22,7 @@ fun GeneralSettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.general), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.settings__general_title), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier

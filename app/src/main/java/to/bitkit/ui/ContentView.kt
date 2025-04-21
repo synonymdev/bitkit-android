@@ -75,6 +75,7 @@ import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
+import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
@@ -228,6 +229,7 @@ fun ContentView(
                 settings(walletViewModel, navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
+                securitySettings(navController)
                 defaultUnitSettings(currencyViewModel, navController)
                 localCurrencySettings(currencyViewModel, navController)
                 backupSettings(navController)
@@ -470,6 +472,12 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     }
 }
 
+private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.SecuritySettings> {
+        SecuritySettingsScreen(navController)
+    }
+}
+
 private fun NavGraphBuilder.defaultUnitSettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
@@ -659,6 +667,10 @@ fun NavController.navigateToGeneralSettings() = navigate(
     route = Routes.GeneralSettings,
 )
 
+fun NavController.navigateToSecuritySettings() = navigate(
+    route = Routes.SecuritySettings,
+)
+
 fun NavController.navigateToDefaultUnitSettings() = navigate(
     route = Routes.DefaultUnitSettings,
 )
@@ -748,6 +760,9 @@ object Routes {
 
     @Serializable
     data object GeneralSettings
+
+    @Serializable
+    data object SecuritySettings
 
     @Serializable
     data object DefaultUnitSettings

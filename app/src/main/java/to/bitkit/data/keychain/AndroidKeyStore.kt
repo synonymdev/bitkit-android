@@ -32,11 +32,11 @@ class AndroidKeyStore(
         if (!keyStore.containsAlias(alias)) {
             try {
                 val generator = KeyGenerator.getInstance(algorithm, type)
-                generator.init(buildSpec(true))
+                generator.init(buildSpec(isStrongboxBacked = true))
                 generator.generateKey()
-            } catch (e: StrongBoxUnavailableException) {
+            } catch (_: StrongBoxUnavailableException) {
                 val generator = KeyGenerator.getInstance(algorithm, type)
-                generator.init(buildSpec(false))
+                generator.init(buildSpec(isStrongboxBacked = false))
                 generator.generateKey()
             }
         }

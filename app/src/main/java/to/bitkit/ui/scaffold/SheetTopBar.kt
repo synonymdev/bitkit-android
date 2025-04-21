@@ -32,10 +32,11 @@ import to.bitkit.ui.theme.AppThemeSurface
 @OptIn(ExperimentalMaterial3Api::class)
 fun SheetTopBar(
     titleText: String,
+    modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(42.dp)
     ) {

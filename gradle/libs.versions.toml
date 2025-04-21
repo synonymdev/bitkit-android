@@ -4,6 +4,7 @@ activityCompose = "1.10.1"
 agp = "8.9.1"
 appcompat = "1.7.0"
 barcodeScanning = "17.3.0"
+biometric = "1.4.0-alpha02"
 bouncyCastle = "1.79"
 camera = "1.4.2"
 composeBom = "2025.03.01" # https://developer.android.com/develop/ui/compose/bom/bom-mapping
@@ -43,6 +44,7 @@ accompanist-permissions = { module = "com.google.accompanist:accompanist-permiss
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
+biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }

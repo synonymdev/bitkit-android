@@ -142,6 +142,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.biometric)
     implementation(libs.zxing)
     implementation(libs.barcode.scanning)
     // CameraX

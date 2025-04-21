@@ -1,12 +1,10 @@
 package to.bitkit.ui.shared
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,7 +16,6 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,20 +85,20 @@ fun TabBar(
                 Text(text = stringResource(R.string.wallet__receive))
             }
         }
-        IconButton(
+        Button(
             onClick = onScanClick,
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = ButtonDefaults.buttonColors(containerColor = Colors.Gray6),
+            contentPadding = PaddingValues(0.dp),
             modifier = Modifier
                 .size(80.dp)
-                .border(2.dp, buttonColors.containerColor, MaterialTheme.shapes.extraLarge)
-                .background(Colors.Gray6, MaterialTheme.shapes.extraLarge)
+                .border(2.dp, buttonColors.containerColor, MaterialTheme.shapes.extraLarge),
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_scan),
                 contentDescription = stringResource(R.string.wallet__recipient_scan),
                 tint = Colors.Gray2,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
     }

@@ -47,17 +47,17 @@ class SettingsStore @Inject constructor(
         store.edit { it[SELECTED_CURRENCY_KEY] = currency }
     }
 
-    val showEmptyState: Flow<Boolean> = store.data.map { it[SHOW_EMPTY_STATE] ?: false }
+    val showEmptyState: Flow<Boolean> = store.data.map { it[SHOW_EMPTY_STATE] == true }
     suspend fun setShowEmptyState(show: Boolean) {
         store.edit { it[SHOW_EMPTY_STATE] = show }
     }
 
-    val hasSeenSpendingIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SPENDING_INTRO] ?: false }
+    val hasSeenSpendingIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SPENDING_INTRO] == true }
     suspend fun setHasSeenSpendingIntro(value: Boolean) {
         store.edit { it[HAS_SEEN_SPENDING_INTRO] = value }
     }
 
-    val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] ?: false }
+    val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] == true }
     suspend fun setHasSeenSavingsIntro(value: Boolean) {
         store.edit { it[HAS_SEEN_SAVINGS_INTRO] = value }
     }
@@ -67,6 +67,15 @@ class SettingsStore @Inject constructor(
         store.edit { it[LIGHTNING_SETUP_STEP] = value }
     }
 
+    val isPinEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ENABLED] == true }
+    suspend fun setIsPinEnabled(value: Boolean) { store.edit { it[IS_PIN_ENABLED] = value } }
+
+    val isPinOnLaunchEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_ON_LAUNCH_ENABLED] == true }
+    suspend fun setIsPinOnLaunchEnabled(value: Boolean) { store.edit { it[IS_PIN_ON_LAUNCH_ENABLED] = value } }
+
+    val isBiometricEnabled: Flow<Boolean> = store.data.map { it[IS_BIOMETRIC_ENABLED] == true }
+    suspend fun setIsBiometricEnabled(value: Boolean) { store.edit { it[IS_BIOMETRIC_ENABLED] = value } }
+
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
         private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
@@ -75,5 +84,8 @@ class SettingsStore @Inject constructor(
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
         private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")
         private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
+        private val IS_PIN_ENABLED = booleanPreferencesKey("is_pin_enabled")
+        private val IS_PIN_ON_LAUNCH_ENABLED = booleanPreferencesKey("is_pin_on_launch_enabled")
+        private val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
     }
 }
