@@ -1,12 +1,15 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -14,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -26,10 +30,14 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -46,6 +54,7 @@ fun EditInvoiceScreen(
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
     var noteText by remember { mutableStateOf("") }
+    var keyboardVisible by remember { mutableStateOf(false) }
 
     AmountInputHandler(
         input = input,
@@ -63,7 +72,10 @@ fun EditInvoiceScreen(
         displayUnit = currencyUiState.displayUnit,
         onEvent = onEvent,
         onBack = onBack,
-        onTextChanged = { newNote -> noteText = newNote }
+        onTextChanged = { newNote -> noteText = newNote },
+        keyboardVisible = keyboardVisible,
+        onClickBalance = { keyboardVisible = !keyboardVisible },
+        onInputChanged = { newText -> }
     )
 }
 
@@ -71,13 +83,15 @@ fun EditInvoiceScreen(
 fun EditInvoiceContent(
     input: String,
     noteText: String,
+    keyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
     onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
+    onClickBalance: () -> Unit,
     onTextChanged: (String) -> Unit,
+    onInputChanged: (String) -> Unit,
 ) {
-    var keyboardVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -100,39 +114,73 @@ fun EditInvoiceContent(
                 primaryDisplay = primaryDisplay,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickableAlpha(onClick = onClickBalance)
                     .testTag("amount_input_field")
             )
-            Spacer(modifier = Modifier.height(44.dp))
 
-            Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
+            if (keyboardVisible) {
+                Text13Up(
+                    text = stringResource(R.string.wallet__send_available),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("available_balance")
+                )
+                Spacer(modifier = Modifier.height(4.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    UnitButton(modifier = Modifier.height(28.dp))
+                }
 
-            TextField(
-                placeholder = {
-                    BodySSB(
-                        text = stringResource(R.string.wallet__receive_note_placeholder),
-                        color = Colors.White64
-                    )
-                },
-                value = noteText,
-                onValueChange = onTextChanged,
-                minLines = 4,
-                colors = AppTextFieldDefaults.noIndicatorColors,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 74.dp),
-            )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Keyboard(
+                    onClick = { number ->
+                        onInputChanged(if (input == "0") number else input + number)
+                    },
+                    onClickBackspace = {
+                        onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
+                    },
+                    isDecimal = primaryDisplay == PrimaryDisplay.FIAT,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("amount_keyboard"),
+                )
+            } else {
+                Spacer(modifier = Modifier.height(44.dp))
 
-            Spacer(modifier = Modifier.weight(1f))
+                Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
 
-            PrimaryButton(
-                text = stringResource(R.string.continue_button),
-                onClick = { }, //TODO IMPLEMENT
-            )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TextField(
+                    placeholder = {
+                        BodySSB(
+                            text = stringResource(R.string.wallet__receive_note_placeholder),
+                            color = Colors.White64
+                        )
+                    },
+                    value = noteText,
+                    onValueChange = onTextChanged,
+                    minLines = 4,
+                    colors = AppTextFieldDefaults.noIndicatorColors,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 74.dp),
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                PrimaryButton(
+                    text = stringResource(R.string.continue_button),
+                    onClick = { }, //TODO IMPLEMENT
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -150,7 +198,10 @@ private fun Preview() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             onEvent = {},
             onBack = {},
-            onTextChanged = {}
+            onTextChanged = {},
+            keyboardVisible = false,
+            onClickBalance = {},
+            onInputChanged = {}
         )
     }
 }
@@ -167,7 +218,29 @@ private fun Preview2() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             onEvent = {},
             onBack = {},
-            onTextChanged = {}
+            onTextChanged = {},
+            keyboardVisible = false,
+            onClickBalance = {},
+            onInputChanged = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview3() {
+    AppThemeSurface {
+        EditInvoiceContent(
+            input = "123",
+            noteText = "Note text",
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            onEvent = {},
+            onBack = {},
+            onTextChanged = {},
+            keyboardVisible = true,
+            onClickBalance = {},
+            onInputChanged = {}
         )
     }
 }
