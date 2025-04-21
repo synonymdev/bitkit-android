@@ -475,8 +475,11 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.SecuritySettings> {
-        SecuritySettingsScreen(navController)
+    composableWithDefaultTransitions<Routes.SecuritySettings> { backStackEntry ->
+        SecuritySettingsScreen(
+            navController = navController,
+            savedStateHandle = backStackEntry.savedStateHandle,
+        )
     }
 }
 
@@ -630,10 +633,7 @@ private fun NavGraphBuilder.qrScanner(
 private fun NavGraphBuilder.authCheck(
     navController: NavHostController,
 ) {
-    composable<Routes.AuthCheck>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) { navBackEntry ->
+    composable<Routes.AuthCheck> { navBackEntry ->
         val route = navBackEntry.toRoute<Routes.AuthCheck>()
         AuthCheckScreen(
             route = route,
@@ -692,13 +692,13 @@ fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
     requireBiometrics: Boolean = false,
-    onSuccessAction: String,
+    onSuccessActionId: String,
 ) = navigate(
     route = Routes.AuthCheck(
         showLogoOnPin = showLogoOnPin,
         requirePin = requirePin,
         requireBiometrics = requireBiometrics,
-        onSuccessAction = onSuccessAction,
+        onSuccessActionId = onSuccessActionId,
     ),
 )
 
@@ -800,7 +800,7 @@ object Routes {
         val showLogoOnPin: Boolean = false,
         val requirePin: Boolean = false,
         val requireBiometrics: Boolean = false,
-        val onSuccessAction: String,
+        val onSuccessActionId: String,
     )
 
     @Serializable

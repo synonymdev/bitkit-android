@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
@@ -34,6 +36,7 @@ import to.bitkit.ui.settings.pin.PinNavigationSheet
 @Composable
 fun SecuritySettingsScreen(
     navController: NavController,
+    savedStateHandle: SavedStateHandle,
 ) {
     val app = appViewModel ?: return
 
@@ -41,6 +44,24 @@ fun SecuritySettingsScreen(
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+
+    LaunchedEffect(savedStateHandle) {
+        savedStateHandle.getStateFlow<String?>(AuthCheckAction.KEY, null)
+            .collect { actionId ->
+                if (actionId != null) {
+                    when (actionId) {
+                        AuthCheckAction.Id.TOGGLE_BIOMETRICS -> {
+                            app.setIsBiometricEnabled(!isBiometricEnabled)
+                        }
+                        AuthCheckAction.Id.TOGGLE_PIN_ON_LAUNCH -> {
+                            app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
+                        }
+                    }
+                    // cleanup
+                    savedStateHandle.remove<String>(AuthCheckAction.KEY)
+                }
+            }
+    }
 
     PinNavigationSheet(
         showSheet = showPinSheet,
@@ -62,13 +83,13 @@ fun SecuritySettingsScreen(
             },
             onPinOnLaunchClick = {
                 navController.navigateToAuthCheck(
-                    onSuccessAction = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH,
+                    onSuccessActionId = AuthCheckAction.Id.TOGGLE_PIN_ON_LAUNCH,
                 )
             },
             onUseBiometricsClick = {
                 navController.navigateToAuthCheck(
                     requireBiometrics = true,
-                    onSuccessAction = AuthCheckAction.TOGGLE_BIOMETRICS,
+                    onSuccessActionId = AuthCheckAction.Id.TOGGLE_BIOMETRICS,
                 )
             },
             onBackClick = { navController.popBackStack() },
