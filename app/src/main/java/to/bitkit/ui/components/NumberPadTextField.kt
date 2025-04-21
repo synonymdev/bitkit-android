@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -37,6 +38,20 @@ fun NumberPadTextField(
     primaryDisplay: PrimaryDisplay,
     modifier: Modifier = Modifier,
 ) {
+
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) {
+        return MoneyAmount(
+            modifier = modifier,
+            value = input,
+            unit = primaryDisplay,
+            placeholder = "",
+            showPlaceholder = true,
+            satoshis = 0,
+            currencySymbol = if (primaryDisplay == PrimaryDisplay.BITCOIN) BITCOIN_SYMBOL else "$"
+        )
+    }
+
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
@@ -139,7 +154,9 @@ fun AmountInputHandler(
 
             PrimaryDisplay.FIAT -> { //Convert sats to fiat
                 val convertedAmount = currencyVM.convert(input.toLongOrDefault(0L))
-                if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
+                if ((convertedAmount?.value
+                        ?: BigDecimal(0)) > BigDecimal(0)
+                ) convertedAmount?.formatted.toString() else ""
             }
         }
         onInputChanged(newInput)
