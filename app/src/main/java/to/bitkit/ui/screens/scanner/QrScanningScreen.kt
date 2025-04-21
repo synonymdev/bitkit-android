@@ -3,7 +3,13 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
+import android.content.Context
+import android.net.Uri
+import android.os.Build
 import android.view.View.LAYER_TYPE_HARDWARE
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -21,8 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +52,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
@@ -57,6 +67,8 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
+import android.content.ClipboardManager
+import android.content.ClipData
 
 @Composable
 fun QrScanningScreen(
@@ -93,6 +105,17 @@ fun QrScanningScreen(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
         )
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
+        }
+    )
+
+    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
     }
 
     LaunchedEffect(lensFacing) {
@@ -144,10 +167,36 @@ fun QrScanningScreen(
         grantedContent = {
             ScreenColumn(modifier = Modifier.gradientBackground()) {
                 AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
-                Content(previewView = previewView, onClickCamera = {
-                    isFlashlightOn = !isFlashlightOn
-                    camera?.cameraControl?.enableTorch(isFlashlightOn)
-                })
+                Content(
+                    previewView = previewView,
+                    onClickFlashlight = {
+                        isFlashlightOn = !isFlashlightOn
+                        camera?.cameraControl?.enableTorch(isFlashlightOn)
+                    },
+                    onClickGallery = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        } else {
+                            galleryLauncher.launch("image/*")
+                        }
+                    },
+                    onPasteFromClipboard = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        if (clipboard.hasPrimaryClip()) {
+                            val clipData: ClipData = clipboard.primaryClip ?: return@Content
+                            if (clipData.itemCount > 0) {
+                                val text = clipData.getItemAt(0).text.toString()
+                                if (text.isNotBlank()) {
+                                    onScanSuccess(text)
+                                } else {
+                                    app.toast(Exception("Clipboard is empty or doesn't contain text"))
+                                }
+                            }
+                        } else {
+                            app.toast(Exception("Clipboard is empty"))
+                        }
+                    }
+                )
             }
         }
     )
@@ -156,7 +205,9 @@ fun QrScanningScreen(
 @Composable
 private fun Content(
     previewView: PreviewView,
-    onClickCamera : () -> Unit,
+    onClickFlashlight: () -> Unit,
+    onClickGallery: () -> Unit,
+    onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -178,7 +229,7 @@ private fun Content(
             )
 
             IconButton(
-                onClick = {}, //TODO IMPLEMENT
+                onClick = onClickGallery,
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
@@ -196,7 +247,7 @@ private fun Content(
             }
 
             IconButton(
-                onClick = onClickCamera,
+                onClick = onClickFlashlight,
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
@@ -223,8 +274,43 @@ private fun Content(
                 )
             },
             text = stringResource(R.string.other__qr_paste),
-            onClick = {} //TODO IMPLEMENT
+            onClick = onPasteFromClipboard
         )
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+private fun processImageFromGallery(
+    context: Context,
+    uri: Uri,
+    onScanSuccess: (String) -> Unit,
+    onError: (Exception) -> Unit,
+) {
+    try {
+        val image = InputImage.fromFilePath(context, uri)
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = BarcodeScanning.getClient(options)
+
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                for (barcode in barcodes) {
+                    barcode.rawValue?.let { qrCode ->
+                        onScanSuccess(qrCode)
+                        Logger.info("QR code found $qrCode")
+                        return@addOnSuccessListener
+                    }
+                }
+                Logger.error("No QR code found in the image")
+                onError(Exception("No QR code found in the image"))
+            }
+            .addOnFailureListener { e ->
+                Logger.error("Failed to scan QR code from gallery", e)
+                onError(e)
+            }
+    } catch (e: Exception) {
+        Logger.error("Failed to process image from gallery", e)
+        onError(e)
     }
 }

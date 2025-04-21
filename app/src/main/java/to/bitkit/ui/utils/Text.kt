@@ -13,6 +13,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import to.bitkit.ui.theme.Colors
+import java.math.BigDecimal
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 fun String.withAccent(
     defaultColor: Color = Color.Unspecified,
@@ -122,3 +126,18 @@ fun localizedRandom(@StringRes id: Int): String {
         }
     }
 }
+
+fun BigDecimal.formatCurrency() : String? {
+    val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
+        decimalSeparator = '.'
+        groupingSeparator = ','
+    }
+    val formatter = DecimalFormat("#,##0.00", symbols).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+    }
+
+    return runCatching { formatter.format(this) }.getOrNull()
+}
+
+

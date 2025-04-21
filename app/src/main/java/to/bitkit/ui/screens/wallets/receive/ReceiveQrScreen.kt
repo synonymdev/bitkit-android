@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -185,7 +186,7 @@ private fun ReceiveQrScreen(
         val uri = cjitInvoice.value ?: walletState.bip21
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp).weight(1f)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -197,6 +198,7 @@ private fun ReceiveQrScreen(
                         0 -> ReceiveQrSlide(
                             uri = uri,
                             qrLogoPainter = painterResource(qrLogoImageRes),
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         1 -> CopyValuesSlide(
@@ -248,20 +250,25 @@ private fun ReceiveLightningFunds(
 private fun ReceiveQrSlide(
     uri: String,
     qrLogoPainter: Painter,
+    modifier: Modifier
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
     ) {
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
+            modifier = Modifier.weight(1f, fill = false)
         )
+
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
@@ -309,6 +316,7 @@ private fun ReceiveQrSlide(
                 }
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -406,6 +414,36 @@ private fun CopyAddressCard(
 @Preview(showBackground = true)
 @Composable
 private fun ReceiveQrScreenPreview() {
+    AppThemeSurface {
+        ReceiveQrScreen(
+            cjitInvoice = remember { mutableStateOf(null) },
+            cjitActive = remember { mutableStateOf(false) },
+            walletState = MainUiState(
+                nodeLifecycleState = Running,
+            ),
+            onCjitToggle = { },
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 600)
+@Composable
+private fun ReceiveQrScreenPreviewSmallScreen() {
+    AppThemeSurface {
+        ReceiveQrScreen(
+            cjitInvoice = remember { mutableStateOf(null) },
+            cjitActive = remember { mutableStateOf(false) },
+            walletState = MainUiState(
+                nodeLifecycleState = Running,
+            ),
+            onCjitToggle = { },
+        )
+    }
+}
+
+@Preview(showBackground = true, device = PIXEL_TABLET)
+@Composable
+private fun ReceiveQrScreenPreviewTablet() {
     AppThemeSurface {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
