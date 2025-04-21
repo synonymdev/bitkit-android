@@ -67,6 +67,7 @@ private object ReceiveRoutes {
     const val AMOUNT = "amount"
     const val CONFIRM = "confirm"
     const val LIQUIDITY = "liquidity"
+    const val EDIT_INVOICE = "edit_invoice"
 }
 
 @Composable
@@ -120,7 +121,8 @@ fun ReceiveQrSheet(
                         } else if (cjitInvoice.value == null) {
                             navController.navigate(ReceiveRoutes.AMOUNT)
                         }
-                    }
+                    },
+                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -154,6 +156,12 @@ fun ReceiveQrSheet(
                     )
                 }
             }
+            composable(ReceiveRoutes.EDIT_INVOICE) {
+                    EditInvoiceScreen (
+                        onEvent = {}, // TODO IMPLEMENT
+                        onBack = { navController.popBackStack() }
+                    )
+            }
         }
     }
 }
@@ -164,6 +172,7 @@ private fun ReceiveQrScreen(
     cjitActive: MutableState<Boolean>,
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
+    onClickEditInvoice: () -> Unit
 ) {
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
@@ -198,7 +207,8 @@ private fun ReceiveQrScreen(
                         0 -> ReceiveQrSlide(
                             uri = uri,
                             qrLogoPainter = painterResource(qrLogoImageRes),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            onClickEditInvoice = onClickEditInvoice
                         )
 
                         1 -> CopyValuesSlide(
@@ -250,7 +260,8 @@ private fun ReceiveLightningFunds(
 private fun ReceiveQrSlide(
     uri: String,
     qrLogoPainter: Painter,
-    modifier: Modifier
+    modifier: Modifier,
+    onClickEditInvoice: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -273,7 +284,7 @@ private fun ReceiveQrSlide(
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
                 size = ButtonSize.Small,
-                onClick = { /* TODO : edit amount */ },
+                onClick = onClickEditInvoice,
                 fullWidth = false,
                 color = Colors.White10,
                 icon = {
@@ -422,6 +433,7 @@ private fun ReceiveQrScreenPreview() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
@@ -437,6 +449,7 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
@@ -452,6 +465,7 @@ private fun ReceiveQrScreenPreviewTablet() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
