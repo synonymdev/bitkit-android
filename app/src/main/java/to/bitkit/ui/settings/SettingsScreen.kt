@@ -23,6 +23,7 @@ import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
 import to.bitkit.ui.navigateToLightning
 import to.bitkit.ui.navigateToRegtestSettings
+import to.bitkit.ui.navigateToSecuritySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
@@ -40,7 +41,8 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            NavButton(stringResource(R.string.general)) { navController.navigateToGeneralSettings() }
+            NavButton(stringResource(R.string.settings__general_title)) { navController.navigateToGeneralSettings() }
+            NavButton(stringResource(R.string.settings__security_title)) { navController.navigateToSecuritySettings() }
             NavButton(stringResource(R.string.button_backup_settings)) { navController.navigateToBackupSettings() }
             NavButton("Lightning") { navController.navigateToLightning() }
             NavButton("Channel Orders") { navController.navigateToChannelOrdersSettings() }

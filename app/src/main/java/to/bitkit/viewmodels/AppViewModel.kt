@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,6 +24,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.watchUntil
@@ -105,6 +108,44 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val isPinEnabled: StateFlow<Boolean> = settingsStore.isPinEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setIsPinEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsPinEnabled(value)
+        }
+    }
+
+    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.isPinOnLaunchEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setIsPinOnLaunchEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsPinOnLaunchEnabled(value)
+        }
+    }
+
+    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setIsBiometricEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsBiometricEnabled(value)
+        }
+    }
+
+    private val _isAuthenticated = MutableStateFlow(false)
+    val isAuthenticated = _isAuthenticated.asStateFlow()
+
+    fun setIsAuthenticated(value: Boolean) {
+        _isAuthenticated.value = value
+    }
+
+    val pinAttemptsRemaining = keychain.pinAttemptsRemaining()
+        .map { attempts -> attempts ?: Env.PIN_ATTEMPTS }
+        .stateIn(viewModelScope, SharingStarted.Lazily, Env.PIN_ATTEMPTS)
+
     fun addTagToSelected(newTag: String) {
         _sendUiState.update {
             it.copy(
@@ -132,6 +173,12 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             delay(1500)
             splashVisible = false
+
+            // Check if auth is needed after splash screen
+            val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
+            if (!needsAuth) {
+                _isAuthenticated.value = true
+            }
         }
 
         observeLdkNodeEvents()
@@ -730,6 +777,55 @@ class AppViewModel @Inject constructor(
     fun loadMnemonic(): String? {
         return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
     }
+
+    // region security
+    fun validatePin(pin: String): Boolean {
+        val storedPin = keychain.loadString(Keychain.Key.PIN.name)
+        val isValid = storedPin == pin
+
+        if (isValid) {
+            viewModelScope.launch {
+                keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+            }
+            return true
+        }
+
+        viewModelScope.launch {
+            val newAttempts = pinAttemptsRemaining.value - 1
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
+
+            if (newAttempts <= 0) {
+                // TODO: wipeStorage() & return to onboarding
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = "TODO: Wipe App data",
+                )
+            }
+        }
+        return false
+    }
+
+    fun addPin(pin: String) {
+        setIsPinEnabled(true)
+
+        viewModelScope.launch {
+            keychain.upsertString(Keychain.Key.PIN.name, pin)
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+        }
+    }
+
+    fun removePin() {
+        setIsPinEnabled(false)
+        setIsPinOnLaunchEnabled(true)
+        setIsBiometricEnabled(false)
+
+        viewModelScope.launch {
+            keychain.delete(Keychain.Key.PIN.name)
+            keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
+        }
+
+    }
+    // endregion
 }
 
 // region send contract

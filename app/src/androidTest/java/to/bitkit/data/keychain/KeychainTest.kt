@@ -99,6 +99,16 @@ class KeychainTest : BaseAndroidTest() {
         assertTrue { sut.snapshot.asMap().isEmpty() }
     }
 
+    @Test
+    fun pinAttemptsRemaining_shouldReturnDecryptedValue() = test {
+        val attemptsRemaining = "3"
+        sut.saveString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, attemptsRemaining)
+
+        val result = sut.pinAttemptsRemaining().first()
+
+        assertEquals(attemptsRemaining, result.toString())
+    }
+
     @After
     fun tearDown() {
         db.close()

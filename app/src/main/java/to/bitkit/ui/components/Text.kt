@@ -203,11 +203,13 @@ fun BodyS(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     BodyS(
         text = AnnotatedString(text),
         modifier = modifier,
-        color = color
+        color = color,
+        textAlign = textAlign,
     )
 }
 
@@ -216,6 +218,7 @@ fun BodyS(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text,
@@ -226,7 +229,7 @@ fun BodyS(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
         modifier = modifier,
     )
