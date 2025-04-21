@@ -33,7 +33,6 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -74,8 +73,10 @@ fun EditInvoiceScreen(
         onBack = onBack,
         onTextChanged = { newNote -> noteText = newNote },
         keyboardVisible = keyboardVisible,
-        onClickBalance = { keyboardVisible = !keyboardVisible },
-        onInputChanged = { newText -> }
+        onClickBalance = { keyboardVisible = true },
+        onInputChanged = { newText -> input = newText },
+        onContinueKeyboard = { keyboardVisible = false },
+        onContinueGeneral = {}
     )
 }
 
@@ -88,7 +89,9 @@ fun EditInvoiceContent(
     displayUnit: BitcoinDisplayUnit,
     onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
+    onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
+    onContinueGeneral: () -> Unit,
     onTextChanged: (String) -> Unit,
     onInputChanged: (String) -> Unit,
 ) {
@@ -106,7 +109,7 @@ fun EditInvoiceContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(32.dp))
 
             NumberPadTextField(
                 input = input,
@@ -119,12 +122,7 @@ fun EditInvoiceContent(
             )
 
             if (keyboardVisible) {
-                Text13Up(
-                    text = stringResource(R.string.wallet__send_available),
-                    color = Colors.White64,
-                    modifier = Modifier.testTag("available_balance")
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -148,7 +146,15 @@ fun EditInvoiceContent(
                         .fillMaxWidth()
                         .testTag("amount_keyboard"),
                 )
+
+                Spacer(modifier = Modifier.height(41.dp))
+
+                PrimaryButton(
+                    text = stringResource(R.string.continue_button),
+                    onClick = onContinueKeyboard,
+                )
             } else {
+
                 Spacer(modifier = Modifier.height(44.dp))
 
                 Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
@@ -178,7 +184,7 @@ fun EditInvoiceContent(
 
                 PrimaryButton(
                     text = stringResource(R.string.continue_button),
-                    onClick = { }, //TODO IMPLEMENT
+                    onClick = onContinueGeneral,
                 )
             }
 
@@ -201,7 +207,9 @@ private fun Preview() {
             onTextChanged = {},
             keyboardVisible = false,
             onClickBalance = {},
-            onInputChanged = {}
+            onInputChanged = {},
+            onContinueGeneral = {},
+            onContinueKeyboard = {}
         )
     }
 }
@@ -221,7 +229,9 @@ private fun Preview2() {
             onTextChanged = {},
             keyboardVisible = false,
             onClickBalance = {},
-            onInputChanged = {}
+            onInputChanged = {},
+            onContinueGeneral = {},
+            onContinueKeyboard = {}
         )
     }
 }
@@ -240,7 +250,9 @@ private fun Preview3() {
             onTextChanged = {},
             keyboardVisible = true,
             onClickBalance = {},
-            onInputChanged = {}
+            onInputChanged = {},
+            onContinueGeneral = {},
+            onContinueKeyboard = {}
         )
     }
 }
