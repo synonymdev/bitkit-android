@@ -159,7 +159,10 @@ fun ReceiveQrSheet(
             composable(ReceiveRoutes.EDIT_INVOICE) {
                     EditInvoiceScreen (
                         onEvent = {}, // TODO IMPLEMENT
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        updateInvoice = { sats, description ->
+                            wallet.updateQr(amountSats = sats, description = description)
+                        }
                     )
             }
         }

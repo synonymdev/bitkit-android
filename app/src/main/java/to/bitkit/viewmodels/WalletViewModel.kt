@@ -10,13 +10,13 @@ import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -44,8 +44,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
-import uniffi.bitkitcore.Scanner
-import uniffi.bitkitcore.decode
 import javax.inject.Inject
 
 @HiltViewModel
@@ -333,6 +331,18 @@ class WalletViewModel @Inject constructor(
                 }
         }
     }
+
+    fun updateQr(
+        amountSats: ULong? = null,
+        description: String
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _bolt11 = createInvoice(amountSats = amountSats, description= description)
+        }
+
+        //TODO UPDATE BIP21
+    }
+
 
     suspend fun createInvoice(
         amountSats: ULong? = null,

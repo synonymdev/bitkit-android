@@ -47,12 +47,14 @@ import to.bitkit.viewmodels.SendEvent
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
+    updateInvoice: (ULong?, String) -> Unit,
     onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
     var noteText by remember { mutableStateOf("") }
+    var satsString by remember { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
 
     AmountInputHandler(
@@ -60,7 +62,7 @@ fun EditInvoiceScreen(
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
         onInputChanged = { newInput -> input = newInput },
-        onAmountCalculated = { sats -> },
+        onAmountCalculated = { sats -> satsString = sats },
         currencyVM = currencyVM
     )
 
@@ -76,7 +78,7 @@ fun EditInvoiceScreen(
         onClickBalance = { keyboardVisible = true },
         onInputChanged = { newText -> input = newText },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = {}
+        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), noteText) }
     )
 }
 
@@ -173,9 +175,7 @@ fun EditInvoiceContent(
                     minLines = 4,
                     colors = AppTextFieldDefaults.noIndicatorColors,
                     shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 74.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
