@@ -162,6 +162,7 @@ fun ReceiveQrSheet(
                         onBack = { navController.popBackStack() },
                         updateInvoice = { sats, description ->
                             wallet.updateQr(amountSats = sats, description = description)
+                            navController.popBackStack()
                         }
                     )
             }
