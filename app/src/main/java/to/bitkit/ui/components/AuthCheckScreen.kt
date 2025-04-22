@@ -33,5 +33,6 @@ object AuthCheckAction {
     object Id {
         const val TOGGLE_PIN_ON_LAUNCH = "toggle_pin_on_launch"
         const val TOGGLE_BIOMETRICS = "toggle_biometrics"
+        const val DISABLE_PIN = "disable_pin"
     }
 }

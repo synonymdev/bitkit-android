@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
@@ -24,14 +25,15 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.navigateToAuthCheck
+import to.bitkit.ui.navigateToDisablePin
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
-import to.bitkit.ui.settings.pin.PinNavigationSheet
 
 @Composable
 fun SecuritySettingsScreen(
@@ -47,19 +49,18 @@ fun SecuritySettingsScreen(
 
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<String?>(AuthCheckAction.KEY, null)
+            .filterNotNull()
             .collect { actionId ->
-                if (actionId != null) {
-                    when (actionId) {
-                        AuthCheckAction.Id.TOGGLE_BIOMETRICS -> {
-                            app.setIsBiometricEnabled(!isBiometricEnabled)
-                        }
-                        AuthCheckAction.Id.TOGGLE_PIN_ON_LAUNCH -> {
-                            app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
-                        }
+                when (actionId) {
+                    AuthCheckAction.Id.TOGGLE_BIOMETRICS -> {
+                        app.setIsBiometricEnabled(!isBiometricEnabled)
                     }
-                    // cleanup
-                    savedStateHandle.remove<String>(AuthCheckAction.KEY)
+
+                    AuthCheckAction.Id.TOGGLE_PIN_ON_LAUNCH -> {
+                        app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
+                    }
                 }
+                savedStateHandle.remove<String>(AuthCheckAction.KEY)
             }
     }
 
@@ -77,8 +78,7 @@ fun SecuritySettingsScreen(
                 if (!isPinEnabled) {
                     showPinSheet = true
                 } else {
-                    // TODO show Disable Pin screen
-                    app.removePin()
+                    navController.navigateToDisablePin()
                 }
             },
             onPinOnLaunchClick = {
