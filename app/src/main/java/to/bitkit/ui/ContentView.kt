@@ -25,6 +25,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.navigation.NavOptions
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -80,6 +81,7 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.utils.screenScaleIn
 import to.bitkit.ui.utils.screenScaleOut
 import to.bitkit.ui.utils.screenSlideIn
@@ -231,6 +233,7 @@ fun ContentView(
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 securitySettings(navController)
+                disablePin(navController)
                 defaultUnitSettings(currencyViewModel, navController)
                 localCurrencySettings(currencyViewModel, navController)
                 backupSettings(navController)
@@ -475,11 +478,16 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.SecuritySettings> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.SecuritySettings> {
         SecuritySettingsScreen(
             navController = navController,
-            savedStateHandle = backStackEntry.savedStateHandle,
         )
+    }
+}
+
+private fun NavGraphBuilder.disablePin(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.DisablePin> {
+        DisablePinScreen(navController)
     }
 }
 
@@ -688,11 +696,16 @@ fun NavController.navigateToSecuritySettings() = navigate(
     route = Routes.SecuritySettings,
 )
 
+fun NavController.navigateToDisablePin() = navigate(
+    route = Routes.DisablePin,
+)
+
 fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
     requireBiometrics: Boolean = false,
     onSuccessActionId: String,
+    navOptions: NavOptions? = null,
 ) = navigate(
     route = Routes.AuthCheck(
         showLogoOnPin = showLogoOnPin,
@@ -700,6 +713,7 @@ fun NavController.navigateToAuthCheck(
         requireBiometrics = requireBiometrics,
         onSuccessActionId = onSuccessActionId,
     ),
+    navOptions = navOptions,
 )
 
 fun NavController.navigateToDefaultUnitSettings() = navigate(
@@ -794,6 +808,9 @@ object Routes {
 
     @Serializable
     data object SecuritySettings
+
+    @Serializable
+    data object DisablePin
 
     @Serializable
     data class AuthCheck(

@@ -27,13 +27,16 @@ import to.bitkit.ui.components.Title
 @OptIn(ExperimentalMaterial3Api::class)
 fun AppTopBar(
     titleText: String,
-    onBackClick: () -> Unit,
+    onBackClick: (() -> Unit)?,
     icon: Painter? = null,
-    navigationIcon: @Composable () -> Unit = backNavIcon(onBackClick),
     actions: @Composable (RowScope.() -> Unit) = {},
 ) {
     CenterAlignedTopAppBar(
-        navigationIcon = navigationIcon,
+        navigationIcon = {
+            if (onBackClick != null) {
+                BackNavIcon(onBackClick)
+            }
+        },
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -60,8 +63,10 @@ fun AppTopBar(
     )
 }
 
-private fun backNavIcon(onBackClick: () -> Unit) = @Composable {
-    IconButton(onClick = onBackClick) {
+// TODO use everywhere
+@Composable
+fun BackNavIcon(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
         Icon(
             imageVector = Icons.AutoMirrored.Default.ArrowBack,
             contentDescription = stringResource(R.string.common__back),
