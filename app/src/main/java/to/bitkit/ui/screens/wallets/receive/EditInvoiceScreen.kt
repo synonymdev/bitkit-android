@@ -106,6 +106,7 @@ fun EditInvoiceContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .testTag("edit_invoice_screen")
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_specify)) {
             onEvent(SendEvent.AmountReset)
@@ -113,7 +114,9 @@ fun EditInvoiceContent(
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("edit_invoice_content")
         ) {
             Spacer(Modifier.height(32.dp))
 
@@ -139,7 +142,9 @@ fun EditInvoiceContent(
                     animationSpec = tween(durationMillis = 300)
                 ) + fadeOut()
             ) {
-                Column {
+                Column(
+                    modifier = Modifier.testTag("keyboard_section")
+                ) {
                     Spacer(modifier = Modifier.weight(1f))
 
                     Row(
@@ -170,6 +175,7 @@ fun EditInvoiceContent(
                     PrimaryButton(
                         text = stringResource(R.string.continue_button),
                         onClick = onContinueKeyboard,
+                        modifier = Modifier.testTag("keyboard_continue_button")
                     )
                 }
             }
@@ -180,7 +186,9 @@ fun EditInvoiceContent(
                 enter = fadeIn(animationSpec = tween(durationMillis = 300)),
                 exit = fadeOut(animationSpec = tween(durationMillis = 300))
             ) {
-                Column {
+                Column(
+                    modifier = Modifier.testTag("note_section")
+                ) {
                     Spacer(modifier = Modifier.height(44.dp))
 
                     Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
@@ -199,7 +207,10 @@ fun EditInvoiceContent(
                         minLines = 4,
                         colors = AppTextFieldDefaults.noIndicatorColors,
                         shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("note_input_field")
+
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -209,6 +220,7 @@ fun EditInvoiceContent(
                     PrimaryButton(
                         text = stringResource(R.string.continue_button),
                         onClick = onContinueGeneral,
+                        modifier = Modifier.testTag("general_continue_button")
                     )
                 }
             }
