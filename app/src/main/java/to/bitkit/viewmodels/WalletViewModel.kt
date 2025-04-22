@@ -333,7 +333,7 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateQr(
+    fun updateBip21Invoice(
         amountSats: ULong? = null,
         description: String
     ) {
