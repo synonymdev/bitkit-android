@@ -347,7 +347,7 @@ class WalletViewModel @Inject constructor(
             }
 
             val newBip21 = Bip21Utils.buildBip21Url(
-                bitcoinAddress = lightningService.newAddress(),
+                bitcoinAddress = _onchainAddress,
                 amountSats = amountSats,
                 message = description.ifBlank { "Bitkit" },
                 lightningInvoice = _bolt11
