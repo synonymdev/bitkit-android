@@ -340,8 +340,10 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val hasChannels = lightningService.channels.hasChannels()
 
-            if (hasChannels) {
-                _bolt11 = createInvoice(amountSats = amountSats, description = description)
+            _bolt11 = if (hasChannels) {
+                createInvoice(amountSats = amountSats, description = description)
+            } else {
+                ""
             }
 
             val newBip21 = Bip21Utils.buildBip21Url(
