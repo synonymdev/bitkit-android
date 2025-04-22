@@ -9,18 +9,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
 import androidx.navigation.NavController
-import kotlinx.coroutines.flow.filterNotNull
+import androidx.navigation.navOptions
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
@@ -35,29 +33,13 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun DisablePinScreen(
     navController: NavController,
-    savedStateHandle: SavedStateHandle,
 ) {
-    val app = appViewModel ?: return
-
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(AuthCheckAction.KEY, null)
-            .filterNotNull()
-            .collect { actionId ->
-                when (actionId) {
-                    AuthCheckAction.Id.DISABLE_PIN -> {
-                        app.removePin()
-                        navController.popBackStack()
-                    }
-                }
-                savedStateHandle.remove<String>(AuthCheckAction.KEY)
-            }
-    }
-
     DisablePinContent(
         onDisableClick = {
             navController.navigateToAuthCheck(
                 requirePin = true,
                 onSuccessActionId = AuthCheckAction.Id.DISABLE_PIN,
+                navOptions = navOptions { popUpTo(Routes.SecuritySettings) },
             )
         },
         onBackClick = { navController.popBackStack() },

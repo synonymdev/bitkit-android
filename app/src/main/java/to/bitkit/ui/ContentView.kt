@@ -25,6 +25,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.navigation.NavOptions
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -486,11 +487,8 @@ private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.disablePin(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.DisablePin> { backStackEntry ->
-        DisablePinScreen(
-            navController = navController,
-            savedStateHandle = backStackEntry.savedStateHandle,
-        )
+    composableWithDefaultTransitions<Routes.DisablePin> {
+        DisablePinScreen(navController)
     }
 }
 
@@ -708,6 +706,7 @@ fun NavController.navigateToAuthCheck(
     requirePin: Boolean = false,
     requireBiometrics: Boolean = false,
     onSuccessActionId: String,
+    navOptions: NavOptions? = null,
 ) = navigate(
     route = Routes.AuthCheck(
         showLogoOnPin = showLogoOnPin,
@@ -715,6 +714,7 @@ fun NavController.navigateToAuthCheck(
         requireBiometrics = requireBiometrics,
         onSuccessActionId = onSuccessActionId,
     ),
+    navOptions = navOptions,
 )
 
 fun NavController.navigateToDefaultUnitSettings() = navigate(

@@ -59,6 +59,10 @@ fun SecuritySettingsScreen(
                     AuthCheckAction.Id.TOGGLE_PIN_ON_LAUNCH -> {
                         app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
                     }
+
+                    AuthCheckAction.Id.DISABLE_PIN -> {
+                        app.removePin()
+                    }
                 }
                 savedStateHandle.remove<String>(AuthCheckAction.KEY)
             }
