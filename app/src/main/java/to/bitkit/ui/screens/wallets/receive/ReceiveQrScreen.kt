@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -157,14 +158,14 @@ fun ReceiveQrSheet(
                 }
             }
             composable(ReceiveRoutes.EDIT_INVOICE) {
-                    EditInvoiceScreen (
-                        onEvent = {}, // TODO IMPLEMENT
-                        onBack = { navController.popBackStack() },
-                        updateInvoice = { sats, description ->
-                            wallet.updateQr(amountSats = sats, description = description)
-                            navController.popBackStack()
-                        }
-                    )
+                EditInvoiceScreen(
+                    onEvent = {}, // TODO IMPLEMENT
+                    onBack = { navController.popBackStack() },
+                    updateInvoice = { sats, description ->
+                        wallet.updateQr(amountSats = sats, description = description)
+                        navController.popBackStack()
+                    }
+                )
             }
         }
     }
@@ -199,7 +200,9 @@ private fun ReceiveQrScreen(
         val uri = cjitInvoice.value ?: walletState.bip21
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp).weight(1f)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .weight(1f)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -251,6 +254,14 @@ private fun ReceiveLightningFunds(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BodyM(text = stringResource(R.string.wallet__receive_spending))
             Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                contentDescription = null,
+                tint = Colors.White64,
+                modifier = Modifier
+                    .rotate(17.33f)
+                    .padding(start = 7.65.dp, end = 13.19.dp)
+            )
             Switch(
                 checked = cjitActive.value,
                 onCheckedChange = onCjitToggle,
