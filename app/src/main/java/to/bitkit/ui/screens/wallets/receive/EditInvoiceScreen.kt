@@ -179,6 +179,8 @@ fun EditInvoiceContent(
                         onClick = onContinueKeyboard,
                         modifier = Modifier.testTag("keyboard_continue_button")
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
@@ -224,10 +226,10 @@ fun EditInvoiceContent(
                         onClick = onContinueGeneral,
                         modifier = Modifier.testTag("general_continue_button")
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
