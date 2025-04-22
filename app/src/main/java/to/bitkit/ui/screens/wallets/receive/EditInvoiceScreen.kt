@@ -1,10 +1,15 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,7 +102,6 @@ fun EditInvoiceContent(
     onTextChanged: (String) -> Unit,
     onInputChanged: (String) -> Unit,
 ) {
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -123,69 +127,90 @@ fun EditInvoiceContent(
                     .testTag("amount_input_field")
             )
 
-            if (keyboardVisible) {
-                Spacer(modifier = Modifier.weight(1f))
+            // Animated visibility for keyboard section
+            AnimatedVisibility(
+                visible = keyboardVisible,
+                enter = slideInVertically(
+                    initialOffsetY = { fullHeight -> fullHeight },
+                    animationSpec = tween(durationMillis = 300)
+                ) + fadeIn(),
+                exit = slideOutVertically(
+                    targetOffsetY = { fullHeight -> fullHeight },
+                    animationSpec = tween(durationMillis = 300)
+                ) + fadeOut()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.weight(1f))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    UnitButton(modifier = Modifier.height(28.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        UnitButton(modifier = Modifier.height(28.dp))
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+                    Keyboard(
+                        onClick = { number ->
+                            onInputChanged(if (input == "0") number else input + number)
+                        },
+                        onClickBackspace = {
+                            onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
+                        },
+                        isDecimal = primaryDisplay == PrimaryDisplay.FIAT,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("amount_keyboard"),
+                    )
+
+                    Spacer(modifier = Modifier.height(41.dp))
+
+                    PrimaryButton(
+                        text = stringResource(R.string.continue_button),
+                        onClick = onContinueKeyboard,
+                    )
                 }
+            }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+            // Animated visibility for note section
+            AnimatedVisibility(
+                visible = !keyboardVisible,
+                enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 300))
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(44.dp))
 
-                Keyboard(
-                    onClick = { number ->
-                        onInputChanged(if (input == "0") number else input + number)
-                    },
-                    onClickBackspace = {
-                        onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
-                    },
-                    isDecimal = primaryDisplay == PrimaryDisplay.FIAT,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("amount_keyboard"),
-                )
+                    Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
 
-                Spacer(modifier = Modifier.height(41.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                PrimaryButton(
-                    text = stringResource(R.string.continue_button),
-                    onClick = onContinueKeyboard,
-                )
-            } else {
+                    TextField(
+                        placeholder = {
+                            BodySSB(
+                                text = stringResource(R.string.wallet__receive_note_placeholder),
+                                color = Colors.White64
+                            )
+                        },
+                        value = noteText,
+                        onValueChange = onTextChanged,
+                        minLines = 4,
+                        colors = AppTextFieldDefaults.noIndicatorColors,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
-                Spacer(modifier = Modifier.height(44.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
+                    Spacer(modifier = Modifier.weight(1f))
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                TextField(
-                    placeholder = {
-                        BodySSB(
-                            text = stringResource(R.string.wallet__receive_note_placeholder),
-                            color = Colors.White64
-                        )
-                    },
-                    value = noteText,
-                    onValueChange = onTextChanged,
-                    minLines = 4,
-                    colors = AppTextFieldDefaults.noIndicatorColors,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                PrimaryButton(
-                    text = stringResource(R.string.continue_button),
-                    onClick = onContinueGeneral,
-                )
+                    PrimaryButton(
+                        text = stringResource(R.string.continue_button),
+                        onClick = onContinueGeneral,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -213,7 +238,6 @@ private fun Preview() {
         )
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable
@@ -256,4 +280,3 @@ private fun Preview3() {
         )
     }
 }
-
