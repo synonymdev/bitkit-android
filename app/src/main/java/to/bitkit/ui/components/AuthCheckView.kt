@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -41,6 +42,7 @@ fun AuthCheckView(
     requireBiometrics: Boolean = false,
     requirePin: Boolean = false,
     onSuccess: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
@@ -54,6 +56,7 @@ fun AuthCheckView(
         requirePin = requirePin,
         validatePin = appViewModel::validatePin,
         onSuccess = onSuccess,
+        onBack = onBack,
     )
 }
 
@@ -67,6 +70,7 @@ private fun AuthCheckViewContent(
     requirePin: Boolean = false,
     validatePin: (String) -> Boolean,
     onSuccess: (() -> Unit)? = null,
+    onBack: (() -> Unit)?,
 ) {
     var showBio by rememberSaveable { mutableStateOf(isBiometricsEnabled) }
 
@@ -89,10 +93,11 @@ private fun AuthCheckViewContent(
             PinPad(
                 showLogo = showLogoOnPin,
                 validatePin = validatePin,
-                onSuccess = onSuccess,
                 attemptsRemaining = attemptsRemaining,
                 allowBiometrics = isBiometricsEnabled && isBiometrySupported && !requirePin,
                 onShowBiometrics = { showBio = true },
+                onSuccess = onSuccess,
+                onBack = onBack,
             )
         }
     }
@@ -102,10 +107,11 @@ private fun AuthCheckViewContent(
 private fun PinPad(
     showLogo: Boolean = false,
     validatePin: (String) -> Boolean,
-    onSuccess: (() -> Unit)?,
     attemptsRemaining: Int,
     allowBiometrics: Boolean,
     onShowBiometrics: () -> Unit,
+    onSuccess: (() -> Unit)?,
+    onBack: (() -> Unit)? = null,
 ) {
     var pin by remember { mutableStateOf("") }
     val isLastAttempt = attemptsRemaining == 1
@@ -122,6 +128,7 @@ private fun PinPad(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        AppTopBar(titleText = " ", onBackClick = onBack)
         Box(
             contentAlignment = Alignment.BottomCenter,
             modifier = Modifier.weight(1f)
@@ -200,6 +207,7 @@ private fun PreviewBio() {
     AppThemeSurface {
         AuthCheckViewContent(
             onSuccess = {},
+            onBack = {},
             isBiometricsEnabled = true,
             isBiometrySupported = true,
             showLogoOnPin = true,
@@ -215,6 +223,7 @@ private fun PreviewPin() {
     AppThemeSurface {
         AuthCheckViewContent(
             onSuccess = {},
+            onBack = {},
             isBiometricsEnabled = false,
             isBiometrySupported = true,
             showLogoOnPin = true,
@@ -230,6 +239,7 @@ private fun PreviewPinAttempts() {
     AppThemeSurface {
         AuthCheckViewContent(
             onSuccess = {},
+            onBack = null,
             isBiometricsEnabled = false,
             isBiometrySupported = true,
             showLogoOnPin = false,
@@ -245,6 +255,7 @@ private fun PreviewPinAttemptLast() {
     AppThemeSurface {
         AuthCheckViewContent(
             onSuccess = {},
+            onBack = {},
             isBiometricsEnabled = false,
             isBiometrySupported = true,
             showLogoOnPin = true,

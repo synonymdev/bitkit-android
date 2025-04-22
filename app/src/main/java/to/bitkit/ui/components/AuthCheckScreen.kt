@@ -39,6 +39,7 @@ fun AuthCheckScreen(
 
             navController.popBackStack()
         },
+        onBack = { navController.popBackStack() },
     )
 }
 
