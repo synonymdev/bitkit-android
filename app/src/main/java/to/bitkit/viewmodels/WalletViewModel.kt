@@ -338,7 +338,12 @@ class WalletViewModel @Inject constructor(
         description: String
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            _bolt11 = createInvoice(amountSats = amountSats, description= description)
+            val hasChannels = lightningService.channels.hasChannels()
+
+            if (hasChannels) {
+                _bolt11 = createInvoice(amountSats = amountSats, description = description)
+            }
+
             val newBip21 = Bip21Utils.buildBip21Url(
                 bitcoinAddress = lightningService.newAddress(),
                 amountSats = amountSats,
@@ -536,6 +541,8 @@ class WalletViewModel @Inject constructor(
         _nodeLifecycleState = NodeLifecycleState.Stopped
         syncState()
     }
+
+    private fun List<ChannelDetails>?.hasChannels() = this?.isNotEmpty() == true
 }
 
 // region state
