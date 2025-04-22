@@ -48,13 +48,11 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.SendEvent
 
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
     updateInvoice: (ULong?, String) -> Unit,
-    onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
@@ -77,7 +75,6 @@ fun EditInvoiceScreen(
         noteText = noteText,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
-        onEvent = onEvent,
         onBack = onBack,
         onTextChanged = { newNote -> noteText = newNote },
         keyboardVisible = keyboardVisible,
@@ -95,7 +92,6 @@ fun EditInvoiceContent(
     keyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
-    onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
@@ -111,7 +107,6 @@ fun EditInvoiceContent(
             .testTag("edit_invoice_screen")
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_specify)) {
-            onEvent(SendEvent.AmountReset)
             onBack()
         }
 
@@ -243,7 +238,6 @@ private fun Preview() {
             noteText = "",
             primaryDisplay = PrimaryDisplay.BITCOIN,
             displayUnit = BitcoinDisplayUnit.MODERN,
-            onEvent = {},
             onBack = {},
             onTextChanged = {},
             keyboardVisible = false,
@@ -264,7 +258,6 @@ private fun Preview2() {
             noteText = "Note text",
             primaryDisplay = PrimaryDisplay.BITCOIN,
             displayUnit = BitcoinDisplayUnit.MODERN,
-            onEvent = {},
             onBack = {},
             onTextChanged = {},
             keyboardVisible = false,
@@ -285,7 +278,6 @@ private fun Preview3() {
             noteText = "Note text",
             primaryDisplay = PrimaryDisplay.BITCOIN,
             displayUnit = BitcoinDisplayUnit.MODERN,
-            onEvent = {},
             onBack = {},
             onTextChanged = {},
             keyboardVisible = true,
