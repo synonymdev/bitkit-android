@@ -478,10 +478,9 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.SecuritySettings> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.SecuritySettings> {
         SecuritySettingsScreen(
             navController = navController,
-            savedStateHandle = backStackEntry.savedStateHandle,
         )
     }
 }

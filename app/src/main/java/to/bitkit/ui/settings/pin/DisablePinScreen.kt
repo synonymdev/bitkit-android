@@ -38,7 +38,7 @@ fun DisablePinScreen(
         onDisableClick = {
             navController.navigateToAuthCheck(
                 requirePin = true,
-                onSuccessActionId = AuthCheckAction.Id.DISABLE_PIN,
+                onSuccessActionId = AuthCheckAction.DISABLE_PIN,
                 navOptions = navOptions { popUpTo(Routes.SecuritySettings) },
             )
         },
