@@ -10,13 +10,13 @@ import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -43,9 +43,8 @@ import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
+import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
-import uniffi.bitkitcore.Scanner
-import uniffi.bitkitcore.decode
 import javax.inject.Inject
 
 @HiltViewModel
@@ -279,35 +278,7 @@ class WalletViewModel @Inject constructor(
             }
         }
 
-        var newBip21 = "bitcoin:$_onchainAddress"
-
-        val hasChannels = lightningService.channels?.isNotEmpty() == true
-        if (hasChannels) {
-
-            // TODO: check current bolt11 for expiry (fix payments not working with commented code & rm next line):
-            _bolt11 = createInvoice(description = "Bitkit")
-
-            // if (_bolt11.isEmpty()) {
-            //     _bolt11 = createInvoice(description = "Bitkit")
-            // } else {
-            //     // Check if existing invoice has expired and create a new one if so
-            //     decode(invoice = _bolt11).let { decoded ->
-            //         if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
-            //             _bolt11 = createInvoice(description = "Bitkit")
-            //         }
-            //     }
-            // }
-        } else {
-            _bolt11 = ""
-        }
-
-        if (_bolt11.isNotEmpty()) {
-            newBip21 += "?lightning=$_bolt11"
-        }
-
-        _bip21 = newBip21
-
-        syncState()
+        updateBip21Invoice(description = "Bitkit")
     }
 
     fun disconnectPeer(peer: LnPeer) {
@@ -333,6 +304,32 @@ class WalletViewModel @Inject constructor(
                 }
         }
     }
+
+    fun updateBip21Invoice(
+        amountSats: ULong? = null,
+        description: String
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val hasChannels = lightningService.channels.hasChannels()
+
+            _bolt11 = if (hasChannels) {
+                createInvoice(amountSats = amountSats, description = description)
+            } else {
+                ""
+            }
+
+            val newBip21 = Bip21Utils.buildBip21Url(
+                bitcoinAddress = _onchainAddress,
+                amountSats = amountSats,
+                message = description.ifBlank { "Bitkit" },
+                lightningInvoice = _bolt11
+            )
+            _bip21 = newBip21
+
+            syncState()
+        }
+    }
+
 
     suspend fun createInvoice(
         amountSats: ULong? = null,
@@ -518,6 +515,8 @@ class WalletViewModel @Inject constructor(
         _nodeLifecycleState = NodeLifecycleState.Stopped
         syncState()
     }
+
+    private fun List<ChannelDetails>?.hasChannels() = this?.isNotEmpty() == true
 }
 
 // region state

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,7 +20,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
@@ -29,6 +27,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadTextField
@@ -43,12 +42,10 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
-import java.math.BigDecimal
 
 @Composable
 fun SendAmountScreen(
@@ -81,7 +78,6 @@ fun SendAmountScreen(
         onEvent = onEvent,
         onBack = onBack
     )
-
 
 }
 
@@ -233,45 +229,6 @@ private fun PaymentMethodButton(
                 SendMethod.LIGHTNING -> Colors.Purple
             }
         )
-    }
-}
-
-@Composable
-private fun AmountInputHandler(
-    input: String,
-    primaryDisplay: PrimaryDisplay,
-    displayUnit: BitcoinDisplayUnit,
-    onInputChanged: (String) -> Unit,
-    onAmountCalculated: (String) -> Unit,
-    currencyVM: CurrencyViewModel
-) {
-    LaunchedEffect(primaryDisplay) {
-        val newInput = when (primaryDisplay) {
-            PrimaryDisplay.BITCOIN -> { //Convert fiat to sats
-                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0
-                if (amountLong > 0.0) amountLong.toString() else ""
-            }
-
-            PrimaryDisplay.FIAT -> { //Convert sats to fiat
-                val convertedAmount = currencyVM.convert(input.toLongOrDefault(0L))
-                if ((convertedAmount?.value ?: BigDecimal(0)) > BigDecimal(0)) convertedAmount?.formatted.toString() else ""
-            }
-        }
-        onInputChanged(newInput)
-    }
-
-    LaunchedEffect(input) {
-        val sats = when (primaryDisplay) {
-            PrimaryDisplay.BITCOIN -> {
-                if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
-            }
-
-            PrimaryDisplay.FIAT -> {
-                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0L
-                convertedAmount.toString()
-            }
-        }
-        onAmountCalculated(sats)
     }
 }
 

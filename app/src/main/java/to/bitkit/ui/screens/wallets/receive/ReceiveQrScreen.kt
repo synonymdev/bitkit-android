@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +68,7 @@ private object ReceiveRoutes {
     const val AMOUNT = "amount"
     const val CONFIRM = "confirm"
     const val LIQUIDITY = "liquidity"
+    const val EDIT_INVOICE = "edit_invoice"
 }
 
 @Composable
@@ -120,7 +122,8 @@ fun ReceiveQrSheet(
                         } else if (cjitInvoice.value == null) {
                             navController.navigate(ReceiveRoutes.AMOUNT)
                         }
-                    }
+                    },
+                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -154,6 +157,15 @@ fun ReceiveQrSheet(
                     )
                 }
             }
+            composable(ReceiveRoutes.EDIT_INVOICE) {
+                EditInvoiceScreen(
+                    onBack = { navController.popBackStack() },
+                    updateInvoice = { sats, description ->
+                        wallet.updateBip21Invoice(amountSats = sats, description = description)
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
     }
 }
@@ -164,6 +176,7 @@ private fun ReceiveQrScreen(
     cjitActive: MutableState<Boolean>,
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
+    onClickEditInvoice: () -> Unit
 ) {
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
@@ -186,7 +199,9 @@ private fun ReceiveQrScreen(
         val uri = cjitInvoice.value ?: walletState.bip21
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp).weight(1f)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .weight(1f)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -198,7 +213,8 @@ private fun ReceiveQrScreen(
                         0 -> ReceiveQrSlide(
                             uri = uri,
                             qrLogoPainter = painterResource(qrLogoImageRes),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            onClickEditInvoice = onClickEditInvoice
                         )
 
                         1 -> CopyValuesSlide(
@@ -237,6 +253,14 @@ private fun ReceiveLightningFunds(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BodyM(text = stringResource(R.string.wallet__receive_spending))
             Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                contentDescription = null,
+                tint = Colors.White64,
+                modifier = Modifier
+                    .rotate(17.33f)
+                    .padding(start = 7.65.dp, end = 13.19.dp)
+            )
             Switch(
                 checked = cjitActive.value,
                 onCheckedChange = onCjitToggle,
@@ -250,7 +274,8 @@ private fun ReceiveLightningFunds(
 private fun ReceiveQrSlide(
     uri: String,
     qrLogoPainter: Painter,
-    modifier: Modifier
+    modifier: Modifier,
+    onClickEditInvoice: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -273,7 +298,7 @@ private fun ReceiveQrSlide(
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
                 size = ButtonSize.Small,
-                onClick = { /* TODO : edit amount */ },
+                onClick = onClickEditInvoice,
                 fullWidth = false,
                 color = Colors.White10,
                 icon = {
@@ -422,6 +447,7 @@ private fun ReceiveQrScreenPreview() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
@@ -437,6 +463,7 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
@@ -452,6 +479,7 @@ private fun ReceiveQrScreenPreviewTablet() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
+            onClickEditInvoice = {}
         )
     }
 }
