@@ -207,7 +207,7 @@ fun EditInvoiceContent(
                         value = noteText,
                         onValueChange = onTextChanged,
                         minLines = 4,
-                        colors = AppTextFieldDefaults.noIndicatorColors,
+                        colors = AppTextFieldDefaults.semiTransparent,
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier
                             .fillMaxWidth()
