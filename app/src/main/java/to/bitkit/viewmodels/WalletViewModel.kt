@@ -278,35 +278,7 @@ class WalletViewModel @Inject constructor(
             }
         }
 
-        var newBip21 = "bitcoin:$_onchainAddress"
-
-        val hasChannels = lightningService.channels?.isNotEmpty() == true
-        if (hasChannels) {
-
-            // TODO: check current bolt11 for expiry (fix payments not working with commented code & rm next line):
-            _bolt11 = createInvoice(description = "Bitkit")
-
-            // if (_bolt11.isEmpty()) {
-            //     _bolt11 = createInvoice(description = "Bitkit")
-            // } else {
-            //     // Check if existing invoice has expired and create a new one if so
-            //     decode(invoice = _bolt11).let { decoded ->
-            //         if (decoded is Scanner.Lightning && decoded.invoice.isExpired) {
-            //             _bolt11 = createInvoice(description = "Bitkit")
-            //         }
-            //     }
-            // }
-        } else {
-            _bolt11 = ""
-        }
-
-        if (_bolt11.isNotEmpty()) {
-            newBip21 += "?lightning=$_bolt11"
-        }
-
-        _bip21 = newBip21
-
-        syncState()
+        updateBip21Invoice(description = "Bitkit")
     }
 
     fun disconnectPeer(peer: LnPeer) {
