@@ -22,6 +22,7 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.navigateToAuthCheck
+import to.bitkit.ui.navigateToChangePin
 import to.bitkit.ui.navigateToDisablePin
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
@@ -60,6 +61,9 @@ fun SecuritySettingsScreen(
                     navController.navigateToDisablePin()
                 }
             },
+            onChangePinClick = {
+                navController.navigateToChangePin()
+            },
             onPinOnLaunchClick = {
                 navController.navigateToAuthCheck(
                     onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH,
@@ -84,6 +88,7 @@ private fun SecuritySettingsContent(
     isBiometricEnabled: Boolean,
     isBiometrySupported: Boolean,
     onPinClick: () -> Unit = {},
+    onChangePinClick: () -> Unit = {},
     onPinOnLaunchClick: () -> Unit = {},
     onUseBiometricsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
@@ -108,6 +113,10 @@ private fun SecuritySettingsContent(
                 onClick = onPinClick,
             )
             if (isPinEnabled) {
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__security__pin_change),
+                    onClick = onChangePinClick,
+                )
                 SettingsSwitchRow(
                     title = stringResource(R.string.settings__security__pin_launch),
                     isChecked = isPinOnLaunchEnabled,

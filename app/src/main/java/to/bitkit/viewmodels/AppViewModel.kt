@@ -805,11 +805,13 @@ class AppViewModel @Inject constructor(
         return false
     }
 
-    fun addPin(pin: String) {
+    fun addPin(pin: String) = editPin(pin)
+
+    fun editPin(newPin: String) {
         setIsPinEnabled(true)
 
         viewModelScope.launch {
-            keychain.upsertString(Keychain.Key.PIN.name, pin)
+            keychain.upsertString(Keychain.Key.PIN.name, newPin)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }

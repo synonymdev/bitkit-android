@@ -81,7 +81,11 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
+import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.pin.ChangePinNewScreen
+import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.utils.screenScaleIn
 import to.bitkit.ui.utils.screenScaleOut
 import to.bitkit.ui.utils.screenSlideIn
@@ -234,6 +238,10 @@ fun ContentView(
                 generalSettings(navController)
                 securitySettings(navController)
                 disablePin(navController)
+                changePin(navController)
+                changePinNew(navController)
+                changePinConfirm(navController)
+                changePinResult(navController)
                 defaultUnitSettings(currencyViewModel, navController)
                 localCurrencySettings(currencyViewModel, navController)
                 backupSettings(navController)
@@ -491,6 +499,34 @@ private fun NavGraphBuilder.disablePin(navController: NavHostController) {
     }
 }
 
+private fun NavGraphBuilder.changePin(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.ChangePin> {
+        ChangePinScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.ChangePinNew> {
+        ChangePinNewScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.ChangePinConfirm> { navBackEntry ->
+        val route = navBackEntry.toRoute<Routes.ChangePinConfirm>()
+        ChangePinConfirmScreen(
+            newPin = route.newPin,
+            navController = navController,
+        )
+    }
+}
+
+private fun NavGraphBuilder.changePinResult(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.ChangePinResult> {
+        ChangePinResultScreen(navController)
+    }
+}
+
 private fun NavGraphBuilder.defaultUnitSettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
@@ -700,6 +736,22 @@ fun NavController.navigateToDisablePin() = navigate(
     route = Routes.DisablePin,
 )
 
+fun NavController.navigateToChangePin() = navigate(
+    route = Routes.ChangePin,
+)
+
+fun NavController.navigateToChangePinNew() = navigate(
+    route = Routes.ChangePinNew,
+)
+
+fun NavController.navigateToChangePinConfirm(newPin: String) = navigate(
+    route = Routes.ChangePinConfirm(newPin),
+)
+
+fun NavController.navigateToChangePinResult() = navigate(
+    route = Routes.ChangePinResult,
+)
+
 fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
@@ -811,6 +863,18 @@ object Routes {
 
     @Serializable
     data object DisablePin
+
+    @Serializable
+    data object ChangePin
+
+    @Serializable
+    data object ChangePinNew
+
+    @Serializable
+    data class ChangePinConfirm(val newPin: String)
+
+    @Serializable
+    data object ChangePinResult
 
     @Serializable
     data class AuthCheck(
