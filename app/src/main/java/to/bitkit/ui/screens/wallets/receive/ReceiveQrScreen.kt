@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -89,7 +88,6 @@ fun ReceiveQrSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
-    var receiveOnSpending by remember { mutableStateOf(false) } //TODO UPDATE BUSINESS LOGIC
 
     LaunchedEffect(Unit) {
         try {
@@ -129,8 +127,7 @@ fun ReceiveQrSheet(
                         }
                     },
                     onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
-                    receiveOnSpending = receiveOnSpending,
-                    onClickReceiveOnSpending = { receiveOnSpending = !receiveOnSpending }
+                    onClickReceiveOnSpending = { wallet.updateReceiveOnSpending() }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -181,7 +178,6 @@ fun ReceiveQrSheet(
 private fun ReceiveQrScreen(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
-    receiveOnSpending: Boolean,
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
     onClickEditInvoice: () -> Unit,
@@ -244,7 +240,7 @@ private fun ReceiveQrScreen(
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
                 Column {
-                    AnimatedVisibility (!receiveOnSpending) {
+                    AnimatedVisibility (!walletState.receiveOnSpendingBalance) {
                         Headline(
                             text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
                         )
@@ -252,7 +248,7 @@ private fun ReceiveQrScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         BodyM(text = stringResource(R.string.wallet__receive_spending))
                         Spacer(modifier = Modifier.weight(1f))
-                        AnimatedVisibility(!receiveOnSpending) {
+                        AnimatedVisibility(!walletState.receiveOnSpendingBalance) {
                             Icon(
                                 painter = painterResource(R.drawable.empty_state_arrow_horizontal),
                                 contentDescription = null,
@@ -263,7 +259,7 @@ private fun ReceiveQrScreen(
                             )
                         }
                         Switch(
-                            checked = receiveOnSpending,
+                            checked = walletState.receiveOnSpendingBalance,
                             onCheckedChange = { onClickReceiveOnSpending() },
                             colors = AppSwitchDefaults.colorsPurple,
                         )
@@ -496,7 +492,6 @@ private fun ReceiveQrScreenPreview() {
             onCjitToggle = { },
             onClickEditInvoice = {},
             onClickReceiveOnSpending = {},
-            receiveOnSpending = false
         )
     }
 }
@@ -514,7 +509,6 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
             onCjitToggle = { },
             onClickEditInvoice = {},
             onClickReceiveOnSpending = {},
-            receiveOnSpending = false
         )
     }
 }
@@ -532,7 +526,6 @@ private fun ReceiveQrScreenPreviewTablet() {
             onCjitToggle = { },
             onClickEditInvoice = {},
             onClickReceiveOnSpending = {},
-            receiveOnSpending = false
         )
     }
 }

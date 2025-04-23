@@ -330,6 +330,9 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun updateReceiveOnSpending() {
+        _uiState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+    }
 
     suspend fun createInvoice(
         amountSats: ULong? = null,
@@ -535,6 +538,7 @@ data class MainUiState(
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
     val isRefreshing: Boolean = false,
+    val receiveOnSpendingBalance: Boolean = true,
 )
 
 // endregion
