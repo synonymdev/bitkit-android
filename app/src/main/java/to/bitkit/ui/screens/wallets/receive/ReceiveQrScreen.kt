@@ -227,7 +227,7 @@ private fun ReceiveQrScreen(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
+            if (walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
                 ReceiveLightningFunds(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
