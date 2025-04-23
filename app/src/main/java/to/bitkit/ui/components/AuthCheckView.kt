@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -57,6 +58,7 @@ fun AuthCheckView(
         validatePin = appViewModel::validatePin,
         onSuccess = onSuccess,
         onBack = onBack,
+        onClickForgotPin = { appViewModel.toast(Exception("TODO: Forgot PIN")) },
     )
 }
 
@@ -71,6 +73,7 @@ private fun AuthCheckViewContent(
     validatePin: (String) -> Boolean,
     onSuccess: (() -> Unit)? = null,
     onBack: (() -> Unit)?,
+    onClickForgotPin: () -> Unit,
 ) {
     var showBio by rememberSaveable { mutableStateOf(isBiometricsEnabled) }
 
@@ -98,6 +101,7 @@ private fun AuthCheckViewContent(
                 onShowBiometrics = { showBio = true },
                 onSuccess = onSuccess,
                 onBack = onBack,
+                onClickForgotPin = onClickForgotPin,
             )
         }
     }
@@ -112,6 +116,7 @@ private fun PinPad(
     onShowBiometrics: () -> Unit,
     onSuccess: (() -> Unit)?,
     onBack: (() -> Unit)? = null,
+    onClickForgotPin: () -> Unit = {},
 ) {
     var pin by remember { mutableStateOf("") }
     val isLastAttempt = attemptsRemaining == 1
@@ -153,11 +158,11 @@ private fun PinPad(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             } else {
-                // TODO: onClick: show forgotPin sheet
                 BodyS(
                     text = stringResource(R.string.security__pin_attempts).replace("{attemptsRemaining}", "$attemptsRemaining"),
                     color = Colors.Brand,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.clickableAlpha { onClickForgotPin() }
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -213,6 +218,7 @@ private fun PreviewBio() {
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 8,
+            onClickForgotPin = {},
         )
     }
 }
@@ -229,6 +235,7 @@ private fun PreviewPin() {
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 8,
+            onClickForgotPin = {},
         )
     }
 }
@@ -245,6 +252,7 @@ private fun PreviewPinAttempts() {
             showLogoOnPin = false,
             validatePin = { true },
             attemptsRemaining = 6,
+            onClickForgotPin = {},
         )
     }
 }
@@ -261,6 +269,7 @@ private fun PreviewPinAttemptLast() {
             showLogoOnPin = true,
             validatePin = { true },
             attemptsRemaining = 1,
+            onClickForgotPin = {},
         )
     }
 }

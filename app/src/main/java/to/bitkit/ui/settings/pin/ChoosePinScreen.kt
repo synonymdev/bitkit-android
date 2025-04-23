@@ -54,10 +54,7 @@ fun ChoosePinScreen(
         Spacer(modifier = Modifier.height(32.dp))
         Spacer(modifier = Modifier.weight(1f))
 
-        PinDots(
-            pin = pin,
-            modifier = Modifier.padding(horizontal = 32.dp),
-        )
+        PinDots(pin = pin)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -78,8 +75,6 @@ fun ChoosePinScreen(
                 .height(350.dp)
                 .background(Colors.Black)
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

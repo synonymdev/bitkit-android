@@ -1,12 +1,10 @@
 package to.bitkit.ui.settings.pin
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,11 +12,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -28,16 +28,18 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.PinDots
 import to.bitkit.ui.components.PinNumberPad
-import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.navigateToChangePinResult
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.CloseNavIcon
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
-fun ConfirmPinScreen(
-    originalPin: String,
-    onPinConfirmed: () -> Unit,
-    onBack: () -> Unit,
+fun ChangePinConfirmScreen(
+    newPin: String,
+    navController: NavController,
 ) {
     val app = appViewModel ?: return
     var pin by remember { mutableStateOf("") }
@@ -45,9 +47,9 @@ fun ConfirmPinScreen(
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
-            if (pin == originalPin) {
-                app.addPin(pin)
-                onPinConfirmed()
+            if (pin == newPin) {
+                app.editPin(newPin)
+                navController.navigateToChangePinResult()
             } else {
                 showError = true
                 delay(500)
@@ -56,7 +58,7 @@ fun ConfirmPinScreen(
         }
     }
 
-    ConfirmPinContent(
+    ChangePinConfirmContent(
         pin = pin,
         showError = showError,
         onKeyPress = { key ->
@@ -68,63 +70,58 @@ fun ConfirmPinScreen(
                 pin += key
             }
         },
-        onBack = onBack,
+        onBackClick = { navController.popBackStack() },
+        onCloseClick = { navController.navigateToHome() },
     )
 }
 
 @Composable
-private fun ConfirmPinContent(
+private fun ChangePinConfirmContent(
     pin: String,
     showError: Boolean,
     onKeyPress: (String) -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .gradientBackground()
-            .navigationBarsPadding()
-    ) {
-        SheetTopBar(
-            stringResource(R.string.security__pin_retype_header),
-            onBack = onBack,
+    ScreenColumn {
+        AppTopBar(
+            titleText = stringResource(R.string.security__cp_retype_title),
+            onBackClick = onBackClick,
+            actions = { CloseNavIcon(onClick = onCloseClick) },
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            BodyM(
+                text = stringResource(R.string.security__cp_retype_text),
+                color = Colors.White64,
+            )
 
-        BodyM(
-            text = stringResource(R.string.security__pin_retype_text),
-            color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 32.dp),
-        )
+            Spacer(modifier = Modifier.height(32.dp))
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Spacer(modifier = Modifier.weight(1f))
+            AnimatedVisibility(visible = showError) {
+                BodyS(
+                    text = stringResource(R.string.security__pin_not_match),
+                    textAlign = TextAlign.Center,
+                    color = Colors.Brand,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
-        AnimatedVisibility(visible = showError) {
-            BodyS(
-                text = stringResource(R.string.security__pin_not_match),
-                textAlign = TextAlign.Center,
-                color = Colors.Brand,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp)
+            PinDots(
+                pin = pin,
+                modifier = Modifier.padding(vertical = 16.dp),
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            PinNumberPad(
+                modifier = Modifier.height(350.dp),
+                onPress = onKeyPress,
             )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        PinDots(pin = pin)
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        PinNumberPad(
-            onPress = onKeyPress,
-            modifier = Modifier
-                .height(350.dp)
-                .background(Colors.Black)
-        )
     }
 }
 
@@ -132,11 +129,12 @@ private fun ConfirmPinContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ConfirmPinContent(
-            pin = "",
+        ChangePinConfirmContent(
+            pin = "12",
             showError = false,
             onKeyPress = {},
-            onBack = {},
+            onBackClick = {},
+            onCloseClick = {},
         )
     }
 }
@@ -145,11 +143,12 @@ private fun Preview() {
 @Composable
 private fun PreviewRetry() {
     AppThemeSurface {
-        ConfirmPinContent(
-            pin = "123",
+        ChangePinConfirmContent(
+            pin = "",
             showError = true,
             onKeyPress = {},
-            onBack = {},
+            onBackClick = {},
+            onCloseClick = {},
         )
     }
 }
