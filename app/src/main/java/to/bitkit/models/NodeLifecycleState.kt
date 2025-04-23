@@ -10,6 +10,7 @@ sealed class NodeLifecycleState {
 
     fun isStoppedOrStopping() = this is Stopped || this is Stopping
     fun isRunningOrStarting() = this is Running || this is Starting
+    fun isStarting() = this is Starting
     fun isRunning() = this is Running
 
     val displayState: String

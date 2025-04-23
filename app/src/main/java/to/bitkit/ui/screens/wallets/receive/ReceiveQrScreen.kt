@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,6 +43,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.truncate
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodeLifecycleState.Running
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -227,12 +229,15 @@ private fun ReceiveQrScreen(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            if (walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
+            AnimatedVisibility (walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
                 ReceiveLightningFunds(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
                     onCjitToggle = onCjitToggle,
                 )
+            }
+            AnimatedVisibility(walletState.nodeLifecycleState.isStarting()) {
+                BodyM(text = stringResource(R.string.wallet__receive_ldk_init))
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -484,7 +489,7 @@ private fun ReceiveQrScreenPreviewTablet() {
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
             walletState = MainUiState(
-                nodeLifecycleState = Running,
+                nodeLifecycleState = NodeLifecycleState.Starting,
             ),
             onCjitToggle = { },
             onClickEditInvoice = {}
