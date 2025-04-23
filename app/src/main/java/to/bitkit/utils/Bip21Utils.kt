@@ -6,7 +6,7 @@ object Bip21Utils {
         bitcoinAddress: String,
         amountSats: ULong? = null,
         label: String? = null,
-        message: String? = null,
+        message: String? = "Bitkit",
         lightningInvoice: String? = null
     ): String {
         val builder = StringBuilder("bitcoin:$bitcoinAddress")

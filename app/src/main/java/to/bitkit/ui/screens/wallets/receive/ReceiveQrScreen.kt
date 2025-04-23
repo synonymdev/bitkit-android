@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -395,7 +396,14 @@ private fun CopyAddressCard(
             .fillMaxWidth()
             .padding(24.dp)
     ) {
-        Caption13Up(text = title, color = Colors.White64)
+        Row {
+            Caption13Up(text = title, color = Colors.White64)
+
+            Spacer(modifier = Modifier.width(3.dp))
+
+            val iconRes =  if (type == CopyAddressType.ONCHAIN) R.drawable.ic_bitcoin else R.drawable.ic_lightning_alt
+            Icon(painter = painterResource(iconRes), contentDescription = null, tint = Colors.White64)
+        }
         Spacer(modifier = Modifier.height(16.dp))
         BodyS(text = address.truncate(32).uppercase())
         Spacer(modifier = Modifier.height(16.dp))

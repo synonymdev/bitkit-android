@@ -278,7 +278,7 @@ class WalletViewModel @Inject constructor(
             }
         }
 
-        updateBip21Invoice(description = "Bitkit")
+        updateBip21Invoice()
     }
 
     fun disconnectPeer(peer: LnPeer) {
@@ -307,7 +307,7 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        description: String
+        description: String = ""
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             val hasChannels = lightningService.channels.hasChannels()
@@ -321,7 +321,7 @@ class WalletViewModel @Inject constructor(
             val newBip21 = Bip21Utils.buildBip21Url(
                 bitcoinAddress = _onchainAddress,
                 amountSats = amountSats,
-                message = description.ifBlank { "Bitkit" },
+                message = description.ifBlank { DEFAULT_INVOICE_MESSAGE },
                 lightningInvoice = _bolt11
             )
             _bip21 = newBip21
@@ -336,7 +336,7 @@ class WalletViewModel @Inject constructor(
         description: String,
         expirySeconds: UInt = 86_400u, // 1 day
     ): String {
-        return lightningService.receive(amountSats, description, expirySeconds)
+        return lightningService.receive(amountSats, description.ifBlank { DEFAULT_INVOICE_MESSAGE }, expirySeconds)
     }
 
     fun openChannel() {
@@ -517,6 +517,10 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun List<ChannelDetails>?.hasChannels() = this?.isNotEmpty() == true
+
+    private companion object {
+        const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
+    }
 }
 
 // region state

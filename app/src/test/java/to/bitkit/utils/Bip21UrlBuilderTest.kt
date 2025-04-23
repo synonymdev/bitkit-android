@@ -18,7 +18,7 @@ class Bip21UrlBuilderTest {
     @Test
     fun `basic address without parameters`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        val expected = "bitcoin:$address"
+        val expected = "bitcoin:$address?message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address))
     }
 
@@ -26,7 +26,7 @@ class Bip21UrlBuilderTest {
     fun `address with amount in sats`() {
         val address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
         val amount = 100000uL // 0.001 BTC
-        val expected = "bitcoin:$address?amount=0.001"
+        val expected = "bitcoin:$address?amount=0.001&message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address, amount))
     }
 
@@ -34,7 +34,7 @@ class Bip21UrlBuilderTest {
     fun `amount with exact 1 BTC`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val amount = 100000000uL
-        val expected = "bitcoin:$address?amount=1"
+        val expected = "bitcoin:$address?amount=1&message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address, amount))
     }
 
@@ -42,7 +42,7 @@ class Bip21UrlBuilderTest {
     fun `amount with fractional sats rounds correctly`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val amount = 12345678uL
-        val expected = "bitcoin:$address?amount=0.12345678"
+        val expected = "bitcoin:$address?amount=0.12345678&message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address, amount))
     }
 
@@ -64,7 +64,7 @@ class Bip21UrlBuilderTest {
     fun `address with lightning parameter`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val invoice = "lnbc500n1p3k9v3pp5kzmj..."
-        val expected = "bitcoin:$address?lightning=${invoice.encodeToUrl()}"
+        val expected = "bitcoin:$address?message=Bitkit&lightning=${invoice.encodeToUrl()}"
         Assert.assertEquals(expected, buildBip21Url(address, lightningInvoice = invoice))
     }
 
@@ -105,7 +105,7 @@ class Bip21UrlBuilderTest {
     fun `zero sats is handled correctly`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val amount = 0uL
-        val expected = "bitcoin:$address?amount=0"
+        val expected = "bitcoin:$address?amount=0&message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address, amount))
     }
 
@@ -113,7 +113,7 @@ class Bip21UrlBuilderTest {
     fun `maximum ULong value is handled correctly`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val amount = ULong.MAX_VALUE
-        val expected = "bitcoin:$address?amount=184467440737.09551615"
+        val expected = "bitcoin:$address?amount=184467440737.09551615&message=Bitkit"
         Assert.assertEquals(expected, buildBip21Url(address, amount))
     }
 
@@ -121,7 +121,7 @@ class Bip21UrlBuilderTest {
     fun `lightning parameter without other parameters`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val invoice = "lnbc100n1p3k9v3pp5kzmj..."
-        val expected = "bitcoin:$address?lightning=${invoice.encodeToUrl()}"
+        val expected = "bitcoin:$address?message=Bitkit&lightning=${invoice.encodeToUrl()}"
         Assert.assertEquals(expected, buildBip21Url(address, lightningInvoice = invoice))
     }
 
@@ -130,7 +130,7 @@ class Bip21UrlBuilderTest {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val amount = 10000uL
         val invoice = "lnbc100n1p3k9v3pp5kzmj..."
-        val expected = "bitcoin:$address?amount=0.0001&lightning=${invoice.encodeToUrl()}"
+        val expected = "bitcoin:$address?amount=0.0001&message=Bitkit&lightning=${invoice.encodeToUrl()}"
         Assert.assertEquals(expected, buildBip21Url(address, amount, lightningInvoice = invoice))
     }
 }
