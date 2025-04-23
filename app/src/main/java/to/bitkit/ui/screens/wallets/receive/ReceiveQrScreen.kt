@@ -243,13 +243,31 @@ private fun ReceiveQrScreen(
                 )
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    BodyM(text = stringResource(R.string.wallet__receive_spending))
-                    Switch(
-                        checked = receiveOnSpending,
-                        onCheckedChange = { onClickReceiveOnSpending },
-                        colors = AppSwitchDefaults.colorsPurple,
-                    )
+                Column {
+                    AnimatedVisibility (!receiveOnSpending) {
+                        Headline(
+                            text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BodyM(text = stringResource(R.string.wallet__receive_spending))
+                        Spacer(modifier = Modifier.weight(1f))
+                        AnimatedVisibility(!receiveOnSpending) {
+                            Icon(
+                                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                                contentDescription = null,
+                                tint = Colors.White64,
+                                modifier = Modifier
+                                    .rotate(17.33f)
+                                    .padding(start = 7.65.dp, end = 13.19.dp)
+                            )
+                        }
+                        Switch(
+                            checked = receiveOnSpending,
+                            onCheckedChange = { onClickReceiveOnSpending() },
+                            colors = AppSwitchDefaults.colorsPurple,
+                        )
+                    }
                 }
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isStarting()) {
