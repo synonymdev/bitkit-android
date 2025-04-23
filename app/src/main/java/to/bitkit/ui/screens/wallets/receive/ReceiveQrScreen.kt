@@ -226,6 +226,7 @@ private fun ReceiveQrScreen(
                             onchainAddress = onchainAddress,
                             bolt11 = walletState.bolt11,
                             cjitInvoice = cjitInvoice.value,
+                            receiveOnSpendingBalance = walletState.receiveOnSpendingBalance
                         )
                     }
                 }
@@ -386,6 +387,7 @@ private fun CopyValuesSlide(
     onchainAddress: String,
     bolt11: String,
     cjitInvoice: String?,
+    receiveOnSpendingBalance: Boolean
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.White10),
@@ -399,7 +401,7 @@ private fun CopyValuesSlide(
                     type = CopyAddressType.ONCHAIN,
                 )
             }
-            if (bolt11.isNotEmpty()) {
+            if (bolt11.isNotEmpty() && receiveOnSpendingBalance) {
                 CopyAddressCard(
                     title = stringResource(R.string.wallet__receive_lightning_invoice),
                     address = bolt11,
@@ -544,6 +546,7 @@ private fun CopyValuesSlidePreview() {
                 onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                 bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
                 cjitInvoice = null,
+                true
             )
         }
     }
