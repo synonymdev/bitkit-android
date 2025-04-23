@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -88,6 +89,7 @@ fun ReceiveQrSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+    var receiveOnSpending by remember { mutableStateOf(false) } //TODO UPDATE BUSINESS LOGIC
 
     LaunchedEffect(Unit) {
         try {
@@ -126,7 +128,9 @@ fun ReceiveQrSheet(
                             navController.navigate(ReceiveRoutes.AMOUNT)
                         }
                     },
-                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) }
+                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
+                    receiveOnSpending = receiveOnSpending,
+                    onClickReceiveOnSpending = { receiveOnSpending = !receiveOnSpending }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -177,9 +181,11 @@ fun ReceiveQrSheet(
 private fun ReceiveQrScreen(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
+    receiveOnSpending: Boolean,
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
-    onClickEditInvoice: () -> Unit
+    onClickEditInvoice: () -> Unit,
+    onClickReceiveOnSpending: () -> Unit,
 ) {
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
@@ -229,12 +235,22 @@ private fun ReceiveQrScreen(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            AnimatedVisibility (walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
+            AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
                 ReceiveLightningFunds(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
                     onCjitToggle = onCjitToggle,
                 )
+            }
+            AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    BodyM(text = stringResource(R.string.wallet__receive_spending))
+                    Switch(
+                        checked = receiveOnSpending,
+                        onCheckedChange = { onClickReceiveOnSpending },
+                        colors = AppSwitchDefaults.colorsPurple,
+                    )
+                }
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isStarting()) {
                 BodyM(text = stringResource(R.string.wallet__receive_ldk_init))
@@ -406,7 +422,7 @@ private fun CopyAddressCard(
 
             Spacer(modifier = Modifier.width(3.dp))
 
-            val iconRes =  if (type == CopyAddressType.ONCHAIN) R.drawable.ic_bitcoin else R.drawable.ic_lightning_alt
+            val iconRes = if (type == CopyAddressType.ONCHAIN) R.drawable.ic_bitcoin else R.drawable.ic_lightning_alt
             Icon(painter = painterResource(iconRes), contentDescription = null, tint = Colors.White64)
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -460,7 +476,9 @@ private fun ReceiveQrScreenPreview() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
+            receiveOnSpending = false
         )
     }
 }
@@ -476,7 +494,9 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
+            receiveOnSpending = false
         )
     }
 }
@@ -492,7 +512,9 @@ private fun ReceiveQrScreenPreviewTablet() {
                 nodeLifecycleState = NodeLifecycleState.Starting,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
+            receiveOnSpending = false
         )
     }
 }
