@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import android.content.Context
 import com.google.firebase.messaging.FirebaseMessaging
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
@@ -26,7 +27,7 @@ import javax.inject.Singleton
 @Singleton
 class WalletRepository @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val appContext: Context,
+    @ApplicationContext  private val appContext: Context,
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
