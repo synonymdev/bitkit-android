@@ -307,20 +307,23 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        description: String = ""
+        description: String = "",
+        generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
+
             val hasChannels = lightningService.channels.hasChannels()
 
-            _bolt11 = if (hasChannels) {
-                createInvoice(amountSats = amountSats, description = description)
+            _bolt11 = if (hasChannels && generateBolt11IfAvailable) {
+                createInvoice(amountSats = _uiState.value.bip21AmountSats, description = _uiState.value.bip21Description)
             } else {
                 ""
             }
 
             val newBip21 = Bip21Utils.buildBip21Url(
                 bitcoinAddress = _onchainAddress,
-                amountSats = amountSats,
+                amountSats = _uiState.value.bip21AmountSats,
                 message = description.ifBlank { DEFAULT_INVOICE_MESSAGE },
                 lightningInvoice = _bolt11
             )
@@ -330,6 +333,14 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun updateReceiveOnSpending() {
+        _uiState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+        updateBip21Invoice(
+            amountSats = _uiState.value.bip21AmountSats,
+            description = _uiState.value.bip21Description,
+            generateBolt11IfAvailable = _uiState.value.receiveOnSpendingBalance
+        )
+    }
 
     suspend fun createInvoice(
         amountSats: ULong? = null,
@@ -535,6 +546,9 @@ data class MainUiState(
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
     val isRefreshing: Boolean = false,
+    val receiveOnSpendingBalance: Boolean = true,
+    val bip21AmountSats: ULong? = null,
+    val bip21Description: String = ""
 )
 
 // endregion

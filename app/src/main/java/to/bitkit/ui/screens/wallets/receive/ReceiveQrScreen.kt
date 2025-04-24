@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,6 +43,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.truncate
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodeLifecycleState.Running
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -124,7 +126,8 @@ fun ReceiveQrSheet(
                             navController.navigate(ReceiveRoutes.AMOUNT)
                         }
                     },
-                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) }
+                    onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
+                    onClickReceiveOnSpending = { wallet.updateReceiveOnSpending() }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -177,7 +180,8 @@ private fun ReceiveQrScreen(
     cjitActive: MutableState<Boolean>,
     walletState: MainUiState,
     onCjitToggle: (Boolean) -> Unit,
-    onClickEditInvoice: () -> Unit
+    onClickEditInvoice: () -> Unit,
+    onClickReceiveOnSpending: () -> Unit,
 ) {
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
@@ -222,17 +226,49 @@ private fun ReceiveQrScreen(
                             onchainAddress = onchainAddress,
                             bolt11 = walletState.bolt11,
                             cjitInvoice = cjitInvoice.value,
+                            receiveOnSpendingBalance = walletState.receiveOnSpendingBalance
                         )
                     }
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            if (walletState.nodeLifecycleState.isRunningOrStarting() && walletState.channels.isEmpty()) {
+            AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isEmpty()) {
                 ReceiveLightningFunds(
                     cjitInvoice = cjitInvoice,
                     cjitActive = cjitActive,
                     onCjitToggle = onCjitToggle,
                 )
+            }
+            AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
+                Column {
+                    AnimatedVisibility (!walletState.receiveOnSpendingBalance) {
+                        Headline(
+                            text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BodyM(text = stringResource(R.string.wallet__receive_spending))
+                        Spacer(modifier = Modifier.weight(1f))
+                        AnimatedVisibility(!walletState.receiveOnSpendingBalance) {
+                            Icon(
+                                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                                contentDescription = null,
+                                tint = Colors.White64,
+                                modifier = Modifier
+                                    .rotate(17.33f)
+                                    .padding(start = 7.65.dp, end = 13.19.dp)
+                            )
+                        }
+                        Switch(
+                            checked = walletState.receiveOnSpendingBalance,
+                            onCheckedChange = { onClickReceiveOnSpending() },
+                            colors = AppSwitchDefaults.colorsPurple,
+                        )
+                    }
+                }
+            }
+            AnimatedVisibility(walletState.nodeLifecycleState.isStarting()) {
+                BodyM(text = stringResource(R.string.wallet__receive_ldk_init))
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -246,7 +282,7 @@ private fun ReceiveLightningFunds(
     onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
-        if (cjitInvoice.value == null) {
+        AnimatedVisibility (!cjitActive.value && cjitInvoice.value == null) {
             Headline(
                 text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
             )
@@ -254,14 +290,16 @@ private fun ReceiveLightningFunds(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BodyM(text = stringResource(R.string.wallet__receive_spending))
             Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
-                contentDescription = null,
-                tint = Colors.White64,
-                modifier = Modifier
-                    .rotate(17.33f)
-                    .padding(start = 7.65.dp, end = 13.19.dp)
-            )
+            AnimatedVisibility(!cjitActive.value && cjitInvoice.value == null) {
+                Icon(
+                    painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                    contentDescription = null,
+                    tint = Colors.White64,
+                    modifier = Modifier
+                        .rotate(17.33f)
+                        .padding(start = 7.65.dp, end = 13.19.dp)
+                )
+            }
             Switch(
                 checked = cjitActive.value,
                 onCheckedChange = onCjitToggle,
@@ -351,20 +389,21 @@ private fun CopyValuesSlide(
     onchainAddress: String,
     bolt11: String,
     cjitInvoice: String?,
+    receiveOnSpendingBalance: Boolean
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.White10),
         shape = AppShapes.small,
     ) {
         Column {
-            if (onchainAddress.isNotEmpty()) {
+            if (onchainAddress.isNotEmpty() && cjitInvoice == null) {
                 CopyAddressCard(
                     title = stringResource(R.string.wallet__receive_bitcoin_invoice),
                     address = onchainAddress,
                     type = CopyAddressType.ONCHAIN,
                 )
             }
-            if (bolt11.isNotEmpty()) {
+            if (bolt11.isNotEmpty() && receiveOnSpendingBalance) {
                 CopyAddressCard(
                     title = stringResource(R.string.wallet__receive_lightning_invoice),
                     address = bolt11,
@@ -401,7 +440,7 @@ private fun CopyAddressCard(
 
             Spacer(modifier = Modifier.width(3.dp))
 
-            val iconRes =  if (type == CopyAddressType.ONCHAIN) R.drawable.ic_bitcoin else R.drawable.ic_lightning_alt
+            val iconRes = if (type == CopyAddressType.ONCHAIN) R.drawable.ic_bitcoin else R.drawable.ic_lightning_alt
             Icon(painter = painterResource(iconRes), contentDescription = null, tint = Colors.White64)
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -455,7 +494,8 @@ private fun ReceiveQrScreenPreview() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
         )
     }
 }
@@ -471,7 +511,8 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
         )
     }
 }
@@ -484,10 +525,11 @@ private fun ReceiveQrScreenPreviewTablet() {
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
             walletState = MainUiState(
-                nodeLifecycleState = Running,
+                nodeLifecycleState = NodeLifecycleState.Starting,
             ),
             onCjitToggle = { },
-            onClickEditInvoice = {}
+            onClickEditInvoice = {},
+            onClickReceiveOnSpending = {},
         )
     }
 }
@@ -506,6 +548,7 @@ private fun CopyValuesSlidePreview() {
                 onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
                 bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
                 cjitInvoice = null,
+                true
             )
         }
     }
