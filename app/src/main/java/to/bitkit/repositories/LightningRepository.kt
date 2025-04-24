@@ -30,7 +30,7 @@ class LightningRepository @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val addressChecker: AddressChecker
 ) {
-    private var nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped
+    private var nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped //TODO REPLACE WITH A FLOW
 
     fun getNodeLifecycleState(): NodeLifecycleState = nodeLifecycleState
 
