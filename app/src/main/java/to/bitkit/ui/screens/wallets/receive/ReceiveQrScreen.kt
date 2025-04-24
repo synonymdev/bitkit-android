@@ -282,7 +282,7 @@ private fun ReceiveLightningFunds(
     onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
-        if (cjitInvoice.value == null) {
+        AnimatedVisibility (!cjitActive.value && cjitInvoice.value == null) {
             Headline(
                 text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
             )
@@ -290,14 +290,16 @@ private fun ReceiveLightningFunds(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BodyM(text = stringResource(R.string.wallet__receive_spending))
             Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                painter = painterResource(R.drawable.empty_state_arrow_horizontal),
-                contentDescription = null,
-                tint = Colors.White64,
-                modifier = Modifier
-                    .rotate(17.33f)
-                    .padding(start = 7.65.dp, end = 13.19.dp)
-            )
+            AnimatedVisibility(!cjitActive.value && cjitInvoice.value == null) {
+                Icon(
+                    painter = painterResource(R.drawable.empty_state_arrow_horizontal),
+                    contentDescription = null,
+                    tint = Colors.White64,
+                    modifier = Modifier
+                        .rotate(17.33f)
+                        .padding(start = 7.65.dp, end = 13.19.dp)
+                )
+            }
             Switch(
                 checked = cjitActive.value,
                 onCheckedChange = onCjitToggle,
