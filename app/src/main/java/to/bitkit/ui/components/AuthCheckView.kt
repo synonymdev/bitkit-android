@@ -1,6 +1,7 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -85,6 +87,8 @@ private fun AuthCheckViewContent(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
+            .background(Colors.Black)
+            .blockPointerInputPassthrough()
             .navigationBarsPadding()
     ) {
         if ((showBio && isBiometrySupported && !requirePin) || requireBiometrics) {

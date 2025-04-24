@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import to.bitkit.ui.theme.Colors
 
 /**
@@ -64,4 +65,14 @@ fun Modifier.gradientBackground(): Modifier {
             colors = listOf(Colors.Gray6, Colors.Black)
         )
     )
+}
+
+fun Modifier.blockPointerInputPassthrough(): Modifier {
+    return this.pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                awaitPointerEvent()
+            }
+        }
+    }
 }

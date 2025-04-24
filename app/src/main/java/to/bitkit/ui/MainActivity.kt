@@ -3,6 +3,9 @@ package to.bitkit.ui
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -171,22 +174,25 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+                    ContentView(
+                        appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
+                        blocktankViewModel = blocktankViewModel,
+                        currencyViewModel = currencyViewModel,
+                        activityListViewModel = activityListViewModel,
+                        transferViewModel = transferViewModel,
+                    )
 
-                    if (!isAuthenticated) {
+                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+                    AnimatedVisibility(
+                        visible = !isAuthenticated,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
                         AuthCheckView(
                             showLogoOnPin = true,
                             appViewModel = appViewModel,
                             onSuccess = { appViewModel.setIsAuthenticated(true) },
-                        )
-                    } else {
-                        ContentView(
-                            appViewModel = appViewModel,
-                            walletViewModel = walletViewModel,
-                            blocktankViewModel = blocktankViewModel,
-                            currencyViewModel = currencyViewModel,
-                            activityListViewModel = activityListViewModel,
-                            transferViewModel = transferViewModel,
                         )
                     }
                 }
