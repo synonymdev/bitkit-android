@@ -394,7 +394,7 @@ private fun CopyValuesSlide(
         shape = AppShapes.small,
     ) {
         Column {
-            if (onchainAddress.isNotEmpty()) {
+            if (onchainAddress.isNotEmpty() && cjitInvoice == null) {
                 CopyAddressCard(
                     title = stringResource(R.string.wallet__receive_bitcoin_invoice),
                     address = onchainAddress,
