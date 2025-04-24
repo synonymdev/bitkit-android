@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.BalanceState
@@ -225,7 +226,7 @@ class WalletRepository @Inject constructor(
         }
     }
 
-    suspend fun getDbConfig(): Flow<List<Any>> {
+    suspend fun getDbConfig(): Flow<List<ConfigEntity>> {
         return db.configDao().getAll()
     }
 
