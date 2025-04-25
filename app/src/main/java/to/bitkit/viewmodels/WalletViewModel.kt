@@ -311,7 +311,7 @@ class WalletViewModel @Inject constructor(
             val newBip21 = walletRepository.buildBip21Url(
                 bitcoinAddress = walletRepository.getOnchainAddress(),
                 amountSats = _uiState.value.bip21AmountSats,
-                message = description.ifBlank { DEFAULT_INVOICE_MESSAGE },
+                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
                 lightningInvoice = walletRepository.getBolt11()
             )
             walletRepository.setBip21(newBip21)
@@ -336,7 +336,7 @@ class WalletViewModel @Inject constructor(
     ): String {
         val result = lightningRepository.createInvoice(
             amountSats,
-            description.ifBlank { DEFAULT_INVOICE_MESSAGE },
+            description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
             expirySeconds
         )
         return result.getOrThrow()
@@ -530,10 +530,6 @@ class WalletViewModel @Inject constructor(
                 syncState()
             }
         }
-    }
-
-    private companion object {
-        const val DEFAULT_INVOICE_MESSAGE = "Bitkit" //todo move to env
     }
 }
 

@@ -311,10 +311,10 @@ class LightningService @Inject constructor(
         return ServiceQueue.LDK.background {
             if (sat != null) {
                 Logger.debug("Creating bolt11 for $sat sats")
-                node.bolt11Payment().receive(sat.millis, description.ifBlank { "Bitkit" }, expirySecs)
+                node.bolt11Payment().receive(sat.millis, description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }, expirySecs)
             } else {
                 Logger.debug("Creating bolt11 for variable amount")
-                node.bolt11Payment().receiveVariableAmount(description.ifBlank { "Bitkit" }, expirySecs)
+                node.bolt11Payment().receiveVariableAmount(description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }, expirySecs)
             }
         }
     }
