@@ -70,6 +70,7 @@ class WalletRepo @Inject constructor(
         try {
             keychain.wipe()
             appStorage.clear()
+            settingsStore.wipe()
             coreService.activity.removeAll()
             Result.success(Unit)
         } catch (e: Throwable) {
