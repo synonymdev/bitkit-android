@@ -11,6 +11,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
@@ -211,6 +212,16 @@ class LightningRepo @Inject constructor(
             Result.success(paymentId)
         } catch (e: Throwable) {
             Logger.error("sendOnChain error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPayments(): Result< List<PaymentDetails>> = withContext(bgDispatcher) {
+        try {
+            val payments = lightningService.payments ?: return@withContext Result.failure(Exception("It wan't possible get the payments"))
+            Result.success(payments)
+        } catch (e: Throwable) {
+            Logger.error("getPayments error", e)
             Result.failure(e)
         }
     }
