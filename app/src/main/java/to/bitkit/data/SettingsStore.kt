@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import to.bitkit.ext.enumValueOfOrNull
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -75,6 +76,11 @@ class SettingsStore @Inject constructor(
 
     val isBiometricEnabled: Flow<Boolean> = store.data.map { it[IS_BIOMETRIC_ENABLED] == true }
     suspend fun setIsBiometricEnabled(value: Boolean) { store.edit { it[IS_BIOMETRIC_ENABLED] = value } }
+
+    suspend fun wipe() {
+        store.edit { it.clear() }
+        Logger.info("Deleted all user settings data.")
+    }
 
     private companion object {
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")

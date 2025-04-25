@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.ForgotPinSheet
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -100,11 +101,12 @@ class MainActivity : FragmentActivity() {
                                 onCreateClick = {
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -138,12 +140,13 @@ class MainActivity : FragmentActivity() {
                                 onRestoreClick = { mnemonic, passphrase ->
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.isRestoringWallet = true
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(false)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -161,11 +164,12 @@ class MainActivity : FragmentActivity() {
                                 onCreateClick = { passphrase ->
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -193,6 +197,14 @@ class MainActivity : FragmentActivity() {
                             showLogoOnPin = true,
                             appViewModel = appViewModel,
                             onSuccess = { appViewModel.setIsAuthenticated(true) },
+                        )
+                    }
+
+                    val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
+                    if (showForgotPinSheet) {
+                        ForgotPinSheet(
+                            onDismiss = { appViewModel.setShowForgotPin(false) },
+                            onResetClick = { walletViewModel.wipeStorage() },
                         )
                     }
                 }

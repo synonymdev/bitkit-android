@@ -389,6 +389,7 @@ class WalletViewModel @Inject constructor(
                 }
                 lightningService.wipeStorage(walletIndex = 0)
                 appStorage.clear()
+                settingsStore.wipe()
                 keychain.wipe()
                 coreService.activity.removeAll() // todo: extract to repo & syncState after, like in removeAllActivities
                 setWalletExistsState()

@@ -60,7 +60,7 @@ fun AuthCheckView(
         validatePin = appViewModel::validatePin,
         onSuccess = onSuccess,
         onBack = onBack,
-        onClickForgotPin = { appViewModel.toast(Exception("TODO: Forgot PIN")) },
+        onClickForgotPin = { appViewModel.setShowForgotPin(true) },
     )
 }
 
