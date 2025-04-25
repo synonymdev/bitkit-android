@@ -138,6 +138,13 @@ class AppViewModel @Inject constructor(
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
 
+    private val _showForgotPinSheet = MutableStateFlow(false)
+    val showForgotPinSheet = _showForgotPinSheet.asStateFlow()
+
+    fun setShowForgotPin(value: Boolean) {
+        _showForgotPinSheet.value = value
+    }
+
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
     }
@@ -171,14 +178,11 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            delay(1500)
+            // Delays are required for auth check on launch functionality
+            delay(1000)
+            resetIsAuthenticatedState()
+            delay(500)
             splashVisible = false
-
-            // Check if auth is needed after splash screen
-            val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
-            if (!needsAuth) {
-                _isAuthenticated.value = true
-            }
         }
 
         observeLdkNodeEvents()
@@ -779,6 +783,15 @@ class AppViewModel @Inject constructor(
     }
 
     // region security
+    fun resetIsAuthenticatedState() {
+        viewModelScope.launch {
+            val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
+            if (!needsAuth) {
+                _isAuthenticated.value = true
+            }
+        }
+    }
+
     fun validatePin(pin: String): Boolean {
         val storedPin = keychain.loadString(Keychain.Key.PIN.name)
         val isValid = storedPin == pin
@@ -805,7 +818,10 @@ class AppViewModel @Inject constructor(
         return false
     }
 
-    fun addPin(pin: String) = editPin(pin)
+    fun addPin(pin: String) {
+        setIsPinOnLaunchEnabled(true)
+        editPin(pin)
+    }
 
     fun editPin(newPin: String) {
         setIsPinEnabled(true)

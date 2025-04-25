@@ -75,6 +75,8 @@ private fun PinResultContent(
     ) {
         SheetTopBar(stringResource(R.string.security__success_title))
 
+        Spacer(modifier = Modifier.height(16.dp))
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier

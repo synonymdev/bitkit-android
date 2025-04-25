@@ -68,7 +68,7 @@ fun ChangePinScreen(
         },
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
-        onClickForgotPin = { app.toast(Exception("TODO: Forgot PIN")) },
+        onClickForgotPin = { app.setShowForgotPin(true) },
     )
 }
 
