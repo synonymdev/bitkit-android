@@ -436,7 +436,7 @@ class WalletViewModel @Inject constructor(
     fun manualNewAddress() {
         viewModelScope.launch {
             lightningRepository.newAddress().onSuccess { address ->
-                // TODO _onchainAddress = address
+                walletRepository.setOnchainAddress(address)
                 syncState()
             }.onFailure { ToastEventBus.send(it) }
         }
@@ -461,40 +461,34 @@ class WalletViewModel @Inject constructor(
     fun debugKeychain() {
         viewModelScope.launch {
             val key = "test"
-            if (keychain.exists(key)) {
-                val value = keychain.loadString(key)
-                Logger.debug("Keychain entry: $key = $value")
-                keychain.delete(key)
+            val value = "testValue"
+            walletRepository.debugKeychain(key, value).onSuccess { existingValue ->
+                Logger.debug("Keychain entry: $key = $existingValue")
             }
-            keychain.saveString(key, "testValue")
         }
     }
 
     fun debugMnemonic() {
         viewModelScope.launch {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-            Logger.debug(mnemonic)
+            walletRepository.getMnemonic().onSuccess { mnemonic ->
+                Logger.debug(mnemonic)
+            }
         }
     }
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            try {
-                val token = FirebaseMessaging.getInstance().token.await()
-                blocktankNotificationsService.testNotification(token)
-            } catch (e: Throwable) {
+            walletRepository.testNotification().onFailure { e ->
                 Logger.error("Error in LSP notification test:", e)
-                ToastEventBus.send(e)
             }
         }
     }
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) {
-            try {
-                val info = coreService.blocktank.info(refresh = true)
+            walletRepository.getBlocktankInfo().onSuccess { info ->
                 Logger.debug("Blocktank info: $info")
-            } catch (e: Throwable) {
+            }.onFailure { e ->
                 Logger.error("Error getting Blocktank info:", e)
             }
         }
