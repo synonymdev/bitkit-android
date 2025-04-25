@@ -17,19 +17,16 @@ import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
-import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.NodeLifecycleState
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.BlocktankNotificationsService
-import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
-import to.bitkit.viewmodels.MainUiState
-import to.bitkit.models.NodeLifecycleState
-import to.bitkit.services.CoreService
-import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.AddressInfo
 import to.bitkit.utils.AddressStats
+import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 
@@ -39,12 +36,9 @@ class WalletViewModelTest : BaseUnitTest() {
     private var db: AppDb = mock()
     private var keychain: Keychain = mock()
     private var firebaseMessaging: FirebaseMessaging = mock()
-    private var coreService: CoreService = mock()
     private var blocktankNotificationsService: BlocktankNotificationsService = mock()
-    private var lightningService: LightningService = mock()
+    private var lightningRepo: LightningRepo = mock()
     private var appStorage: AppStorage = mock()
-    private val ldkNodeEventBus: LdkNodeEventBus = mock()
-    private val settingsStore: SettingsStore = mock()
     private val addressChecker: AddressChecker = mock()
 
     private lateinit var sut: WalletViewModel
@@ -53,11 +47,11 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(lightningService.nodeId).thenReturn("nodeId")
-        whenever(lightningService.balances).thenReturn(balanceDetails)
-        whenever(lightningService.balances?.totalLightningBalanceSats).thenReturn(1000u)
-        whenever(lightningService.balances?.totalOnchainBalanceSats).thenReturn(10_000u)
-        wheneverBlocking { lightningService.newAddress() }.thenReturn("onchainAddress")
+        whenever(lightningRepo.getNodeId()).thenReturn("nodeId")
+        whenever(lightningRepo.getBalances()).thenReturn(balanceDetails)
+        whenever(lightningRepo.getBalances()?.totalLightningBalanceSats).thenReturn(1000u)
+        whenever(lightningRepo.getBalances()?.totalOnchainBalanceSats).thenReturn(10_000u)
+        wheneverBlocking { lightningRepo.newAddress() }.thenReturn(Result.success("onchainAddress"))
         whenever(db.configDao()).thenReturn(mock())
         whenever(db.configDao().getAll()).thenReturn(mock())
 
@@ -70,16 +64,8 @@ class WalletViewModelTest : BaseUnitTest() {
         sut = WalletViewModel(
             bgDispatcher = testDispatcher,
             appContext = mock(),
-            appStorage = appStorage,
-            db = db,
-            keychain = keychain,
-            coreService = coreService,
-            blocktankNotificationsService = blocktankNotificationsService,
-            lightningService = lightningService,
-            firebaseMessaging = firebaseMessaging,
-            ldkNodeEventBus = ldkNodeEventBus,
-            settingsStore = settingsStore,
-            addressChecker = addressChecker,
+            walletRepo = mock(),
+            lightningRepo = lightningRepo
         )
     }
 
