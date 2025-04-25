@@ -26,7 +26,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class WalletRepository @Inject constructor(
+class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @ApplicationContext  private val appContext: Context,
     private val appStorage: AppStorage,

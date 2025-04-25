@@ -30,7 +30,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepository
-import to.bitkit.repositories.WalletRepository
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -39,16 +39,16 @@ import javax.inject.Inject
 class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @ApplicationContext private val appContext: Context,
-    private val walletRepository: WalletRepository,
+    private val walletRepo: WalletRepo,
     private val lightningRepository: LightningRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _balanceState = MutableStateFlow(walletRepository.getBalanceState())
+    private val _balanceState = MutableStateFlow(walletRepo.getBalanceState())
     val balanceState = _balanceState.asStateFlow()
 
-    var walletExists by mutableStateOf(walletRepository.walletExists())
+    var walletExists by mutableStateOf(walletRepo.walletExists())
         private set
 
     init {
@@ -58,7 +58,7 @@ class WalletViewModel @Inject constructor(
     var isRestoringWallet by mutableStateOf(false)
 
     fun setWalletExistsState() {
-        walletExists = walletRepository.walletExists()
+        walletExists = walletRepo.walletExists()
     }
 
     fun setInitNodeLifecycleState() {
@@ -124,7 +124,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private suspend fun observeDbConfig() {
-        walletRepository.getDbConfig().collect {
+        walletRepo.getDbConfig().collect {
             Logger.info("Database config sync: $it")
         }
     }
@@ -157,9 +157,9 @@ class WalletViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 nodeId = lightningRepository.getNodeId().orEmpty(),
-                onchainAddress = walletRepository.getOnchainAddress(),
-                bolt11 = walletRepository.getBolt11(),
-                bip21 = walletRepository.getBip21(),
+                onchainAddress = walletRepo.getOnchainAddress(),
+                bolt11 = walletRepo.getBolt11(),
+                bip21 = walletRepo.getBip21(),
                 nodeStatus = lightningRepository.getStatus(),
                 peers = lightningRepository.getPeers().orEmpty(),
                 channels = lightningRepository.getChannels().orEmpty(),
@@ -180,11 +180,11 @@ class WalletViewModel @Inject constructor(
                 totalSats = totalSats,
             )
             _balanceState.update { newBalance }
-            walletRepository.saveBalanceState(newBalance)
+            walletRepo.saveBalanceState(newBalance)
 
             if (totalSats > 0u) {
                 viewModelScope.launch {
-                    walletRepository.setShowEmptyState(false)
+                    walletRepo.setShowEmptyState(false)
                 }
             }
         }
@@ -210,7 +210,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private suspend fun registerForNotificationsIfNeeded() {
-        walletRepository.registerForNotifications()
+        walletRepo.registerForNotifications()
             .onFailure { e ->
                 Logger.error("Failed to register device for notifications", e)
             }
@@ -223,10 +223,10 @@ class WalletViewModel @Inject constructor(
         Logger.debug("Refreshing bip21", context = "WalletViewModel")
 
         // Check current address or generate new one
-        val currentAddress = walletRepository.getOnchainAddress()
+        val currentAddress = walletRepo.getOnchainAddress()
         if (currentAddress.isEmpty()) {
             lightningRepository.newAddress()
-                .onSuccess { address -> walletRepository.setOnchainAddress(address) }
+                .onSuccess { address -> walletRepo.setOnchainAddress(address) }
                 .onFailure { error -> Logger.error("Error generating new address", error) }
         } else {
             // Check if current address has been used
@@ -235,7 +235,7 @@ class WalletViewModel @Inject constructor(
                     if (hasTransactions) {
                         // Address has been used, generate a new one
                         lightningRepository.newAddress()
-                            .onSuccess { address -> walletRepository.setOnchainAddress(address) }
+                            .onSuccess { address -> walletRepo.setOnchainAddress(address) }
                     }
                 }
         }
@@ -295,19 +295,19 @@ class WalletViewModel @Inject constructor(
                     amountSats = _uiState.value.bip21AmountSats,
                     description = _uiState.value.bip21Description
                 ).onSuccess { bolt11 ->
-                    walletRepository.setBolt11(bolt11)
+                    walletRepo.setBolt11(bolt11)
                 }
             } else {
-                walletRepository.setBolt11("")
+                walletRepo.setBolt11("")
             }
 
-            val newBip21 = walletRepository.buildBip21Url(
-                bitcoinAddress = walletRepository.getOnchainAddress(),
+            val newBip21 = walletRepo.buildBip21Url(
+                bitcoinAddress = walletRepo.getOnchainAddress(),
                 amountSats = _uiState.value.bip21AmountSats,
                 message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
-                lightningInvoice = walletRepository.getBolt11()
+                lightningInvoice = walletRepo.getBolt11()
             )
-            walletRepository.setBip21(newBip21)
+            walletRepo.setBip21(newBip21)
 
             syncState()
         }
@@ -387,7 +387,7 @@ class WalletViewModel @Inject constructor(
             if (lightningRepository.nodeLifecycleState.value.isRunningOrStarting()) {
                 stopLightningNode()
             }
-            walletRepository.wipeWallet()
+            walletRepo.wipeWallet()
                 .onSuccess {
                     setWalletExistsState()
                 }.onFailure {
@@ -397,13 +397,13 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun createWallet(bip39Passphrase: String?) {
-        walletRepository.createWallet(bip39Passphrase).onFailure {
+        walletRepo.createWallet(bip39Passphrase).onFailure {
             ToastEventBus.send(it)
         }
     }
 
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
-        walletRepository.restoreWallet(
+        walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase
         ).onFailure {
@@ -414,7 +414,7 @@ class WalletViewModel @Inject constructor(
     // region debug
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepository.registerForNotifications()
+            walletRepo.registerForNotifications()
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -429,7 +429,7 @@ class WalletViewModel @Inject constructor(
     fun manualNewAddress() {
         viewModelScope.launch {
             lightningRepository.newAddress().onSuccess { address ->
-                walletRepository.setOnchainAddress(address)
+                walletRepo.setOnchainAddress(address)
                 syncState()
             }.onFailure { ToastEventBus.send(it) }
         }
@@ -437,7 +437,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugDb() {
         viewModelScope.launch {
-            walletRepository.getDbConfig().collect {
+            walletRepo.getDbConfig().collect {
                 Logger.debug("${it.count()} entities in DB: $it")
             }
         }
@@ -445,7 +445,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugFcmToken() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepository.getFcmToken().onSuccess { token ->
+            walletRepo.getFcmToken().onSuccess { token ->
                 Logger.debug("FCM registration token: $token")
             }
         }
@@ -455,7 +455,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             val key = "test"
             val value = "testValue"
-            walletRepository.debugKeychain(key, value).onSuccess { existingValue ->
+            walletRepo.debugKeychain(key, value).onSuccess { existingValue ->
                 Logger.debug("Keychain entry: $key = $existingValue")
             }
         }
@@ -463,7 +463,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugMnemonic() {
         viewModelScope.launch {
-            walletRepository.getMnemonic().onSuccess { mnemonic ->
+            walletRepo.getMnemonic().onSuccess { mnemonic ->
                 Logger.debug(mnemonic)
             }
         }
@@ -471,7 +471,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepository.testNotification().onFailure { e ->
+            walletRepo.testNotification().onFailure { e ->
                 Logger.error("Error in LSP notification test:", e)
             }
         }
@@ -479,7 +479,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepository.getBlocktankInfo().onSuccess { info ->
+            walletRepo.getBlocktankInfo().onSuccess { info ->
                 Logger.debug("Blocktank info: $info")
             }.onFailure { e ->
                 Logger.error("Error getting Blocktank info:", e)
