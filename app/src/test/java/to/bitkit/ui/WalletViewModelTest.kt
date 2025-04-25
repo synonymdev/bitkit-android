@@ -20,6 +20,7 @@ import to.bitkit.data.AppStorage
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
@@ -38,6 +39,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private var firebaseMessaging: FirebaseMessaging = mock()
     private var blocktankNotificationsService: BlocktankNotificationsService = mock()
     private var lightningRepo: LightningRepo = mock()
+    private var walletRepo: WalletRepo = mock()
     private var appStorage: AppStorage = mock()
     private val addressChecker: AddressChecker = mock()
 
@@ -64,7 +66,7 @@ class WalletViewModelTest : BaseUnitTest() {
         sut = WalletViewModel(
             bgDispatcher = testDispatcher,
             appContext = mock(),
-            walletRepo = mock(),
+            walletRepo = walletRepo,
             lightningRepo = lightningRepo
         )
     }
@@ -122,7 +124,7 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `manualRegisterForNotifications should register device with FCM token`() = test {
         sut.manualRegisterForNotifications()
 
-        verify(blocktankNotificationsService).registerDevice("cachedToken")
+        verify(walletRepo).registerForNotifications()
     }
 
     private fun setupExistingWalletMocks() {
