@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -46,7 +47,11 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun start(walletIndex: Int, timeout: Duration? = null, eventHandler: NodeEventHandler? = null): Result<Unit> =
+    suspend fun start(
+        walletIndex: Int,
+        timeout: Duration? = null,
+        eventHandler: NodeEventHandler? = null
+    ): Result<Unit> =
         withContext(bgDispatcher) {
             if (nodeLifecycleState.value.isRunningOrStarting()) {
                 return@withContext Result.success(Unit)
@@ -190,12 +195,22 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun payInvoice(bolt11: String): Result<PaymentId> = withContext(bgDispatcher) {
+    suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> = withContext(bgDispatcher) {
         try {
-            val paymentId = lightningService.send(bolt11)
+            val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
             Result.success(paymentId)
         } catch (e: Throwable) {
             Logger.error("Pay invoice error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendOnChain(address: Address, sats: ULong): Result<PaymentId> = withContext(bgDispatcher) {
+        try {
+            val paymentId = lightningService.send(address = address, sats = sats)
+            Result.success(paymentId)
+        } catch (e: Throwable) {
+            Logger.error("sendOnChain error", e)
             Result.failure(e)
         }
     }
@@ -224,6 +239,8 @@ class LightningRepo @Inject constructor(
                 Result.failure(e)
             }
         }
+
+    fun canSend(amountSats: ULong): Boolean = lightningService.canSend(amountSats)
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
