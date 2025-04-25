@@ -55,7 +55,6 @@ class WalletViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val walletRepository: WalletRepository,
     private val lightningRepository: LightningRepository,
-    private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
