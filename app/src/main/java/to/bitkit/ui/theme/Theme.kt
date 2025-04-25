@@ -11,16 +11,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 val Gray100 = Color(0xFFF4F4F4)
-val Gray300 = Color(0xFFBDBDBD)
-val Gray400 = Color(0xFFABABAB)
 val gray900 = Color(0xFF212121)
-val Brand50 = Color(0xFFFFF1EE)
-val Brand500 = Color(0xFFEC5428)
-val Blue500 = Color(0xFF0085FF)
-val Red500 = Color(0xFFF44336)
 val Green500 = Color(0xFF4CAF50)
-val Orange500 = Color(0xFFFF9800)
-val Purple500 = Color(0xFF9C27B0)
 val Purple700 = Color(0xFFB95CE8)
 
 val secondaryColor: Color
@@ -58,6 +50,7 @@ private object ColorPalette {
         onPrimary = Colors.Black,
         onSecondary = Colors.White,
         outlineVariant = Colors.White10, // divider default
+        scrim = Colors.Black,
     )
 }
 

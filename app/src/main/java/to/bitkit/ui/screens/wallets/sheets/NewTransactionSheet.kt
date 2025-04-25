@@ -39,6 +39,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.ModalSheetTopPadding
 import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.viewmodels.AppViewModel
 
@@ -76,7 +77,7 @@ fun NewTransactionSheet(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(top = 100.dp)
+            .padding(top = ModalSheetTopPadding)
     ) {
         NewTransactionSheetView(
             details = details,

@@ -3,6 +3,9 @@ package to.bitkit.ui
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -16,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.ForgotPinSheet
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -97,11 +101,12 @@ class MainActivity : FragmentActivity() {
                                 onCreateClick = {
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -135,12 +140,13 @@ class MainActivity : FragmentActivity() {
                                 onRestoreClick = { mnemonic, passphrase ->
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.isRestoringWallet = true
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(false)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -158,11 +164,12 @@ class MainActivity : FragmentActivity() {
                                 onCreateClick = { passphrase ->
                                     scope.launch {
                                         try {
+                                            appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
                                             walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
-                                        } catch (e: Exception) {
+                                        } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
                                     }
@@ -171,22 +178,33 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+                    ContentView(
+                        appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
+                        blocktankViewModel = blocktankViewModel,
+                        currencyViewModel = currencyViewModel,
+                        activityListViewModel = activityListViewModel,
+                        transferViewModel = transferViewModel,
+                    )
 
-                    if (!isAuthenticated) {
+                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+                    AnimatedVisibility(
+                        visible = !isAuthenticated,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
                         AuthCheckView(
                             showLogoOnPin = true,
                             appViewModel = appViewModel,
                             onSuccess = { appViewModel.setIsAuthenticated(true) },
                         )
-                    } else {
-                        ContentView(
-                            appViewModel = appViewModel,
-                            walletViewModel = walletViewModel,
-                            blocktankViewModel = blocktankViewModel,
-                            currencyViewModel = currencyViewModel,
-                            activityListViewModel = activityListViewModel,
-                            transferViewModel = transferViewModel,
+                    }
+
+                    val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
+                    if (showForgotPinSheet) {
+                        ForgotPinSheet(
+                            onDismiss = { appViewModel.setShowForgotPin(false) },
+                            onResetClick = { walletViewModel.wipeStorage() },
                         )
                     }
                 }

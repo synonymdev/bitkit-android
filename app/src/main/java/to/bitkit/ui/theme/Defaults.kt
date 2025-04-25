@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 @Immutable
 object AppTextFieldDefaults {
@@ -112,3 +113,5 @@ object AppSwitchDefaults {
             uncheckedIconColor = Colors.Gray4,
         )
 }
+
+val ModalSheetTopPadding = 125.dp
