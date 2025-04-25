@@ -7,18 +7,22 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.Toast
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.IBtInfo
@@ -67,6 +71,10 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(): Result<Unit> = withContext(bgDispatcher) {
+        if (Env.network != Network.REGTEST) {
+            return@withContext Result.failure(Exception("Can only wipe on regtest."))
+        }
+
         try {
             keychain.wipe()
             appStorage.clear()

@@ -375,15 +375,6 @@ class WalletViewModel @Inject constructor(
 
     fun wipeStorage() {
         viewModelScope.launch {
-            if (Env.network != Network.REGTEST) {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = "Error",
-                    description = "Can only wipe on regtest."
-                )
-                return@launch
-            }
-
             if (lightningRepo.nodeLifecycleState.value.isRunningOrStarting()) {
                 stopLightningNode()
             }
