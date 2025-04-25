@@ -517,31 +517,26 @@ class WalletViewModel @Inject constructor(
             )
         }
     }
-    // endregion
 
     fun stopIfNeeded() {
-        if (_nodeLifecycleState.isStoppedOrStopping()) return
-
-        viewModelScope.launch {
-            stopLightningNode()
+        viewModelScope.launch(bgDispatcher) {
+            lightningRepository.stop()
         }
     }
 
     private suspend fun stopLightningNode() {
-        _nodeLifecycleState = NodeLifecycleState.Stopping
-        lightningService.stop()
-        _nodeLifecycleState = NodeLifecycleState.Stopped
-        syncState()
+        viewModelScope.launch(bgDispatcher) {
+            lightningRepository.stop().onSuccess {
+                syncState()
+            }
+        }
     }
 
-    private fun List<ChannelDetails>?.hasChannels() = this?.isNotEmpty() == true
-
     private companion object {
-        const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
+        const val DEFAULT_INVOICE_MESSAGE = "Bitkit" //todo move to env
     }
 }
 
-// region state
 data class MainUiState(
     val nodeId: String = "",
     val balanceDetails: BalanceDetails? = null,
@@ -557,5 +552,3 @@ data class MainUiState(
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = ""
 )
-
-// endregion
