@@ -50,6 +50,7 @@ private object ColorPalette {
         onPrimary = Colors.Black,
         onSecondary = Colors.White,
         outlineVariant = Colors.White10, // divider default
+        scrim = Colors.Black,
     )
 }
 
