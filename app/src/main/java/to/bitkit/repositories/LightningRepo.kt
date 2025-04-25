@@ -27,7 +27,7 @@ import javax.inject.Singleton
 import kotlin.time.Duration
 
 @Singleton
-class LightningRepository @Inject constructor(
+class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,

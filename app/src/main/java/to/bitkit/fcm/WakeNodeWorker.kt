@@ -24,7 +24,7 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
 import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
-import to.bitkit.repositories.LightningRepository
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
@@ -36,7 +36,7 @@ class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
     private val coreService: CoreService,
-    private val lightningRepo: LightningRepository,
+    private val lightningRepo: LightningRepo,
 ) : CoroutineWorker(appContext, workerParams) {
     private val self = this
 

@@ -29,7 +29,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.repositories.LightningRepository
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -40,7 +40,7 @@ class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     @ApplicationContext private val appContext: Context,
     private val walletRepo: WalletRepo,
-    private val lightningRepository: LightningRepository,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
@@ -77,7 +77,7 @@ class WalletViewModel @Inject constructor(
 
             syncState()
 
-            lightningRepository.start(walletIndex) { event ->
+            lightningRepo.start(walletIndex) { event ->
                 syncState()
                 refreshBip21ForEvent(event)
             }.onFailure { error ->
@@ -86,7 +86,7 @@ class WalletViewModel @Inject constructor(
             }.onSuccess {
                 syncState()
 
-                lightningRepository.connectToTrustedPeers().onFailure { e ->
+                lightningRepo.connectToTrustedPeers().onFailure { e ->
                     Logger.error("Failed to connect to trusted peers", e)
                 }
 
@@ -107,7 +107,7 @@ class WalletViewModel @Inject constructor(
     }
 
     suspend fun observeLdkWallet() {
-        lightningRepository.getSyncFlow()
+        lightningRepo.getSyncFlow()
             .filter { _uiState.value.nodeLifecycleState == NodeLifecycleState.Running }
             .collect {
                 runCatching { sync() }
@@ -117,7 +117,7 @@ class WalletViewModel @Inject constructor(
 
     private fun collectNodeLifecycleState() {
         viewModelScope.launch(Dispatchers.IO) {
-            lightningRepository.nodeLifecycleState.collect { currentState ->
+            lightningRepo.nodeLifecycleState.collect { currentState ->
                 _uiState.update { it.copy(nodeLifecycleState = currentState) }
             }
         }
@@ -142,7 +142,7 @@ class WalletViewModel @Inject constructor(
         isSyncingWallet = true
         syncState()
 
-        lightningRepository.sync()
+        lightningRepo.sync()
             .onSuccess {
                 isSyncingWallet = false
                 syncState()
@@ -156,13 +156,13 @@ class WalletViewModel @Inject constructor(
     private fun syncState() {
         _uiState.update {
             it.copy(
-                nodeId = lightningRepository.getNodeId().orEmpty(),
+                nodeId = lightningRepo.getNodeId().orEmpty(),
                 onchainAddress = walletRepo.getOnchainAddress(),
                 bolt11 = walletRepo.getBolt11(),
                 bip21 = walletRepo.getBip21(),
-                nodeStatus = lightningRepository.getStatus(),
-                peers = lightningRepository.getPeers().orEmpty(),
-                channels = lightningRepository.getChannels().orEmpty(),
+                nodeStatus = lightningRepo.getStatus(),
+                peers = lightningRepo.getPeers().orEmpty(),
+                channels = lightningRepo.getChannels().orEmpty(),
             )
         }
 
@@ -170,7 +170,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun syncBalances() {
-        lightningRepository.getBalances()?.let { balance ->
+        lightningRepo.getBalances()?.let { balance ->
             _uiState.update { it.copy(balanceDetails = balance) }
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
 
@@ -217,7 +217,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private val incomingLightningCapacitySats: ULong?
-        get() = lightningRepository.getChannels()?.sumOf { it.inboundCapacityMsat / 1000u }
+        get() = lightningRepo.getChannels()?.sumOf { it.inboundCapacityMsat / 1000u }
 
     suspend fun refreshBip21() {
         Logger.debug("Refreshing bip21", context = "WalletViewModel")
@@ -225,16 +225,16 @@ class WalletViewModel @Inject constructor(
         // Check current address or generate new one
         val currentAddress = walletRepo.getOnchainAddress()
         if (currentAddress.isEmpty()) {
-            lightningRepository.newAddress()
+            lightningRepo.newAddress()
                 .onSuccess { address -> walletRepo.setOnchainAddress(address) }
                 .onFailure { error -> Logger.error("Error generating new address", error) }
         } else {
             // Check if current address has been used
-            lightningRepository.checkAddressUsage(currentAddress)
+            lightningRepo.checkAddressUsage(currentAddress)
                 .onSuccess { hasTransactions ->
                     if (hasTransactions) {
                         // Address has been used, generate a new one
-                        lightningRepository.newAddress()
+                        lightningRepo.newAddress()
                             .onSuccess { address -> walletRepo.setOnchainAddress(address) }
                     }
                 }
@@ -245,7 +245,7 @@ class WalletViewModel @Inject constructor(
 
     fun disconnectPeer(peer: LnPeer) {
         viewModelScope.launch {
-            lightningRepository.disconnectPeer(peer)
+            lightningRepo.disconnectPeer(peer)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -253,7 +253,7 @@ class WalletViewModel @Inject constructor(
                         description = "Peer disconnected."
                     )
                     _uiState.update {
-                        it.copy(peers = lightningRepository.getPeers().orEmpty())
+                        it.copy(peers = lightningRepo.getPeers().orEmpty())
                     }
                 }
                 .onFailure { error ->
@@ -268,7 +268,7 @@ class WalletViewModel @Inject constructor(
 
     fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepository.payInvoice(bolt11)
+            lightningRepo.payInvoice(bolt11)
                 .onSuccess { syncState() }
                 .onFailure { error ->
                     ToastEventBus.send(
@@ -288,10 +288,10 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
 
-            val hasChannels = lightningRepository.hasChannels()
+            val hasChannels = lightningRepo.hasChannels()
 
             if (hasChannels && generateBolt11IfAvailable) {
-                lightningRepository.createInvoice(
+                lightningRepo.createInvoice(
                     amountSats = _uiState.value.bip21AmountSats,
                     description = _uiState.value.bip21Description
                 ).onSuccess { bolt11 ->
@@ -327,7 +327,7 @@ class WalletViewModel @Inject constructor(
         description: String,
         expirySeconds: UInt = 86_400u, // 1 day
     ): String {
-        val result = lightningRepository.createInvoice(
+        val result = lightningRepo.createInvoice(
             amountSats,
             description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
             expirySeconds
@@ -337,7 +337,7 @@ class WalletViewModel @Inject constructor(
 
     fun openChannel() {
         viewModelScope.launch(bgDispatcher) {
-            val peer = lightningRepository.getPeers()?.firstOrNull()
+            val peer = lightningRepo.getPeers()?.firstOrNull()
 
             if (peer == null) {
                 ToastEventBus.send(
@@ -348,7 +348,7 @@ class WalletViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningRepository.openChannel(peer, 50000u, 10000u)
+            lightningRepo.openChannel(peer, 50000u, 10000u)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -362,7 +362,7 @@ class WalletViewModel @Inject constructor(
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepository.closeChannel(
+            lightningRepo.closeChannel(
                 channel.userChannelId,
                 channel.counterpartyNodeId
             ).onSuccess {
@@ -384,7 +384,7 @@ class WalletViewModel @Inject constructor(
                 return@launch
             }
 
-            if (lightningRepository.nodeLifecycleState.value.isRunningOrStarting()) {
+            if (lightningRepo.nodeLifecycleState.value.isRunningOrStarting()) {
                 stopLightningNode()
             }
             walletRepo.wipeWallet()
@@ -428,7 +428,7 @@ class WalletViewModel @Inject constructor(
 
     fun manualNewAddress() {
         viewModelScope.launch {
-            lightningRepository.newAddress().onSuccess { address ->
+            lightningRepo.newAddress().onSuccess { address ->
                 walletRepo.setOnchainAddress(address)
                 syncState()
             }.onFailure { ToastEventBus.send(it) }
@@ -507,13 +507,13 @@ class WalletViewModel @Inject constructor(
 
     fun stopIfNeeded() {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepository.stop()
+            lightningRepo.stop()
         }
     }
 
     private suspend fun stopLightningNode() {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepository.stop().onSuccess {
+            lightningRepo.stop().onSuccess {
                 syncState()
             }
         }

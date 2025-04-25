@@ -14,7 +14,7 @@ import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.repositories.LightningRepository
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
@@ -32,8 +32,8 @@ object RepositoryModule {
         lightningService: LightningService,
         ldkNodeEventBus: LdkNodeEventBus,
         addressChecker: AddressChecker
-    ): LightningRepository {
-        return LightningRepository(
+    ): LightningRepo {
+        return LightningRepo(
             bgDispatcher = bgDispatcher,
             lightningService = lightningService,
             ldkNodeEventBus = ldkNodeEventBus,
