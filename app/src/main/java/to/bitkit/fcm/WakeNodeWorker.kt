@@ -24,8 +24,8 @@ import to.bitkit.models.blocktank.BlocktankNotificationType.incomingHtlc
 import to.bitkit.models.blocktank.BlocktankNotificationType.mutualClose
 import to.bitkit.models.blocktank.BlocktankNotificationType.orderPaymentConfirmed
 import to.bitkit.models.blocktank.BlocktankNotificationType.wakeToTimeout
+import to.bitkit.repositories.LightningRepository
 import to.bitkit.services.CoreService
-import to.bitkit.services.LightningService
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.withPerformanceLogging
@@ -36,7 +36,7 @@ class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
     private val coreService: CoreService,
-    private val lightningService: LightningService,
+    private val lightningRepo: LightningRepository,
 ) : CoroutineWorker(appContext, workerParams) {
     private val self = this
 
@@ -63,10 +63,8 @@ class WakeNodeWorker @AssistedInject constructor(
 
         try {
             withPerformanceLogging {
-                // TODO: Only start node if it's not running or implement & use StateLocker
-                lightningService.setup(walletIndex = 0)
-                lightningService.start(timeout) { event -> handleLdkEvent(event) }
-                lightningService.connectToTrustedPeers()
+                lightningRepo.start(walletIndex = 0, timeout= timeout) { event -> handleLdkEvent(event) }
+                lightningRepo.connectToTrustedPeers()
 
                 // Once node is started, handle the manual channel opening if needed
                 if (self.notificationType == orderPaymentConfirmed) {
@@ -136,7 +134,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     self.bestAttemptContent?.title = "Payment received"
                     self.bestAttemptContent?.body = "Via new channel"
 
-                    lightningService.channels?.find { it.channelId == event.channelId }?.let { channel ->
+                    lightningRepo.getChannels()?.find { it.channelId == event.channelId }?.let { channel ->
                         val sats = channel.outboundCapacityMsat / 1000u
                         self.bestAttemptContent?.title = "Received ⚡ $sats sats"
                         // Save for UI to pick up
@@ -185,7 +183,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
-        lightningService.stop()
+        lightningRepo.stop()
 
         bestAttemptContent?.run {
             pushNotification(title, body, context = appContext)

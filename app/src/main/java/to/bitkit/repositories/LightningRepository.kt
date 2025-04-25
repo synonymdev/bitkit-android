@@ -24,6 +24,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
 
 @Singleton
 class LightningRepository @Inject constructor(
@@ -45,7 +46,7 @@ class LightningRepository @Inject constructor(
         }
     }
 
-    suspend fun start(walletIndex: Int, eventHandler: NodeEventHandler? = null): Result<Unit> =
+    suspend fun start(walletIndex: Int, timeout: Duration? = null, eventHandler: NodeEventHandler? = null): Result<Unit> =
         withContext(bgDispatcher) {
             if (nodeLifecycleState.value.isRunningOrStarting()) {
                 return@withContext Result.success(Unit)
@@ -66,7 +67,7 @@ class LightningRepository @Inject constructor(
                 }
 
                 // Start the node service
-                lightningService.start { event ->
+                lightningService.start(timeout) { event ->
                     eventHandler?.invoke(event)
                     ldkNodeEventBus.emit(event)
                 }
