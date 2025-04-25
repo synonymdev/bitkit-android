@@ -81,24 +81,21 @@ class WalletViewModel @Inject constructor(
                 syncState()
                 refreshBip21ForEvent(event)
             }.onFailure { error ->
-                _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(error)) }
                 Logger.error("Node startup error", error)
                 throw error
+            }.onSuccess {
+                syncState()
+
+                lightningRepository.connectToTrustedPeers().onFailure { e ->
+                    Logger.error("Failed to connect to trusted peers", e)
+                }
+
+                // Refresh BIP21 and sync
+                launch(bgDispatcher) { refreshBip21() }
+                launch(bgDispatcher) { sync() }
+                launch(bgDispatcher) { registerForNotificationsIfNeeded() }
+                launch(bgDispatcher) { observeDbConfig() }
             }
-
-            _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-            syncState()
-
-            // Connect to trusted peers
-            lightningRepository.connectToTrustedPeers().onFailure { e ->
-                Logger.error("Failed to connect to trusted peers", e)
-            }
-
-            // Refresh BIP21 and sync
-            launch(bgDispatcher) { refreshBip21() }
-            launch(bgDispatcher) { sync() }
-            launch(bgDispatcher) { registerForNotificationsIfNeeded() }
-            launch(bgDispatcher) { observeDbConfig() }
         }
     }
 
