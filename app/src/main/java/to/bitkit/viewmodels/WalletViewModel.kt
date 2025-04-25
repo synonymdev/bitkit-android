@@ -6,28 +6,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
-import org.lightningdevkit.ldknode.generateEntropyMnemonic
-import to.bitkit.data.AppDb
-import to.bitkit.data.AppStorage
-import to.bitkit.data.SettingsStore
-import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.BalanceState
@@ -39,13 +31,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepository
 import to.bitkit.repositories.WalletRepository
-import to.bitkit.services.BlocktankNotificationsService
-import to.bitkit.services.CoreService
-import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.AddressChecker
-import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -64,6 +50,10 @@ class WalletViewModel @Inject constructor(
 
     var walletExists by mutableStateOf(walletRepository.walletExists())
         private set
+
+    init {
+        collectNodeLifecycleState()
+    }
 
     var isRestoringWallet by mutableStateOf(false)
 
@@ -128,6 +118,14 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    private fun collectNodeLifecycleState() {
+        viewModelScope.launch(Dispatchers.IO) {
+            lightningRepository.nodeLifecycleState.collect { currentState ->
+                _uiState.update { it.copy(nodeLifecycleState = currentState) }
+            }
+        }
+    }
+
     private suspend fun observeDbConfig() {
         walletRepository.getDbConfig().collect {
             Logger.info("Database config sync: $it")
@@ -166,7 +164,6 @@ class WalletViewModel @Inject constructor(
                 bolt11 = walletRepository.getBolt11(),
                 bip21 = walletRepository.getBip21(),
                 nodeStatus = lightningRepository.getStatus(),
-                nodeLifecycleState = lightningRepository.getNodeLifecycleState(),
                 peers = lightningRepository.getPeers().orEmpty(),
                 channels = lightningRepository.getChannels().orEmpty(),
             )
@@ -390,7 +387,7 @@ class WalletViewModel @Inject constructor(
                 return@launch
             }
 
-            if (lightningRepository.getNodeLifecycleState().isRunningOrStarting()) {
+            if (lightningRepository.nodeLifecycleState.value.isRunningOrStarting()) {
                 stopLightningNode()
             }
             walletRepository.wipeWallet()

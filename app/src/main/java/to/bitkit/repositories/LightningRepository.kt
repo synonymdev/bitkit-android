@@ -3,6 +3,8 @@ package to.bitkit.repositories
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
@@ -30,9 +32,8 @@ class LightningRepository @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val addressChecker: AddressChecker
 ) {
-    private var nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped //TODO REPLACE WITH A FLOW
-
-    fun getNodeLifecycleState(): NodeLifecycleState = nodeLifecycleState
+    private val _nodeLifecycleState: MutableStateFlow<NodeLifecycleState> = MutableStateFlow(NodeLifecycleState.Stopped)
+    val nodeLifecycleState = _nodeLifecycleState.asStateFlow()
 
     suspend fun setup(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         return@withContext try {
@@ -44,46 +45,49 @@ class LightningRepository @Inject constructor(
         }
     }
 
-    suspend fun start(walletIndex: Int, eventHandler: NodeEventHandler? = null): Result<Unit> = withContext(bgDispatcher) {
-        if (nodeLifecycleState.isRunningOrStarting()) {
-            return@withContext Result.success(Unit)
-        }
+    suspend fun start(walletIndex: Int, eventHandler: NodeEventHandler? = null): Result<Unit> =
+        withContext(bgDispatcher) {
+            if (nodeLifecycleState.value.isRunningOrStarting()) {
+                return@withContext Result.success(Unit)
+            }
 
-        try {
-            nodeLifecycleState = NodeLifecycleState.Starting
+            try {
+                _nodeLifecycleState.value = NodeLifecycleState.Starting
 
-            // Setup if not already setup
-            if (lightningService.node == null) {
-                val setupResult = setup(walletIndex)
-                if (setupResult.isFailure) {
-                    nodeLifecycleState = NodeLifecycleState.ErrorStarting(setupResult.exceptionOrNull() ?: Exception("Unknown setup error"))
-                    return@withContext setupResult
+                // Setup if not already setup
+                if (lightningService.node == null) {
+                    val setupResult = setup(walletIndex)
+                    if (setupResult.isFailure) {
+                        _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(
+                            setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
+                        )
+                        return@withContext setupResult
+                    }
                 }
-            }
 
-            // Start the node service
-            lightningService.start { event ->
-                eventHandler?.invoke(event)
-                ldkNodeEventBus.emit(event)
-            }
+                // Start the node service
+                lightningService.start { event ->
+                    eventHandler?.invoke(event)
+                    ldkNodeEventBus.emit(event)
+                }
 
-            nodeLifecycleState = NodeLifecycleState.Running
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Node start error", e)
-            nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)
-            Result.failure(e)
+                _nodeLifecycleState.value = NodeLifecycleState.Running
+                Result.success(Unit)
+            } catch (e: Throwable) {
+                Logger.error("Node start error", e)
+                _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(e)
+                Result.failure(e)
+            }
         }
-    }
 
     suspend fun waitForNodeStart(timeout: Long = 30000): Result<Unit> = withContext(bgDispatcher) {
         val startTime = System.currentTimeMillis()
 
         while (System.currentTimeMillis() - startTime < timeout) {
-            when (nodeLifecycleState) {
+            when (nodeLifecycleState.value) {
                 NodeLifecycleState.Running -> return@withContext Result.success(Unit)
                 is NodeLifecycleState.ErrorStarting -> {
-                    val error = (nodeLifecycleState as NodeLifecycleState.ErrorStarting).cause
+                    val error = (nodeLifecycleState.value as NodeLifecycleState.ErrorStarting).cause
                     return@withContext Result.failure(error)
                 }
 
@@ -95,14 +99,14 @@ class LightningRepository @Inject constructor(
     }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        if (nodeLifecycleState.isStoppedOrStopping()) {
+        if (nodeLifecycleState.value.isStoppedOrStopping()) {
             return@withContext Result.success(Unit)
         }
 
         try {
-            nodeLifecycleState = NodeLifecycleState.Stopping
+            _nodeLifecycleState.value = NodeLifecycleState.Stopping
             lightningService.stop()
-            nodeLifecycleState = NodeLifecycleState.Stopped
+            _nodeLifecycleState.value = NodeLifecycleState.Stopped
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node stop error", e)
@@ -209,15 +213,16 @@ class LightningRepository @Inject constructor(
         }
     }
 
-    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            lightningService.closeChannel(userChannelId, counterpartyNodeId)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Close channel error", e)
-            Result.failure(e)
+    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> =
+        withContext(bgDispatcher) {
+            try {
+                lightningService.closeChannel(userChannelId, counterpartyNodeId)
+                Result.success(Unit)
+            } catch (e: Throwable) {
+                Logger.error("Close channel error", e)
+                Result.failure(e)
+            }
         }
-    }
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
