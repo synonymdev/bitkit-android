@@ -10,7 +10,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.SheetHost
 
 @Composable
@@ -20,7 +19,6 @@ fun PinNavigationSheet(
     onDismiss: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    val app = appViewModel ?: return
     val navController = rememberNavController()
 
     SheetHost(
@@ -88,20 +86,19 @@ fun PinNavigationSheet(
     )
 }
 
-@Serializable
-sealed class PinRoute {
+object PinRoute {
     @Serializable
-    data object PinPrompt : PinRoute()
+    data object PinPrompt
 
     @Serializable
-    data object ChoosePin : PinRoute()
+    data object ChoosePin
 
     @Serializable
-    data class ConfirmPin(val pin: String) : PinRoute()
+    data class ConfirmPin(val pin: String)
 
     @Serializable
-    data object AskForBiometrics : PinRoute()
+    data object AskForBiometrics
 
     @Serializable
-    data class Result(val isBioOn: Boolean) : PinRoute()
+    data class Result(val isBioOn: Boolean)
 }
