@@ -75,7 +75,7 @@ class WalletRepo @Inject constructor(
             return@withContext Result.failure(Exception("Can only wipe on regtest."))
         }
 
-        try {
+        try { //TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
             keychain.wipe()
             appStorage.clear()
             settingsStore.wipe()
@@ -111,7 +111,7 @@ class WalletRepo @Inject constructor(
     fun buildBip21Url(
         bitcoinAddress: String,
         amountSats: ULong? = null,
-        message: String = "Bitkit", //TODO GET ENV VARIABLE
+        message: String = Env.DEFAULT_INVOICE_MESSAGE,
         lightningInvoice: String = ""
     ): String {
         return Bip21Utils.buildBip21Url(
@@ -146,7 +146,6 @@ class WalletRepo @Inject constructor(
             }
 
             blocktankNotificationsService.registerDevice(token)
-            keychain.saveString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name, token)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Register for notifications error", e)

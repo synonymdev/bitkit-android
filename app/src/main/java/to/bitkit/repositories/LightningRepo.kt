@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,8 +12,8 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
-import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
@@ -23,7 +22,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -86,24 +84,6 @@ class LightningRepo @Inject constructor(
                 Result.failure(e)
             }
         }
-
-    suspend fun waitForNodeStart(timeout: Long = 30000): Result<Unit> = withContext(bgDispatcher) {
-        val startTime = System.currentTimeMillis()
-
-        while (System.currentTimeMillis() - startTime < timeout) {
-            when (nodeLifecycleState.value) {
-                NodeLifecycleState.Running -> return@withContext Result.success(Unit)
-                is NodeLifecycleState.ErrorStarting -> {
-                    val error = (nodeLifecycleState.value as NodeLifecycleState.ErrorStarting).cause
-                    return@withContext Result.failure(error)
-                }
-
-                else -> delay(100) // Wait a bit before checking again
-            }
-        }
-
-        Result.failure(ServiceError.NodeStartTimeout)
-    }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         if (nodeLifecycleState.value.isStoppedOrStopping()) {
@@ -206,19 +186,20 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun sendOnChain(address: Address, sats: ULong): Result<PaymentId> = withContext(bgDispatcher) {
+    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> = withContext(bgDispatcher) {
         try {
-            val paymentId = lightningService.send(address = address, sats = sats)
-            Result.success(paymentId)
+            val txId = lightningService.send(address = address, sats = sats)
+            Result.success(txId)
         } catch (e: Throwable) {
             Logger.error("sendOnChain error", e)
             Result.failure(e)
         }
     }
 
-    suspend fun getPayments(): Result< List<PaymentDetails>> = withContext(bgDispatcher) {
+    suspend fun getPayments(): Result<List<PaymentDetails>> = withContext(bgDispatcher) {
         try {
-            val payments = lightningService.payments ?: return@withContext Result.failure(Exception("It wan't possible get the payments"))
+            val payments = lightningService.payments
+                ?: return@withContext Result.failure(Exception("It wasn't possible get the payments"))
             Result.success(payments)
         } catch (e: Throwable) {
             Logger.error("getPayments error", e)
@@ -262,6 +243,4 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? = lightningService.channels
 
     fun hasChannels(): Boolean = lightningService.channels?.isNotEmpty() == true
-
-    fun generateMnemonic(): String = generateEntropyMnemonic()
 }
