@@ -246,6 +246,4 @@ class LightningRepo @Inject constructor(
     fun getChannels(): List<ChannelDetails>? = lightningService.channels
 
     fun hasChannels(): Boolean = lightningService.channels?.isNotEmpty() == true
-
-    fun generateMnemonic(): String = generateEntropyMnemonic()
 }
