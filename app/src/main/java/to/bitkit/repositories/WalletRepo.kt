@@ -75,7 +75,7 @@ class WalletRepo @Inject constructor(
             return@withContext Result.failure(Exception("Can only wipe on regtest."))
         }
 
-        try {
+        try { //TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
             keychain.wipe()
             appStorage.clear()
             settingsStore.wipe()
