@@ -196,6 +196,7 @@ class AppViewModel @Inject constructor(
                 try {
                     when (event) {
                         is Event.PaymentReceived -> {
+                            //TODO IMPLEMENT TAG HERE
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -523,7 +524,13 @@ class AppViewModel @Inject constructor(
                     val result = sendOnchain(validatedAddress.address, amount)
                     if (result.isSuccess) {
                         val txId = result.getOrNull()
-                        attachTagsToActivity(paymentHashOrTxId = txId, type = ActivityFilter.ONCHAIN)
+                        val tags = _sendUiState.value.selectedTags
+                        attachTagsToActivity(
+                            paymentHashOrTxId = txId,
+                            type = ActivityFilter.ONCHAIN,
+                            txType = PaymentType.SENT,
+                            tags = tags
+                        )
                         Logger.info("Onchain send result txid: $txId")
                         setSendEffect(
                             SendEffect.PaymentSuccess(
@@ -551,7 +558,13 @@ class AppViewModel @Inject constructor(
                     if (result.isSuccess) {
                         val paymentHash = result.getOrNull()
                         Logger.info("Lightning send result payment hash: $paymentHash")
-                        attachTagsToActivity(paymentHashOrTxId = paymentHash, type = ActivityFilter.LIGHTNING)
+                        val tags = _sendUiState.value.selectedTags
+                        attachTagsToActivity(
+                            paymentHashOrTxId = paymentHash,
+                            type = ActivityFilter.LIGHTNING,
+                            txType = PaymentType.SENT,
+                            tags = tags
+                        )
                         setSendEffect(SendEffect.PaymentSuccess())
                         resetSendState()
                     } else {
@@ -584,8 +597,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
-        val tags = _sendUiState.value.selectedTags
+    private fun attachTagsToActivity(
+        paymentHashOrTxId: String?,
+        type: ActivityFilter,
+        txType: PaymentType,
+        tags: List<String>
+    ) {
         Logger.debug("attachTagsToActivity $tags")
         if (tags.isEmpty()) {
             Logger.debug("selectedTags empty")
@@ -598,7 +615,7 @@ class AppViewModel @Inject constructor(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val activity = coreService.activity.get(filter = type, txType = PaymentType.SENT, limit = 1u).firstOrNull()
+            val activity = coreService.activity.get(filter = type, txType = txType, limit = 1u).firstOrNull()
 
             if (activity == null) {
                 Logger.error(msg = "Activity not found")
