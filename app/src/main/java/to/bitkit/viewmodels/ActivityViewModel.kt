@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
@@ -20,7 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
     private val coreService: CoreService,
-    private val lightningService: LightningService,
+    private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
@@ -166,12 +166,10 @@ class ActivityListViewModel @Inject constructor(
 
     fun syncLdkNodePayments() {
         viewModelScope.launch {
-            try {
-                lightningService.payments?.let {
-                    coreService.activity.syncLdkNodePayments(it)
-                    syncState()
-                }
-            } catch (e: Exception) {
+            lightningRepo.getPayments().onSuccess {
+                coreService.activity.syncLdkNodePayments(it)
+                syncState()
+            }.onFailure { e ->
                 Logger.error("Failed to sync ldk-node payments", e)
             }
         }

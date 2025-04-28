@@ -18,9 +18,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.CurrencyService
-import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.BtOrderState2
@@ -37,7 +37,7 @@ const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
-    private val lightningService: LightningService,
+    private val lightningRepo: LightningRepo,
     private val coreService: CoreService,
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
@@ -69,7 +69,7 @@ class TransferViewModel @Inject constructor(
     fun onTransferToSpendingConfirm(order: IBtOrder) {
         viewModelScope.launch {
             try {
-                lightningService.send(address = order.payment.onchain.address, sats = order.feeSat)
+                lightningRepo.sendOnChain(address = order.payment.onchain.address, sats = order.feeSat)
                 settingsStore.setLightningSetupStep(0)
                 watchOrder(order.id)
             } catch (e: Throwable) {
@@ -248,7 +248,7 @@ class TransferViewModel @Inject constructor(
 
     /** Calculates the total value of channels connected to Blocktank nodes */
     private fun totalBtChannelsValueSats(info: IBtInfo?): ULong {
-        val channels = lightningService.channels ?: return 0u
+        val channels = lightningRepo.getChannels() ?: return 0u
         val btNodeIds = info?.nodes?.map { it.pubkey } ?: return 0u
 
         val btChannels = channels.filter { btNodeIds.contains(it.counterpartyNodeId) }
@@ -284,7 +284,7 @@ class TransferViewModel @Inject constructor(
                 async {
                     try {
                         Logger.info("Closing channel: ${channel.channelId}")
-                        lightningService.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+                        lightningRepo.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
                         null
                     } catch (e: Throwable) {
                         Logger.error("Error closing channel: ${channel.channelId}", e)
