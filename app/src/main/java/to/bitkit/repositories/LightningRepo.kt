@@ -199,7 +199,7 @@ class LightningRepo @Inject constructor(
     suspend fun getPayments(): Result<List<PaymentDetails>> = withContext(bgDispatcher) {
         try {
             val payments = lightningService.payments
-                ?: return@withContext Result.failure(Exception("It wan't possible get the payments"))
+                ?: return@withContext Result.failure(Exception("It wasn't possible get the payments"))
             Result.success(payments)
         } catch (e: Throwable) {
             Logger.error("getPayments error", e)
