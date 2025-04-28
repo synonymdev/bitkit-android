@@ -69,7 +69,7 @@ class WalletViewModel @Inject constructor(
         if (!walletExists) return
         if (_uiState.value.nodeLifecycleState.isRunningOrStarting()) return
 
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             if (_uiState.value.nodeLifecycleState != NodeLifecycleState.Initializing) {
                 // Initializing means it's a wallet restore or create so we need to show the loading view
                 _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
@@ -116,7 +116,7 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun collectNodeLifecycleState() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(bgDispatcher) {
             lightningRepo.nodeLifecycleState.collect { currentState ->
                 _uiState.update { it.copy(nodeLifecycleState = currentState) }
             }
