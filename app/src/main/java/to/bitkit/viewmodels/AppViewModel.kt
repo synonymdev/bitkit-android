@@ -195,8 +195,13 @@ class AppViewModel @Inject constructor(
             ldkNodeEventBus.events.collect { event ->
                 try {
                     when (event) {
-                        is Event.PaymentReceived -> {
-                            //TODO IMPLEMENT TAG HERE
+                        is Event.PaymentReceived -> { //TODO HANDLE ON CHAIN EVENTS
+                            attachTagsToActivity(
+                                paymentHashOrTxId = event.paymentHash,
+                                type = ActivityFilter.LIGHTNING,
+                                txType = PaymentType.RECEIVED,
+                                tags = listOf() //TODO GET
+                            )
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
