@@ -13,6 +13,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.di.BgDispatcher
@@ -206,10 +207,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun sendOnChain(address: Address, sats: ULong): Result<PaymentId> = withContext(bgDispatcher) {
+    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> = withContext(bgDispatcher) {
         try {
-            val paymentId = lightningService.send(address = address, sats = sats)
-            Result.success(paymentId)
+            val txId = lightningService.send(address = address, sats = sats)
+            Result.success(txId)
         } catch (e: Throwable) {
             Logger.error("sendOnChain error", e)
             Result.failure(e)
