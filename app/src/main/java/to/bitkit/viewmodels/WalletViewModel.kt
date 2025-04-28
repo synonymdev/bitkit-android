@@ -510,6 +510,22 @@ class WalletViewModel @Inject constructor(
             }
         }
     }
+
+    fun addTagToSelected(newTag: String) {
+        _uiState.update {
+            it.copy(
+                selectedTags = (it.selectedTags + newTag).distinct()
+            )
+        }
+    }
+
+    fun removeTag(tag: String) {
+        _uiState.update {
+            it.copy(
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+            )
+        }
+    }
 }
 
 data class MainUiState(
@@ -525,5 +541,6 @@ data class MainUiState(
     val isRefreshing: Boolean = false,
     val receiveOnSpendingBalance: Boolean = true,
     val bip21AmountSats: ULong? = null,
-    val bip21Description: String = ""
+    val bip21Description: String = "",
+    val selectedTags: List<String> = listOf(),
 )

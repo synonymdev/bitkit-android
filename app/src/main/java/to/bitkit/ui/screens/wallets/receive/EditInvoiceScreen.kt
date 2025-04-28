@@ -54,19 +54,21 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.MainUiState
 
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
+    walletUiState: MainUiState,
     updateInvoice: (ULong?, String) -> Unit,
     onClickAddTag: () -> Unit,
+    onClickTag: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
     var noteText by remember { mutableStateOf("") }
     var satsString by remember { mutableStateOf("") }
-    var tags by remember { mutableStateOf(listOf("")) }
     var keyboardVisible by remember { mutableStateOf(false) }
 
     AmountInputHandler(
@@ -83,7 +85,7 @@ fun EditInvoiceScreen(
         noteText = noteText,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
-        tags = tags,
+        tags = walletUiState.selectedTags,
         onBack = onBack,
         onTextChanged = { newNote -> noteText = newNote },
         keyboardVisible = keyboardVisible,
@@ -92,7 +94,7 @@ fun EditInvoiceScreen(
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), noteText) },
         onClickAddTag = onClickAddTag,
-        onClickTag = { tagToRemove -> tags = tags.filterNot { it == tagToRemove } }
+        onClickTag = onClickTag
     )
 }
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -164,7 +165,9 @@ fun ReceiveQrSheet(
                 }
             }
             composable(ReceiveRoutes.EDIT_INVOICE) {
+                val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
                 EditInvoiceScreen(
+                    walletUiState = walletUiState,
                     onBack = { navController.popBackStack() },
                     updateInvoice = { sats, description ->
                         wallet.updateBip21Invoice(amountSats = sats, description = description)
@@ -172,7 +175,10 @@ fun ReceiveQrSheet(
                     },
                     onClickAddTag = {
                         navController.navigate(ReceiveRoutes.ADD_TAG)
-                    }
+                    },
+                    onClickTag = { tagToRemove ->
+                        wallet.removeTag(tagToRemove)
+                    },
                 )
             }
             composable(ReceiveRoutes.ADD_TAG) {
@@ -180,7 +186,8 @@ fun ReceiveQrSheet(
                     onBack = {
                         navController.popBackStack()
                     },
-                    onTagSelected = {
+                    onTagSelected = { tag ->
+                        wallet.addTagToSelected(tag)
                         navController.popBackStack()
                     }
                 )
@@ -257,7 +264,7 @@ private fun ReceiveQrScreen(
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
                 Column {
-                    AnimatedVisibility (!walletState.receiveOnSpendingBalance) {
+                    AnimatedVisibility(!walletState.receiveOnSpendingBalance) {
                         Headline(
                             text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
                         )
@@ -298,7 +305,7 @@ private fun ReceiveLightningFunds(
     onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
-        AnimatedVisibility (!cjitActive.value && cjitInvoice.value == null) {
+        AnimatedVisibility(!cjitActive.value && cjitInvoice.value == null) {
             Headline(
                 text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
             )
