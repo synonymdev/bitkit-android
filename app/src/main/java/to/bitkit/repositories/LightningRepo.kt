@@ -88,24 +88,6 @@ class LightningRepo @Inject constructor(
             }
         }
 
-    suspend fun waitForNodeStart(timeout: Long = 30000): Result<Unit> = withContext(bgDispatcher) {
-        val startTime = System.currentTimeMillis()
-
-        while (System.currentTimeMillis() - startTime < timeout) {
-            when (nodeLifecycleState.value) {
-                NodeLifecycleState.Running -> return@withContext Result.success(Unit)
-                is NodeLifecycleState.ErrorStarting -> {
-                    val error = (nodeLifecycleState.value as NodeLifecycleState.ErrorStarting).cause
-                    return@withContext Result.failure(error)
-                }
-
-                else -> delay(100) // Wait a bit before checking again
-            }
-        }
-
-        Result.failure(ServiceError.NodeStartTimeout)
-    }
-
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         if (nodeLifecycleState.value.isStoppedOrStopping()) {
             return@withContext Result.success(Unit)
@@ -217,9 +199,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun getPayments(): Result< List<PaymentDetails>> = withContext(bgDispatcher) {
+    suspend fun getPayments(): Result<List<PaymentDetails>> = withContext(bgDispatcher) {
         try {
-            val payments = lightningService.payments ?: return@withContext Result.failure(Exception("It wan't possible get the payments"))
+            val payments = lightningService.payments
+                ?: return@withContext Result.failure(Exception("It wan't possible get the payments"))
             Result.success(payments)
         } catch (e: Throwable) {
             Logger.error("getPayments error", e)
