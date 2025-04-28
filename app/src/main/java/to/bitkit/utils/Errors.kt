@@ -23,6 +23,7 @@ open class AppError(override val message: String? = null) : Exception(message) {
 sealed class ServiceError(message: String) : AppError(message) {
     data object NodeNotSetup : ServiceError("Node is not setup")
     data object NodeNotStarted : ServiceError("Node is not started")
+    data object NodeStartTimeout : ServiceError("Node took too long to start")
     class LdkNodeSqliteAlreadyExists(path: String) : ServiceError("LDK-node SQLite file already exists at $path")
     data object LdkToLdkNodeMigration : ServiceError("LDK to LDK-node migration issue")
     data object MnemonicNotFound : ServiceError("Mnemonic not found")

@@ -34,9 +34,9 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.LightningService
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
 import to.bitkit.services.lightningParam
@@ -56,7 +56,7 @@ import javax.inject.Inject
 class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
-    private val lightningService: LightningService,
+    private val lightningService: LightningRepo,
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
@@ -218,7 +218,7 @@ class AppViewModel @Inject constructor(
 
                         is Event.ChannelReady -> {
                             // TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.
-                            val channel = lightningService.channels?.find { it.channelId == event.channelId }
+                            val channel = lightningService.getChannels()?.find { it.channelId == event.channelId }
                             if (channel != null) {
                                 showNewTransactionSheet(
                                     NewTransactionSheetDetails(
@@ -643,14 +643,13 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
-        return runCatching { lightningService.send(address = address, amount) }
-            .onFailure {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = "Error Sending",
-                    description = it.message ?: "Unknown error"
-                )
-            }
+        return lightningService.sendOnChain(address = address, amount).onFailure {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = "Error Sending",
+                description = it.message ?: "Unknown error"
+            )
+        }
     }
 
     private suspend fun sendLightning(
@@ -658,7 +657,7 @@ class AppViewModel @Inject constructor(
         amount: ULong? = null,
     ): Result<PaymentId> {
         return try {
-            val hash = lightningService.send(bolt11 = bolt11, amount)
+            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull()
 
             // Wait until matching payment event is received
             val result = ldkNodeEventBus.events.watchUntil { event ->
