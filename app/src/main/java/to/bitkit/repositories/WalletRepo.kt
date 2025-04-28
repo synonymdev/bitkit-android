@@ -146,7 +146,6 @@ class WalletRepo @Inject constructor(
             }
 
             blocktankNotificationsService.registerDevice(token)
-            keychain.saveString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name, token)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Register for notifications error", e)
