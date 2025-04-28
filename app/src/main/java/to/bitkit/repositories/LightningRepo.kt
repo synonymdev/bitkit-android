@@ -1,7 +1,6 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,7 +14,6 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
-import org.lightningdevkit.ldknode.generateEntropyMnemonic
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
@@ -24,7 +22,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
