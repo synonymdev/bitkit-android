@@ -126,6 +126,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.isPinOnIdleEnabled
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setIsPinOnIdleEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsPinOnIdleEnabled(value)
+        }
+    }
+
     val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -834,13 +843,13 @@ class AppViewModel @Inject constructor(
     fun removePin() {
         setIsPinEnabled(false)
         setIsPinOnLaunchEnabled(true)
+        setIsPinOnIdleEnabled(false)
         setIsBiometricEnabled(false)
 
         viewModelScope.launch {
             keychain.delete(Keychain.Key.PIN.name)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
-
     }
     // endregion
 }
