@@ -380,6 +380,7 @@ class WalletViewModel @Inject constructor(
             }
             walletRepo.wipeWallet()
                 .onSuccess {
+                    lightningRepo.wipeStorage(walletIndex = 0)
                     setWalletExistsState()
                 }.onFailure {
                     ToastEventBus.send(it)
