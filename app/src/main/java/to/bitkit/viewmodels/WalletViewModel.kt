@@ -57,7 +57,7 @@ class WalletViewModel @Inject constructor(
 
     var isRestoringWallet by mutableStateOf(false)
 
-    fun setWalletExistsState() { //TODO CHECK IF THIS IS NECESSARY
+    fun setWalletExistsState() {
         walletExists = walletRepo.walletExists()
     }
 
