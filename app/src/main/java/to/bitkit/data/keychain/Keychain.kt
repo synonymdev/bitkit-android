@@ -71,7 +71,7 @@ class Keychain @Inject constructor(
         } catch (_: Exception) {
             throw KeychainError.FailedToSave(key)
         }
-        Logger.info("Saved/updated in keychain: $key")
+        Logger.info("Upsert in keychain: $key")
     }
 
     suspend fun delete(key: String) {

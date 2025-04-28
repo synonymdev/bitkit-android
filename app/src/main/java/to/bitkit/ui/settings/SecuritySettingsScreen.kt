@@ -43,6 +43,7 @@ fun SecuritySettingsScreen(
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
 
     PinNavigationSheet(
         showSheet = showPinSheet,
@@ -53,6 +54,7 @@ fun SecuritySettingsScreen(
             isPinEnabled = isPinEnabled,
             isPinOnLaunchEnabled = isPinOnLaunchEnabled,
             isBiometricEnabled = isBiometricEnabled,
+            isPinOnIdleEnabled = isPinOnIdleEnabled,
             isBiometrySupported = rememberBiometricAuthSupported(),
             onPinClick = {
                 if (!isPinEnabled) {
@@ -67,6 +69,11 @@ fun SecuritySettingsScreen(
             onPinOnLaunchClick = {
                 navController.navigateToAuthCheck(
                     onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH,
+                )
+            },
+            onPinOnIdleClick = {
+                navController.navigateToAuthCheck(
+                    onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_IDLE,
                 )
             },
             onUseBiometricsClick = {
@@ -86,10 +93,12 @@ private fun SecuritySettingsContent(
     isPinEnabled: Boolean,
     isPinOnLaunchEnabled: Boolean,
     isBiometricEnabled: Boolean,
+    isPinOnIdleEnabled: Boolean,
     isBiometrySupported: Boolean,
     onPinClick: () -> Unit = {},
     onChangePinClick: () -> Unit = {},
     onPinOnLaunchClick: () -> Unit = {},
+    onPinOnIdleClick: () -> Unit = {},
     onUseBiometricsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
@@ -122,10 +131,15 @@ private fun SecuritySettingsContent(
                     isChecked = isPinOnLaunchEnabled,
                     onClick = onPinOnLaunchClick,
                 )
+                SettingsSwitchRow(
+                    title = stringResource(R.string.settings__security__pin_idle),
+                    isChecked = isPinOnIdleEnabled,
+                    onClick = onPinOnIdleClick,
+                )
             }
             if (isPinEnabled && isBiometrySupported) {
                 SettingsSwitchRow(
-                    title = let {
+                    title = run {
                         val bioTypeName = stringResource(R.string.security__bio)
                         stringResource(R.string.settings__security__use_bio).replace("{biometryTypeName}", bioTypeName)
                     },
@@ -135,7 +149,7 @@ private fun SecuritySettingsContent(
             }
             if (isPinEnabled && isBiometrySupported) {
                 BodyS(
-                    text = let {
+                    text = run {
                         val bioTypeName = stringResource(R.string.security__bio)
                         stringResource(R.string.settings__security__footer).replace("{biometryTypeName}", bioTypeName)
                     },
@@ -155,6 +169,7 @@ fun Preview() {
             isPinEnabled = true,
             isPinOnLaunchEnabled = true,
             isBiometricEnabled = false,
+            isPinOnIdleEnabled = false,
             isBiometrySupported = true,
         )
     }
