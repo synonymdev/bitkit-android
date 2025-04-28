@@ -45,7 +45,7 @@ fun InactivityTracker(
         if (isPinEnabled && isPinOnIdleEnabled && isAuthenticated) {
             inactivityJob = scope.launch {
                 delay(INACTIVITY_DELAY)
-                Logger.debug("Inactivity timeout reached after ${INACTIVITY_DELAY/1000}s, isAuthenticated=false.")
+                Logger.debug("Inactivity timeout reached after ${INACTIVITY_DELAY / 1000}s, resetting isAuthenticated.")
                 app.setIsAuthenticated(false)
                 resetInactivityTimeout()
             }
@@ -66,14 +66,16 @@ fun InactivityTracker(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> resetInactivityTimeout()
-                Lifecycle.Event.ON_PAUSE -> inactivityJob?.cancel()
+                Lifecycle.Event.ON_PAUSE -> inactivityJob?.cancel()?.also { inactivityJob = null }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            inactivityJob?.cancel()
+            inactivityJob?.cancel()?.also {
+                inactivityJob = null
+            }
         }
     }
 
