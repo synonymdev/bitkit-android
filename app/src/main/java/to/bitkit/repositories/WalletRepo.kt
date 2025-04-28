@@ -111,7 +111,7 @@ class WalletRepo @Inject constructor(
     fun buildBip21Url(
         bitcoinAddress: String,
         amountSats: ULong? = null,
-        message: String = "Bitkit", //TODO GET ENV VARIABLE
+        message: String = Env.DEFAULT_INVOICE_MESSAGE,
         lightningInvoice: String = ""
     ): String {
         return Bip21Utils.buildBip21Url(
