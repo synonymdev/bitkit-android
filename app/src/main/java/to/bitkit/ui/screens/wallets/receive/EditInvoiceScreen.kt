@@ -59,6 +59,7 @@ import to.bitkit.viewmodels.CurrencyUiState
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
     updateInvoice: (ULong?, String) -> Unit,
+    onClickAddTag: () -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
@@ -90,8 +91,8 @@ fun EditInvoiceScreen(
         onInputChanged = { newText -> input = newText },
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), noteText) },
-        onClickAddTag = {}, //TODO
-        onClickTag = {}//TODO
+        onClickAddTag = onClickAddTag,
+        onClickTag = { tagToRemove -> tags = tags.filterNot { it == tagToRemove } }
     )
 }
 

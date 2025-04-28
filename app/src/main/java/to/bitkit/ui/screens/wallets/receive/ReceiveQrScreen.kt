@@ -55,6 +55,7 @@ import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
@@ -72,6 +73,7 @@ private object ReceiveRoutes {
     const val CONFIRM = "confirm"
     const val LIQUIDITY = "liquidity"
     const val EDIT_INVOICE = "edit_invoice"
+    const val ADD_TAG = "add_tag"
 }
 
 @Composable
@@ -167,8 +169,22 @@ fun ReceiveQrSheet(
                     updateInvoice = { sats, description ->
                         wallet.updateBip21Invoice(amountSats = sats, description = description)
                         navController.popBackStack()
+                    },
+                    onClickAddTag = {
+                        navController.navigate(ReceiveRoutes.ADD_TAG)
                     }
                 )
+            }
+            composable(ReceiveRoutes.ADD_TAG) {
+                AddTagScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                    onTagSelected = {
+                        navController.popBackStack()
+                    }
+                )
+
             }
         }
     }
