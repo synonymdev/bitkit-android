@@ -374,7 +374,7 @@ class WalletViewModel @Inject constructor(
     }
 
     fun wipeStorage() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             if (lightningRepo.nodeLifecycleState.value.isRunningOrStarting()) {
                 stopLightningNode()
             }
