@@ -85,6 +85,7 @@ class WalletRepo @Inject constructor(
             appStorage.clear()
             settingsStore.wipe()
             coreService.activity.removeAll()
+            deleteAllInvoices()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Wipe wallet error", e)
@@ -273,6 +274,14 @@ class WalletRepo @Inject constructor(
             db.invoiceTagDao().deleteInvoiceByPaymentHash(paymentHash = txId)
         } catch (e: Throwable) {
             Logger.error("deleteInvoice error", e, context = TAG)
+        }
+    }
+
+    suspend fun deleteAllInvoices() = withContext(bgDispatcher) {
+        try {
+            db.invoiceTagDao().deleteAllInvoices()
+        } catch (e: Throwable) {
+            Logger.error("deleteAllInvoices error", e, context = TAG)
         }
     }
 
