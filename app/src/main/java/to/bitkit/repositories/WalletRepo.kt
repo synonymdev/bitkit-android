@@ -27,6 +27,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -241,16 +242,25 @@ class WalletRepo @Inject constructor(
         return db.configDao().getAll()
     }
 
-    suspend fun saveInvoice(txId: Txid, tags: List<String>) = withContext(bgDispatcher) {
+    suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
         try {
             deleteExpiredInvoices()
-            db.invoiceTagDao().saveInvoice(
-                invoiceTag = InvoiceTagEntity(
-                    paymentHash = txId,
-                    tags = tags,
-                    createdAt = Calendar.getInstance().time.time
+            val decoded = uniffi.bitkitcore.decode(bip21Invoice)
+            val paymentHashOrAddress = when(decoded) {
+                is Scanner.Lightning -> decoded.invoice.paymentHash
+                is Scanner.OnChain -> decoded.invoice.address
+                else -> null
+            }
+
+            paymentHashOrAddress?.let {
+                db.invoiceTagDao().saveInvoice(
+                    invoiceTag = InvoiceTagEntity(
+                        paymentHash = decoded.toString(),
+                        tags = tags,
+                        createdAt = Calendar.getInstance().time.time
+                    )
                 )
-            )
+            }
         } catch (e: Throwable) {
             Logger.error("saveInvoice error", e, context = TAG)
         }
