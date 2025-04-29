@@ -35,6 +35,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
@@ -57,6 +58,7 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningRepo,
+    private val walletRepo: WalletRepo,
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
@@ -204,12 +206,13 @@ class AppViewModel @Inject constructor(
             ldkNodeEventBus.events.collect { event ->
                 try {
                     when (event) {
-                        is Event.PaymentReceived -> { //TODO HANDLE ON CHAIN EVENTS
+                        is Event.PaymentReceived -> {
+                            val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty() //TODO CREATE METHOD
                             attachTagsToActivity(
                                 paymentHashOrTxId = event.paymentHash,
                                 type = ActivityFilter.LIGHTNING,
                                 txType = PaymentType.RECEIVED,
-                                tags = listOf() //TODO GET
+                                tags = tags
                             )
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
