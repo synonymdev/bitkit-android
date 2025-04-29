@@ -307,6 +307,7 @@ class WalletViewModel @Inject constructor(
             )
             walletRepo.setBip21(newBip21)
             walletRepo.saveInvoiceWithTags(bip21Invoice = newBip21, tags = _uiState.value.selectedTags)
+            _uiState.update { it.copy(selectedTags = listOf()) }
             syncState()
         }
     }
