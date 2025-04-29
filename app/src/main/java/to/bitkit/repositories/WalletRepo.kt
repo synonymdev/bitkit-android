@@ -28,6 +28,7 @@ import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -242,20 +243,21 @@ class WalletRepo @Inject constructor(
         return db.configDao().getAll()
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
         try {
             deleteExpiredInvoices()
-            val decoded = uniffi.bitkitcore.decode(bip21Invoice)
+            val decoded = decode(bip21Invoice)
             val paymentHashOrAddress = when(decoded) {
-                is Scanner.Lightning -> decoded.invoice.paymentHash
-                is Scanner.OnChain -> decoded.invoice.address
+                is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
+                is Scanner.OnChain -> decoded.extractLightningHashOrAddress()
                 else -> null
             }
 
             paymentHashOrAddress?.let {
                 db.invoiceTagDao().saveInvoice(
                     invoiceTag = InvoiceTagEntity(
-                        paymentHash = decoded.toString(),
+                        paymentHash = paymentHashOrAddress,
                         tags = tags,
                         createdAt = Calendar.getInstance().time.time
                     )
@@ -302,6 +304,22 @@ class WalletRepo @Inject constructor(
         } catch (e: Throwable) {
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
         }
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
+        val address = this.invoice.address
+        val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
+        val decoded = decode(lightningInvoice)
+
+        val paymentHash = when(decoded) {
+            is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
+            else -> null
+        } ?: address
+
+        return paymentHash
+
+        return address
     }
 
     private fun generateEntropyMnemonic(): String {

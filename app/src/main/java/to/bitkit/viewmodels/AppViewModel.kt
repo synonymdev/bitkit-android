@@ -207,7 +207,7 @@ class AppViewModel @Inject constructor(
                 try {
                     when (event) {
                         is Event.PaymentReceived -> {
-                            val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty() //TODO CREATE METHOD
+                            val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty() //TODO EXTRACT TO METHOD
                             attachTagsToActivity(
                                 paymentHashOrTxId = event.paymentHash,
                                 type = ActivityFilter.LIGHTNING,
