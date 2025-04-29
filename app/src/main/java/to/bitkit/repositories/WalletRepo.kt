@@ -243,6 +243,7 @@ class WalletRepo @Inject constructor(
 
     suspend fun saveInvoice(txId: Txid, tags: List<String>) = withContext(bgDispatcher) {
         try {
+            deleteExpiredInvoices()
             db.invoiceTagDao().saveInvoice(
                 invoiceTag = InvoiceTagEntity(
                     paymentHash = txId,
