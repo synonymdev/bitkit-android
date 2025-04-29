@@ -258,6 +258,16 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    suspend fun searchInvoice(txId: Txid): Result<InvoiceTagEntity> = withContext(bgDispatcher) {
+        return@withContext try {
+            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(Exception("Result not found"))
+            Result.success(invoiceTag)
+        } catch (e: Throwable) {
+            Logger.error("saveInvoice error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
     private fun generateEntropyMnemonic(): String {
         return org.lightningdevkit.ldknode.generateEntropyMnemonic()
     }
