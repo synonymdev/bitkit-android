@@ -260,11 +260,19 @@ class WalletRepo @Inject constructor(
 
     suspend fun searchInvoice(txId: Txid): Result<InvoiceTagEntity> = withContext(bgDispatcher) {
         return@withContext try {
-            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(Exception("Result not found"))
+            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(Exception("Invoice not found"))
             Result.success(invoiceTag)
         } catch (e: Throwable) {
-            Logger.error("saveInvoice error", e, context = TAG)
+            Logger.error("searchInvoice error", e, context = TAG)
             Result.failure(e)
+        }
+    }
+
+    suspend fun deleteInvoice(txId: Txid) = withContext(bgDispatcher) {
+        try {
+            db.invoiceTagDao().deleteInvoiceByPaymentHash(paymentHash = txId)
+        } catch (e: Throwable) {
+            Logger.error("deleteInvoice error", e, context = TAG)
         }
     }
 
