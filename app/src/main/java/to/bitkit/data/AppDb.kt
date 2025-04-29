@@ -6,6 +6,7 @@ import androidx.room.Database
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.Upsert
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.work.CoroutineWorker
@@ -16,14 +17,19 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
 import to.bitkit.data.entities.ConfigEntity
+import to.bitkit.data.entities.InvoiceTagEntity
+import to.bitkit.data.typeConverters.StringListConverter
 import to.bitkit.env.Env
 
 @Database(
     entities = [
         ConfigEntity::class,
+        InvoiceTagEntity::class
     ],
     version = 1,
 )
+
+@TypeConverters(StringListConverter::class)
 abstract class AppDb : RoomDatabase() {
     abstract fun configDao(): ConfigDao
 
