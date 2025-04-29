@@ -84,7 +84,7 @@ fun SendAndReviewScreen(
 
             when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
-                SendMethod.LIGHTNING -> LightningDescription(uiState = uiState, onEvent = onEvent)
+                SendMethod.LIGHTNING -> LightningDescription(uiState = uiState)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -219,7 +219,6 @@ private fun OnChainDescription(
 @Composable
 private fun LightningDescription(
     uiState: SendUiState,
-    onEvent: (SendEvent) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
