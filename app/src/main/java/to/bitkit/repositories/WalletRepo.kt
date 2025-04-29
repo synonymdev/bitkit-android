@@ -8,9 +8,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.LocalDateTime
 import org.lightningdevkit.ldknode.Network
-import org.lightningdevkit.ldknode.PaymentHash
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
@@ -24,10 +22,8 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.Toast
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.IBtInfo
@@ -282,6 +278,18 @@ class WalletRepo @Inject constructor(
             db.invoiceTagDao().deleteAllInvoices()
         } catch (e: Throwable) {
             Logger.error("deleteAllInvoices error", e, context = TAG)
+        }
+    }
+
+    suspend fun deleteExpiredInvoices() = withContext(bgDispatcher) {
+        try {
+            val twoDaysExpiration = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 2)
+            }.time.time
+
+            db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysExpiration)
+        } catch (e: Throwable) {
+            Logger.error("deleteExpiredInvoices error", e, context = TAG)
         }
     }
 
