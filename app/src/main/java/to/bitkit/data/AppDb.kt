@@ -16,6 +16,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
+import to.bitkit.data.dao.InvoiceTagDao
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.typeConverters.StringListConverter
@@ -32,6 +33,7 @@ import to.bitkit.env.Env
 @TypeConverters(StringListConverter::class)
 abstract class AppDb : RoomDatabase() {
     abstract fun configDao(): ConfigDao
+    abstract fun invoiceTagDao(): InvoiceTagDao
 
     companion object {
         private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.name.lowercase()}.sqlite"

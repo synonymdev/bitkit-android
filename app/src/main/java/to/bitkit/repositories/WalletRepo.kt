@@ -1,17 +1,22 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import android.icu.util.Calendar
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDateTime
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.PaymentHash
+import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.ConfigEntity
+import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -32,7 +37,7 @@ import javax.inject.Singleton
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @ApplicationContext  private val appContext: Context,
+    @ApplicationContext private val appContext: Context,
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
@@ -166,7 +171,8 @@ class WalletRepo @Inject constructor(
 
     suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
         try {
-            val info = coreService.blocktank.info(refresh = true) ?: return@withContext Result.failure(Exception("Couldn't get info"))
+            val info = coreService.blocktank.info(refresh = true)
+                ?: return@withContext Result.failure(Exception("Couldn't get info"))
             Result.success(info)
         } catch (e: Throwable) {
             Logger.error("Blocktank info error", e)
@@ -238,7 +244,25 @@ class WalletRepo @Inject constructor(
         return db.configDao().getAll()
     }
 
+    suspend fun saveInvoice(txId: Txid, tags: List<String>) = withContext(bgDispatcher) {
+        try {
+            db.invoiceTagDao().saveInvoice(
+                invoiceTag = InvoiceTagEntity(
+                    paymentHash = txId,
+                    tags = tags,
+                    createdAt = Calendar.getInstance().time.time
+                )
+            )
+        } catch (e: Throwable) {
+            Logger.error("saveInvoice error", e, context = TAG)
+        }
+    }
+
     private fun generateEntropyMnemonic(): String {
         return org.lightningdevkit.ldknode.generateEntropyMnemonic()
+    }
+
+    private companion object {
+        const val TAG = "WalletRepo"
     }
 }
