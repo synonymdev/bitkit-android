@@ -245,6 +245,8 @@ class WalletRepo @Inject constructor(
 
     @OptIn(ExperimentalStdlibApi::class)
     suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
+        if (tags.isEmpty()) return@withContext
+
         try {
             deleteExpiredInvoices()
             val decoded = decode(bip21Invoice)
