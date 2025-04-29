@@ -63,11 +63,11 @@ fun EditInvoiceScreen(
     updateInvoice: (ULong?, String) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
+    onDescriptionUpdate: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
-    var noteText by remember { mutableStateOf("") }
     var satsString by remember { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
 
@@ -82,17 +82,17 @@ fun EditInvoiceScreen(
 
     EditInvoiceContent(
         input = input,
-        noteText = noteText,
+        noteText = walletUiState.bip21Description,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
         tags = walletUiState.selectedTags,
         onBack = onBack,
-        onTextChanged = { newNote -> noteText = newNote },
+        onTextChanged = onDescriptionUpdate,
         keyboardVisible = keyboardVisible,
         onClickBalance = { keyboardVisible = true },
         onInputChanged = { newText -> input = newText },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), noteText) },
+        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), walletUiState.bip21Description) },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag
     )

@@ -525,6 +525,10 @@ class WalletViewModel @Inject constructor(
             )
         }
     }
+
+    fun updateBip21Description(newText: String) {
+        _uiState.update { it.copy(bip21Description = newText) }
+    }
 }
 
 data class MainUiState(

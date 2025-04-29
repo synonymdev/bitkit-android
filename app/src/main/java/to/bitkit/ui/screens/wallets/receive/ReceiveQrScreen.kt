@@ -179,6 +179,9 @@ fun ReceiveQrSheet(
                     onClickTag = { tagToRemove ->
                         wallet.removeTag(tagToRemove)
                     },
+                    onDescriptionUpdate = { newText ->
+                        wallet.updateBip21Description(newText = newText)
+                    }
                 )
             }
             composable(ReceiveRoutes.ADD_TAG) {
