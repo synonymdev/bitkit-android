@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,10 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,13 +31,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -44,6 +52,7 @@ import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -54,86 +63,153 @@ import java.time.Instant
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SendAndReviewScreen(
+    savedStateHandle: SavedStateHandle,
     uiState: SendUiState,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
+    onNavigateToPin: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        val scope = rememberCoroutineScope()
-        // TODO handle loading via uiState?
-        var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // TODO handle loading via uiState?
+    var isLoading by rememberSaveable { mutableStateOf(false) }
+    var showBiometrics by remember { mutableStateOf(false) }
 
-        SheetTopBar(stringResource(R.string.title_send_review)) {
-            onBack()
-        }
+    val app = appViewModel ?: return
+    val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
+    val pinForPayments by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isBiometrySupported = rememberBiometricAuthSupported()
 
-        Spacer(Modifier.height(16.dp))
+    LaunchedEffect(savedStateHandle) {
+        savedStateHandle.getStateFlow<Boolean?>(PIN_CHECK_RESULT_KEY, null)
+            .filterNotNull()
+            .collect { isLoading = it }
+    }
 
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth()
-        ) {
-            BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
-                SendMethod.LIGHTNING -> LightningDescription(uiState = uiState)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                uiState.selectedTags.map { tagText ->
-                    TagButton(
-                        text = tagText,
-                        isSelected = false,
-                        displayIconClose = true,
-                        onClick = { onClickTag(tagText) },
-                    )
+    SendAndReviewContent(
+        uiState = uiState,
+        isLoading = isLoading,
+        showBiometrics = showBiometrics,
+        onBack = onBack,
+        onEvent = onEvent,
+        onClickAddTag = onClickAddTag,
+        onClickTag = onClickTag,
+        onSwipeToConfirm = {
+            scope.launch {
+                isLoading = true
+                delay(300)
+                if (isPinEnabled && pinForPayments) {
+                    if (isBiometricEnabled && isBiometrySupported) {
+                        showBiometrics = true
+                    } else {
+                        onNavigateToPin()
+                    }
+                } else {
+                    onEvent(SendEvent.SwipeToPay)
                 }
             }
-            PrimaryButton(
-                text = stringResource(R.string.wallet__tags_add),
-                size = ButtonSize.Small,
-                onClick = { onClickAddTag() },
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_tag),
-                        contentDescription = null,
-                        tint = Colors.Brand
-                    )
-                },
-                fullWidth = false
-            )
-            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+        },
+        onBiometricsSuccess = {
+            isLoading = true
+            showBiometrics = false
+            onEvent(SendEvent.SwipeToPay)
+        },
+        onBiometricsFailure = {
+            isLoading = false
+            showBiometrics = false
+            onNavigateToPin()
+        },
+    )
+}
 
-            Spacer(modifier = Modifier.weight(1f))
-            SwipeToConfirm(
-                text = stringResource(R.string.wallet__send_swipe),
-                loading = isLoading,
-                onConfirm = {
-                    scope.launch {
-                        isLoading = true
-                        delay(300)
-                        onEvent(SendEvent.SwipeToPay)
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SendAndReviewContent(
+    uiState: SendUiState,
+    isLoading: Boolean,
+    showBiometrics: Boolean,
+    onBack: () -> Unit,
+    onEvent: (SendEvent) -> Unit,
+    onClickAddTag: () -> Unit,
+    onClickTag: (String) -> Unit,
+    onSwipeToConfirm: () -> Unit,
+    onBiometricsSuccess: () -> Unit,
+    onBiometricsFailure: () -> Unit,
+) {
+    Box {
+        Column(modifier = Modifier.fillMaxSize()) {
+            SheetTopBar(stringResource(R.string.title_send_review)) {
+                onBack()
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+            ) {
+                BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                when (uiState.payMethod) {
+                    SendMethod.ONCHAIN -> OnChainDescription(uiState = uiState, onEvent = onEvent)
+                    SendMethod.LIGHTNING -> LightningDescription(uiState = uiState)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    uiState.selectedTags.map { tagText ->
+                        TagButton(
+                            text = tagText,
+                            isSelected = false,
+                            displayIconClose = true,
+                            onClick = { onClickTag(tagText) },
+                        )
                     }
                 }
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__tags_add),
+                    size = ButtonSize.Small,
+                    onClick = onClickAddTag,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_tag),
+                            contentDescription = null,
+                            tint = Colors.Brand
+                        )
+                    },
+                    fullWidth = false
+                )
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+
+                Spacer(modifier = Modifier.weight(1f))
+                SwipeToConfirm(
+                    text = stringResource(R.string.wallet__send_swipe),
+                    loading = isLoading,
+                    confirmed = isLoading,
+                    onConfirm = onSwipeToConfirm,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+
+        if (showBiometrics) {
+            BiometricsView(
+                onSuccess = onBiometricsSuccess,
+                onFailure = onBiometricsFailure,
             )
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -304,9 +380,9 @@ private fun LightningDescription(
 @Suppress("SpellCheckingInspection")
 @Preview(name = "Lightning")
 @Composable
-private fun SendAndReviewPreview() {
+private fun Preview() {
     AppThemeSurface {
-        SendAndReviewScreen(
+        SendAndReviewContent(
             uiState = SendUiState(
                 amount = 1234uL,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
@@ -322,12 +398,17 @@ private fun SendAndReviewPreview() {
                     networkType = NetworkType.REGTEST,
                     payeeNodeId = null,
                     description = "Some invoice description",
-                )
+                ),
             ),
+            isLoading = false,
+            showBiometrics = false,
             onBack = {},
             onEvent = {},
             onClickAddTag = {},
             onClickTag = {},
+            onSwipeToConfirm = {},
+            onBiometricsSuccess = {},
+            onBiometricsFailure = {},
         )
     }
 }
@@ -335,9 +416,9 @@ private fun SendAndReviewPreview() {
 @Suppress("SpellCheckingInspection")
 @Preview(name = "OnChain")
 @Composable
-private fun SendAndReviewPreview2() {
+private fun PreviewOnChain() {
     AppThemeSurface {
-        SendAndReviewScreen(
+        SendAndReviewContent(
             uiState = SendUiState(
                 amount = 1234uL,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
@@ -354,12 +435,54 @@ private fun SendAndReviewPreview2() {
                     networkType = NetworkType.REGTEST,
                     payeeNodeId = null,
                     description = "Some invoice description",
-                )
+                ),
             ),
+            isLoading = false,
+            showBiometrics = false,
             onBack = {},
             onEvent = {},
             onClickAddTag = {},
             onClickTag = {},
+            onSwipeToConfirm = {},
+            onBiometricsSuccess = {},
+            onBiometricsFailure = {},
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview
+@Composable
+private fun PreviewBio() {
+    AppThemeSurface {
+        SendAndReviewContent(
+            uiState = SendUiState(
+                amount = 1234uL,
+                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
+                bolt11 = "lnbcrt1…",
+                payMethod = SendMethod.ONCHAIN,
+                selectedTags = listOf("car", "house", "uber"),
+                decodedInvoice = LightningInvoice(
+                    bolt11 = "bcrt123",
+                    paymentHash = ByteArray(0),
+                    amountSatoshis = 10000uL,
+                    timestampSeconds = 0uL,
+                    expirySeconds = 3600uL,
+                    isExpired = false,
+                    networkType = NetworkType.REGTEST,
+                    payeeNodeId = null,
+                    description = "Some invoice description",
+                ),
+            ),
+            isLoading = false,
+            showBiometrics = true,
+            onBack = {},
+            onEvent = {},
+            onClickAddTag = {},
+            onClickTag = {},
+            onSwipeToConfirm = {},
+            onBiometricsSuccess = {},
+            onBiometricsFailure = {},
         )
     }
 }

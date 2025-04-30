@@ -31,8 +31,10 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.composableWithDefaultTransitions
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.util.gradientBackground
@@ -102,14 +104,16 @@ fun SendOptionsView(
                     appViewModel.onScanSuccess(data = qrCode)
                 }
             }
-            composable<SendRoute.ReviewAndSend> {
+            composable<SendRoute.ReviewAndSend> { backStackEntry ->
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
+                    savedStateHandle = backStackEntry.savedStateHandle,
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onEvent = { appViewModel.setSendEvent(it) },
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
-                    onClickTag = { tag -> appViewModel.removeTag(tag) }
+                    onClickTag = { tag -> appViewModel.removeTag(tag) },
+                    onNavigateToPin = { navController.navigate(SendRoute.PinCheck) }
                 )
             }
             composable<SendRoute.AddTag> {
@@ -118,6 +122,18 @@ fun SendOptionsView(
                     onTagSelected = { tag ->
                         appViewModel.addTagToSelected(tag)
                         navController.popBackStack()
+                    },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.PinCheck> {
+                PinCheckScreen(
+                    onBack = { navController.popBackStack() },
+                    onSuccess = {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(PIN_CHECK_RESULT_KEY, true)
+                        navController.popBackStack()
+                        appViewModel.setSendEvent(SendEvent.SwipeToPay)
                     },
                 )
             }
@@ -245,4 +261,7 @@ interface SendRoute {
 
     @Serializable
     data object AddTag : SendRoute
+
+    @Serializable
+    data object PinCheck : SendRoute
 }
