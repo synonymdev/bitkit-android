@@ -70,11 +70,11 @@ class AppViewModel @Inject constructor(
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
-    private val _sendEffect = MutableSharedFlow<SendEffect>(replay = 0, extraBufferCapacity = 1)
+    private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
 
-    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(replay = 0, extraBufferCapacity = 1)
+    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
     private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
 

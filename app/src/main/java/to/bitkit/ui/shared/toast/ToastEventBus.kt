@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import to.bitkit.models.Toast
 
 object ToastEventBus {
-    private val _events = MutableSharedFlow<Toast>(replay = 0, extraBufferCapacity = 1)
+    private val _events = MutableSharedFlow<Toast>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
 
     suspend fun send(
