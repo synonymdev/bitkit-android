@@ -24,14 +24,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.composableWithDefaultTransitions
@@ -75,12 +73,12 @@ fun SendOptionsView(
             navController = navController,
             startDestination = startDestination,
         ) {
-            composable<SendRoute.Options> {
+            composableWithDefaultTransitions<SendRoute.Options> {
                 SendOptionsContent(
                     onEvent = { appViewModel.setSendEvent(it) }
                 )
             }
-            composable<SendRoute.Address> {
+            composableWithDefaultTransitions<SendRoute.Address> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAddressScreen(
                     uiState = uiState,
@@ -88,7 +86,7 @@ fun SendOptionsView(
                     onEvent = { appViewModel.setSendEvent(it) },
                 )
             }
-            composable<SendRoute.Amount> {
+            composableWithDefaultTransitions<SendRoute.Amount> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
                 SendAmountScreen(
@@ -98,13 +96,13 @@ fun SendOptionsView(
                     onEvent = { appViewModel.setSendEvent(it) }
                 )
             }
-            composable<SendRoute.QrScanner> {
+            composableWithDefaultTransitions<SendRoute.QrScanner> {
                 QrScanningScreen(navController = navController) { qrCode ->
                     navController.popBackStack()
                     appViewModel.onScanSuccess(data = qrCode)
                 }
             }
-            composable<SendRoute.ReviewAndSend> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.ReviewAndSend> { backStackEntry ->
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
                     savedStateHandle = backStackEntry.savedStateHandle,
@@ -116,7 +114,7 @@ fun SendOptionsView(
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) }
                 )
             }
-            composable<SendRoute.AddTag> {
+            composableWithDefaultTransitions<SendRoute.AddTag> {
                 AddTagScreen(
                     onBack = { navController.popBackStack() },
                     onTagSelected = { tag ->
@@ -231,7 +229,6 @@ private fun SendOptionsContent(
     }
 }
 
-// region preview
 @Preview(showBackground = true)
 @Composable
 private fun SendOptionsContentPreview() {
@@ -241,7 +238,6 @@ private fun SendOptionsContentPreview() {
         )
     }
 }
-// endregion
 
 interface SendRoute {
     @Serializable
