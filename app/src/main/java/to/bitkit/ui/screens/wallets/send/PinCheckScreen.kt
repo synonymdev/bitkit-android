@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -57,9 +58,17 @@ fun PinCheckScreen(
     PinCheckContent(
         pin = pin,
         attemptsRemaining = attemptsRemaining,
-        onPinChange = { pin = it },
+        onKeyPress = { key ->
+            if (key == KEY_DELETE) {
+                if (pin.isNotEmpty()) {
+                    pin = pin.dropLast(1)
+                }
+            } else if (pin.length < Env.PIN_LENGTH) {
+                pin += key
+            }
+        },
         onBack = onBack,
-        onForgotPin = { app.setShowForgotPin(true) },
+        onClickForgotPin = { app.setShowForgotPin(true) },
     )
 }
 
@@ -67,9 +76,9 @@ fun PinCheckScreen(
 private fun PinCheckContent(
     pin: String,
     attemptsRemaining: Int,
-    onPinChange: (String) -> Unit,
+    onKeyPress: (String) -> Unit,
     onBack: () -> Unit,
-    onForgotPin: () -> Unit,
+    onClickForgotPin: () -> Unit,
 ) {
     val isLastAttempt = attemptsRemaining == 1
 
@@ -96,7 +105,7 @@ private fun PinCheckContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (attemptsRemaining < Env.PIN_ATTEMPTS) {
+            AnimatedVisibility(visible = attemptsRemaining < Env.PIN_ATTEMPTS) {
                 if (isLastAttempt) {
                     BodyS(
                         text = stringResource(R.string.security__pin_last_attempt),
@@ -112,7 +121,7 @@ private fun PinCheckContent(
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .padding(horizontal = 32.dp)
-                            .clickableAlpha { onForgotPin() }
+                            .clickableAlpha { onClickForgotPin() }
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -126,14 +135,7 @@ private fun PinCheckContent(
             Spacer(modifier = Modifier.weight(1f))
 
             PinNumberPad(
-                onPress = { key ->
-                    val newPin = when {
-                        key == KEY_DELETE && pin.isNotEmpty() -> pin.dropLast(1)
-                        key != KEY_DELETE && pin.length < Env.PIN_LENGTH -> pin + key
-                        else -> pin
-                    }
-                    onPinChange(newPin)
-                },
+                onPress = onKeyPress,
                 modifier = Modifier
                     .height(350.dp)
                     .background(Colors.Black)
@@ -149,9 +151,9 @@ private fun Preview() {
         PinCheckContent(
             pin = "123",
             attemptsRemaining = 8,
-            onPinChange = {},
+            onKeyPress = {},
             onBack = {},
-            onForgotPin = {},
+            onClickForgotPin = {},
         )
     }
 }
@@ -163,9 +165,9 @@ private fun PreviewAttempts() {
         PinCheckContent(
             pin = "123",
             attemptsRemaining = 3,
-            onPinChange = {},
+            onKeyPress = {},
             onBack = {},
-            onForgotPin = {},
+            onClickForgotPin = {},
         )
     }
 }
@@ -177,9 +179,9 @@ private fun PreviewAttemptsLast() {
         PinCheckContent(
             pin = "123",
             attemptsRemaining = 1,
-            onPinChange = {},
+            onKeyPress = {},
             onBack = {},
-            onForgotPin = {},
+            onClickForgotPin = {},
         )
     }
 }
