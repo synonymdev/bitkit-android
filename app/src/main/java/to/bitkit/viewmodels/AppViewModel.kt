@@ -666,6 +666,7 @@ class AppViewModel @Inject constructor(
                             Logger.error("Error attaching tags $tags")
                         }.onSuccess {
                             Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
+                            walletRepo.deleteInvoice(txId = paymentHashOrTxId)
                         }
                     } else {
                         Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
@@ -681,6 +682,7 @@ class AppViewModel @Inject constructor(
                             Logger.error("Error attaching tags $tags")
                         }.onSuccess {
                             Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
+                            walletRepo.deleteInvoice(txId = paymentHashOrTxId)
                         }
                     } else {
                         Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
