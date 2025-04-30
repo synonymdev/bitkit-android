@@ -52,6 +52,7 @@ import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
@@ -632,7 +633,23 @@ class AppViewModel @Inject constructor(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val activity = coreService.activity.get(filter = type, txType = txType, limit = 1u).firstOrNull()
+            var activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
+                    when (activityItem) {
+                        is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
+                        is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
+                    }
+                }
+
+            if (activity == null) {
+                Logger.warn("activity not found, trying again after delay")
+                delay(5.seconds)
+                activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
+                    when (activityItem) {
+                        is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
+                        is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
+                    }
+                }
+            }
 
             if (activity == null) {
                 Logger.error(msg = "Activity not found")
@@ -647,6 +664,8 @@ class AppViewModel @Inject constructor(
                             tags = tags
                         ).onFailure {
                             Logger.error("Error attaching tags $tags")
+                        }.onSuccess {
+                            Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
                         }
                     } else {
                         Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
@@ -658,7 +677,11 @@ class AppViewModel @Inject constructor(
                         coreService.activity.appendTags(
                             toActivityId = activity.v1.id,
                             tags = tags
-                        )
+                        ).onFailure {
+                            Logger.error("Error attaching tags $tags")
+                        }.onSuccess {
+                            Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
+                        }
                     } else {
                         Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
                     }
