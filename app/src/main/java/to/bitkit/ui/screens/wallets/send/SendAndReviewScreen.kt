@@ -85,7 +85,10 @@ fun SendAndReviewScreen(
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<Boolean?>(PIN_CHECK_RESULT_KEY, null)
             .filterNotNull()
-            .collect { isLoading = it }
+            .collect {
+                isLoading = it
+                savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
+            }
     }
 
     SendAndReviewContent(
