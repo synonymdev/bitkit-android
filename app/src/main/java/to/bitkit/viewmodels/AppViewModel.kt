@@ -682,7 +682,7 @@ class AppViewModel @Inject constructor(
         amount: ULong? = null,
     ): Result<PaymentId> {
         return try {
-            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull()
+            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() //TODO HANDLE FAILURE IN OTHER PR
 
             // Wait until matching payment event is received
             val result = ldkNodeEventBus.events.watchUntil { event ->
