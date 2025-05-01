@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -209,6 +212,27 @@ private fun ReceiveQrScreen(
     onClickEditInvoice: () -> Unit,
     onClickReceiveOnSpending: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val window = remember(context) { (context as Activity).window }
+
+    // Keep screen on and set brightness to max while this composable is active
+    DisposableEffect(Unit) {
+        val originalBrightness = window.attributes.screenBrightness
+        val originalFlags = window.attributes.flags
+
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            flags = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        }
+
+        onDispose {
+            window.attributes = window.attributes.apply {
+                screenBrightness = originalBrightness
+                flags = originalFlags
+            }
+        }
+    }
+
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
             cjitInvoice.value?.isNotEmpty() == true -> R.drawable.ic_ln_circle
