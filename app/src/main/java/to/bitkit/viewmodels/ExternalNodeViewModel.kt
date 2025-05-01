@@ -33,7 +33,7 @@ class ExternalNodeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _effects = MutableSharedFlow<SideEffect>(replay = 0, extraBufferCapacity = 1)
+    private val _effects = MutableSharedFlow<SideEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
     private fun setEffect(effect: SideEffect) = viewModelScope.launch { _effects.emit(effect) }
 

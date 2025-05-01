@@ -159,6 +159,7 @@ fun ContentView(
         appViewModel.mainScreenEffect.collect {
             when (it) {
                 is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityItem(it.activityId))
+                else -> Unit
             }
         }
     }

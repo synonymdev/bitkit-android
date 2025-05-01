@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,8 +23,10 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.removeSpaces
@@ -44,6 +47,7 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ResourceProvider
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.LightningInvoice
@@ -54,12 +58,14 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningRepo,
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
+    private val resourceProvider: ResourceProvider,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -70,11 +76,11 @@ class AppViewModel @Inject constructor(
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
-    private val _sendEffect = MutableSharedFlow<SendEffect>(replay = 0, extraBufferCapacity = 1)
+    private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
 
-    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(replay = 0, extraBufferCapacity = 1)
+    private val _mainScreenEffect = MutableSharedFlow<MainScreenEffect>(extraBufferCapacity = 1)
     val mainScreenEffect = _mainScreenEffect.asSharedFlow()
     private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
 
@@ -820,16 +826,18 @@ class AppViewModel @Inject constructor(
             return true
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             val newAttempts = pinAttemptsRemaining.value - 1
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, newAttempts.toString())
 
             if (newAttempts <= 0) {
-                // TODO: wipeStorage() & return to onboarding
                 toast(
-                    type = Toast.ToastType.WARNING,
-                    title = "TODO: Wipe App data",
+                    type = Toast.ToastType.SUCCESS,
+                    title = resourceProvider.getString(R.string.security__wiped_title),
+                    description = resourceProvider.getString(R.string.security__wiped_message),
                 )
+                delay(250) // small delay for UI feedback
+                mainScreenEffect(MainScreenEffect.WipeStorage)
             }
         }
         return false
@@ -892,6 +900,7 @@ sealed class SendEffect {
 
 sealed class MainScreenEffect {
     data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
+    data object WipeStorage : MainScreenEffect()
 }
 
 sealed class SendEvent {
