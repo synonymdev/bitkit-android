@@ -258,7 +258,7 @@ class WalletRepo @Inject constructor(
         try {
             deleteExpiredInvoices()
             val decoded = decode(bip21Invoice)
-            val paymentHashOrAddress = when(decoded) {
+            val paymentHashOrAddress = when (decoded) {
                 is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
                 is Scanner.OnChain -> decoded.extractLightningHashOrAddress()
                 else -> null
@@ -280,7 +280,9 @@ class WalletRepo @Inject constructor(
 
     suspend fun searchInvoice(txId: Txid): Result<InvoiceTagEntity> = withContext(bgDispatcher) {
         return@withContext try {
-            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(Exception("Invoice not found"))
+            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(
+                Exception("Invoice not found")
+            )
             Result.success(invoiceTag)
         } catch (e: Throwable) {
             Logger.error("searchInvoice error", e, context = TAG)
@@ -321,81 +323,82 @@ class WalletRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType,
         tags: List<String>
-    ) : Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("attachTagsToActivity $tags")
-        if (tags.isEmpty()) {
-            Logger.debug("selectedTags empty")
-            return@withContext Result.failure(Exception("selectedTags empty"))
-        }
+    ): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("attachTagsToActivity $tags", context = TAG)
 
-        if (paymentHashOrTxId == null) {
-            Logger.error(msg = "null paymentHashOrTxId")
-            return@withContext Result.failure(Exception("null paymentHashOrTxId"))
-        }
+        when {
+            tags.isEmpty() -> {
+                Logger.debug("selectedTags empty", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("selectedTags empty"))
+            }
 
-        var activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
-            when (activityItem) {
-                is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
-                is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
+            paymentHashOrTxId == null -> {
+                Logger.error(msg = "null paymentHashOrTxId", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("null paymentHashOrTxId"))
             }
         }
 
-        if (activity == null) {
-            Logger.warn("activity not found, trying again after delay")
-            delay(5.seconds)
-            activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
-                when (activityItem) {
-                    is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
-                    is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
-                }
-            }
+        val activity = findActivityWithRetry(
+            paymentHashOrTxId = paymentHashOrTxId,
+            type = type,
+            txType = txType
+        ) ?: return@withContext Result.failure(IllegalStateException("Activity not found"))
+
+        if (!activity.matchesId(paymentHashOrTxId)) {
+            Logger.error(
+                "ID mismatch. Expected: $paymentHashOrTxId found: ${activity.idValue}",
+                context = TAG
+            )
+            return@withContext Result.failure(IllegalStateException("Activity ID mismatch"))
         }
 
-        if (activity == null) {
-            Logger.error(msg = "Activity not found")
-            return@withContext Result.failure(Exception("Activity not found"))
-        }
-
-        return@withContext when (activity) {
-            is Activity.Lightning -> {
-                if (paymentHashOrTxId == activity.v1.id) {
-                    coreService.activity.appendTags(
-                        toActivityId = activity.v1.id,
-                        tags = tags
-                    ).onFailure { e ->
-                        Logger.error("Error attaching tags $tags", e)
-                        return@withContext Result.failure(Exception("Error attaching tags $tags"))
-                    }.onSuccess {
-                        Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
-                        deleteInvoice(txId = paymentHashOrTxId)
-                       return@withContext Result.success(Unit)
-                    }
-                } else {
-                    Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
-                    return@withContext Result.failure(Exception("Error attaching tags $tags"))
-                }
+        coreService.activity.appendTags(
+            toActivityId = activity.idValue,
+            tags = tags
+        ).fold(
+            onFailure = { error ->
+                Logger.error("Error attaching tags $tags", error, context = TAG)
+                Result.failure(Exception("Error attaching tags $tags", error))
+            },
+            onSuccess = {
+                Logger.info("Success attaching tags $tags to activity ${activity.idValue}", context = TAG)
+                deleteInvoice(txId = paymentHashOrTxId)
+                Result.success(Unit)
             }
-
-            is Activity.Onchain -> {
-                if (paymentHashOrTxId == activity.v1.txId) {
-                    coreService.activity.appendTags(
-                        toActivityId = activity.v1.id,
-                        tags = tags
-                    ).onFailure {
-                        Logger.error("Error attaching tags $tags")
-                        return@withContext Result.failure(Exception("Error attaching tags $tags"))
-                    }.onSuccess {
-                        Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
-                        deleteInvoice(txId = paymentHashOrTxId)
-                        return@onSuccess
-                    }
-                } else {
-                    Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
-                    return@withContext Result.failure(Exception("Error attaching tags $tags"))
-                }
-            }
-        }
+        )
     }
+
+    private suspend fun findActivityWithRetry(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType
+    ): Activity? {
+
+        suspend fun findActivity(): Activity? = coreService.activity.get(
+            filter = type,
+            txType = txType,
+            limit = 10u
+        ).firstOrNull { it.matchesId(paymentHashOrTxId) }
+
+        var activity = findActivity()
+        if (activity == null) {
+            Logger.warn("activity not found, trying again after delay", context = TAG)
+            delay(5.seconds)
+            activity = findActivity()
+        }
+        return activity
+    }
+
+    private fun Activity.matchesId(paymentHashOrTxId: String): Boolean = when (this) {
+        is Activity.Lightning -> paymentHashOrTxId == v1.id
+        is Activity.Onchain -> paymentHashOrTxId == v1.txId
+    }
+
+    private val Activity.idValue: String
+        get() = when (this) {
+            is Activity.Lightning -> v1.id
+            is Activity.Onchain -> v1.txId
+        }
 
     @OptIn(ExperimentalStdlibApi::class)
     private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
@@ -403,7 +406,7 @@ class WalletRepo @Inject constructor(
         val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
         val decoded = decode(lightningInvoice)
 
-        val paymentHash = when(decoded) {
+        val paymentHash = when (decoded) {
             is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
             else -> null
         } ?: address
