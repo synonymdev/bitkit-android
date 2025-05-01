@@ -113,6 +113,6 @@ class MigrationService @Inject constructor(
         private const val KEY = "key"
         private const val VALUE = "value"
         private const val LDK_DB_NAME = "$LDK_NODE_DATA.sqlite"
-        private const val LDK_DB_VERSION = 2
+        private const val LDK_DB_VERSION = 2 // Should match SCHEMA_USER_VERSION from ldk-node
     }
 }
