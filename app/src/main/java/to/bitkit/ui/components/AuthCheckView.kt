@@ -163,7 +163,8 @@ private fun PinPad(
                 )
             } else {
                 BodyS(
-                    text = stringResource(R.string.security__pin_attempts).replace("{attemptsRemaining}", "$attemptsRemaining"),
+                    text = stringResource(R.string.security__pin_attempts)
+                        .replace("{attemptsRemaining}", "$attemptsRemaining"),
                     color = Colors.Brand,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.clickableAlpha { onClickForgotPin() }
@@ -175,7 +176,8 @@ private fun PinPad(
         if (allowBiometrics) {
             val biometricsName = stringResource(R.string.security__bio)
             PrimaryButton(
-                text = stringResource(R.string.security__pin_use_biometrics).replace("{biometricsName}", biometricsName),
+                text = stringResource(R.string.security__pin_use_biometrics)
+                    .replace("{biometricsName}", biometricsName),
                 onClick = onShowBiometrics,
                 fullWidth = false,
                 size = ButtonSize.Small,
