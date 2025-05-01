@@ -40,7 +40,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(MainUiState())
+    private val _uiState = MutableStateFlow(WalletState())
     val uiState = _uiState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(walletRepo.getBalanceState())
@@ -534,7 +534,7 @@ class WalletViewModel @Inject constructor(
     }
 }
 
-data class MainUiState(
+data class WalletState(
     val nodeId: String = "",
     val balanceDetails: BalanceDetails? = null,
     val onchainAddress: String = "",

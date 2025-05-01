@@ -69,7 +69,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 
 private object ReceiveRoutes {
     const val QR = "qr"
@@ -82,7 +82,7 @@ private object ReceiveRoutes {
 
 @Composable
 fun ReceiveQrSheet(
-    walletState: MainUiState,
+    walletState: WalletState,
     modifier: Modifier = Modifier,
 ) {
     val app = appViewModel ?: return
@@ -207,7 +207,7 @@ fun ReceiveQrSheet(
 private fun ReceiveQrScreen(
     cjitInvoice: MutableState<String?>,
     cjitActive: MutableState<Boolean>,
-    walletState: MainUiState,
+    walletState: WalletState,
     onCjitToggle: (Boolean) -> Unit,
     onClickEditInvoice: () -> Unit,
     onClickReceiveOnSpending: () -> Unit,
@@ -540,7 +540,7 @@ private fun ReceiveQrScreenPreview() {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
-            walletState = MainUiState(
+            walletState = WalletState(
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
@@ -557,7 +557,7 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
-            walletState = MainUiState(
+            walletState = WalletState(
                 nodeLifecycleState = Running,
             ),
             onCjitToggle = { },
@@ -574,7 +574,7 @@ private fun ReceiveQrScreenPreviewTablet() {
         ReceiveQrScreen(
             cjitInvoice = remember { mutableStateOf(null) },
             cjitActive = remember { mutableStateOf(false) },
-            walletState = MainUiState(
+            walletState = WalletState(
                 nodeLifecycleState = NodeLifecycleState.Starting,
             ),
             onCjitToggle = { },

@@ -37,7 +37,7 @@ import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.Payments
 import to.bitkit.ui.shared.Peers
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -111,7 +111,7 @@ private fun debugPushNotification() {
 }
 
 @Composable
-fun NodeDetails(contentState: MainUiState) {
+fun NodeDetails(contentState: WalletState) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.Bottom,

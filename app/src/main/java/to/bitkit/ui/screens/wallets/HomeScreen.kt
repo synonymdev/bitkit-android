@@ -71,7 +71,7 @@ import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -80,7 +80,7 @@ fun HomeScreen(
     appViewModel: AppViewModel,
     rootNavController: NavController,
 ) {
-    val uiState: MainUiState by walletViewModel.uiState.collectAsState()
+    val uiState: WalletState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
     SheetHost(
         shouldExpand = currentSheet != null,
@@ -175,7 +175,7 @@ fun HomeScreen(
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun HomeContentView(
-    uiState: MainUiState,
+    uiState: WalletState,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -299,7 +299,7 @@ object HomeRoutes {
 private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
-            uiState = MainUiState(),
+            uiState = WalletState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},

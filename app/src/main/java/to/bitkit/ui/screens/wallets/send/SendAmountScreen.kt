@@ -42,7 +42,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -50,7 +50,7 @@ import to.bitkit.viewmodels.SendUiState
 @Composable
 fun SendAmountScreen(
     uiState: SendUiState,
-    walletUiState: MainUiState,
+    walletUiState: WalletState,
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -84,7 +84,7 @@ fun SendAmountScreen(
 @Composable
 fun SendAmountContent(
     input: String,
-    walletUiState: MainUiState,
+    walletUiState: WalletState,
     uiState: SendUiState,
     balances: BalanceState = LocalBalances.current,
     primaryDisplay: PrimaryDisplay,
@@ -243,7 +243,7 @@ private fun PreviewRunningLightning() {
                 isAmountInputValid = true,
                 isUnified = true
             ),
-            walletUiState = MainUiState(
+            walletUiState = WalletState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
             onBack = {},
@@ -268,7 +268,7 @@ private fun PreviewRunningOnchain() {
                 isAmountInputValid = true,
                 isUnified = true
             ),
-            walletUiState = MainUiState(
+            walletUiState = WalletState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
             onBack = {},
@@ -291,7 +291,7 @@ private fun PreviewInitializing() {
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100"
             ),
-            walletUiState = MainUiState(
+            walletUiState = WalletState(
                 nodeLifecycleState = NodeLifecycleState.Initializing
             ),
             onBack = {},

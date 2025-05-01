@@ -10,7 +10,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -27,7 +27,7 @@ class SendAmountContentTest {
         isUnified = true
     )
 
-    private val testWalletState = MainUiState(
+    private val testWalletState = WalletState(
         nodeLifecycleState = NodeLifecycleState.Running
     )
 
@@ -61,7 +61,7 @@ class SendAmountContentTest {
             SendAmountContent(
                 input = "100",
                 uiState = testUiState,
-                walletUiState = MainUiState(
+                walletUiState = WalletState(
                     nodeLifecycleState = NodeLifecycleState.Initializing
                 ),
                 displayUnit = BitcoinDisplayUnit.MODERN,

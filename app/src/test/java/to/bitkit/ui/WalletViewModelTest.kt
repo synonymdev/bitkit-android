@@ -19,7 +19,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 
@@ -60,7 +60,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `start should emit Content uiState`() = test {
         setupExistingWalletMocks()
-        val expectedUiState = MainUiState(
+        val expectedUiState = WalletState(
             nodeId = "nodeId",
             onchainAddress = "onchainAddress",
             peers = emptyList(),

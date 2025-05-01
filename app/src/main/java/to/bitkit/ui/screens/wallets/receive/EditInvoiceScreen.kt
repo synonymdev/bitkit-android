@@ -54,12 +54,12 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
-    walletUiState: MainUiState,
+    walletUiState: WalletState,
     updateInvoice: (ULong?, String) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,

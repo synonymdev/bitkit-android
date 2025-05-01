@@ -37,11 +37,11 @@ import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletState
 
 @Composable
 fun SpendingWalletScreen(
-    uiState: MainUiState,
+    uiState: WalletState,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onTransferToSavingsClick: () -> Unit,
@@ -129,7 +129,7 @@ fun SpendingWalletScreen(
 private fun SpendingWalletScreenPreview() {
     AppThemeSurface {
         SpendingWalletScreen(
-            uiState = MainUiState(),
+            uiState = WalletState(),
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
             onTransferToSavingsClick = {},
