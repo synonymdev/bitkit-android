@@ -6,6 +6,7 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -40,6 +41,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -209,6 +211,15 @@ class MainActivity : FragmentActivity() {
                             onDismiss = { appViewModel.setShowForgotPin(false) },
                             onResetClick = { walletViewModel.wipeStorage() },
                         )
+                    }
+
+                    LaunchedEffect(appViewModel) {
+                        appViewModel.mainScreenEffect.collect {
+                            when (it) {
+                                MainScreenEffect.WipeStorage -> walletViewModel.wipeStorage()
+                                else -> Unit
+                            }
+                        }
                     }
                 }
 
