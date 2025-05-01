@@ -109,7 +109,6 @@ class WalletViewModel @Inject constructor(
             .filter { _uiState.value.nodeLifecycleState == NodeLifecycleState.Running }
             .collect {
                 runCatching { sync() }
-                Logger.verbose("App state synced with ldk-node.")
             }
     }
 

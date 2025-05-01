@@ -44,6 +44,7 @@ fun SecuritySettingsScreen(
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
+    val isPinForPaymentsEnabled by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     PinNavigationSheet(
         showSheet = showPinSheet,
@@ -55,6 +56,7 @@ fun SecuritySettingsScreen(
             isPinOnLaunchEnabled = isPinOnLaunchEnabled,
             isBiometricEnabled = isBiometricEnabled,
             isPinOnIdleEnabled = isPinOnIdleEnabled,
+            isPinForPaymentsEnabled = isPinForPaymentsEnabled,
             isBiometrySupported = rememberBiometricAuthSupported(),
             onPinClick = {
                 if (!isPinEnabled) {
@@ -76,6 +78,11 @@ fun SecuritySettingsScreen(
                     onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_IDLE,
                 )
             },
+            onPinForPaymentsClick = {
+                navController.navigateToAuthCheck(
+                    onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
+                )
+            },
             onUseBiometricsClick = {
                 navController.navigateToAuthCheck(
                     requireBiometrics = true,
@@ -94,11 +101,13 @@ private fun SecuritySettingsContent(
     isPinOnLaunchEnabled: Boolean,
     isBiometricEnabled: Boolean,
     isPinOnIdleEnabled: Boolean,
+    isPinForPaymentsEnabled: Boolean,
     isBiometrySupported: Boolean,
     onPinClick: () -> Unit = {},
     onChangePinClick: () -> Unit = {},
     onPinOnLaunchClick: () -> Unit = {},
     onPinOnIdleClick: () -> Unit = {},
+    onPinForPaymentsClick: () -> Unit = {},
     onUseBiometricsClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
@@ -136,6 +145,11 @@ private fun SecuritySettingsContent(
                     isChecked = isPinOnIdleEnabled,
                     onClick = onPinOnIdleClick,
                 )
+                SettingsSwitchRow(
+                    title = stringResource(R.string.settings__security__pin_payments),
+                    isChecked = isPinForPaymentsEnabled,
+                    onClick = onPinForPaymentsClick,
+                )
             }
             if (isPinEnabled && isBiometrySupported) {
                 SettingsSwitchRow(
@@ -170,6 +184,7 @@ fun Preview() {
             isPinOnLaunchEnabled = true,
             isBiometricEnabled = false,
             isPinOnIdleEnabled = false,
+            isPinForPaymentsEnabled = false,
             isBiometrySupported = true,
         )
     }

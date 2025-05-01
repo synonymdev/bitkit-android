@@ -137,6 +137,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.isPinForPaymentsEnabled
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setIsPinForPaymentsEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsPinForPaymentsEnabled(value)
+        }
+    }
+
     val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -820,6 +829,7 @@ class AppViewModel @Inject constructor(
         setIsPinEnabled(false)
         setIsPinOnLaunchEnabled(true)
         setIsPinOnIdleEnabled(false)
+        setIsPinForPaymentsEnabled(false)
         setIsBiometricEnabled(false)
 
         viewModelScope.launch {
