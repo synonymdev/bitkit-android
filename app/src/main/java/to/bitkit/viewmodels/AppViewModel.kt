@@ -52,7 +52,6 @@ import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
-import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
@@ -271,7 +270,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleTags(event: Event.PaymentReceived) {
         val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty()
-        attachTagsToActivity(
+        walletRepo.attachTagsToActivity(
             paymentHashOrTxId = event.paymentHash,
             type = ActivityFilter.LIGHTNING,
             txType = PaymentType.RECEIVED,
@@ -547,7 +546,7 @@ class AppViewModel @Inject constructor(
                     if (result.isSuccess) {
                         val txId = result.getOrNull()
                         val tags = _sendUiState.value.selectedTags
-                        attachTagsToActivity(
+                        walletRepo.attachTagsToActivity(
                             paymentHashOrTxId = txId,
                             type = ActivityFilter.ONCHAIN,
                             txType = PaymentType.SENT,
@@ -581,7 +580,7 @@ class AppViewModel @Inject constructor(
                         val paymentHash = result.getOrNull()
                         Logger.info("Lightning send result payment hash: $paymentHash")
                         val tags = _sendUiState.value.selectedTags
-                        attachTagsToActivity(
+                        walletRepo.attachTagsToActivity(
                             paymentHashOrTxId = paymentHash,
                             type = ActivityFilter.LIGHTNING,
                             txType = PaymentType.SENT,
@@ -616,83 +615,6 @@ class AppViewModel @Inject constructor(
             }
 
             mainScreenEffect(MainScreenEffect.NavigateActivityDetail(id))
-        }
-    }
-
-    private fun attachTagsToActivity(
-        paymentHashOrTxId: String?,
-        type: ActivityFilter,
-        txType: PaymentType,
-        tags: List<String>
-    ) {
-        Logger.debug("attachTagsToActivity $tags")
-        if (tags.isEmpty()) {
-            Logger.debug("selectedTags empty")
-            return
-        }
-
-        if (paymentHashOrTxId == null) {
-            Logger.error(msg = "null paymentHashOrTxId")
-            return
-        }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            var activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
-                    when (activityItem) {
-                        is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
-                        is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
-                    }
-                }
-
-            if (activity == null) {
-                Logger.warn("activity not found, trying again after delay")
-                delay(5.seconds)
-                activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
-                    when (activityItem) {
-                        is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
-                        is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
-                    }
-                }
-            }
-
-            if (activity == null) {
-                Logger.error(msg = "Activity not found")
-                return@launch
-            }
-
-            when (activity) {
-                is Activity.Lightning -> {
-                    if (paymentHashOrTxId == activity.v1.id) {
-                        coreService.activity.appendTags(
-                            toActivityId = activity.v1.id,
-                            tags = tags
-                        ).onFailure {
-                            Logger.error("Error attaching tags $tags")
-                        }.onSuccess {
-                            Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
-                            walletRepo.deleteInvoice(txId = paymentHashOrTxId)
-                        }
-                    } else {
-                        Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
-                    }
-                }
-
-                is Activity.Onchain -> {
-                    if (paymentHashOrTxId == activity.v1.txId) {
-                        coreService.activity.appendTags(
-                            toActivityId = activity.v1.id,
-                            tags = tags
-                        ).onFailure {
-                            Logger.error("Error attaching tags $tags")
-                        }.onSuccess {
-                            Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
-                            walletRepo.deleteInvoice(txId = paymentHashOrTxId)
-                        }
-                    } else {
-                        Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
-                    }
-                }
-            }
         }
     }
 

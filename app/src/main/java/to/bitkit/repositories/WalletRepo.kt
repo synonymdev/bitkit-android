@@ -2,10 +2,14 @@ package to.bitkit.repositories
 
 import android.content.Context
 import android.icu.util.Calendar
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Network
@@ -26,11 +30,15 @@ import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.Activity
+import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import uniffi.bitkitcore.decode
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class WalletRepo @Inject constructor(
@@ -305,6 +313,87 @@ class WalletRepo @Inject constructor(
             db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysExpiration)
         } catch (e: Throwable) {
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
+        }
+    }
+
+    suspend fun attachTagsToActivity(
+        paymentHashOrTxId: String?,
+        type: ActivityFilter,
+        txType: PaymentType,
+        tags: List<String>
+    ) : Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("attachTagsToActivity $tags")
+        if (tags.isEmpty()) {
+            Logger.debug("selectedTags empty")
+            return@withContext Result.failure(Exception("selectedTags empty"))
+        }
+
+        if (paymentHashOrTxId == null) {
+            Logger.error(msg = "null paymentHashOrTxId")
+            return@withContext Result.failure(Exception("null paymentHashOrTxId"))
+        }
+
+        var activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
+            when (activityItem) {
+                is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
+                is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
+            }
+        }
+
+        if (activity == null) {
+            Logger.warn("activity not found, trying again after delay")
+            delay(5.seconds)
+            activity = coreService.activity.get(filter = type, txType = txType, limit = 10u).firstOrNull { activityItem ->
+                when (activityItem) {
+                    is Activity.Lightning -> paymentHashOrTxId == activityItem.v1.id
+                    is Activity.Onchain -> paymentHashOrTxId == activityItem.v1.txId
+                }
+            }
+        }
+
+        if (activity == null) {
+            Logger.error(msg = "Activity not found")
+            return@withContext Result.failure(Exception("Activity not found"))
+        }
+
+        return@withContext when (activity) {
+            is Activity.Lightning -> {
+                if (paymentHashOrTxId == activity.v1.id) {
+                    coreService.activity.appendTags(
+                        toActivityId = activity.v1.id,
+                        tags = tags
+                    ).onFailure { e ->
+                        Logger.error("Error attaching tags $tags", e)
+                        return@withContext Result.failure(Exception("Error attaching tags $tags"))
+                    }.onSuccess {
+                        Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
+                        deleteInvoice(txId = paymentHashOrTxId)
+                       return@withContext Result.success(Unit)
+                    }
+                } else {
+                    Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
+                    return@withContext Result.failure(Exception("Error attaching tags $tags"))
+                }
+            }
+
+            is Activity.Onchain -> {
+                if (paymentHashOrTxId == activity.v1.txId) {
+                    coreService.activity.appendTags(
+                        toActivityId = activity.v1.id,
+                        tags = tags
+                    ).onFailure {
+                        Logger.error("Error attaching tags $tags")
+                        return@withContext Result.failure(Exception("Error attaching tags $tags"))
+                    }.onSuccess {
+                        Logger.info("Success attatching tags $tags to activity ${activity.v1.id}")
+                        deleteInvoice(txId = paymentHashOrTxId)
+                        return@onSuccess
+                    }
+                } else {
+                    Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
+                    return@withContext Result.failure(Exception("Error attaching tags $tags"))
+                }
+            }
         }
     }
 
