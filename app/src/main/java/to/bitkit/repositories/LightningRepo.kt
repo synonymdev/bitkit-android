@@ -4,7 +4,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
@@ -25,6 +27,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -36,12 +39,73 @@ class LightningRepo @Inject constructor(
     private val _nodeLifecycleState: MutableStateFlow<NodeLifecycleState> = MutableStateFlow(NodeLifecycleState.Stopped)
     val nodeLifecycleState = _nodeLifecycleState.asStateFlow()
 
+    /**
+     * Executes the provided operation only if the node is running.
+     * If the node is not running, waits for it to be running for a specified timeout.
+     *
+     * @param operationName Name of the operation for logging
+     * @param waitTimeout Duration to wait for the node to be running
+     * @param operation Lambda to execute when the node is running
+     * @return Result of the operation, or failure if node isn't running or operation fails
+     */
+    private suspend fun <T> executeWhenNodeRunning(
+        operationName: String,
+        waitTimeout: Duration = 1.minutes,
+        operation: suspend () -> Result<T>
+    ): Result<T> = withContext(bgDispatcher) {
+        // If node is already running, execute immediately
+        Logger.debug("Operation called: $operationName", context = TAG)
+
+        if (nodeLifecycleState.value.isRunning()) {
+            return@withContext executeOperation(operationName, operation)
+        }
+
+        // If node is not in a state that can become running, fail fast
+        if (!nodeLifecycleState.value.canRun()) {
+            return@withContext Result.failure(
+                Exception("Cannot execute $operationName: Node is ${nodeLifecycleState.value} and not starting")
+            )
+        }
+
+        val nodeRunning = withTimeoutOrNull(waitTimeout) {
+            if (nodeLifecycleState.value.isRunning()) {
+                return@withTimeoutOrNull true
+            }
+
+            // Otherwise, wait for it to transition to running state
+            Logger.debug("Waiting for node runs to execute $operationName", context = TAG)
+            _nodeLifecycleState.first { it.isRunning() }
+            Logger.debug("Operation executed: $operationName", context = TAG)
+            true
+        } ?: false
+
+        if (!nodeRunning) {
+            return@withContext Result.failure(
+                Exception("Timeout waiting for node to be running to execute $operationName")
+            )
+        }
+
+        return@withContext executeOperation(operationName, operation)
+    }
+
+    private suspend fun <T> executeOperation(
+        operationName: String,
+        operation: suspend () -> Result<T>
+    ): Result<T> {
+        return try {
+            operation()
+        } catch (e: Throwable) {
+            Logger.error("$operationName error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
     suspend fun setup(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         return@withContext try {
             lightningService.setup(walletIndex)
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Node setup error", e)
+            Logger.error("Node setup error", e, context = TAG)
             Result.failure(e)
         }
     }
@@ -79,7 +143,7 @@ class LightningRepo @Inject constructor(
                 _nodeLifecycleState.value = NodeLifecycleState.Running
                 Result.success(Unit)
             } catch (e: Throwable) {
-                Logger.error("Node start error", e)
+                Logger.error("Node start error", e, context = TAG)
                 _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(e)
                 Result.failure(e)
             }
@@ -96,19 +160,14 @@ class LightningRepo @Inject constructor(
             _nodeLifecycleState.value = NodeLifecycleState.Stopped
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Node stop error", e)
+            Logger.error("Node stop error", e, context = TAG)
             Result.failure(e)
         }
     }
 
-    suspend fun sync(): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            lightningService.sync()
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Sync error", e)
-            Result.failure(e)
-        }
+    suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
+        lightningService.sync()
+        Result.success(Unit)
     }
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
@@ -116,131 +175,92 @@ class LightningRepo @Inject constructor(
             lightningService.wipeStorage(walletIndex)
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Wipe storage error", e)
+            Logger.error("Wipe storage error", e, context = TAG)
             Result.failure(e)
         }
     }
 
-    suspend fun connectToTrustedPeers(): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            lightningService.connectToTrustedPeers()
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Connect to trusted peers error", e)
-            Result.failure(e)
-        }
+    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {
+        lightningService.connectToTrustedPeers()
+        Result.success(Unit)
     }
 
-    suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            lightningService.disconnectPeer(peer)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Disconnect peer error", e)
-            Result.failure(e)
-        }
+    suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
+        lightningService.disconnectPeer(peer)
+        Result.success(Unit)
     }
 
-    suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val address = lightningService.newAddress()
-            Result.success(address)
-        } catch (e: Throwable) {
-            Logger.error("New address error", e)
-            Result.failure(e)
-        }
+    suspend fun newAddress(): Result<String> = executeWhenNodeRunning("New address") {
+        val address = lightningService.newAddress()
+        Result.success(address)
     }
 
-    suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
-        try {
-            val addressInfo = addressChecker.getAddressInfo(address)
-            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
-            Result.success(hasTransactions)
-        } catch (e: Throwable) {
-            Logger.error("Check address usage error", e)
-            Result.failure(e)
-        }
+    suspend fun checkAddressUsage(address: String): Result<Boolean> = executeWhenNodeRunning("Check address usage") {
+        val addressInfo = addressChecker.getAddressInfo(address)
+        val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
+        Result.success(hasTransactions)
     }
 
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = 86_400u
-    ): Result<Bolt11Invoice> = withContext(bgDispatcher) {
-        try {
-            val invoice = lightningService.receive(amountSats, description, expirySeconds)
-            Result.success(invoice)
-        } catch (e: Throwable) {
-            Logger.error("Create invoice error", e)
-            Result.failure(e)
-        }
+    ): Result<Bolt11Invoice> = executeWhenNodeRunning("Create invoice") {
+        val invoice = lightningService.receive(amountSats, description, expirySeconds)
+        Result.success(invoice)
     }
 
-    suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> = withContext(bgDispatcher) {
-        try {
+    suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
+        executeWhenNodeRunning("Pay invoice") {
             val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
             Result.success(paymentId)
-        } catch (e: Throwable) {
-            Logger.error("Pay invoice error", e)
-            Result.failure(e)
         }
-    }
 
-    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> = withContext(bgDispatcher) {
-        try {
+    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> =
+        executeWhenNodeRunning("Send on-chain") {
             val txId = lightningService.send(address = address, sats = sats)
             Result.success(txId)
-        } catch (e: Throwable) {
-            Logger.error("sendOnChain error", e)
-            Result.failure(e)
         }
-    }
 
-    suspend fun getPayments(): Result<List<PaymentDetails>> = withContext(bgDispatcher) {
-        try {
-            val payments = lightningService.payments
-                ?: return@withContext Result.failure(Exception("It wasn't possible get the payments"))
-            Result.success(payments)
-        } catch (e: Throwable) {
-            Logger.error("getPayments error", e)
-            Result.failure(e)
-        }
+    suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("Get payments") {
+        val payments = lightningService.payments
+            ?: return@executeWhenNodeRunning Result.failure(Exception("It wasn't possible get the payments"))
+        Result.success(payments)
     }
 
     suspend fun openChannel(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null
-    ): Result<UserChannelId> = withContext(bgDispatcher) {
-        try {
-            val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
-            result
-        } catch (e: Throwable) {
-            Logger.error("Open channel error", e)
-            Result.failure(e)
-        }
+    ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
+        lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
     }
 
     suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> =
-        withContext(bgDispatcher) {
-            try {
-                lightningService.closeChannel(userChannelId, counterpartyNodeId)
-                Result.success(Unit)
-            } catch (e: Throwable) {
-                Logger.error("Close channel error", e)
-                Result.failure(e)
-            }
+        executeWhenNodeRunning("Close channel") {
+            lightningService.closeChannel(userChannelId, counterpartyNodeId)
+            Result.success(Unit)
         }
 
-    fun canSend(amountSats: ULong): Boolean = lightningService.canSend(amountSats)
+    fun canSend(amountSats: ULong): Boolean =
+        nodeLifecycleState.value.isRunning() && lightningService.canSend(amountSats)
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
-    fun getNodeId(): String? = lightningService.nodeId
-    fun getBalances(): BalanceDetails? = lightningService.balances
-    fun getStatus(): NodeStatus? = lightningService.status
-    fun getPeers(): List<LnPeer>? = lightningService.peers
-    fun getChannels(): List<ChannelDetails>? = lightningService.channels
+    fun getNodeId(): String? = if (nodeLifecycleState.value.isRunning()) lightningService.nodeId else null
 
-    fun hasChannels(): Boolean = lightningService.channels?.isNotEmpty() == true
+    fun getBalances(): BalanceDetails? = if (nodeLifecycleState.value.isRunning()) lightningService.balances else null
+
+    fun getStatus(): NodeStatus? = if (nodeLifecycleState.value.isRunning()) lightningService.status else null
+
+    fun getPeers(): List<LnPeer>? = if (nodeLifecycleState.value.isRunning()) lightningService.peers else null
+
+    fun getChannels(): List<ChannelDetails>? =
+        if (nodeLifecycleState.value.isRunning()) lightningService.channels else null
+
+    fun hasChannels(): Boolean = nodeLifecycleState.value.isRunning() && lightningService.channels?.isNotEmpty() == true
+
+    private companion object {
+        const val TAG = "LightningRepo"
+    }
 }

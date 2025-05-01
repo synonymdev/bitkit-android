@@ -12,6 +12,7 @@ sealed class NodeLifecycleState {
     fun isRunningOrStarting() = this is Running || this is Starting
     fun isStarting() = this is Starting
     fun isRunning() = this is Running
+    fun canRun() = this.isRunningOrStarting() || this is Initializing
 
     val displayState: String
         get() = when (this) {
