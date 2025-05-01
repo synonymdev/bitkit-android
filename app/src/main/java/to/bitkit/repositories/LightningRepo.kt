@@ -53,7 +53,6 @@ class LightningRepo @Inject constructor(
         waitTimeout: Duration = 1.minutes,
         operation: suspend () -> Result<T>
     ): Result<T> = withContext(bgDispatcher) {
-        // If node is already running, execute immediately
         Logger.debug("Operation called: $operationName", context = TAG)
 
         if (nodeLifecycleState.value.isRunning()) {
