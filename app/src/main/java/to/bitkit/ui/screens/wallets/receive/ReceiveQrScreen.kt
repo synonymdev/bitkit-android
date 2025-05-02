@@ -97,8 +97,8 @@ fun ReceiveQrSheet(
 
     LaunchedEffect(Unit) {
         try {
-            coroutineScope {
-                launch { wallet.refreshBip21() }
+            coroutineScope { //TODO THIS WILL TRIGGER AN ERROR TOAST IF CLOSES THE SCREEN TOO EARLY
+//                launch { wallet.refreshBip21() } TODO CHECK IF IT IS NECESSARY
                 launch { blocktank.refreshInfo() }
             }
         } catch (e: Exception) {

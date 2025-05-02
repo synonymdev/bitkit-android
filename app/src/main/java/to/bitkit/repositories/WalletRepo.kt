@@ -46,7 +46,6 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val bgScope: CoroutineScope = CoroutineScope(bgDispatcher + SupervisorJob()),
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
@@ -57,6 +56,8 @@ class WalletRepo @Inject constructor(
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo
 ) {
+
+    private val bgScope: CoroutineScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     private val _walletState = MutableStateFlow(WalletState(
         onchainAddress = appStorage.onchainAddress,
