@@ -12,6 +12,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/")
+        maven(url = "https://jitpack.io")
     }
 }
 rootProject.name = "bitkit-android"
