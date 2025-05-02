@@ -9,23 +9,19 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.NodeStatus
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
@@ -40,204 +36,79 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(MainUiState())
-    val uiState = _uiState.asStateFlow()
 
-    private val _balanceState = MutableStateFlow(walletRepo.getBalanceState())
-    val balanceState = _balanceState.asStateFlow()
+    // State from repositories
+    val lightningState = lightningRepo.lightningState
+    val walletState = walletRepo.walletState
+    val balanceState = lightningRepo.balanceState //TODO GET FROM WALLET
 
+    // Local UI state
     var walletExists by mutableStateOf(walletRepo.walletExists())
         private set
 
+    var isRestoringWallet by mutableStateOf(false)
+
     init {
         collectNodeLifecycleState()
+        collectSyncFlow()
     }
 
-    var isRestoringWallet by mutableStateOf(false)
+    private fun collectNodeLifecycleState() {
+        lightningRepo.nodeLifecycleState.launchIn(viewModelScope)
+    }
+
+    private fun collectSyncFlow() {
+        viewModelScope.launch(bgDispatcher) {
+            lightningRepo.getSyncFlow().collect {
+                lightningRepo.sync()
+                    .onFailure { error ->
+                        Logger.error("Failed to sync: ${error.message}", error)
+                    }
+            }
+        }
+    }
 
     fun setWalletExistsState() {
         walletExists = walletRepo.walletExists()
     }
 
     fun setInitNodeLifecycleState() {
-        _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
+        lightningRepo.setInitNodeLifecycleState()
     }
 
     fun start(walletIndex: Int = 0) {
         if (!walletExists) return
-        if (_uiState.value.nodeLifecycleState.isRunningOrStarting()) return
 
         viewModelScope.launch(bgDispatcher) {
-            if (_uiState.value.nodeLifecycleState != NodeLifecycleState.Initializing) {
-                // Initializing means it's a wallet restore or create so we need to show the loading view
-                _uiState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
-            }
-
-            syncState()
-
-            lightningRepo.start(walletIndex) { event ->
-                syncState()
-                refreshBip21ForEvent(event)
-            }.onFailure { error ->
-                Logger.error("Node startup error", error)
-                throw error
-            }.onSuccess {
-                syncState()
-
-                lightningRepo.connectToTrustedPeers().onFailure { e ->
-                    Logger.error("Failed to connect to trusted peers", e)
+            lightningRepo.start(walletIndex)
+                .onFailure { error ->
+                    Logger.error("Node startup error", error)
+                    ToastEventBus.send(error)
                 }
-
-                // Refresh BIP21 and sync
-                launch(bgDispatcher) { refreshBip21() }
-                launch(bgDispatcher) { sync() }
-                launch(bgDispatcher) { registerForNotificationsIfNeeded() }
-                launch(bgDispatcher) { observeDbConfig() }
-            }
-        }
-    }
-
-    private suspend fun refreshBip21ForEvent(event: Event) {
-        when (event) {
-            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
-            else -> Unit
-        }
-    }
-
-    suspend fun observeLdkWallet() {
-        lightningRepo.getSyncFlow()
-            .filter { _uiState.value.nodeLifecycleState == NodeLifecycleState.Running }
-            .collect {
-                runCatching { sync() }
-            }
-    }
-
-    private fun collectNodeLifecycleState() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.nodeLifecycleState.collect { currentState ->
-                _uiState.update { it.copy(nodeLifecycleState = currentState) }
-            }
-        }
-    }
-
-    private suspend fun observeDbConfig() {
-        walletRepo.getDbConfig().collect {
-            Logger.info("Database config sync: $it")
-        }
-    }
-
-    private var isSyncingWallet = false
-
-    private suspend fun sync() {
-        syncState()
-
-        if (isSyncingWallet) {
-            Logger.warn("Sync already in progress, waiting for existing sync.")
-            return
-        }
-
-        isSyncingWallet = true
-        syncState()
-
-        lightningRepo.sync()
-            .onSuccess {
-                isSyncingWallet = false
-                syncState()
-            }
-            .onFailure { e ->
-                isSyncingWallet = false
-                throw e
-            }
-    }
-
-    private fun syncState() {
-        _uiState.update {
-            it.copy(
-                nodeId = lightningRepo.getNodeId().orEmpty(),
-                onchainAddress = walletRepo.getOnchainAddress(),
-                bolt11 = walletRepo.getBolt11(),
-                bip21 = walletRepo.getBip21(),
-                nodeStatus = lightningRepo.getStatus(),
-                peers = lightningRepo.getPeers().orEmpty(),
-                channels = lightningRepo.getChannels().orEmpty(),
-            )
-        }
-
-        viewModelScope.launch(bgDispatcher) { syncBalances() }
-    }
-
-    private fun syncBalances() {
-        lightningRepo.getBalances()?.let { balance ->
-            _uiState.update { it.copy(balanceDetails = balance) }
-            val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
-
-            val newBalance = BalanceState(
-                totalOnchainSats = balance.totalOnchainBalanceSats,
-                totalLightningSats = balance.totalLightningBalanceSats,
-                totalSats = totalSats,
-            )
-            _balanceState.update { newBalance }
-            walletRepo.saveBalanceState(newBalance)
-
-            if (totalSats > 0u) {
-                viewModelScope.launch {
-                    walletRepo.setShowEmptyState(false)
-                }
-            }
         }
     }
 
     fun refreshState() {
         viewModelScope.launch {
-            sync()
+            lightningRepo.sync()
+                .onFailure { error ->
+                    Logger.error("Failed to sync: ${error.message}", error)
+                    ToastEventBus.send(error)
+                }
         }
     }
 
     fun onPullToRefresh() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
             try {
-                sync()
+                lightningRepo.sync()
+                    .onFailure { error ->
+                        ToastEventBus.send(error)
+                    }
             } catch (e: Throwable) {
                 ToastEventBus.send(e)
-            } finally {
-                _uiState.update { it.copy(isRefreshing = false) }
             }
         }
-    }
-
-    private suspend fun registerForNotificationsIfNeeded() {
-        walletRepo.registerForNotifications()
-            .onFailure { e ->
-                Logger.error("Failed to register device for notifications", e)
-            }
-    }
-
-    private val incomingLightningCapacitySats: ULong?
-        get() = lightningRepo.getChannels()?.sumOf { it.inboundCapacityMsat / 1000u }
-
-    suspend fun refreshBip21() {
-        Logger.debug("Refreshing bip21", context = "WalletViewModel")
-
-        // Check current address or generate new one
-        val currentAddress = walletRepo.getOnchainAddress()
-        if (currentAddress.isEmpty()) {
-            lightningRepo.newAddress()
-                .onSuccess { address -> walletRepo.setOnchainAddress(address) }
-                .onFailure { error -> Logger.error("Error generating new address", error) }
-        } else {
-            // Check if current address has been used
-            lightningRepo.checkAddressUsage(currentAddress)
-                .onSuccess { hasTransactions ->
-                    if (hasTransactions) {
-                        // Address has been used, generate a new one
-                        lightningRepo.newAddress()
-                            .onSuccess { address -> walletRepo.setOnchainAddress(address) }
-                    }
-                }
-        }
-
-        updateBip21Invoice()
     }
 
     fun disconnectPeer(peer: LnPeer) {
@@ -249,9 +120,6 @@ class WalletViewModel @Inject constructor(
                         title = "Success",
                         description = "Peer disconnected."
                     )
-                    _uiState.update {
-                        it.copy(peers = lightningRepo.getPeers().orEmpty())
-                    }
                 }
                 .onFailure { error ->
                     ToastEventBus.send(
@@ -266,7 +134,6 @@ class WalletViewModel @Inject constructor(
     fun send(bolt11: String) {
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.payInvoice(bolt11)
-                .onSuccess { syncState() }
                 .onFailure { error ->
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
@@ -283,40 +150,27 @@ class WalletViewModel @Inject constructor(
         generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch {
-            _uiState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
-
-            val hasChannels = lightningRepo.hasChannels()
-
-            if (hasChannels && generateBolt11IfAvailable) {
-                lightningRepo.createInvoice(
-                    amountSats = _uiState.value.bip21AmountSats,
-                    description = _uiState.value.bip21Description
-                ).onSuccess { bolt11 ->
-                    walletRepo.setBolt11(bolt11)
-                }
-            } else {
-                walletRepo.setBolt11("")
+            lightningRepo.updateBip21Invoice(
+                amountSats = amountSats,
+                description = description,
+                generateBolt11IfAvailable = generateBolt11IfAvailable,
+                tags = lightningState.value.selectedTags
+            ).onFailure { error ->
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = "Error updating invoice",
+                    description = error.message ?: "Unknown error"
+                )
             }
-
-            val newBip21 = walletRepo.buildBip21Url(
-                bitcoinAddress = walletRepo.getOnchainAddress(),
-                amountSats = _uiState.value.bip21AmountSats,
-                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
-                lightningInvoice = walletRepo.getBolt11()
-            )
-            walletRepo.setBip21(newBip21)
-            walletRepo.saveInvoiceWithTags(bip21Invoice = newBip21, tags = _uiState.value.selectedTags)
-            clearTagsAndBip21DescriptionState()
-            syncState()
         }
     }
 
     fun updateReceiveOnSpending() {
-        _uiState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+        lightningRepo.toggleReceiveOnSpendingBalance()
         updateBip21Invoice(
-            amountSats = _uiState.value.bip21AmountSats,
-            description = _uiState.value.bip21Description,
-            generateBolt11IfAvailable = _uiState.value.receiveOnSpendingBalance
+            amountSats = lightningState.value.bip21AmountSats,
+            description = lightningState.value.bip21Description,
+            generateBolt11IfAvailable = lightningState.value.receiveOnSpendingBalance
         )
     }
 
@@ -363,9 +217,7 @@ class WalletViewModel @Inject constructor(
             lightningRepo.closeChannel(
                 channel.userChannelId,
                 channel.counterpartyNodeId
-            ).onSuccess {
-                syncState()
-            }.onFailure {
+            ).onFailure {
                 ToastEventBus.send(it)
             }
         }
@@ -376,16 +228,21 @@ class WalletViewModel @Inject constructor(
             walletRepo.wipeWallet()
                 .onSuccess {
                     lightningRepo.wipeStorage(walletIndex = 0)
-                    setWalletExistsState()
-                }.onFailure {
-                    ToastEventBus.send(it)
+                        .onSuccess {
+                            setWalletExistsState()
+                        }
+                        .onFailure { error ->
+                            ToastEventBus.send(error)
+                        }
+                }.onFailure { error ->
+                    ToastEventBus.send(error)
                 }
         }
     }
 
     suspend fun createWallet(bip39Passphrase: String?) {
-        walletRepo.createWallet(bip39Passphrase).onFailure {
-            ToastEventBus.send(it)
+        walletRepo.createWallet(bip39Passphrase).onFailure { error ->
+            ToastEventBus.send(error)
         }
     }
 
@@ -393,12 +250,12 @@ class WalletViewModel @Inject constructor(
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase
-        ).onFailure {
-            ToastEventBus.send(it)
+        ).onFailure { error ->
+            ToastEventBus.send(error)
         }
     }
 
-    // region debug
+    // region debug methods
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
             walletRepo.registerForNotifications()
@@ -417,7 +274,6 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.newAddress().onSuccess { address ->
                 walletRepo.setOnchainAddress(address)
-                syncState()
             }.onFailure { ToastEventBus.send(it) }
         }
     }
@@ -498,36 +354,20 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    private suspend fun stopLightningNode() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.stop().onSuccess {
-                syncState()
-            }
-        }
-    }
-
     fun addTagToSelected(newTag: String) {
-        _uiState.update {
-            it.copy(
-                selectedTags = (it.selectedTags + newTag).distinct()
-            )
+        viewModelScope.launch(bgDispatcher) {
+            walletRepo.addTagToSelected(newTag)
         }
     }
 
     fun removeTag(tag: String) {
-        _uiState.update {
-            it.copy(
-                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
-            )
+        viewModelScope.launch(bgDispatcher) {
+            walletRepo.removeTag(tag)
         }
     }
 
     fun updateBip21Description(newText: String) {
-        _uiState.update { it.copy(bip21Description = newText) }
-    }
-
-    private fun clearTagsAndBip21DescriptionState() {
-        _uiState.update { it.copy(selectedTags = listOf(), bip21Description = "") }
+        walletRepo.updateBip21Description(newText)
     }
 }
 

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -12,12 +13,15 @@ import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
+import to.bitkit.models.BalanceState
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.LdkNodeEventBus
@@ -35,10 +39,16 @@ class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
-    private val addressChecker: AddressChecker
+    private val addressChecker: AddressChecker,
+    private val walletRepo: WalletRepo //TODO REVERSE DEPENDENCY
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
+
+    val nodeLifecycleState = _lightningState.asStateFlow().map { it.nodeLifecycleState }
+
+    private val _balanceState = MutableStateFlow<BalanceState?>(null)
+    val balanceState = _balanceState.asStateFlow()
 
     /**
      * Executes the provided operation only if the node is running.
@@ -192,7 +202,6 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
-
         if (_lightningState.value.isSyncingWallet) {
             Logger.warn("Sync already in progress, waiting for existing sync.")
             return@executeWhenNodeRunning Result.success(Unit)
@@ -200,6 +209,7 @@ class LightningRepo @Inject constructor(
 
         _lightningState.update { it.copy(isSyncingWallet = true) }
         lightningService.sync()
+        syncState()
         _lightningState.update { it.copy(isSyncingWallet = false) }
 
         Result.success(Unit)
@@ -226,6 +236,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
         lightningService.disconnectPeer(peer)
+        syncState()
         Result.success(Unit)
     }
 
@@ -252,12 +263,14 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
         executeWhenNodeRunning("Pay invoice") {
             val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
+            syncState()
             Result.success(paymentId)
         }
 
     suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val txId = lightningService.send(address = address, sats = sats)
+            syncState()
             Result.success(txId)
         }
 
@@ -272,32 +285,181 @@ class LightningRepo @Inject constructor(
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null
     ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
-        lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        syncState()
+        result
     }
 
     suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> =
         executeWhenNodeRunning("Close channel") {
             lightningService.closeChannel(userChannelId, counterpartyNodeId)
+            syncState()
             Result.success(Unit)
         }
 
+    suspend fun registerForNotificationsIfNeeded(): Result<Unit> = withContext(bgDispatcher) {
+        walletRepo.registerForNotifications()
+            .onFailure { e ->
+                Logger.error("Failed to register device for notifications", e)
+            }
+    }
+
+    suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Refreshing bip21", context = "LightningRepo")
+
+        // Check current address or generate new one
+        val currentAddress = walletRepo.getOnchainAddress()
+        if (currentAddress.isEmpty()) {
+            newAddress()
+                .onSuccess { address -> walletRepo.setOnchainAddress(address) }
+                .onFailure { error -> Logger.error("Error generating new address", error) }
+        } else {
+            // Check if current address has been used
+            checkAddressUsage(currentAddress)
+                .onSuccess { hasTransactions ->
+                    if (hasTransactions) {
+                        // Address has been used, generate a new one
+                        newAddress()
+                            .onSuccess { address -> walletRepo.setOnchainAddress(address) }
+                    }
+                }
+        }
+
+        updateBip21Invoice()
+
+        return@withContext Result.success(Unit)
+    }
+
+    private suspend fun refreshBip21ForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
+        }
+    }
+
+    suspend fun updateBip21Invoice(
+        amountSats: ULong? = null,
+        description: String = "",
+        generateBolt11IfAvailable: Boolean = true,
+        tags: List<String> = emptyList()
+    ): Result<Unit> = withContext(bgDispatcher) {
+        try {
+            // Update state
+            _lightningState.update {
+                it.copy(
+                    bip21AmountSats = amountSats,
+                    bip21Description = description
+                )
+            }
+
+            val hasChannels = hasChannels()
+
+            if (hasChannels && generateBolt11IfAvailable) {
+                createInvoice(
+                    amountSats = _lightningState.value.bip21AmountSats,
+                    description = _lightningState.value.bip21Description
+                ).onSuccess { bolt11 ->
+                    walletRepo.setBolt11(bolt11)
+                }
+            } else {
+                walletRepo.setBolt11("")
+            }
+
+            val newBip21 = walletRepo.buildBip21Url(
+                bitcoinAddress = walletRepo.getOnchainAddress(),
+                amountSats = _lightningState.value.bip21AmountSats,
+                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+                lightningInvoice = walletRepo.getBolt11()
+            )
+            walletRepo.setBip21(newBip21)
+            walletRepo.saveInvoiceWithTags(bip21Invoice = newBip21, tags = tags)
+
+            _lightningState.update { it.copy(selectedTags = emptyList(), bip21Description = "") }
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Update BIP21 invoice error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun syncState() {
+        _lightningState.update {
+            it.copy(
+                nodeId = getNodeId().orEmpty(),
+                balanceDetails = getBalances(),
+                nodeStatus = getStatus(),
+                peers = getPeers().orEmpty(),
+                channels = getChannels().orEmpty(),
+            )
+        }
+
+        syncBalances()
+    }
+
+    private suspend fun syncBalances() {
+        getBalances()?.let { balance ->
+            val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
+
+            val newBalance = BalanceState(
+                totalOnchainSats = balance.totalOnchainBalanceSats,
+                totalLightningSats = balance.totalLightningBalanceSats,
+                totalSats = totalSats,
+            )
+            _balanceState.update { newBalance }
+            walletRepo.saveBalanceState(newBalance)
+
+            if (totalSats > 0u) {
+                walletRepo.setShowEmptyState(false)
+            }
+        }
+    }
+
     fun canSend(amountSats: ULong): Boolean =
-        nodeLifecycleState.value.isRunning() && lightningService.canSend(amountSats)
+        _lightningState.value.nodeLifecycleState.isRunning() && lightningService.canSend(amountSats)
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
-    fun getNodeId(): String? = if (nodeLifecycleState.value.isRunning()) lightningService.nodeId else null
+    fun getNodeId(): String? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
 
-    fun getBalances(): BalanceDetails? = if (nodeLifecycleState.value.isRunning()) lightningService.balances else null
+    fun getBalances(): BalanceDetails? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
 
-    fun getStatus(): NodeStatus? = if (nodeLifecycleState.value.isRunning()) lightningService.status else null
+    fun getStatus(): NodeStatus? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.status else null
 
-    fun getPeers(): List<LnPeer>? = if (nodeLifecycleState.value.isRunning()) lightningService.peers else null
+    fun getPeers(): List<LnPeer>? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.peers else null
 
     fun getChannels(): List<ChannelDetails>? =
-        if (nodeLifecycleState.value.isRunning()) lightningService.channels else null
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
-    fun hasChannels(): Boolean = nodeLifecycleState.value.isRunning() && lightningService.channels?.isNotEmpty() == true
+    fun hasChannels(): Boolean = _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
+
+    fun addTagToSelected(newTag: String) {
+        _lightningState.update {
+            it.copy(
+                selectedTags = (it.selectedTags + newTag).distinct()
+            )
+        }
+    }
+
+    fun removeTag(tag: String) {
+        _lightningState.update {
+            it.copy(
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+            )
+        }
+    }
+
+    fun updateBip21Description(newText: String) {
+        _lightningState.update { it.copy(bip21Description = newText) }
+    }
+
+    fun updateBip21AmountSats(amount: ULong?) {
+        _lightningState.update { it.copy(bip21AmountSats = amount) }
+    }
+
+    fun toggleReceiveOnSpendingBalance() {
+        _lightningState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+    }
 
     private companion object {
         const val TAG = "LightningRepo"
@@ -312,5 +474,9 @@ data class LightningState(
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
     val isRefreshing: Boolean = false,
-    val isSyncingWallet: Boolean = false
+    val isSyncingWallet: Boolean = false,
+    val receiveOnSpendingBalance: Boolean = true,
+    val bip21AmountSats: ULong? = null,
+    val bip21Description: String = "",
+    val selectedTags: List<String> = listOf()
 )
