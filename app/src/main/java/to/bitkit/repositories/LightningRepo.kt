@@ -154,10 +154,12 @@ class LightningRepo @Inject constructor(
         }
 
         try {
-            _nodeLifecycleState.value = NodeLifecycleState.Stopping
-            lightningService.stop()
-            _nodeLifecycleState.value = NodeLifecycleState.Stopped
-            Result.success(Unit)
+            executeWhenNodeRunning("stop") {
+                _nodeLifecycleState.value = NodeLifecycleState.Stopping
+                lightningService.stop()
+                _nodeLifecycleState.value = NodeLifecycleState.Stopped
+                Result.success(Unit)
+            }
         } catch (e: Throwable) {
             Logger.error("Node stop error", e, context = TAG)
             Result.failure(e)
@@ -169,7 +171,7 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
-    suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) { //TODO HANDLE (err: 'Node is still running')
         try {
             lightningService.wipeStorage(walletIndex)
             Result.success(Unit)
