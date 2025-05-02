@@ -38,6 +38,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
@@ -62,6 +63,7 @@ class AppViewModel @Inject constructor(
     private val keychain: Keychain,
     private val scannerService: ScannerService,
     private val lightningService: LightningRepo,
+    private val walletRepo: WalletRepo,
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
@@ -220,6 +222,7 @@ class AppViewModel @Inject constructor(
                 try {
                     when (event) {
                         is Event.PaymentReceived -> {
+                            handleTags(event)
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -278,6 +281,16 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun handleTags(event: Event.PaymentReceived) {
+        val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty()
+        walletRepo.attachTagsToActivity(
+            paymentHashOrTxId = event.paymentHash,
+            type = ActivityFilter.LIGHTNING,
+            txType = PaymentType.RECEIVED,
+            tags = tags
+        )
     }
 
     private fun checkGeoStatus() {
@@ -547,7 +560,13 @@ class AppViewModel @Inject constructor(
                     val result = sendOnchain(validatedAddress.address, amount)
                     if (result.isSuccess) {
                         val txId = result.getOrNull()
-                        attachTagsToActivity(paymentHashOrTxId = txId, type = ActivityFilter.ONCHAIN)
+                        val tags = _sendUiState.value.selectedTags
+                        walletRepo.attachTagsToActivity(
+                            paymentHashOrTxId = txId,
+                            type = ActivityFilter.ONCHAIN,
+                            txType = PaymentType.SENT,
+                            tags = tags
+                        )
                         Logger.info("Onchain send result txid: $txId")
                         setSendEffect(
                             SendEffect.PaymentSuccess(
@@ -575,7 +594,13 @@ class AppViewModel @Inject constructor(
                     if (result.isSuccess) {
                         val paymentHash = result.getOrNull()
                         Logger.info("Lightning send result payment hash: $paymentHash")
-                        attachTagsToActivity(paymentHashOrTxId = paymentHash, type = ActivityFilter.LIGHTNING)
+                        val tags = _sendUiState.value.selectedTags
+                        walletRepo.attachTagsToActivity(
+                            paymentHashOrTxId = paymentHash,
+                            type = ActivityFilter.LIGHTNING,
+                            txType = PaymentType.SENT,
+                            tags = tags
+                        )
                         setSendEffect(SendEffect.PaymentSuccess())
                         resetSendState()
                     } else {
@@ -608,55 +633,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun attachTagsToActivity(paymentHashOrTxId: String?, type: ActivityFilter) {
-        val tags = _sendUiState.value.selectedTags
-        Logger.debug("attachTagsToActivity $tags")
-        if (tags.isEmpty()) {
-            Logger.debug("selectedTags empty")
-            return
-        }
-
-        if (paymentHashOrTxId == null) {
-            Logger.error(msg = "null paymentHashOrTxId")
-            return
-        }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val activity = coreService.activity.get(filter = type, txType = PaymentType.SENT, limit = 1u).firstOrNull()
-
-            if (activity == null) {
-                Logger.error(msg = "Activity not found")
-                return@launch
-            }
-
-            when (activity) {
-                is Activity.Lightning -> {
-                    if (paymentHashOrTxId == activity.v1.id) {
-                        coreService.activity.appendTags(
-                            toActivityId = activity.v1.id,
-                            tags = tags
-                        ).onFailure {
-                            Logger.error("Error attaching tags $tags")
-                        }
-                    } else {
-                        Logger.error("Different activity id. Expected: $paymentHashOrTxId found: ${activity.v1.id}")
-                    }
-                }
-
-                is Activity.Onchain -> {
-                    if (paymentHashOrTxId == activity.v1.txId) {
-                        coreService.activity.appendTags(
-                            toActivityId = activity.v1.id,
-                            tags = tags
-                        )
-                    } else {
-                        Logger.error("Different txId. Expected: $paymentHashOrTxId found: ${activity.v1.txId}")
-                    }
-                }
-            }
-        }
-    }
-
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
         return lightningService.sendOnChain(address = address, amount).onFailure {
             toast(
@@ -672,7 +648,7 @@ class AppViewModel @Inject constructor(
         amount: ULong? = null,
     ): Result<PaymentId> {
         return try {
-            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull()
+            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() //TODO HANDLE FAILURE IN OTHER PR
 
             // Wait until matching payment event is received
             val result = ldkNodeEventBus.events.watchUntil { event ->

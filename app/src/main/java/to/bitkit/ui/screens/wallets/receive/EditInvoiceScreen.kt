@@ -8,6 +8,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -35,10 +39,12 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -48,16 +54,20 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.MainUiState
 
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
+    walletUiState: MainUiState,
     updateInvoice: (ULong?, String) -> Unit,
+    onClickAddTag: () -> Unit,
+    onClickTag: (String) -> Unit,
+    onDescriptionUpdate: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
-    var noteText by remember { mutableStateOf("") }
     var satsString by remember { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
 
@@ -72,19 +82,23 @@ fun EditInvoiceScreen(
 
     EditInvoiceContent(
         input = input,
-        noteText = noteText,
+        noteText = walletUiState.bip21Description,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
+        tags = walletUiState.selectedTags,
         onBack = onBack,
-        onTextChanged = { newNote -> noteText = newNote },
+        onTextChanged = onDescriptionUpdate,
         keyboardVisible = keyboardVisible,
         onClickBalance = { keyboardVisible = true },
         onInputChanged = { newText -> input = newText },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), noteText) }
+        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), walletUiState.bip21Description) },
+        onClickAddTag = onClickAddTag,
+        onClickTag = onClickTag
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditInvoiceContent(
     input: String,
@@ -92,11 +106,14 @@ fun EditInvoiceContent(
     keyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
+    tags: List<String>,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
     onContinueGeneral: () -> Unit,
+    onClickAddTag: () -> Unit,
     onTextChanged: (String) -> Unit,
+    onClickTag: (String) -> Unit,
     onInputChanged: (String) -> Unit,
 ) {
     Column(
@@ -214,6 +231,38 @@ fun EditInvoiceContent(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        tags.map { tagText ->
+                            TagButton(
+                                text = tagText,
+                                isSelected = false,
+                                displayIconClose = true,
+                                onClick = { onClickTag(tagText) },
+                            )
+                        }
+                    }
+                    PrimaryButton(
+                        text = stringResource(R.string.wallet__tags_add),
+                        size = ButtonSize.Small,
+                        onClick = { onClickAddTag() },
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_tag),
+                                contentDescription = null,
+                                tint = Colors.Brand
+                            )
+                        },
+                        fullWidth = false
+                    )
+
                     Spacer(modifier = Modifier.weight(1f))
 
                     PrimaryButton(
@@ -244,7 +293,10 @@ private fun Preview() {
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
-            onContinueKeyboard = {}
+            onContinueKeyboard = {},
+            tags = listOf(),
+            onClickAddTag = {},
+            onClickTag = {}
         )
     }
 }
@@ -264,7 +316,10 @@ private fun Preview2() {
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
-            onContinueKeyboard = {}
+            onContinueKeyboard = {},
+            tags = listOf("Team", "Dinner", "Home", "Work"),
+            onClickAddTag = {},
+            onClickTag = {}
         )
     }
 }
@@ -284,7 +339,10 @@ private fun Preview3() {
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
-            onContinueKeyboard = {}
+            onContinueKeyboard = {},
+            tags = listOf("Team", "Dinner"),
+            onClickAddTag = {},
+            onClickTag = {}
         )
     }
 }

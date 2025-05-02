@@ -1,38 +1,53 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import android.icu.util.Calendar
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.ConfigEntity
+import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.Toast
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.Activity
+import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.PaymentType
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @ApplicationContext  private val appContext: Context,
+    @ApplicationContext private val appContext: Context,
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
@@ -80,6 +95,7 @@ class WalletRepo @Inject constructor(
             appStorage.clear()
             settingsStore.wipe()
             coreService.activity.removeAll()
+            deleteAllInvoices()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Wipe wallet error", e)
@@ -166,7 +182,8 @@ class WalletRepo @Inject constructor(
 
     suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
         try {
-            val info = coreService.blocktank.info(refresh = true) ?: return@withContext Result.failure(Exception("Couldn't get info"))
+            val info = coreService.blocktank.info(refresh = true)
+                ?: return@withContext Result.failure(Exception("Couldn't get info"))
             Result.success(info)
         } catch (e: Throwable) {
             Logger.error("Blocktank info error", e)
@@ -238,7 +255,167 @@ class WalletRepo @Inject constructor(
         return db.configDao().getAll()
     }
 
+    suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
+        if (tags.isEmpty()) return@withContext
+
+        try {
+            deleteExpiredInvoices()
+            val decoded = decode(bip21Invoice)
+            val paymentHashOrAddress = when (decoded) {
+                is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
+                is Scanner.OnChain -> decoded.extractLightningHashOrAddress()
+                else -> null
+            }
+
+            paymentHashOrAddress?.let {
+                db.invoiceTagDao().saveInvoice(
+                    invoiceTag = InvoiceTagEntity(
+                        paymentHash = paymentHashOrAddress,
+                        tags = tags,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        } catch (e: Throwable) {
+            Logger.error("saveInvoice error", e, context = TAG)
+        }
+    }
+
+    suspend fun searchInvoice(txId: Txid): Result<InvoiceTagEntity> = withContext(bgDispatcher) {
+        return@withContext try {
+            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(
+                Exception("Invoice not found")
+            )
+            Result.success(invoiceTag)
+        } catch (e: Throwable) {
+            Logger.error("searchInvoice error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteInvoice(txId: Txid) = withContext(bgDispatcher) {
+        try {
+            db.invoiceTagDao().deleteInvoiceByPaymentHash(paymentHash = txId)
+        } catch (e: Throwable) {
+            Logger.error("deleteInvoice error", e, context = TAG)
+        }
+    }
+
+    suspend fun deleteAllInvoices() = withContext(bgDispatcher) {
+        try {
+            db.invoiceTagDao().deleteAllInvoices()
+        } catch (e: Throwable) {
+            Logger.error("deleteAllInvoices error", e, context = TAG)
+        }
+    }
+
+    suspend fun deleteExpiredInvoices() = withContext(bgDispatcher) {
+        try {
+            val twoDaysAgoMillis = Clock.System.now().minus(2.days).toEpochMilliseconds()
+            db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysAgoMillis)
+        } catch (e: Throwable) {
+            Logger.error("deleteExpiredInvoices error", e, context = TAG)
+        }
+    }
+
+    suspend fun attachTagsToActivity(
+        paymentHashOrTxId: String?,
+        type: ActivityFilter,
+        txType: PaymentType,
+        tags: List<String>
+    ): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("attachTagsToActivity $tags", context = TAG)
+
+        when {
+            tags.isEmpty() -> {
+                Logger.debug("selectedTags empty", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("selectedTags empty"))
+            }
+
+            paymentHashOrTxId == null -> {
+                Logger.error(msg = "null paymentHashOrTxId", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("null paymentHashOrTxId"))
+            }
+        }
+
+        val activity = findActivityWithRetry(
+            paymentHashOrTxId = paymentHashOrTxId,
+            type = type,
+            txType = txType
+        ) ?: return@withContext Result.failure(IllegalStateException("Activity not found"))
+
+        if (!activity.matchesId(paymentHashOrTxId)) {
+            Logger.error(
+                "ID mismatch. Expected: $paymentHashOrTxId found: ${activity.idValue}",
+                context = TAG
+            )
+            return@withContext Result.failure(IllegalStateException("Activity ID mismatch"))
+        }
+
+        coreService.activity.appendTags(
+            toActivityId = activity.idValue,
+            tags = tags
+        ).fold(
+            onFailure = { error ->
+                Logger.error("Error attaching tags $tags", error, context = TAG)
+                Result.failure(Exception("Error attaching tags $tags", error))
+            },
+            onSuccess = {
+                Logger.info("Success attaching tags $tags to activity ${activity.idValue}", context = TAG)
+                deleteInvoice(txId = paymentHashOrTxId)
+                Result.success(Unit)
+            }
+        )
+    }
+
+    private suspend fun findActivityWithRetry(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType
+    ): Activity? {
+
+        suspend fun findActivity(): Activity? = coreService.activity.get(
+            filter = type,
+            txType = txType,
+            limit = 10u
+        ).firstOrNull { it.matchesId(paymentHashOrTxId) }
+
+        var activity = findActivity()
+        if (activity == null) {
+            Logger.warn("activity not found, trying again after delay", context = TAG)
+            delay(5.seconds)
+            activity = findActivity()
+        }
+        return activity
+    }
+
+    private fun Activity.matchesId(paymentHashOrTxId: String): Boolean = when (this) {
+        is Activity.Lightning -> paymentHashOrTxId == v1.id
+        is Activity.Onchain -> paymentHashOrTxId == v1.txId
+    }
+
+    private val Activity.idValue: String
+        get() = when (this) {
+            is Activity.Lightning -> v1.id
+            is Activity.Onchain -> v1.txId
+        }
+
+    private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
+        val address = this.invoice.address
+        val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
+        val decoded = decode(lightningInvoice)
+
+        return when (decoded) {
+            is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
+            else -> address
+        }
+    }
+
     private fun generateEntropyMnemonic(): String {
         return org.lightningdevkit.ldknode.generateEntropyMnemonic()
+    }
+
+    private companion object {
+        const val TAG = "WalletRepo"
     }
 }

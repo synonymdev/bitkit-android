@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -36,6 +39,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -55,6 +59,7 @@ import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.PagerWithIndicator
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
@@ -72,6 +77,7 @@ private object ReceiveRoutes {
     const val CONFIRM = "confirm"
     const val LIQUIDITY = "liquidity"
     const val EDIT_INVOICE = "edit_invoice"
+    const val ADD_TAG = "add_tag"
 }
 
 @Composable
@@ -162,13 +168,36 @@ fun ReceiveQrSheet(
                 }
             }
             composable(ReceiveRoutes.EDIT_INVOICE) {
+                val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
                 EditInvoiceScreen(
+                    walletUiState = walletUiState,
                     onBack = { navController.popBackStack() },
                     updateInvoice = { sats, description ->
                         wallet.updateBip21Invoice(amountSats = sats, description = description)
                         navController.popBackStack()
+                    },
+                    onClickAddTag = {
+                        navController.navigate(ReceiveRoutes.ADD_TAG)
+                    },
+                    onClickTag = { tagToRemove ->
+                        wallet.removeTag(tagToRemove)
+                    },
+                    onDescriptionUpdate = { newText ->
+                        wallet.updateBip21Description(newText = newText)
                     }
                 )
+            }
+            composable(ReceiveRoutes.ADD_TAG) {
+                AddTagScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                    onTagSelected = { tag ->
+                        wallet.addTagToSelected(tag)
+                        navController.popBackStack()
+                    }
+                )
+
             }
         }
     }
@@ -183,6 +212,27 @@ private fun ReceiveQrScreen(
     onClickEditInvoice: () -> Unit,
     onClickReceiveOnSpending: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val window = remember(context) { (context as Activity).window }
+
+    // Keep screen on and set brightness to max while this composable is active
+    DisposableEffect(Unit) {
+        val originalBrightness = window.attributes.screenBrightness
+        val originalFlags = window.attributes.flags
+
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+            flags = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        }
+
+        onDispose {
+            window.attributes = window.attributes.apply {
+                screenBrightness = originalBrightness
+                flags = originalFlags
+            }
+        }
+    }
+
     val qrLogoImageRes by remember(walletState, cjitInvoice.value) {
         val resId = when {
             cjitInvoice.value?.isNotEmpty() == true -> R.drawable.ic_ln_circle
@@ -241,7 +291,7 @@ private fun ReceiveQrScreen(
             }
             AnimatedVisibility(walletState.nodeLifecycleState.isRunning() && walletState.channels.isNotEmpty()) {
                 Column {
-                    AnimatedVisibility (!walletState.receiveOnSpendingBalance) {
+                    AnimatedVisibility(!walletState.receiveOnSpendingBalance) {
                         Headline(
                             text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
                         )
@@ -282,7 +332,7 @@ private fun ReceiveLightningFunds(
     onCjitToggle: (Boolean) -> Unit,
 ) {
     Column {
-        AnimatedVisibility (!cjitActive.value && cjitInvoice.value == null) {
+        AnimatedVisibility(!cjitActive.value && cjitInvoice.value == null) {
             Headline(
                 text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)
             )
