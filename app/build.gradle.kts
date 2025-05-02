@@ -151,7 +151,9 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
-    implementation(libs.ldk.node.android)
+    implementation(libs.ldk.node.android) {
+        exclude(group = "net.java.dev.jna", module = "jna") // TODO: remove when using official ldk-node-android release
+    }
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

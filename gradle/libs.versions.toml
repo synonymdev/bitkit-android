@@ -24,7 +24,6 @@ kotlin = "2.1.10"
 kotlinxDatetime = "0.6.2"
 ksp = "2.1.10-1.0.31"
 ktor = "3.1.1"
-ldkNode = "0.4.2"
 lifecycle = "2.8.7"
 material = "1.12.0"
 mockitoKotlin = "5.4.0"
@@ -80,7 +79,8 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-ldk-node-android = { module = "org.lightningdevkit:ldk-node-android", version.ref = "ldkNode" }
+#ldk-node-android = { module = "org.lightningdevkit:ldk-node-android", version = "0.5.0" } # TODO use official release when available
+ldk-node-android = { module = "com.github.ovitrif:ldk-node", version = "v0.5.0-fork" } # TODO remove when replacing with above
 lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }

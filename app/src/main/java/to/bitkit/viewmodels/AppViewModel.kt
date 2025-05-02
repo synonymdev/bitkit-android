@@ -275,6 +275,7 @@ class AppViewModel @Inject constructor(
 
                         is Event.PaymentClaimable -> Unit
                         is Event.PaymentFailed -> Unit
+                        is Event.PaymentForwarded -> Unit
                     }
                 } catch (e: Exception) {
                     Logger.error("LDK event handler error", e)

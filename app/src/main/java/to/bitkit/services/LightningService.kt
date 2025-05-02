@@ -11,14 +11,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
+import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.LogLevel
+import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
@@ -68,9 +70,7 @@ class LightningService @Inject constructor(
             .fromConfig(
                 defaultConfig().apply {
                     storageDirPath = dirPath
-                    logDirPath = dirPath
                     network = Env.network
-                    logLevel = LogLevel.TRACE
 
                     trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
                     anchorChannelsConfig = AnchorChannelsConfig(
@@ -79,12 +79,15 @@ class LightningService @Inject constructor(
                     )
                 })
             .apply {
+                setFilesystemLogger(Env.ldkLogFilePath(walletIndex), Env.ldkLogLevel)
                 setChainSourceEsplora(
                     serverUrl = Env.esploraServerUrl,
                     config = EsploraSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                        BackgroundSyncConfig(
+                            onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                            lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                            feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                        ),
                     ),
                 )
                 if (Env.ldkRgsServerUrl != null) {
@@ -266,7 +269,7 @@ class LightningService @Inject constructor(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
-    ) : Result<UserChannelId> {
+    ): Result<UserChannelId> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
@@ -311,10 +314,23 @@ class LightningService @Inject constructor(
         return ServiceQueue.LDK.background {
             if (sat != null) {
                 Logger.debug("Creating bolt11 for $sat sats")
-                node.bolt11Payment().receive(sat.millis, description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }, expirySecs)
+                node.bolt11Payment()
+                    .receive(
+                        amountMsat = sat.millis,
+                        description = Bolt11InvoiceDescription.Direct(
+                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
+                        ),
+                        expirySecs = expirySecs,
+                    )
             } else {
                 Logger.debug("Creating bolt11 for variable amount")
-                node.bolt11Payment().receiveVariableAmount(description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }, expirySecs)
+                node.bolt11Payment()
+                    .receiveVariableAmount(
+                        description = Bolt11InvoiceDescription.Direct(
+                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
+                        ),
+                        expirySecs = expirySecs,
+                    )
             }
         }
     }
@@ -338,13 +354,18 @@ class LightningService @Inject constructor(
         return true
     }
 
-    suspend fun send(address: Address, sats: ULong): Txid {
+    //TODO: get feeRate from real source
+    suspend fun send(address: Address, sats: ULong, satKwu: ULong = 250uL * 5uL): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.info("Sending $sats sats to $address")
 
         return ServiceQueue.LDK.background {
-            node.onchainPayment().sendToAddress(address, sats)
+            node.onchainPayment().sendToAddress(
+                address = address,
+                amountSats = sats,
+                feeRate = FeeRate.fromSatPerKwu(satKwu)
+            )
         }
     }
 
@@ -373,8 +394,12 @@ class LightningService @Inject constructor(
             }
             val event = node.nextEventAsync()
 
-            Logger.debug("LDK eventHandled: $event")
-            node.eventHandled()
+            try {
+                node.eventHandled()
+                Logger.debug("LDK eventHandled: $event")
+            } catch (e: NodeException) {
+                Logger.error("LDK eventHandled error", LdkError(e))
+            }
 
             logEvent(event)
             onEvent?.invoke(event)
@@ -410,6 +435,8 @@ class LightningService @Inject constructor(
                 val claimableAmountMsat = event.claimableAmountMsat
                 Logger.info("🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat")
             }
+
+            is Event.PaymentForwarded -> Unit
 
             is Event.ChannelPending -> {
                 val channelId = event.channelId

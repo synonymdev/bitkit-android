@@ -65,6 +65,9 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is BuildException.KvStoreSetupFailed -> "KV store setup failed."
                 is BuildException.WalletSetupFailed -> "Wallet setup failed."
                 is BuildException.LoggerSetupFailed -> "Logger setup failed."
+                is BuildException.InvalidAnnouncementAddresses -> "Invalid announcement addresses"
+                is BuildException.InvalidNodeAlias -> "Invalid node alias"
+                is BuildException.NetworkMismatch -> "Network mismatch"
                 else -> exception.message
             }?.let { "LDK Build error: $it" }
         }
@@ -120,6 +123,9 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.InvalidUri -> "Invalid URI."
                 is NodeException.InvalidQuantity -> "Invalid quantity."
                 is NodeException.InvalidNodeAlias -> "Invalid node alias."
+                is NodeException.InvalidCustomTlvs -> "Invalid custom TLVs"
+                is NodeException.InvalidDateTime -> "Invalid date time"
+                is NodeException.InvalidFeeRate -> "Invalid fee rate"
                 else -> exception.message
             }?.let { "LDK Node error: $it" }
         }
