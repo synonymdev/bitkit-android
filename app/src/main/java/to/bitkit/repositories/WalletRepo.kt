@@ -2,14 +2,19 @@ package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
@@ -24,6 +29,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
@@ -40,6 +46,7 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val bgScope: CoroutineScope = CoroutineScope(bgDispatcher + SupervisorJob()),
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
@@ -47,6 +54,8 @@ class WalletRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val settingsStore: SettingsStore,
+    private val addressChecker: AddressChecker,
+    private val lightningRepo: LightningRepo
 ) {
 
     private val _walletState = MutableStateFlow(WalletState(
@@ -66,6 +75,122 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(walletExists = walletExists()) }
     }
 
+    init {
+        bgScope.launch {
+            lightningRepo.getSyncFlow().collect {
+                lightningRepo.sync().onSuccess {
+                    syncBalances()
+                }
+            }
+        }
+    }
+
+    suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
+        return@withContext try {
+            val addressInfo = addressChecker.getAddressInfo(address)
+            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
+            Result.success(hasTransactions)
+        } catch (e: Exception) {
+            Logger.error("checkAddressUsage error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Refreshing bip21", context = "LightningRepo")
+
+        // Check current address or generate new one
+        val currentAddress = getOnchainAddress()
+        if (currentAddress.isEmpty()) {
+            lightningRepo.newAddress()
+                .onSuccess { address -> setOnchainAddress(address) }
+                .onFailure { error -> Logger.error("Error generating new address", error) }
+        } else {
+            // Check if current address has been used
+            checkAddressUsage(currentAddress)
+                .onSuccess { hasTransactions ->
+                    if (hasTransactions) {
+                        // Address has been used, generate a new one
+                        lightningRepo.newAddress().onSuccess { address -> setOnchainAddress(address) }
+                    }
+                }
+        }
+
+        updateBip21Invoice()
+
+        return@withContext Result.success(Unit)
+    }
+
+    private suspend fun syncBalances() {
+        lightningRepo.getBalances()?.let { balance ->
+            val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
+
+            val newBalance = BalanceState(
+                totalOnchainSats = balance.totalOnchainBalanceSats,
+                totalLightningSats = balance.totalLightningBalanceSats,
+                totalSats = totalSats,
+            )
+            _balanceState.update { newBalance }
+            _walletState.update { it.copy(balanceDetails = lightningRepo.getBalances()) }
+            saveBalanceState(newBalance)
+
+            setShowEmptyState(totalSats <= 0u)
+        }
+    }
+
+    suspend fun updateBip21Invoice(
+        amountSats: ULong? = null,
+        description: String = "",
+        generateBolt11IfAvailable: Boolean = true,
+        tags: List<String> = emptyList()
+    ): Result<Unit> = withContext(bgDispatcher) {
+        try {
+            // Update state
+            _walletState.update {
+                it.copy(
+                    bip21AmountSats = amountSats,
+                    bip21Description = description
+                )
+            }
+
+            val hasChannels = lightningRepo.hasChannels()
+
+            if (hasChannels && generateBolt11IfAvailable) {
+                lightningRepo.createInvoice(
+                    amountSats = _walletState.value.bip21AmountSats,
+                    description = _walletState.value.bip21Description
+                ).onSuccess { bolt11 ->
+                    setBolt11(bolt11)
+                }
+            } else {
+                setBolt11("")
+            }
+
+            val newBip21 = buildBip21Url(
+                bitcoinAddress = getOnchainAddress(),
+                amountSats = _walletState.value.bip21AmountSats,
+                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+                lightningInvoice = getBolt11()
+            )
+            setBip21(newBip21)
+            saveInvoiceWithTags(bip21Invoice = newBip21, tags = tags)
+
+            _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "") }
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Update BIP21 invoice error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun refreshBip21ForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
+        }
+    }
+
     fun setRestoringWalletState(isRestoring: Boolean) {
         _walletState.update { it.copy(isRestoringWallet = isRestoring) }
     }
@@ -80,7 +205,7 @@ class WalletRepo @Inject constructor(
             setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Create wallet error", e)
+            Logger.error("Create wallet error", e, context = TAG)
             Result.failure(e)
         }
     }
@@ -212,7 +337,6 @@ class WalletRepo @Inject constructor(
         amountSats: ULong? = null,
         description: String = "",
         generateBolt11IfAvailable: Boolean = true,
-        lightningRepo: LightningRepo //TODO MAYBE INJECT IN THE CLASS
     ) = withContext(bgDispatcher) {
         updateBip21AmountSats(amountSats)
         updateBip21Description(description)
@@ -500,5 +624,6 @@ data class WalletState(
     val receiveOnSpendingBalance: Boolean = true,
     val showEmptyState: Boolean = true,
     val walletExists: Boolean = false,
-    val isRestoringWallet: Boolean = false
+    val isRestoringWallet: Boolean = false,
+    val balanceDetails: BalanceDetails? = null, //TODO KEEP ONLY BalanceState IF POSSIBLE
 )
