@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
@@ -36,8 +37,8 @@ class LightningRepo @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val addressChecker: AddressChecker
 ) {
-    private val _nodeLifecycleState: MutableStateFlow<NodeLifecycleState> = MutableStateFlow(NodeLifecycleState.Stopped)
-    val nodeLifecycleState = _nodeLifecycleState.asStateFlow()
+    private val _lightningState = MutableStateFlow(LightningState())
+    val lightningState = _lightningState.asStateFlow()
 
     /**
      * Executes the provided operation only if the node is running.
@@ -55,25 +56,25 @@ class LightningRepo @Inject constructor(
     ): Result<T> = withContext(bgDispatcher) {
         Logger.debug("Operation called: $operationName", context = TAG)
 
-        if (nodeLifecycleState.value.isRunning()) {
+        if (_lightningState.value.nodeLifecycleState.isRunning()) {
             return@withContext executeOperation(operationName, operation)
         }
 
         // If node is not in a state that can become running, fail fast
-        if (!nodeLifecycleState.value.canRun()) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                Exception("Cannot execute $operationName: Node is ${nodeLifecycleState.value} and not starting")
+                Exception("Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting")
             )
         }
 
         val nodeRunning = withTimeoutOrNull(waitTimeout) {
-            if (nodeLifecycleState.value.isRunning()) {
+            if (_lightningState.value.nodeLifecycleState.isRunning()) {
                 return@withTimeoutOrNull true
             }
 
             // Otherwise, wait for it to transition to running state
             Logger.debug("Waiting for node runs to execute $operationName", context = TAG)
-            _nodeLifecycleState.first { it.isRunning() }
+            _lightningState.first { it.nodeLifecycleState.isRunning() }
             Logger.debug("Operation executed: $operationName", context = TAG)
             true
         } ?: false
@@ -113,51 +114,75 @@ class LightningRepo @Inject constructor(
         walletIndex: Int,
         timeout: Duration? = null,
         eventHandler: NodeEventHandler? = null
-    ): Result<Unit> =
-        withContext(bgDispatcher) {
-            if (nodeLifecycleState.value.isRunningOrStarting()) {
-                return@withContext Result.success(Unit)
-            }
-
-            try {
-                _nodeLifecycleState.value = NodeLifecycleState.Starting
-
-                // Setup if not already setup
-                if (lightningService.node == null) {
-                    val setupResult = setup(walletIndex)
-                    if (setupResult.isFailure) {
-                        _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(
-                            setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
-                        )
-                        return@withContext setupResult
-                    }
-                }
-
-                // Start the node service
-                lightningService.start(timeout) { event ->
-                    eventHandler?.invoke(event)
-                    ldkNodeEventBus.emit(event)
-                }
-
-                _nodeLifecycleState.value = NodeLifecycleState.Running
-                Result.success(Unit)
-            } catch (e: Throwable) {
-                Logger.error("Node start error", e, context = TAG)
-                _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(e)
-                Result.failure(e)
-            }
+    ): Result<Unit> = withContext(bgDispatcher) {
+        if (_lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
+            return@withContext Result.success(Unit)
         }
 
+        try {
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+
+            // Setup if not already setup
+            if (lightningService.node == null) {
+                val setupResult = setup(walletIndex)
+                if (setupResult.isFailure) {
+                    _lightningState.update {
+                        it.copy(
+                            nodeLifecycleState = NodeLifecycleState.ErrorStarting(
+                                setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
+                            )
+                        )
+                    }
+                    return@withContext setupResult
+                }
+            }
+
+            // Start the node service
+            lightningService.start(timeout) { event ->
+                eventHandler?.invoke(event)
+                ldkNodeEventBus.emit(event)
+                refreshBip21ForEvent(event)
+            }
+
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+
+            // Initial state sync
+            syncState()
+
+            // Perform post-startup tasks
+            connectToTrustedPeers().onFailure { e ->
+                Logger.error("Failed to connect to trusted peers", e)
+            }
+
+            // Refresh BIP21 and synchronize
+            refreshBip21()
+            sync()
+            registerForNotificationsIfNeeded()
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Node start error", e, context = TAG)
+            _lightningState.update {
+                it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+            }
+            Result.failure(e)
+        }
+    }
+
+    fun setInitNodeLifecycleState() {
+        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
+    }
+
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        if (nodeLifecycleState.value.isStoppedOrStopping()) {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
             return@withContext Result.success(Unit)
         }
 
         try {
             executeWhenNodeRunning("stop") {
-                _nodeLifecycleState.value = NodeLifecycleState.Stopping
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
                 lightningService.stop()
-                _nodeLifecycleState.value = NodeLifecycleState.Stopped
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                 Result.success(Unit)
             }
         } catch (e: Throwable) {
@@ -167,7 +192,16 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
+
+        if (_lightningState.value.isSyncingWallet) {
+            Logger.warn("Sync already in progress, waiting for existing sync.")
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
+        _lightningState.update { it.copy(isSyncingWallet = true) }
         lightningService.sync()
+        _lightningState.update { it.copy(isSyncingWallet = false) }
+
         Result.success(Unit)
     }
 
@@ -269,3 +303,14 @@ class LightningRepo @Inject constructor(
         const val TAG = "LightningRepo"
     }
 }
+
+data class LightningState(
+    val nodeId: String = "",
+    val balanceDetails: BalanceDetails? = null,
+    val nodeStatus: NodeStatus? = null,
+    val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
+    val peers: List<LnPeer> = emptyList(),
+    val channels: List<ChannelDetails> = emptyList(),
+    val isRefreshing: Boolean = false,
+    val isSyncingWallet: Boolean = false
+)
