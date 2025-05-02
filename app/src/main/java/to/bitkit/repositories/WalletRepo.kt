@@ -1,19 +1,15 @@
 package to.bitkit.repositories
 
-import android.content.Context
-import android.icu.util.Calendar
-import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
@@ -26,9 +22,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.utils.Bip21Utils
@@ -47,7 +40,6 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @ApplicationContext private val appContext: Context,
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
@@ -56,7 +48,27 @@ class WalletRepo @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val settingsStore: SettingsStore,
 ) {
+
+    private val _walletState = MutableStateFlow(WalletState(
+        onchainAddress = appStorage.onchainAddress,
+        bolt11 = appStorage.bolt11,
+        bip21 = appStorage.bip21,
+        walletExists = walletExists()
+    ))
+    val walletState = _walletState.asStateFlow()
+
+    private val _balanceState = MutableStateFlow(getBalanceState())
+    val balanceState = _balanceState.asStateFlow()
+
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+
+    fun setWalletExistsState() {
+        _walletState.update { it.copy(walletExists = walletExists()) }
+    }
+
+    fun setRestoringWalletState(isRestoring: Boolean) {
+        _walletState.update { it.copy(isRestoringWallet = isRestoring) }
+    }
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         try {
@@ -65,6 +77,7 @@ class WalletRepo @Inject constructor(
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Create wallet error", e)
@@ -78,6 +91,7 @@ class WalletRepo @Inject constructor(
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Restore wallet error", e)
@@ -96,6 +110,7 @@ class WalletRepo @Inject constructor(
             settingsStore.wipe()
             coreService.activity.removeAll()
             deleteAllInvoices()
+            setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Wipe wallet error", e)
@@ -108,20 +123,23 @@ class WalletRepo @Inject constructor(
 
     fun setOnchainAddress(address: String) {
         appStorage.onchainAddress = address
+        _walletState.update { it.copy(onchainAddress = address) }
     }
 
     // Bolt11 management
-    fun getBolt11(): String = appStorage.bolt11
+    fun getBolt11(): String = _walletState.value.bolt11
 
     fun setBolt11(bolt11: String) {
         appStorage.bolt11 = bolt11
+        _walletState.update { it.copy(bolt11 = bolt11) }
     }
 
     // BIP21 management
-    fun getBip21(): String = appStorage.bip21
+    fun getBip21(): String = _walletState.value.bip21
 
     fun setBip21(bip21: String) {
         appStorage.bip21 = bip21
+        _walletState.update { it.copy(bip21 = bip21) }
     }
 
     fun buildBip21Url(
@@ -141,13 +159,86 @@ class WalletRepo @Inject constructor(
     // Balance management
     fun getBalanceState(): BalanceState = appStorage.loadBalance() ?: BalanceState()
 
-    fun saveBalanceState(balanceState: BalanceState) {
+    suspend fun saveBalanceState(balanceState: BalanceState) {
         appStorage.cacheBalance(balanceState)
+        _balanceState.update { balanceState }
+
+        if (balanceState.totalSats > 0u) {
+            setShowEmptyState(false)
+        }
     }
 
     // Settings
     suspend fun setShowEmptyState(show: Boolean) {
         settingsStore.setShowEmptyState(show)
+        _walletState.update { it.copy(showEmptyState = show) }
+    }
+
+    // BIP21 state management
+    fun updateBip21AmountSats(amount: ULong?) {
+        _walletState.update { it.copy(bip21AmountSats = amount) }
+    }
+
+    fun updateBip21Description(description: String) {
+        _walletState.update { it.copy(bip21Description = description) }
+    }
+
+    fun toggleReceiveOnSpendingBalance() {
+        _walletState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+    }
+
+    fun addTagToSelected(newTag: String) {
+        _walletState.update {
+            it.copy(
+                selectedTags = (it.selectedTags + newTag).distinct()
+            )
+        }
+    }
+
+    fun removeTag(tag: String) {
+        _walletState.update {
+            it.copy(
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+            )
+        }
+    }
+
+    fun clearTagsAndBip21DescriptionState() {
+        _walletState.update { it.copy(selectedTags = listOf(), bip21Description = "") }
+    }
+
+    // BIP21 invoice creation
+    suspend fun updateBip21Invoice(
+        amountSats: ULong? = null,
+        description: String = "",
+        generateBolt11IfAvailable: Boolean = true,
+        lightningRepo: LightningRepo //TODO MAYBE INJECT IN THE CLASS
+    ) = withContext(bgDispatcher) {
+        updateBip21AmountSats(amountSats)
+        updateBip21Description(description)
+
+        val hasChannels = lightningRepo.hasChannels()
+
+        if (hasChannels && generateBolt11IfAvailable) {
+            lightningRepo.createInvoice(
+                amountSats = _walletState.value.bip21AmountSats,
+                description = _walletState.value.bip21Description
+            ).onSuccess { bolt11 ->
+                setBolt11(bolt11)
+            }
+        } else {
+            setBolt11("")
+        }
+
+        val newBip21 = buildBip21Url(
+            bitcoinAddress = getOnchainAddress(),
+            amountSats = _walletState.value.bip21AmountSats,
+            message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+            lightningInvoice = getBolt11()
+        )
+        setBip21(newBip21)
+        saveInvoiceWithTags(bip21Invoice = newBip21, tags = _walletState.value.selectedTags)
+        clearTagsAndBip21DescriptionState()
     }
 
     // Notification handling
@@ -187,27 +278,6 @@ class WalletRepo @Inject constructor(
             Result.success(info)
         } catch (e: Throwable) {
             Logger.error("Blocktank info error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun createTransactionSheet(
-        type: NewTransactionSheetType,
-        direction: NewTransactionSheetDirection,
-        sats: Long
-    ): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            NewTransactionSheetDetails.save(
-                appContext,
-                NewTransactionSheetDetails(
-                    type = type,
-                    direction = direction,
-                    sats = sats,
-                )
-            )
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Create transaction sheet error", e)
             Result.failure(e)
         }
     }
@@ -419,3 +489,16 @@ class WalletRepo @Inject constructor(
         const val TAG = "WalletRepo"
     }
 }
+
+data class WalletState(
+    val onchainAddress: String = "",
+    val bolt11: String = "",
+    val bip21: String = "",
+    val bip21AmountSats: ULong? = null,
+    val bip21Description: String = "",
+    val selectedTags: List<String> = listOf(),
+    val receiveOnSpendingBalance: Boolean = true,
+    val showEmptyState: Boolean = true,
+    val walletExists: Boolean = false,
+    val isRestoringWallet: Boolean = false
+)
