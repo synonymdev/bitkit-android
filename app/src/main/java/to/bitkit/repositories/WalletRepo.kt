@@ -98,7 +98,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Refreshing bip21", context = "LightningRepo")
+        Logger.debug("Refreshing bip21", context = TAG)
 
         // Check current address or generate new one
         val currentAddress = getOnchainAddress()
@@ -117,6 +117,7 @@ class WalletRepo @Inject constructor(
                 }
         }
 
+        //TODO MAYBE CALL clearTagsAndBip21DescriptionState()
         updateBip21Invoice()
 
         return@withContext Result.success(Unit)

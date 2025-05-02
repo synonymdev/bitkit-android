@@ -162,7 +162,7 @@ class LightningRepo @Inject constructor(
             sync()
 
             Result.success(Unit)
-        } catch (e: Throwable) {
+        } catch (e: Throwable) { //TODO RETRY
             Logger.error("Node start error", e, context = TAG)
             _lightningState.update {
                 it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
@@ -170,6 +170,7 @@ class LightningRepo @Inject constructor(
             Result.failure(e)
         }
     }
+
     fun setInitNodeLifecycleState() {
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
