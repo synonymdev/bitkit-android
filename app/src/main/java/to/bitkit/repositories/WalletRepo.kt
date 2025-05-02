@@ -269,7 +269,7 @@ class WalletRepo @Inject constructor(
                     invoiceTag = InvoiceTagEntity(
                         paymentHash = paymentHashOrAddress,
                         tags = tags,
-                        createdAt = Calendar.getInstance().time.time
+                        createdAt = System.currentTimeMillis()
                     )
                 )
             }
