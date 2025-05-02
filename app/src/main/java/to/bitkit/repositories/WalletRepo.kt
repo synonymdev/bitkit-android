@@ -252,7 +252,6 @@ class WalletRepo @Inject constructor(
         return db.configDao().getAll()
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
         if (tags.isEmpty()) return@withContext
 
@@ -260,7 +259,7 @@ class WalletRepo @Inject constructor(
             deleteExpiredInvoices()
             val decoded = decode(bip21Invoice)
             val paymentHashOrAddress = when (decoded) {
-                is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
+                is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
                 is Scanner.OnChain -> decoded.extractLightningHashOrAddress()
                 else -> null
             }
