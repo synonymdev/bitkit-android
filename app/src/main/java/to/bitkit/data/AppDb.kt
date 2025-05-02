@@ -27,7 +27,7 @@ import to.bitkit.env.Env
         ConfigEntity::class,
         InvoiceTagEntity::class
     ],
-    version = 1,
+    version = 2,
 )
 
 @TypeConverters(StringListConverter::class)
