@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
@@ -39,6 +41,7 @@ import uniffi.bitkitcore.Scanner
 import uniffi.bitkitcore.decode
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -308,11 +311,8 @@ class WalletRepo @Inject constructor(
 
     suspend fun deleteExpiredInvoices() = withContext(bgDispatcher) {
         try {
-            val twoDaysExpiration = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, 2)
-            }.time.time
-
-            db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysExpiration)
+            val twoDaysAgoMillis = Clock.System.now().minus(2.days).toEpochMilliseconds()
+            db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysAgoMillis)
         } catch (e: Throwable) {
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
         }
