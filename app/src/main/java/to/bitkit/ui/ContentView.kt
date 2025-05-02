@@ -151,10 +151,6 @@ fun ContentView(
         }
     }
 
-    LaunchedEffect(Unit) {
-        walletViewModel.observeLdkWallet()
-    }
-
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
