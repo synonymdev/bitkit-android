@@ -22,6 +22,7 @@ import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -400,14 +401,13 @@ class WalletRepo @Inject constructor(
             is Activity.Onchain -> v1.txId
         }
 
-    @OptIn(ExperimentalStdlibApi::class)
     private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
         val address = this.invoice.address
         val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
         val decoded = decode(lightningInvoice)
 
         val paymentHash = when (decoded) {
-            is Scanner.Lightning -> decoded.invoice.paymentHash.toHexString()
+            is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
             else -> null
         } ?: address
 
