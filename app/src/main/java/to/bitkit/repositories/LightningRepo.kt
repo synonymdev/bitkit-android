@@ -171,13 +171,17 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
-    suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) { //TODO HANDLE (err: 'Node is still running')
-        try {
-            lightningService.wipeStorage(walletIndex)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Wipe storage error", e, context = TAG)
-            Result.failure(e)
+    suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
+        stop().onSuccess {
+            return@withContext try {
+                lightningService.wipeStorage(walletIndex)
+                Result.success(Unit)
+            } catch (e: Throwable) {
+                Logger.error("Wipe storage error", e, context = TAG)
+                Result.failure(e)
+            }
+        }.onFailure { e ->
+            return@withContext Result.failure(e)
         }
     }
 
