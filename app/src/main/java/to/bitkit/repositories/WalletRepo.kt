@@ -405,14 +405,10 @@ class WalletRepo @Inject constructor(
         val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
         val decoded = decode(lightningInvoice)
 
-        val paymentHash = when (decoded) {
+        return when (decoded) {
             is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
-            else -> null
-        } ?: address
-
-        return paymentHash
-
-        return address
+            else -> address
+        }
     }
 
     private fun generateEntropyMnemonic(): String {
