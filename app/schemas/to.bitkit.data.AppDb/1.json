@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "548162ed64d13ae0bed807c23709b850",
+    "identityHash": "ea0d5b36d92a5a3fb1523c3064686f7d",
     "entities": [
       {
         "tableName": "config",
@@ -23,44 +23,12 @@
         },
         "indices": [],
         "foreignKeys": []
-      },
-      {
-        "tableName": "invoice_tag",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentHash` TEXT NOT NULL, `tags` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`paymentHash`))",
-        "fields": [
-          {
-            "fieldPath": "paymentHash",
-            "columnName": "paymentHash",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "tags",
-            "columnName": "tags",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "paymentHash"
-          ]
-        },
-        "indices": [],
-        "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '548162ed64d13ae0bed807c23709b850')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ea0d5b36d92a5a3fb1523c3064686f7d')"
     ]
   }
 }
