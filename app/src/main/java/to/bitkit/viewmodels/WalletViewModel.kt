@@ -306,7 +306,7 @@ class WalletViewModel @Inject constructor(
             )
             walletRepo.setBip21(newBip21)
             walletRepo.saveInvoiceWithTags(bip21Invoice = newBip21, tags = _uiState.value.selectedTags)
-            resetWalletState()
+            clearTagsAndBip21DescriptionState()
             syncState()
         }
     }
@@ -526,7 +526,7 @@ class WalletViewModel @Inject constructor(
         _uiState.update { it.copy(bip21Description = newText) }
     }
 
-    private fun resetWalletState() {
+    private fun clearTagsAndBip21DescriptionState() {
         _uiState.update { it.copy(selectedTags = listOf(), bip21Description = "") }
     }
 }
