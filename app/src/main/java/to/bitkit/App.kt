@@ -4,10 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import to.bitkit.androidServices.LightningNodeService.Companion.BITKIT_CHANNEL_ID
 import to.bitkit.env.Env
 import javax.inject.Inject
 
@@ -24,6 +28,7 @@ internal open class App : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
+        createNotificationChannel()
 
         Env.initAppStoragePath(filesDir.absolutePath)
     }
@@ -31,6 +36,21 @@ internal open class App : Application(), Configuration.Provider {
     companion object {
         @SuppressLint("StaticFieldLeak") // Should be safe given its manual memory management
         internal var currentActivity: CurrentActivity? = null
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = getString(R.string.app_name)
+            val descriptionText = "Channel for LightningNodeService"
+            val importance = NotificationManager.IMPORTANCE_LOW
+
+            val channel = NotificationChannel(BITKIT_CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+            }
+
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
     }
 }
 
