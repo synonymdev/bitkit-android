@@ -116,7 +116,7 @@ fun ContentView(
     val scope = rememberCoroutineScope()
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
-    DisposableEffect(lifecycle) {
+    DisposableEffect(lifecycle) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
@@ -134,10 +134,6 @@ fun ContentView(
 
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.triggerRefreshOrders()
-                }
-
-                Lifecycle.Event.ON_STOP -> {
-                    walletViewModel.stopIfNeeded()
                 }
 
                 else -> Unit
@@ -184,7 +180,7 @@ fun ContentView(
         }
     }
 
-    if (walletIsInitializing) {
+    if (walletIsInitializing) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
                 scope.launch {
