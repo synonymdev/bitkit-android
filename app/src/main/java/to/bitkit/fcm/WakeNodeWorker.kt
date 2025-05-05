@@ -170,6 +170,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
             is Event.PaymentSuccessful -> Unit
             is Event.PaymentClaimable -> Unit
+            is Event.PaymentForwarded -> Unit
 
             is Event.PaymentFailed -> {
                 self.bestAttemptContent?.title = "Payment failed"

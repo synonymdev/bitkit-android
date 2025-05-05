@@ -1,5 +1,6 @@
 package to.bitkit.env
 
+import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.ext.ensureDir
@@ -16,7 +17,6 @@ internal object Env {
     val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
-    val esploraParallelRequests = 6
     val trustedLnPeers
         get() = when (network) {
             Network.REGTEST -> listOf(
@@ -82,6 +82,14 @@ internal object Env {
         Logger.info("App storage path: $path")
         appStoragePath = path
     }
+
+    fun ldkLogFilePath(walletIndex: Int): String {
+        val logPath = Path(ldkStoragePath(walletIndex), "ldk_node_latest.log").toFile().absolutePath
+        Logger.info("LDK-node log path: $logPath")
+        return logPath
+    }
+
+    val ldkLogLevel = LogLevel.TRACE
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
     fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
