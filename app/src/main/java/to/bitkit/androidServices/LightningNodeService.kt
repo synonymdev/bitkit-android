@@ -16,6 +16,7 @@ import to.bitkit.R
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.MainActivity
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -32,6 +33,7 @@ class LightningNodeService : Service() {
     override fun onCreate() {
         super.onCreate()
         setupService()
+        Logger.debug("onCreate", context = TAG)
     }
 
     private fun setupService() {
@@ -71,10 +73,12 @@ class LightningNodeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Logger.debug("onStartCommand", context = TAG)
         return START_STICKY
     }
 
     override fun onDestroy() {
+        Logger.debug("onDestroy", context = TAG)
         serviceScope.launch {
             lightningRepo.stop().onSuccess {
                 serviceScope.cancel()
@@ -88,5 +92,6 @@ class LightningNodeService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1
         const val BITKIT_CHANNEL_ID = "bitkit_notification_channel"
+        const val TAG = "LightningNodeService"
     }
 }

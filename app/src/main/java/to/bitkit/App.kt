@@ -6,11 +6,13 @@ import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.BITKIT_CHANNEL_ID
 import to.bitkit.env.Env
 import javax.inject.Inject
@@ -29,6 +31,8 @@ internal open class App : Application(), Configuration.Provider {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         createNotificationChannel()
+
+        startService(Intent(this, LightningNodeService::class.java))
 
         Env.initAppStoragePath(filesDir.absolutePath)
     }
