@@ -70,6 +70,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
@@ -78,6 +79,7 @@ import to.bitkit.viewmodels.WalletViewModel
 fun HomeScreen(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
+    activityListViewModel: ActivityListViewModel,
     rootNavController: NavController,
 ) {
     val uiState: MainUiState by walletViewModel.uiState.collectAsState()
@@ -118,7 +120,10 @@ fun HomeScreen(
                         uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
-                        onRefresh = walletViewModel::onPullToRefresh,
+                        onRefresh = {
+                            walletViewModel.onPullToRefresh()
+                            activityListViewModel.syncLdkNodePayments()
+                        },
                     )
                 }
                 composable<HomeRoutes.Savings>(

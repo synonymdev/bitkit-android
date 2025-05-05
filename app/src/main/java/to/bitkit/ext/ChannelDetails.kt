@@ -55,5 +55,8 @@ fun mockChannelDetails(
             forceCloseAvoidanceMaxFeeSatoshis = 0uL,
             acceptUnderpayingHtlcs = false,
         ),
+        shortChannelId = 1234uL,
+        outboundScidAlias = 2345uL,
+        inboundScidAlias = 3456uL,
     )
 }

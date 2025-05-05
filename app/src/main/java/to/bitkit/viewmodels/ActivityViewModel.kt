@@ -164,14 +164,23 @@ class ActivityListViewModel @Inject constructor(
         _selectedTags.value = mutableSetOf()
     }
 
+    var isSyncingLdkNodePayments = false
     fun syncLdkNodePayments() {
+        if (isSyncingLdkNodePayments) {
+            Logger.warn("LDK-node payments are already being synced, skipping")
+            return
+        }
+
         viewModelScope.launch {
-            lightningRepo.getPayments().onSuccess {
-                coreService.activity.syncLdkNodePayments(it)
-                syncState()
-            }.onFailure { e ->
-                Logger.error("Failed to sync ldk-node payments", e)
-            }
+            isSyncingLdkNodePayments = true
+            lightningRepo.getPayments()
+                .onSuccess {
+                    coreService.activity.syncLdkNodePayments(it)
+                    syncState()
+                }.onFailure { e ->
+                    Logger.error("Failed to sync ldk-node payments", e)
+                }
+            isSyncingLdkNodePayments = false
         }
     }
 

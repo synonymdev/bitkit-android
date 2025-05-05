@@ -122,7 +122,6 @@ fun ContentView(
                 Lifecycle.Event.ON_START -> {
                     try {
                         walletViewModel.start()
-                        activityListViewModel.syncLdkNodePayments()
                     } catch (e: Throwable) {
                         Logger.error("Failed to start wallet", e)
                     }
@@ -222,6 +221,11 @@ fun ContentView(
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
         val currencies by currencyViewModel.uiState.collectAsState()
 
+        LaunchedEffect(balance) {
+            // Anytime we receive a balance update, we should sync the payments to activity list
+            activityListViewModel.syncLdkNodePayments()
+        }
+
         CompositionLocalProvider(
             LocalAppViewModel provides appViewModel,
             LocalWalletViewModel provides walletViewModel,
@@ -233,7 +237,7 @@ fun ContentView(
             LocalCurrencies provides currencies,
         ) {
             NavHost(navController, startDestination = Routes.Home) {
-                home(walletViewModel, appViewModel, navController)
+                home(walletViewModel, appViewModel, activityListViewModel, navController)
                 settings(walletViewModel, navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
@@ -448,12 +452,14 @@ fun ContentView(
 private fun NavGraphBuilder.home(
     viewModel: WalletViewModel,
     appViewModel: AppViewModel,
+    activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
         HomeScreen(
             walletViewModel = viewModel,
             appViewModel = appViewModel,
+            activityListViewModel = activityListViewModel,
             rootNavController = navController,
         )
     }
