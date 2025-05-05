@@ -2,6 +2,7 @@ package to.bitkit.utils
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
@@ -30,13 +31,13 @@ object Logger {
         val timestamp = dateFormatter.format(Date())
         val sessionLogFilePath = File(Env.logDir).resolve("bitkit_$timestamp.log").path
 
-        // Run cleanup in background when logger is initialized
-        queue.launch {
+        // Run cleanup in background
+        CoroutineScope(Dispatchers.IO).launch {
             cleanupOldLogFiles()
         }
 
         Log.i(TAG, "Bitkit logger initialized with session log: $sessionLogFilePath")
-        sessionLogFilePath
+        return@lazy sessionLogFilePath
     }
 
     fun info(
