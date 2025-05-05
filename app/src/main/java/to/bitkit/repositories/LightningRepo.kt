@@ -138,6 +138,13 @@ class LightningRepo @Inject constructor(
                 }
             }
 
+            if (getStatus()?.isRunning == true) {
+                Logger.info("LDK node already running", context = TAG)
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                lightningService.listenForEvents(onEvent = eventHandler)
+                return@withContext Result.success(Unit)
+            }
+
             // Start the node service
             lightningService.start(timeout) { event ->
                 eventHandler?.invoke(event)
