@@ -147,7 +147,6 @@ class WalletRepo @Inject constructor(
         tags: List<String> = emptyList()
     ): Result<Unit> = withContext(bgDispatcher) {
         try {
-            // Update state
             _walletState.update {
                 it.copy(
                     bip21AmountSats = amountSats,
@@ -186,7 +185,7 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    private suspend fun refreshBip21ForEvent(event: Event) {
+    suspend fun refreshBip21ForEvent(event: Event) {
         when (event) {
             is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
             else -> Unit

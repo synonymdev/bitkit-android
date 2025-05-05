@@ -20,6 +20,12 @@
         android:roundIcon="@mipmap/ic_launcher_regtest_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.App">
+        <service
+            android:name=".androidServices.LightningNodeService"
+            android:foregroundServiceType="dataSync"
+            android:enabled="true"
+            android:exported="false"/>
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
@@ -28,6 +34,7 @@
             android:windowSoftInputMode="adjustResize|stateHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>

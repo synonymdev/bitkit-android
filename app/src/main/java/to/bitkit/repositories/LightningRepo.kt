@@ -112,7 +112,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun start(
-        walletIndex: Int,
+        walletIndex: Int = 0,
         timeout: Duration? = null,
         eventHandler: NodeEventHandler? = null
     ): Result<Unit> = withContext(bgDispatcher) {
@@ -153,12 +153,6 @@ class LightningRepo @Inject constructor(
             connectToTrustedPeers().onFailure { e ->
                 Logger.error("Failed to connect to trusted peers", e)
             }
-
-            /*TODO IF SUCCESS CALL:
-            * walletRepo.registerForNotifications()
-            * refreshBip21()
-            * refreshBip21ForEvent(event)
-            * */
             sync()
 
             Result.success(Unit)
