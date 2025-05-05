@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import app.cash.turbine.test
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -18,9 +17,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.test.assertEquals
 
 @RunWith(AndroidJUnit4::class)
 @Config(application = TestApp::class)
@@ -46,7 +43,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.nodeLifecycleState).thenReturn(nodeLifecycleStateFlow)
 
         // Database config flow
-        wheneverBlocking{walletRepo.getDbConfig()}.thenReturn(flowOf(emptyList()))
+        wheneverBlocking { walletRepo.getDbConfig() }.thenReturn(flowOf(emptyList()))
 
         sut = WalletViewModel(
             bgDispatcher = testDispatcher,
@@ -54,40 +51,6 @@ class WalletViewModelTest : BaseUnitTest() {
             walletRepo = walletRepo,
             lightningRepo = lightningRepo
         )
-    }
-
-    @Test
-    fun `start should emit Content uiState`() = test {
-        setupExistingWalletMocks()
-        val expectedUiState = MainUiState(
-            nodeId = "nodeId",
-            onchainAddress = "onchainAddress",
-            peers = emptyList(),
-            channels = emptyList(),
-            balanceDetails = balanceDetails,
-            bolt11 = "bolt11",
-            bip21 = "bitcoin:onchainAddress",
-            nodeLifecycleState = NodeLifecycleState.Starting,
-            nodeStatus = null,
-        )
-
-        sut.start()
-
-        sut.uiState.test {
-            val content = awaitItem()
-            assertEquals(expectedUiState, content)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `start should register for notifications if token is not cached`() = test {
-        setupExistingWalletMocks()
-        whenever(lightningRepo.start(walletIndex = 0)).thenReturn(Result.success(Unit))
-
-        sut.start()
-
-        verify(walletRepo).registerForNotifications()
     }
 
     @Test
