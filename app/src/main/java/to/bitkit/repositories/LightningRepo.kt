@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +30,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -114,6 +116,7 @@ class LightningRepo @Inject constructor(
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
+        shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
@@ -163,12 +166,23 @@ class LightningRepo @Inject constructor(
             sync()
 
             Result.success(Unit)
-        } catch (e: Throwable) { //TODO RETRY
-            Logger.error("Node start error", e, context = TAG)
-            _lightningState.update {
-                it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+        } catch (e: Throwable) {
+            if (shouldRetry) {
+                Logger.warn("Start error, retrying after two seconds...", e = e, context = TAG)
+                delay(2.seconds)
+                return@withContext start(
+                    walletIndex = walletIndex,
+                    timeout = timeout,
+                    shouldRetry = false,
+                    eventHandler = eventHandler
+                )
+            } else {
+                Logger.error("Node start error", e, context = TAG)
+                _lightningState.update {
+                    it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+                }
+                Result.failure(e)
             }
-            Result.failure(e)
         }
     }
 
