@@ -122,7 +122,7 @@ class WalletRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    private suspend fun syncBalances() {
+    suspend fun syncBalances() {
         lightningRepo.getBalances()?.let { balance ->
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
 
