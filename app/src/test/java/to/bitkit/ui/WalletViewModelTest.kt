@@ -8,7 +8,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.BalanceDetails
-import org.mockito.ArgumentMatchers.anyString
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -106,7 +105,6 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(walletRepo.getBip21()).thenReturn("bitcoin:onchainAddress")
         whenever(walletRepo.getMnemonic()).thenReturn(Result.success("mnemonic"))
         whenever(walletRepo.getBolt11()).thenReturn("bolt11")
-        whenever(lightningRepo.checkAddressUsage(anyString())).thenReturn(Result.success(true))
         whenever(lightningRepo.start(walletIndex = 0)).thenReturn(Result.success(Unit))
         whenever(lightningRepo.getPeers()).thenReturn(emptyList())
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())

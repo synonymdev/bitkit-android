@@ -54,7 +54,8 @@ class WalletRepo @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val settingsStore: SettingsStore,
     private val addressChecker: AddressChecker,
-    private val lightningRepo: LightningRepo
+    private val lightningRepo: LightningRepo,
+    private val network: Network
 ) {
 
     private val bgScope: CoroutineScope = CoroutineScope(bgDispatcher + SupervisorJob())
@@ -225,7 +226,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(): Result<Unit> = withContext(bgDispatcher) {
-        if (Env.network != Network.REGTEST) {
+        if (network != Network.REGTEST) {
             return@withContext Result.failure(Exception("Can only wipe on regtest."))
         }
 
