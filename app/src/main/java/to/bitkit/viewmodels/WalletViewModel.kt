@@ -197,6 +197,12 @@ class WalletViewModel @Inject constructor(
         )
     }
 
+    fun refreshBip21() {
+        viewModelScope.launch {
+            walletRepo.refreshBip21()
+        }
+    }
+
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,

@@ -57,7 +57,7 @@ class LightningNodeService : Service() {
     }
 
     private fun createNotification(
-        contentText: String = "Bitkit is running in background so you can receive Lightning payments" //TODO GER FROM RESOURCES
+        contentText: String = "Bitkit is running in background so you can receive Lightning payments" //TODO GET FROM RESOURCES
     ): Notification {
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(

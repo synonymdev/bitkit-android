@@ -117,7 +117,6 @@ class WalletRepo @Inject constructor(
                 }
         }
 
-        //TODO MAYBE CALL clearTagsAndBip21DescriptionState()
         updateBip21Invoice()
 
         return@withContext Result.success(Unit)
