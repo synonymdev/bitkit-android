@@ -197,7 +197,7 @@ class ActivityService(
 
                             val onchain = OnchainActivity(
                                 id = payment.id,
-                                txType = if (payment.direction == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED,
+                                txType = payment.direction.toPaymentType(),
                                 txId = kind.txid,
                                 value = payment.amountSats ?: 0u,
                                 fee = (payment.feePaidMsat ?: 0u) / 1000u,
@@ -232,7 +232,7 @@ class ActivityService(
 
                             val ln = LightningActivity(
                                 id = payment.id,
-                                txType = if (payment.direction == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED,
+                                txType = payment.direction.toPaymentType(),
                                 status = state,
                                 value = payment.amountSats ?: 0u,
                                 fee = null, // TODO
@@ -252,6 +252,7 @@ class ActivityService(
                                 addedCount++
                             }
                         }
+
                         else -> Unit // Handle spontaneous payments if needed
                     }
                 } catch (e: Throwable) {
@@ -266,6 +267,9 @@ class ActivityService(
             Logger.info("Synced LDK payments - Added: $addedCount - Updated: $updatedCount", context = "CoreService")
         }
     }
+
+    private fun PaymentDirection.toPaymentType(): PaymentType =
+        if (this == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED
 
     suspend fun getActivity(id: String): Activity? {
         return ServiceQueue.CORE.background {
