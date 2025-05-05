@@ -17,6 +17,8 @@ internal object Env {
     val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
+
+    // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
             Network.REGTEST -> listOf(
@@ -95,13 +97,13 @@ internal object Env {
     fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
-        require(::appStoragePath.isInitialized) { "App storage path should be init as context.filesDir.absolutePath." }
-        val absolutePath = Path(appStoragePath, network, "wallet$walletIndex", dir)
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
             .toFile()
             .ensureDir()
-            .absolutePath
-        Logger.debug("Using ${dir.uppercase()} storage path: $absolutePath")
-        return absolutePath
+            .path
+        Logger.debug("Using ${dir.uppercase()} storage path: $path")
+        return path
     }
 
     object Peers {
