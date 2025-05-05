@@ -7,6 +7,7 @@ import to.bitkit.ext.ensureDir
 import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import to.bitkit.utils.Logger
+import java.io.File
 import kotlin.io.path.Path
 
 @Suppress("ConstPropertyName")
@@ -85,11 +86,11 @@ internal object Env {
         appStoragePath = path
     }
 
-    fun ldkLogFilePath(walletIndex: Int): String {
-        val logPath = Path(ldkStoragePath(walletIndex), "ldk_node_latest.log").toFile().absolutePath
-        Logger.info("LDK-node log path: $logPath")
-        return logPath
-    }
+    val logDir: String
+        get() {
+            require(::appStoragePath.isInitialized)
+            return File(appStoragePath).resolve("logs").ensureDir().path
+        }
 
     val ldkLogLevel = LogLevel.TRACE
 
