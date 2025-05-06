@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,17 +27,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
@@ -59,29 +64,29 @@ import to.bitkit.viewmodels.MainUiState
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
-    walletUiState: MainUiState,
-    updateInvoice: (ULong?, String) -> Unit,
+    walletUiState: WalletState,
+    updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
+    onInputUpdated: (String) -> Unit,
     onDescriptionUpdate: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
-    var input: String by remember { mutableStateOf("") }
-    var satsString by remember { mutableStateOf("") }
+    var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
 
     AmountInputHandler(
-        input = input,
+        input = walletUiState.balanceInput,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
-        onInputChanged = { newInput -> input = newInput },
+        onInputChanged = onInputUpdated,
         onAmountCalculated = { sats -> satsString = sats },
         currencyVM = currencyVM
     )
 
     EditInvoiceContent(
-        input = input,
+        input = walletUiState.balanceInput,
         noteText = walletUiState.bip21Description,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
@@ -90,9 +95,9 @@ fun EditInvoiceScreen(
         onTextChanged = onDescriptionUpdate,
         keyboardVisible = keyboardVisible,
         onClickBalance = { keyboardVisible = true },
-        onInputChanged = { newText -> input = newText },
+        onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), walletUiState.bip21Description) },
+        onContinueGeneral = { updateInvoice(satsString.toULongOrNull()) },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag
     )
@@ -187,7 +192,7 @@ fun EditInvoiceContent(
                     Spacer(modifier = Modifier.height(41.dp))
 
                     PrimaryButton(
-                        text = stringResource(R.string.continue_button),
+                        text = stringResource(R.string.common__continue),
                         onClick = onContinueKeyboard,
                         modifier = Modifier.testTag("keyboard_continue_button")
                     )
@@ -221,6 +226,9 @@ fun EditInvoiceContent(
                         value = noteText,
                         onValueChange = onTextChanged,
                         minLines = 4,
+                        keyboardOptions = KeyboardOptions.Default.copy(
+                            imeAction = ImeAction.Done
+                        ),
                         colors = AppTextFieldDefaults.semiTransparent,
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier
@@ -266,7 +274,7 @@ fun EditInvoiceContent(
                     Spacer(modifier = Modifier.weight(1f))
 
                     PrimaryButton(
-                        text = stringResource(R.string.continue_button),
+                        text = stringResource(R.string.wallet__receive_show_qr),
                         onClick = onContinueGeneral,
                         modifier = Modifier.testTag("general_continue_button")
                     )

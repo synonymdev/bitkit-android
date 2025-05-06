@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,7 +146,10 @@ fun AmountInputHandler(
     onAmountCalculated: (String) -> Unit,
     currencyVM: CurrencyViewModel
 ) {
+    var lastDisplay by rememberSaveable { mutableStateOf(primaryDisplay) }
     LaunchedEffect(primaryDisplay) {
+        if (primaryDisplay == lastDisplay) return@LaunchedEffect
+        lastDisplay = primaryDisplay
         val newInput = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> { //Convert fiat to sats
                 val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0

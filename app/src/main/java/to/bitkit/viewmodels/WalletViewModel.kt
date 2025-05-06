@@ -50,6 +50,7 @@ class WalletViewModel @Inject constructor(
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
+    @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
     val uiState = _uiState.asStateFlow()
 
     init {
@@ -64,6 +65,7 @@ class WalletViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         onchainAddress = state.onchainAddress,
+                        balanceInput = state.balanceInput,
                         bolt11 = state.bolt11,
                         bip21 = state.bip21,
                         bip21AmountSats = state.bip21AmountSats,
@@ -174,13 +176,12 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        description: String = "",
         generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch {
             walletRepo.updateBip21Invoice(
                 amountSats = amountSats,
-                description = description,
+                description = walletState.value.bip21Description,
                 generateBolt11IfAvailable = generateBolt11IfAvailable,
                 tags = walletState.value.selectedTags
             ).onFailure { error ->
@@ -197,7 +198,6 @@ class WalletViewModel @Inject constructor(
         walletRepo.toggleReceiveOnSpendingBalance()
         updateBip21Invoice(
             amountSats = walletState.value.bip21AmountSats,
-            description = walletState.value.bip21Description,
             generateBolt11IfAvailable = walletState.value.receiveOnSpendingBalance
         )
     }
@@ -401,12 +401,20 @@ class WalletViewModel @Inject constructor(
     }
 
     fun updateBip21Description(newText: String) {
+        if (newText.isEmpty()) {
+            Logger.warn("Empty")
+        }
         walletRepo.updateBip21Description(newText)
+    }
+
+    fun updateBalanceInput(newText: String) {
+        walletRepo.updateBalanceInput(newText = newText)
     }
 }
 
 data class MainUiState(
     val nodeId: String = "",
+    val balanceInput: String = "",
     val balanceDetails: BalanceDetails? = null,
     val onchainAddress: String = "",
     val bolt11: String = "",

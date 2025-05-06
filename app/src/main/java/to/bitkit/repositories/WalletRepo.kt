@@ -118,6 +118,9 @@ class WalletRepo @Inject constructor(
                 }
         }
 
+        //Reset invoice state
+        _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "", balanceInput = "") }
+
         updateBip21Invoice()
 
         return@withContext Result.success(Unit)
@@ -175,8 +178,6 @@ class WalletRepo @Inject constructor(
             )
             setBip21(newBip21)
             saveInvoiceWithTags(bip21Invoice = newBip21, tags = tags)
-
-            _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "") }
 
             Result.success(Unit)
         } catch (e: Throwable) {
@@ -309,6 +310,10 @@ class WalletRepo @Inject constructor(
 
     fun updateBip21Description(description: String) {
         _walletState.update { it.copy(bip21Description = description) }
+    }
+
+    fun updateBalanceInput(newText: String) {
+        _walletState.update { it.copy(balanceInput = newText) }
     }
 
     fun toggleReceiveOnSpendingBalance() {
@@ -619,6 +624,7 @@ class WalletRepo @Inject constructor(
 
 data class WalletState(
     val onchainAddress: String = "",
+    val balanceInput: String = "",
     val bolt11: String = "",
     val bip21: String = "",
     val bip21AmountSats: ULong? = null,
