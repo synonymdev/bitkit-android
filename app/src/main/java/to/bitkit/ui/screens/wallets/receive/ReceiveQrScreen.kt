@@ -184,6 +184,9 @@ fun ReceiveQrSheet(
                     },
                     onDescriptionUpdate = { newText ->
                         wallet.updateBip21Description(newText = newText)
+                    },
+                    onInputUpdated = { newText ->
+                        wallet.updateBalanceInput(newText)
                     }
                 )
             }

@@ -118,6 +118,9 @@ class WalletRepo @Inject constructor(
                 }
         }
 
+        //Reset invoice state
+        _walletState.update { it.copy(balanceInput = "") }
+
         updateBip21Invoice()
 
         return@withContext Result.success(Unit)
@@ -309,6 +312,10 @@ class WalletRepo @Inject constructor(
 
     fun updateBip21Description(description: String) {
         _walletState.update { it.copy(bip21Description = description) }
+    }
+
+    fun updateBalanceInput(newText: String) {
+        _walletState.update { it.copy(balanceInput = newText) }
     }
 
     fun toggleReceiveOnSpendingBalance() {
@@ -619,6 +626,7 @@ class WalletRepo @Inject constructor(
 
 data class WalletState(
     val onchainAddress: String = "",
+    val balanceInput: String = "",
     val bolt11: String = "",
     val bip21: String = "",
     val bip21AmountSats: ULong? = null,
