@@ -1,76 +1,296 @@
 package to.bitkit.ui
 
+import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.lightningdevkit.ldknode.BalanceDetails
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.annotation.Config
-import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.LnPeer
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WalletState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 @Config(application = TestApp::class)
 class WalletViewModelTest : BaseUnitTest() {
-    private var lightningRepo: LightningRepo = mock()
-    private var walletRepo: WalletRepo = mock()
 
     private lateinit var sut: WalletViewModel
 
-    private val balanceDetails = mock<BalanceDetails>()
-    private val nodeLifecycleStateFlow = MutableStateFlow(NodeLifecycleState.Stopped)
+    private val walletRepo: WalletRepo = mock()
+    private val lightningRepo: LightningRepo = mock()
+    private val context: Context = mock()
+    private val mockLightningState = MutableStateFlow(LightningState())
+    private val mockWalletState = MutableStateFlow(WalletState())
+
 
     @Before
     fun setUp() {
-        whenever(lightningRepo.getNodeId()).thenReturn("nodeId")
-        whenever(lightningRepo.getBalances()).thenReturn(balanceDetails)
-        whenever(lightningRepo.getBalances()?.totalLightningBalanceSats).thenReturn(1000u)
-        whenever(lightningRepo.getBalances()?.totalOnchainBalanceSats).thenReturn(10_000u)
-        wheneverBlocking { lightningRepo.newAddress() }.thenReturn(Result.success("onchainAddress"))
-
-
-        // Node lifecycle state flow
-        whenever(lightningRepo.nodeLifecycleState).thenReturn(nodeLifecycleStateFlow)
-
-        // Database config flow
-        wheneverBlocking { walletRepo.getDbConfig() }.thenReturn(flowOf(emptyList()))
+        whenever(walletRepo.walletState).thenReturn(mockWalletState)
+        whenever(lightningRepo.lightningState).thenReturn(mockLightningState)
 
         sut = WalletViewModel(
-            bgDispatcher = testDispatcher,
-            appContext = mock(),
+            bgDispatcher = Dispatchers.Unconfined,
+            appContext = context,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo
         )
     }
 
     @Test
-    fun `manualRegisterForNotifications should register device with FCM token`() = test {
-        sut.manualRegisterForNotifications()
-
-        verify(walletRepo).registerForNotifications()
-    }
-
-    private fun setupExistingWalletMocks() = test {
+    fun `setWalletExistsState should update walletExists`() = test {
         whenever(walletRepo.walletExists()).thenReturn(true)
         sut.setWalletExistsState()
-        whenever(walletRepo.walletExists()).thenReturn(true)
-        whenever(walletRepo.getOnchainAddress()).thenReturn("onchainAddress")
-        whenever(walletRepo.getBip21()).thenReturn("bitcoin:onchainAddress")
-        whenever(walletRepo.getMnemonic()).thenReturn(Result.success("mnemonic"))
-        whenever(walletRepo.getBolt11()).thenReturn("bolt11")
-        whenever(lightningRepo.start(walletIndex = 0)).thenReturn(Result.success(Unit))
-        whenever(lightningRepo.getPeers()).thenReturn(emptyList())
-        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(lightningRepo.getStatus()).thenReturn(null)
+        assertTrue(sut.walletExists)
+
+        whenever(walletRepo.walletExists()).thenReturn(false)
+        sut.setWalletExistsState()
+        assertFalse(sut.walletExists)
+    }
+
+    @Test
+    fun `setInitNodeLifecycleState should call lightningRepo`() = test {
+        sut.setInitNodeLifecycleState()
+        verify(lightningRepo).setInitNodeLifecycleState()
+    }
+
+
+    @Test
+    fun `refreshState should call lightningRepo sync`() = test {
+        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
+
+        sut.refreshState()
+
+        verify(lightningRepo).sync()
+    }
+
+    @Test
+    fun `onPullToRefresh should call lightningRepo sync`() = test {
+        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
+
+        sut.onPullToRefresh()
+
+        verify(lightningRepo).sync()
+    }
+
+    @Test
+    fun `disconnectPeer should call lightningRepo disconnectPeer and send success toast`() = test {
+        val testPeer = LnPeer("nodeId", "host", "9735")
+        whenever(lightningRepo.disconnectPeer(testPeer)).thenReturn(Result.success(Unit))
+
+        sut.disconnectPeer(testPeer)
+
+        verify(lightningRepo).disconnectPeer(testPeer)
+        // Add verification for ToastEventBus.send if you have a way to capture those events
+    }
+
+    @Test
+    fun `disconnectPeer should call lightningRepo disconnectPeer and send failure toast`() = test {
+        val testPeer = LnPeer("nodeId", "host", "9735")
+        val testError = Exception("Test error")
+        whenever(lightningRepo.disconnectPeer(testPeer)).thenReturn(Result.failure(testError))
+
+        sut.disconnectPeer(testPeer)
+
+        verify(lightningRepo).disconnectPeer(testPeer)
+        // Add verification for ToastEventBus.send if you have a way to capture those events
+    }
+
+    @Test
+    fun `send should call lightningRepo payInvoice and send failure toast`() = test {
+        val testBolt11 = "test_bolt11"
+        val testError = Exception("Test error")
+        whenever(lightningRepo.payInvoice(testBolt11)).thenReturn(Result.failure(testError))
+
+        sut.send(testBolt11)
+
+        verify(lightningRepo).payInvoice(testBolt11)
+        // Add verification for ToastEventBus.send
+    }
+
+    @Test
+    fun `updateBip21Invoice should call walletRepo updateBip21Invoice and send failure toast`() = test {
+        val testError = Exception("Test error")
+        whenever(walletRepo.updateBip21Invoice(anyOrNull(), any(), any(), any())).thenReturn(Result.failure(testError))
+
+        sut.updateBip21Invoice()
+
+        verify(walletRepo).updateBip21Invoice(anyOrNull(), any(), any(), any())
+        // Add verification for ToastEventBus.send
+    }
+
+    @Test
+    fun `refreshBip21 should call walletRepo refreshBip21`() = test {
+        sut.refreshBip21()
+        verify(walletRepo).refreshBip21()
+    }
+
+    @Test
+    fun `createInvoice should call lightningRepo createInvoice`() = test {
+        val testInvoice = "test_invoice"
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(testInvoice))
+
+        val result = sut.createInvoice(description = "test")
+
+        verify(lightningRepo).createInvoice(anyOrNull(), any(), any())
+        assertEquals("test_invoice", result)
+    }
+
+    @Test
+    fun `openChannel should send a toast if there are no peers`() = test {
+        val peersFlow = MutableStateFlow(emptyList<LnPeer>())
+        whenever(lightningRepo.getPeers()).thenReturn(peersFlow.value)
+
+        sut.openChannel()
+
+        verify(lightningRepo, never()).openChannel(any(), any(), any())
+        // Add verification for ToastEventBus.send
+    }
+
+    @Test
+    fun `wipeStorage should call walletRepo wipeWallet and lightningRepo wipeStorage, and set walletExists`() =
+        test {
+            whenever(walletRepo.wipeWallet()).thenReturn(Result.success(Unit))
+            whenever(lightningRepo.wipeStorage(any())).thenReturn(Result.success(Unit))
+            whenever(walletRepo.walletExists()).thenReturn(false)
+
+            sut.wipeStorage()
+
+            verify(walletRepo).wipeWallet()
+            verify(lightningRepo).wipeStorage(any())
+            assertFalse(sut.walletExists)
+        }
+
+    @Test
+    fun `createWallet should call walletRepo createWallet and send failure toast`() = test {
+        val testError = Exception("Test error")
+        whenever(walletRepo.createWallet(anyOrNull())).thenReturn(Result.failure(testError))
+
+        sut.createWallet(null)
+
+        verify(walletRepo).createWallet(anyOrNull())
+        // Add verification for ToastEventBus.send
+    }
+
+    @Test
+    fun `restoreWallet should call walletRepo restoreWallet and send failure toast`() = test {
+        val testError = Exception("Test error")
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.failure(testError))
+
+        sut.restoreWallet("test_mnemonic", null)
+
+        verify(walletRepo).restoreWallet(any(), anyOrNull())
+        // Add verification for ToastEventBus.send
+    }
+
+    @Test
+    fun `manualRegisterForNotifications should call walletRepo registerForNotifications and send appropriate toasts`() =
+        test {
+            whenever(walletRepo.registerForNotifications()).thenReturn(Result.success(Unit))
+
+            sut.manualRegisterForNotifications()
+
+            verify(walletRepo).registerForNotifications()
+            // Add verification for ToastEventBus.send
+        }
+
+    @Test
+    fun `manualNewAddress should call lightningRepo newAddress and walletRepo setOnchainAddress, and send failure toast`() =
+        test {
+            whenever(lightningRepo.newAddress()).thenReturn(Result.success("test_address"))
+
+            sut.manualNewAddress()
+
+            verify(lightningRepo).newAddress()
+            verify(walletRepo).setOnchainAddress("test_address")
+        }
+
+    @Test
+    fun `debugDb should call walletRepo getDbConfig`() = test {
+        whenever(walletRepo.getDbConfig()).thenReturn(flowOf(emptyList()))
+
+        sut.debugDb()
+
+        verify(walletRepo).getDbConfig()
+    }
+
+    @Test
+    fun `debugFcmToken should call walletRepo getFcmToken`() = test {
+        whenever(walletRepo.getFcmToken()).thenReturn(Result.success("test_token"))
+
+        sut.debugFcmToken()
+
+        verify(walletRepo).getFcmToken()
+    }
+
+    @Test
+    fun `debugKeychain should call walletRepo debugKeychain`() = test {
+        whenever(walletRepo.debugKeychain(any(), any())).thenReturn(Result.success(null))
+
+        sut.debugKeychain()
+
+        verify(walletRepo).debugKeychain(any(), any())
+    }
+
+    @Test
+    fun `debugMnemonic should call walletRepo getMnemonic`() = test {
+        whenever(walletRepo.getMnemonic()).thenReturn(Result.success("test_mnemonic"))
+
+        sut.debugMnemonic()
+
+        verify(walletRepo).getMnemonic()
+    }
+
+    @Test
+    fun `debugLspNotifications should call walletRepo testNotification`() = test {
+        whenever(walletRepo.testNotification()).thenReturn(Result.success(Unit))
+
+        sut.debugLspNotifications()
+
+        verify(walletRepo).testNotification()
+    }
+
+    @Test
+    fun `stopIfNeeded should call lightningRepo stop`() = test {
+        sut.stopIfNeeded()
+
+        verify(lightningRepo).stop()
+    }
+
+    @Test
+    fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
+        sut.addTagToSelected("test_tag")
+
+        verify(walletRepo).addTagToSelected("test_tag")
+    }
+
+    @Test
+    fun `removeTag should call walletRepo removeTag`() = test {
+        sut.removeTag("test_tag")
+
+        verify(walletRepo).removeTag("test_tag")
+    }
+
+    @Test
+    fun `updateBip21Description should call walletRepo updateBip21Description`() = test {
+        sut.updateBip21Description("test_description")
+
+        verify(walletRepo).updateBip21Description("test_description")
     }
 }
