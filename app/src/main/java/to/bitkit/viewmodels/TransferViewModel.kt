@@ -18,6 +18,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.getSatsPerVbyteFor
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.CurrencyService
@@ -66,10 +68,17 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order and start watching it for state updates */
-    fun onTransferToSpendingConfirm(order: IBtOrder) {
+    fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed) {
         viewModelScope.launch {
             try {
-                lightningRepo.sendOnChain(address = order.payment.onchain.address, sats = order.feeSat)
+                var fees = coreService.blocktank.getFeesSafe().getOrThrow()
+                var satsPerVbyte = fees.getSatsPerVbyteFor(speed)
+
+                lightningRepo.sendOnChain(
+                    address = order.payment.onchain.address,
+                    sats = order.feeSat,
+                    satsPerVByte = satsPerVbyte,
+                )
                 settingsStore.setLightningSetupStep(0)
                 watchOrder(order.id)
             } catch (e: Throwable) {

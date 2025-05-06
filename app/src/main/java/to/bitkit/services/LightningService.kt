@@ -361,11 +361,10 @@ class LightningService @Inject constructor(
         return true
     }
 
-    // TODO: get feeRate from real source
-    suspend fun send(address: Address, sats: ULong, satsPerVByte: UInt = 5u): Txid {
+    suspend fun send(address: Address, sats: ULong, satsPerVByte: UInt): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Sending $sats sats to $address")
+        Logger.info("Sending $sats sats to $address with satsPerVByte=$satsPerVByte")
 
         return ServiceQueue.LDK.background {
             node.onchainPayment().sendToAddress(

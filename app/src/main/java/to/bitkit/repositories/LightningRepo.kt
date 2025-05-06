@@ -221,9 +221,10 @@ class LightningRepo @Inject constructor(
             Result.success(paymentId)
         }
 
-    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> =
+    // TODO: remove default satsPerVByte
+    suspend fun sendOnChain(address: Address, sats: ULong, satsPerVByte: UInt = 5u): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
-            val txId = lightningService.send(address = address, sats = sats)
+            val txId = lightningService.send(address = address, sats = sats, satsPerVByte = satsPerVByte)
             Result.success(txId)
         }
 

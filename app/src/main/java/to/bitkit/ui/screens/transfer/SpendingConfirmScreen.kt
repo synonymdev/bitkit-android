@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
@@ -172,7 +173,8 @@ fun SpendingConfirmScreen(
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        viewModel.onTransferToSpendingConfirm(order)
+                        // TODO use TransactionSpeed from settings
+                        viewModel.onTransferToSpendingConfirm(order, speed = TransactionSpeed.Fast)
                         onConfirm()
                     }
                 }
