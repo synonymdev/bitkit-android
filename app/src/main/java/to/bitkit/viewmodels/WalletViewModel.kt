@@ -50,6 +50,7 @@ class WalletViewModel @Inject constructor(
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
+    @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
     val uiState = _uiState.asStateFlow()
 
     init {
