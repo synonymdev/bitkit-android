@@ -41,8 +41,6 @@ class LightningRepo @Inject constructor(
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
-    val nodeLifecycleState = _lightningState.asStateFlow().map { it.nodeLifecycleState }
-
     /**
      * Executes the provided operation only if the node is running.
      * If the node is not running, waits for it to be running for a specified timeout.
