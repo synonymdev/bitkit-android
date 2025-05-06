@@ -7,6 +7,7 @@ import to.bitkit.ext.ensureDir
 import to.bitkit.models.LnPeer
 import to.bitkit.models.blocktank.BlocktankNotificationType
 import to.bitkit.utils.Logger
+import java.io.File
 import kotlin.io.path.Path
 
 @Suppress("ConstPropertyName")
@@ -17,6 +18,8 @@ internal object Env {
     val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
+
+    // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
             Network.REGTEST -> listOf(
@@ -83,11 +86,11 @@ internal object Env {
         appStoragePath = path
     }
 
-    fun ldkLogFilePath(walletIndex: Int): String {
-        val logPath = Path(ldkStoragePath(walletIndex), "ldk_node_latest.log").toFile().absolutePath
-        Logger.info("LDK-node log path: $logPath")
-        return logPath
-    }
+    val logDir: String
+        get() {
+            require(::appStoragePath.isInitialized)
+            return File(appStoragePath).resolve("logs").ensureDir().path
+        }
 
     val ldkLogLevel = LogLevel.TRACE
 
@@ -95,13 +98,13 @@ internal object Env {
     fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
-        require(::appStoragePath.isInitialized) { "App storage path should be init as context.filesDir.absolutePath." }
-        val absolutePath = Path(appStoragePath, network, "wallet$walletIndex", dir)
+        require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
+        val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
             .toFile()
             .ensureDir()
-            .absolutePath
-        Logger.debug("Using ${dir.uppercase()} storage path: $absolutePath")
-        return absolutePath
+            .path
+        Logger.debug("Using ${dir.uppercase()} storage path: $path")
+        return path
     }
 
     object Peers {
@@ -114,4 +117,5 @@ internal object Env {
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
     const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
+    const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
 }

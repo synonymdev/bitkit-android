@@ -2,9 +2,18 @@ package to.bitkit.utils
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
+import to.bitkit.env.Env
+import to.bitkit.ext.DatePattern
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.Executors
 
 object Logger {
@@ -15,6 +24,22 @@ object Logger {
         .asCoroutineDispatcher()
     private val queue = CoroutineScope(singleThreadDispatcher + SupervisorJob())
 
+    private val sessionLogFile: String by lazy {
+        val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val timestamp = dateFormatter.format(Date())
+        val sessionLogFilePath = File(Env.logDir).resolve("bitkit_$timestamp.log").path
+
+        // Run cleanup in background
+        CoroutineScope(Dispatchers.IO).launch {
+            cleanupOldLogFiles()
+        }
+
+        Log.i(TAG, "Bitkit logger initialized with session log: $sessionLogFilePath")
+        return@lazy sessionLogFilePath
+    }
+
     fun info(
         msg: String?,
         context: String = "",
@@ -23,7 +48,7 @@ object Logger {
     ) {
         val message = format("INFOℹ️: $msg", context, file, line)
         Log.i(TAG, message)
-        saveLog(message)
+        saveToFile(message)
     }
 
     fun debug(
@@ -34,7 +59,7 @@ object Logger {
     ) {
         val message = format("DEBUG: $msg", context, file, line)
         Log.d(TAG, message)
-        saveLog(message)
+        saveToFile(message)
     }
 
     fun warn(
@@ -47,7 +72,7 @@ object Logger {
         val errMsg = e?.message?.let { " (err: '$it')" } ?: ""
         val message = format("WARN⚠️: $msg$errMsg", context, file, line)
         Log.w(TAG, message, e)
-        saveLog(message)
+        saveToFile(message)
     }
 
     fun error(
@@ -60,7 +85,7 @@ object Logger {
         val errMsg = e?.message?.let { " (err: '$it')" } ?: ""
         val message = format("ERROR❌️: $msg$errMsg", context, file, line)
         Log.e(TAG, message, e)
-        saveLog(message)
+        saveToFile(message)
     }
 
     fun verbose(
@@ -71,7 +96,7 @@ object Logger {
     ) {
         val message = format("VERBOSE: $msg", context, file, line)
         Log.v(TAG, message)
-        saveLog(message)
+        saveToFile(message)
     }
 
     fun performance(
@@ -82,7 +107,7 @@ object Logger {
     ) {
         val message = format("PERF: $msg", context, file, line)
         Log.v(TAG, message)
-        saveLog(message)
+        saveToFile(message)
     }
 
     private fun format(message: Any, context: String, file: String, line: Int): String {
@@ -97,9 +122,48 @@ object Logger {
         return Thread.currentThread().stackTrace.getOrNull(4)?.lineNumber ?: -1
     }
 
-    private fun saveLog(message: String) {
+    private fun saveToFile(message: String) {
         queue.launch {
-            // TODO: save log to file
+            try {
+                val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
+                val timestamp = dateFormatter.format(Date())
+                val logMessage = "[$timestamp UTC] $message\n"
+
+                FileOutputStream(File(sessionLogFile), true).use { stream ->
+                    stream.write(logMessage.toByteArray())
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to write to log file", e)
+            }
+        }
+    }
+
+    // Cleans up both bitkit and ldk log files
+    private fun cleanupOldLogFiles(maxTotalSizeMB: Int = 20) {
+        val baseDir = File(Env.logDir)
+        if (!baseDir.exists()) return
+
+        val logFiles = baseDir
+            .listFiles { file -> file.extension == "log" }
+            ?.map { file -> Triple(file, file.length(), file.lastModified()) }
+            ?: return
+
+        var totalSize = logFiles.sumOf { it.second }
+        val maxSizeBytes = maxTotalSizeMB * 1024L * 1024L
+
+        // Sort by creation date (oldest first)
+        logFiles.sortedBy { it.third }.forEach { (file, size, _) ->
+            if (totalSize <= maxSizeBytes) return
+
+            try {
+                if (file.delete()) {
+                    totalSize -= size
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to cleanup log file:", e)
+            }
         }
     }
 }

@@ -76,16 +76,18 @@ import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.LogDetailScreen
+import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
-import to.bitkit.ui.settings.pin.ChangePinScreen
-import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
+import to.bitkit.ui.settings.pin.ChangePinScreen
+import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.utils.screenScaleIn
 import to.bitkit.ui.utils.screenScaleOut
 import to.bitkit.ui.utils.screenSlideIn
@@ -262,6 +264,7 @@ fun ContentView(
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
                 authCheck(navController)
+                logs(navController)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -692,6 +695,21 @@ private fun NavGraphBuilder.authCheck(
         )
     }
 }
+
+private fun NavGraphBuilder.logs(
+    navController: NavHostController,
+) {
+    composableWithDefaultTransitions<Routes.Logs> {
+        LogsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.LogDetail> { navBackEntry ->
+        val route = navBackEntry.toRoute<Routes.LogDetail>()
+        LogDetailScreen(
+            navController = navController,
+            fileName = route.fileName,
+        )
+    }
+}
 // endregion
 
 /**
@@ -850,6 +868,14 @@ fun NavController.navigateToActivityItem(id: String) = navigate(
 fun NavController.navigateToQrScanner() = navigate(
     route = Routes.QrScanner,
 )
+
+fun NavController.navigateToLogs() = navigate(
+    route = Routes.Logs,
+)
+
+fun NavController.navigateToLogDetail(fileName: String) = navigate(
+    route = Routes.LogDetail(fileName),
+)
 // endregion
 
 object Routes {
@@ -908,6 +934,12 @@ object Routes {
 
     @Serializable
     data object ChannelOrdersSettings
+
+    @Serializable
+    data object Logs
+
+    @Serializable
+    data class LogDetail(val fileName: String)
 
     @Serializable
     data class OrderDetail(val id: String)

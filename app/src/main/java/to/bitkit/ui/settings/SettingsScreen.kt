@@ -24,6 +24,7 @@ import to.bitkit.ui.navigateToGeneralSettings
 import to.bitkit.ui.navigateToLightning
 import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.navigateToSecuritySettings
+import to.bitkit.ui.navigateToLogs
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
@@ -46,6 +47,7 @@ fun SettingsScreen(
             NavButton(stringResource(R.string.button_backup_settings)) { navController.navigateToBackupSettings() }
             NavButton("Lightning") { navController.navigateToLightning() }
             NavButton("Channel Orders") { navController.navigateToChannelOrdersSettings() }
+            NavButton("Logs") { navController.navigateToLogs() }
             if (Env.network == Network.REGTEST) {
                 LabelText("REGTEST ONLY")
                 NavButton("Dev Settings") { navController.navigateToDevSettings() }
