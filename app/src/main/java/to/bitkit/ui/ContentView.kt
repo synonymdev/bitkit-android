@@ -76,8 +76,8 @@ import to.bitkit.ui.settings.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LocalCurrencySettingsScreen
-import to.bitkit.ui.settings.LogContentScreen
-import to.bitkit.ui.settings.LogScreen
+import to.bitkit.ui.settings.LogDetailScreen
+import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
@@ -700,13 +700,13 @@ private fun NavGraphBuilder.logs(
     navController: NavHostController,
 ) {
     composableWithDefaultTransitions<Routes.Logs> {
-        LogScreen(navController)
+        LogsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LogFile> { navBackEntry ->
-        val route = navBackEntry.toRoute<Routes.LogFile>()
-        LogContentScreen(
+    composableWithDefaultTransitions<Routes.LogDetail> { navBackEntry ->
+        val route = navBackEntry.toRoute<Routes.LogDetail>()
+        LogDetailScreen(
             navController = navController,
-            fileName = route.fileName
+            fileName = route.fileName,
         )
     }
 }
@@ -873,8 +873,8 @@ fun NavController.navigateToLogs() = navigate(
     route = Routes.Logs,
 )
 
-fun NavController.navigateToLogFile(fileName: String) = navigate(
-    route = Routes.LogFile(fileName),
+fun NavController.navigateToLogDetail(fileName: String) = navigate(
+    route = Routes.LogDetail(fileName),
 )
 // endregion
 
@@ -939,7 +939,7 @@ object Routes {
     data object Logs
 
     @Serializable
-    data class LogFile(val fileName: String)
+    data class LogDetail(val fileName: String)
 
     @Serializable
     data class OrderDetail(val id: String)

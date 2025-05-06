@@ -36,17 +36,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption
-import to.bitkit.ui.navigateToLogFile
+import to.bitkit.ui.navigateToLogDetail
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.LogViewModel
+import to.bitkit.viewmodels.LogsViewModel
 
 @Composable
-fun LogScreen(
+fun LogsScreen(
     navController: NavController,
-    viewModel: LogViewModel = hiltViewModel(),
+    viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val logs by viewModel.logs.collectAsState()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -85,7 +85,7 @@ fun LogScreen(
                         )
                     },
                     modifier = Modifier.clickableAlpha {
-                        navController.navigateToLogFile(logFile.fileName)
+                        navController.navigateToLogDetail(logFile.fileName)
                     }
                 )
                 HorizontalDivider()
@@ -119,10 +119,10 @@ fun LogScreen(
 }
 
 @Composable
-fun LogContentScreen(
+fun LogDetailScreen(
     navController: NavController,
     fileName: String,
-    viewModel: LogViewModel = hiltViewModel(),
+    viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val logs by viewModel.logs.collectAsState()

@@ -20,7 +20,9 @@ import java.io.FileReader
 import javax.inject.Inject
 
 @HiltViewModel
-class LogViewModel @Inject constructor(private val application: Application) : AndroidViewModel(application) {
+class LogsViewModel @Inject constructor(
+    private val application: Application,
+) : AndroidViewModel(application) {
     private val _logs = MutableStateFlow<List<LogFile>>(emptyList())
     val logs: StateFlow<List<LogFile>> = _logs.asStateFlow()
 
@@ -91,7 +93,7 @@ class LogViewModel @Inject constructor(private val application: Application) : A
             try {
                 withContext(Dispatchers.IO) {
                     val tempDir = application.externalCacheDir?.resolve("logs")?.apply { mkdirs() }
-                        ?: error("External cache directory is not available")
+                        ?: error("External cache dir is not available")
                     val tempFile = File(tempDir, logFile.fileName)
 
                     logFile.file.copyTo(tempFile, overwrite = true)
