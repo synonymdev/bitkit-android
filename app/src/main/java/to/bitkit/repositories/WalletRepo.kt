@@ -119,7 +119,7 @@ class WalletRepo @Inject constructor(
         }
 
         //Reset invoice state
-        _walletState.update { it.copy(balanceInput = "") }
+        _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "", balanceInput = "") }
 
         updateBip21Invoice()
 
@@ -178,8 +178,6 @@ class WalletRepo @Inject constructor(
             )
             setBip21(newBip21)
             saveInvoiceWithTags(bip21Invoice = newBip21, tags = tags)
-
-            _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "") }
 
             Result.success(Unit)
         } catch (e: Throwable) {

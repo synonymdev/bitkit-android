@@ -175,13 +175,12 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        description: String = "",
         generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch {
             walletRepo.updateBip21Invoice(
                 amountSats = amountSats,
-                description = description,
+                description = walletState.value.bip21Description,
                 generateBolt11IfAvailable = generateBolt11IfAvailable,
                 tags = walletState.value.selectedTags
             ).onFailure { error ->
@@ -198,7 +197,6 @@ class WalletViewModel @Inject constructor(
         walletRepo.toggleReceiveOnSpendingBalance()
         updateBip21Invoice(
             amountSats = walletState.value.bip21AmountSats,
-            description = walletState.value.bip21Description,
             generateBolt11IfAvailable = walletState.value.receiveOnSpendingBalance
         )
     }
@@ -402,6 +400,9 @@ class WalletViewModel @Inject constructor(
     }
 
     fun updateBip21Description(newText: String) {
+        if (newText.isEmpty()) {
+            Logger.warn("Empty")
+        }
         walletRepo.updateBip21Description(newText)
     }
 

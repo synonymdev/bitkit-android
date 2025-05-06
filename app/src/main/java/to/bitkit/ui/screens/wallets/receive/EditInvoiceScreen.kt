@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
@@ -60,8 +61,8 @@ import to.bitkit.viewmodels.MainUiState
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
-    walletUiState: MainUiState,
-    updateInvoice: (ULong?, String) -> Unit,
+    walletUiState: WalletState,
+    updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onInputUpdated: (String) -> Unit,
@@ -93,7 +94,7 @@ fun EditInvoiceScreen(
         onClickBalance = { keyboardVisible = true },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull(), walletUiState.bip21Description) },
+        onContinueGeneral = { updateInvoice(satsString.toULongOrNull()) },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag
     )
@@ -220,7 +221,7 @@ fun EditInvoiceContent(
                             )
                         },
                         value = noteText,
-                        onValueChange = onTextChanged,
+                        onValueChange = onTextChanged, //it is being callet with the current state and with the previous state
                         minLines = 4,
                         colors = AppTextFieldDefaults.semiTransparent,
                         shape = MaterialTheme.shapes.medium,
