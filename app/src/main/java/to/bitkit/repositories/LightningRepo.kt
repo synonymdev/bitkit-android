@@ -223,6 +223,7 @@ class LightningRepo @Inject constructor(
         stop().onSuccess {
             return@withContext try {
                 lightningService.wipeStorage(walletIndex)
+                _lightningState.update { LightningState(nodeStatus = it.nodeStatus, nodeLifecycleState = it.nodeLifecycleState) }
                 Result.success(Unit)
             } catch (e: Throwable) {
                 Logger.error("Wipe storage error", e, context = TAG)

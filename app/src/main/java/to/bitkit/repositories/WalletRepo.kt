@@ -236,6 +236,8 @@ class WalletRepo @Inject constructor(
             settingsStore.wipe()
             coreService.activity.removeAll()
             deleteAllInvoices()
+            _walletState.update { WalletState() }
+            _balanceState.update { BalanceState() }
             setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
