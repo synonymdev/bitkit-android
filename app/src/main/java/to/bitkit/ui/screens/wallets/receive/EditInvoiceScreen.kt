@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -189,7 +188,7 @@ fun EditInvoiceContent(
                     Spacer(modifier = Modifier.height(41.dp))
 
                     PrimaryButton(
-                        text = stringResource(R.string.continue_button),
+                        text = stringResource(R.string.common__continue),
                         onClick = onContinueKeyboard,
                         modifier = Modifier.testTag("keyboard_continue_button")
                     )
@@ -268,7 +267,7 @@ fun EditInvoiceContent(
                     Spacer(modifier = Modifier.weight(1f))
 
                     PrimaryButton(
-                        text = stringResource(R.string.continue_button),
+                        text = stringResource(R.string.wallet__receive_show_qr),
                         onClick = onContinueGeneral,
                         modifier = Modifier.testTag("general_continue_button")
                     )
