@@ -47,6 +47,7 @@ class WalletViewModel @Inject constructor(
         private set
 
     var isRestoringWallet by mutableStateOf(false)
+        private set
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
@@ -89,6 +90,10 @@ class WalletViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun setRestoringWalletState(isRestoringWallet: Boolean) {
+        walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
     }
 
     fun setWalletExistsState() {

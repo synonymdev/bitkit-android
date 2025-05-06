@@ -207,7 +207,7 @@ fun ContentView(
         }
     } else if (walletViewModel.isRestoringWallet) {
         WalletInitResultView(result = WalletInitResult.Restored) {
-            walletViewModel.isRestoringWallet = false
+            walletViewModel.setRestoringWalletState(false)
         }
     } else {
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
