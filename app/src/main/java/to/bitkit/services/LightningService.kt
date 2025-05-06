@@ -35,6 +35,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.DatePattern
 import to.bitkit.ext.millis
 import to.bitkit.ext.toHex
 import to.bitkit.ext.toSha256
@@ -44,6 +45,11 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.io.path.Path
@@ -79,7 +85,8 @@ class LightningService @Inject constructor(
                     )
                 })
             .apply {
-                setFilesystemLogger(Env.ldkLogFilePath(walletIndex), Env.ldkLogLevel)
+                setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
+
                 setChainSourceEsplora(
                     serverUrl = Env.esploraServerUrl,
                     config = EsploraSyncConfig(
@@ -354,7 +361,7 @@ class LightningService @Inject constructor(
         return true
     }
 
-    //TODO: get feeRate from real source
+    // TODO: get feeRate from real source
     suspend fun send(address: Address, sats: ULong, satKwu: ULong = 250uL * 5uL): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -480,6 +487,18 @@ class LightningService @Inject constructor(
         }
     }.flowOn(bgDispatcher)
     // endregion
+
+    private fun generateLogFilePath(): String {
+        val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val timestamp = dateFormatter.format(Date())
+
+        val sessionLogFilePath = File(Env.logDir).resolve("ldk_$timestamp.log").path
+
+        Logger.debug("Generated LDK log file path: $sessionLogFilePath")
+        return sessionLogFilePath
+    }
 }
 
 // region helpers
