@@ -183,7 +183,6 @@ class WalletViewModel @Inject constructor(
                 amountSats = amountSats,
                 description = walletState.value.bip21Description,
                 generateBolt11IfAvailable = generateBolt11IfAvailable,
-                tags = walletState.value.selectedTags
             ).onFailure { error ->
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,

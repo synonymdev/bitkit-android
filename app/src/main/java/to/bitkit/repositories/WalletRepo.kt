@@ -119,7 +119,7 @@ class WalletRepo @Inject constructor(
         }
 
         //Reset invoice state
-        _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "", balanceInput = "") }
+        _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "", balanceInput = "", bip21 = "") }
 
         updateBip21Invoice()
 
@@ -140,49 +140,6 @@ class WalletRepo @Inject constructor(
             saveBalanceState(newBalance)
 
             setShowEmptyState(totalSats <= 0u)
-        }
-    }
-
-    suspend fun updateBip21Invoice(
-        amountSats: ULong? = null,
-        description: String = "",
-        generateBolt11IfAvailable: Boolean = true,
-        tags: List<String> = emptyList()
-    ): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            _walletState.update {
-                it.copy(
-                    bip21AmountSats = amountSats,
-                    bip21Description = description
-                )
-            }
-
-            val hasChannels = lightningRepo.hasChannels()
-
-            if (hasChannels && generateBolt11IfAvailable) {
-                lightningRepo.createInvoice(
-                    amountSats = _walletState.value.bip21AmountSats,
-                    description = _walletState.value.bip21Description
-                ).onSuccess { bolt11 ->
-                    setBolt11(bolt11)
-                }
-            } else {
-                setBolt11("")
-            }
-
-            val newBip21 = buildBip21Url(
-                bitcoinAddress = getOnchainAddress(),
-                amountSats = _walletState.value.bip21AmountSats,
-                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
-                lightningInvoice = getBolt11()
-            )
-            setBip21(newBip21)
-            saveInvoiceWithTags(bip21Invoice = newBip21, tags = tags)
-
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Update BIP21 invoice error", e, context = TAG)
-            Result.failure(e)
         }
     }
 
@@ -336,41 +293,42 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    fun clearTagsAndBip21DescriptionState() {
-        _walletState.update { it.copy(selectedTags = listOf(), bip21Description = "") }
-    }
-
     // BIP21 invoice creation
     suspend fun updateBip21Invoice(
         amountSats: ULong? = null,
         description: String = "",
         generateBolt11IfAvailable: Boolean = true,
-    ) = withContext(bgDispatcher) {
-        updateBip21AmountSats(amountSats)
-        updateBip21Description(description)
+    ): Result<Unit> = withContext(bgDispatcher) {
+        try {
+            updateBip21AmountSats(amountSats)
+            updateBip21Description(description)
 
-        val hasChannels = lightningRepo.hasChannels()
+            val hasChannels = lightningRepo.hasChannels()
 
-        if (hasChannels && generateBolt11IfAvailable) {
-            lightningRepo.createInvoice(
-                amountSats = _walletState.value.bip21AmountSats,
-                description = _walletState.value.bip21Description
-            ).onSuccess { bolt11 ->
-                setBolt11(bolt11)
+            if (hasChannels && generateBolt11IfAvailable) {
+                lightningRepo.createInvoice(
+                    amountSats = _walletState.value.bip21AmountSats,
+                    description = _walletState.value.bip21Description
+                ).onSuccess { bolt11 ->
+                    setBolt11(bolt11)
+                }
+            } else {
+                setBolt11("")
             }
-        } else {
-            setBolt11("")
-        }
 
-        val newBip21 = buildBip21Url(
-            bitcoinAddress = getOnchainAddress(),
-            amountSats = _walletState.value.bip21AmountSats,
-            message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
-            lightningInvoice = getBolt11()
-        )
-        setBip21(newBip21)
-        saveInvoiceWithTags(bip21Invoice = newBip21, tags = _walletState.value.selectedTags)
-        clearTagsAndBip21DescriptionState()
+            val newBip21 = buildBip21Url(
+                bitcoinAddress = getOnchainAddress(),
+                amountSats = _walletState.value.bip21AmountSats,
+                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+                lightningInvoice = getBolt11()
+            )
+            setBip21(newBip21)
+            saveInvoiceWithTags(bip21Invoice = newBip21, tags = _walletState.value.selectedTags)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Update BIP21 invoice error", e, context = TAG)
+            Result.failure(e)
+        }
     }
 
     // Notification handling
