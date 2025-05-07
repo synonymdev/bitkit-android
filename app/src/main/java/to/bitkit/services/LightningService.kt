@@ -413,26 +413,6 @@ class LightningService @Inject constructor(
         }
     }
 
-    fun listenForEvents(): Flow<Event> = flow {
-        while (shouldListenForEvents) {
-            val node = this@LightningService.node ?: let {
-                Logger.error(ServiceError.NodeNotStarted.message.orEmpty())
-                return@flow
-            }
-            val event = node.nextEventAsync()
-
-            try {
-                node.eventHandled()
-                Logger.debug("LDK eventHandled: $event")
-            } catch (e: NodeException) {
-                Logger.error("LDK eventHandled error", LdkError(e))
-            }
-
-            logEvent(event)
-            emit(event)
-        }
-    }
-
     private fun logEvent(event: Event) {
         when (event) {
             is Event.PaymentSuccessful -> {

@@ -2,14 +2,12 @@ package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -27,6 +25,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
@@ -123,8 +122,26 @@ class WalletRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
+    suspend fun observeLdkWallet() = withContext(bgDispatcher) {
+        lightningRepo.getSyncFlow()
+            .filter { lightningRepo.lightningState.value.nodeLifecycleState == NodeLifecycleState.Running }
+            .collect {
+                runCatching {
+                   syncNodeAndWallet()
+                }
+            }
+    }
+
+    suspend fun syncNodeAndWallet() : Result<Unit> = withContext(bgDispatcher) {
+        lightningRepo.sync().onSuccess {
+            syncBalances()
+            return@withContext Result.success(Unit)
+        }.onFailure { e ->
+            return@withContext Result.failure(e)
+        }
+    }
+
     suspend fun syncBalances() {
-        lightningRepo.sync()
         lightningRepo.getBalances()?.let { balance ->
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
 
@@ -141,28 +158,9 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun syncWithEvents() = withContext(bgDispatcher) {
-        lightningRepo.listenForNodeEvents().onSuccess { eventFlow ->
-            eventFlow.collect { event ->
-                Logger.debug("Event collected: $event", context = TAG)
-                syncBalancesForEvent(event)
-                refreshBip21ForEvent(event)
-            }
-        }.onFailure { e ->
-            Logger.error("syncWithEvents error ", e, context = TAG)
-        }
-    }
-
-    private suspend fun refreshBip21ForEvent(event: Event) {
+    suspend fun refreshBip21ForEvent(event: Event) {
         when (event) {
             is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
-            else -> Unit
-        }
-    }
-
-    private suspend fun syncBalancesForEvent(event: Event) {
-        when (event) {
-            is Event.PaymentReceived, Event.PaymentSuccessful -> syncBalances()
             else -> Unit
         }
     }

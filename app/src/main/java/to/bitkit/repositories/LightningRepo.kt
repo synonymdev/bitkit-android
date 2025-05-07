@@ -13,7 +13,6 @@ import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -182,11 +181,6 @@ class LightningRepo @Inject constructor(
                 Result.failure(e)
             }
         }
-    }
-
-    suspend fun listenForNodeEvents(
-    ) : Result<Flow<Event>> = executeWhenNodeRunning("listen for node events") {
-        Result.success(lightningService.listenForEvents())
     }
 
     fun setInitNodeLifecycleState() {

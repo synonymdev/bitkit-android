@@ -118,6 +118,10 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    suspend fun observeLdkWallet() {
+        walletRepo.observeLdkWallet()
+    }
+
     fun refreshState() {
         viewModelScope.launch {
             lightningRepo.sync()
@@ -131,7 +135,7 @@ class WalletViewModel @Inject constructor(
     fun onPullToRefresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
-            lightningRepo.sync()
+            walletRepo.syncNodeAndWallet()
                 .onSuccess {
                     _uiState.update { it.copy(isRefreshing = false) }
                 }
