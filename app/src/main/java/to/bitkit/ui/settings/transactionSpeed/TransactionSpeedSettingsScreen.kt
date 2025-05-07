@@ -9,19 +9,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.models.TransactionSpeed
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.settings.SettingsCheckRow
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun TransactionSpeedSettingsScreen(
     navController: NavController,
 ) {
+    val app = appViewModel ?: return
+    val defaultTransactionSpeed = app.defaultTransactionSpeed.collectAsStateWithLifecycle()
+
     TransactionSpeedSettingsContent(
+        selectedSpeed = defaultTransactionSpeed.value,
+        onSpeedSelected = { app.setDefaultTransactionSpeed(it) },
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
     )
@@ -29,6 +39,8 @@ fun TransactionSpeedSettingsScreen(
 
 @Composable
 private fun TransactionSpeedSettingsContent(
+    selectedSpeed: TransactionSpeed,
+    onSpeedSelected: (TransactionSpeed) -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -43,15 +55,40 @@ private fun TransactionSpeedSettingsContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            // TODO: Add content here
+            SettingsCheckRow(
+                title = stringResource(R.string.settings__fee__fast__label),
+                subtitle = stringResource(R.string.settings__fee__fast__description),
+                iconRes = R.drawable.ic_speed_fast,
+                iconTint = Colors.Brand,
+                isOn = selectedSpeed == TransactionSpeed.Fast,
+                onClick = { onSpeedSelected(TransactionSpeed.Fast) },
+            )
+            SettingsCheckRow(
+                title = stringResource(R.string.settings__fee__normal__label),
+                subtitle = stringResource(R.string.settings__fee__normal__description),
+                iconRes = R.drawable.ic_speed_normal,
+                iconTint = Colors.Brand,
+                isOn = selectedSpeed == TransactionSpeed.Medium,
+                onClick = { onSpeedSelected(TransactionSpeed.Medium) },
+            )
+            SettingsCheckRow(
+                title = stringResource(R.string.settings__fee__slow__label),
+                subtitle = stringResource(R.string.settings__fee__slow__description),
+                iconRes = R.drawable.ic_speed_slow,
+                iconTint = Colors.Brand,
+                isOn = selectedSpeed == TransactionSpeed.Slow,
+                onClick = { onSpeedSelected(TransactionSpeed.Slow) },
+            )
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        TransactionSpeedSettingsContent()
+        TransactionSpeedSettingsContent(
+            selectedSpeed = TransactionSpeed.Medium,
+        )
     }
 }

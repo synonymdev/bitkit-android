@@ -27,12 +27,12 @@ fun SettingsSwitchRow(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier.height(52.dp)
+        modifier = modifier.height(52.dp)
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .clickableAlpha { onClick() }
                 .padding(vertical = 16.dp)
