@@ -87,7 +87,6 @@ class WalletViewModel @Inject constructor(
                         nodeLifecycleState = state.nodeLifecycleState,
                         peers = state.peers,
                         channels = state.channels,
-                        isRefreshing = state.isRefreshing,
                     )
                 }
             }
@@ -130,14 +129,15 @@ class WalletViewModel @Inject constructor(
 
     fun onPullToRefresh() {
         viewModelScope.launch {
-            try {
-                lightningRepo.sync()
-                    .onFailure { error ->
-                        ToastEventBus.send(error)
-                    }
-            } catch (e: Throwable) {
-                ToastEventBus.send(e)
-            }
+            _uiState.update { it.copy(isRefreshing = true) }
+            lightningRepo.sync()
+                .onSuccess {
+                    _uiState.update { it.copy(isRefreshing = false) }
+                }
+                .onFailure { error ->
+                    ToastEventBus.send(error)
+                    _uiState.update { it.copy(isRefreshing = false) }
+                }
         }
     }
 

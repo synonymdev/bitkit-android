@@ -338,6 +338,5 @@ data class LightningState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
-    val isRefreshing: Boolean = false,
     val isSyncingWallet: Boolean = false
 )
