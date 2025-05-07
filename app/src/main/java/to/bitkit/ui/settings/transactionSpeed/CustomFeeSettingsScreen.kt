@@ -28,7 +28,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.LargeRow
-import to.bitkit.ui.components.PinNumberPad
+import to.bitkit.ui.components.NumberPadSimple
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
@@ -130,7 +130,7 @@ private fun CustomFeeSettingsContent(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            PinNumberPad(
+            NumberPadSimple(
                 onPress = onKeyPress,
                 modifier = Modifier.height(350.dp)
             )
