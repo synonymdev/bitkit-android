@@ -19,6 +19,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.navigateToCustomFeeSettings
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -36,6 +37,7 @@ fun TransactionSpeedSettingsScreen(
     TransactionSpeedSettingsContent(
         selectedSpeed = defaultTransactionSpeed.value,
         onSpeedSelected = { app.setDefaultTransactionSpeed(it) },
+        onCustomFeeClick = { navController.navigateToCustomFeeSettings() },
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
     )
@@ -45,6 +47,7 @@ fun TransactionSpeedSettingsScreen(
 private fun TransactionSpeedSettingsContent(
     selectedSpeed: TransactionSpeed,
     onSpeedSelected: (TransactionSpeed) -> Unit = {},
+    onCustomFeeClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -86,6 +89,14 @@ private fun TransactionSpeedSettingsContent(
                 iconTint = Colors.Brand,
                 value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Slow),
                 onClick = { onSpeedSelected(TransactionSpeed.Slow) },
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__fee__custom__label),
+                subtitle = stringResource(R.string.settings__fee__custom__description),
+                iconRes = R.drawable.ic_settings,
+                iconTint = Colors.White,
+                value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Custom),
+                onClick = onCustomFeeClick,
             )
         }
     }

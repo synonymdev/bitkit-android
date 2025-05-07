@@ -101,7 +101,7 @@ fun SettingsButtonRow(
                                 modifier = Modifier.size(32.dp),
                             )
 
-                            else -> Spacer(modifier = Modifier.size(32.dp))
+                            else -> Unit
                         }
                     }
                 }
