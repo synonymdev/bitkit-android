@@ -67,7 +67,7 @@ class LightningNodeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_launcher_fg_regtest) //TODO GET PRODUCTION ICON
             .setContentIntent(pendingIntent)
             .build()
     }
