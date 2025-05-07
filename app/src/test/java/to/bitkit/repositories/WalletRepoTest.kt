@@ -1,13 +1,11 @@
 package to.bitkit.repositories
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.cash.turbine.test
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
@@ -15,7 +13,6 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.robolectric.annotation.Config
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
@@ -24,18 +21,11 @@ import to.bitkit.env.Env
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.test.TestApp
 import to.bitkit.utils.AddressChecker
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentType
-import kotlin.random.Random
-import kotlin.random.nextULong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-@RunWith(AndroidJUnit4::class)
-@Config(application = TestApp::class)
 class WalletRepoTest : BaseUnitTest() {
 
     private lateinit var sut: WalletRepo
@@ -80,22 +70,6 @@ class WalletRepoTest : BaseUnitTest() {
         val testFlow = MutableStateFlow(Unit)
         whenever(lightningRepo.getSyncFlow()).thenReturn(testFlow)
         whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
-
-        // Recreate sut with the new mock
-        val testSut = WalletRepo(
-            bgDispatcher = testDispatcher,
-            appStorage = appStorage,
-            db = db,
-            keychain = keychain,
-            coreService = coreService,
-            blocktankNotificationsService = blocktankNotificationsService,
-            firebaseMessaging = firebaseMessaging,
-            settingsStore = settingsStore,
-            addressChecker = addressChecker,
-            lightningRepo = lightningRepo,
-            network = Env.network
-        )
-
         verify(lightningRepo).sync()
     }
 
@@ -178,45 +152,4 @@ class WalletRepoTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
     }
-
-    fun mockOnchainActivity(
-        id: String = java.util.UUID.randomUUID().toString(),
-        txType: PaymentType = PaymentType.values().random(),
-        txId: String = java.util.UUID.randomUUID().toString(),
-        value: ULong = Random.nextULong(),
-        fee: ULong = Random.nextULong(),
-        feeRate: ULong = Random.nextULong(),
-        address: String = "mockAddress_${Random.nextInt(100)}",
-        confirmed: Boolean = Random.nextBoolean(),
-        timestamp: ULong = System.currentTimeMillis().toULong(),
-        isBoosted: Boolean = Random.nextBoolean(),
-        isTransfer: Boolean = Random.nextBoolean(),
-        doesExist: Boolean = true,
-        confirmTimestamp: ULong? = if (confirmed) System.currentTimeMillis().toULong() else null,
-        channelId: String? = "mockChannel_${Random.nextInt(10)}",
-        transferTxId: String? = if (isTransfer) java.util.UUID.randomUUID().toString() else null,
-        createdAt: ULong? = System.currentTimeMillis().toULong(),
-        updatedAt: ULong? = System.currentTimeMillis().toULong()
-    ): OnchainActivity {
-        return OnchainActivity(
-            id,
-            txType,
-            txId,
-            value,
-            fee,
-            feeRate,
-            address,
-            confirmed,
-            timestamp,
-            isBoosted,
-            isTransfer,
-            doesExist,
-            confirmTimestamp,
-            channelId,
-            transferTxId,
-            createdAt,
-            updatedAt
-        )
-    }
-
 }
