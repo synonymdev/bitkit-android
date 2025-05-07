@@ -7,13 +7,12 @@ import android.app.Application.ActivityLifecycleCallbacks
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.androidServices.LightningNodeService
-import to.bitkit.androidServices.LightningNodeService.Companion.BITKIT_CHANNEL_ID
+import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.env.Env
 import javax.inject.Inject
 
@@ -43,18 +42,16 @@ internal open class App : Application(), Configuration.Provider {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = getString(R.string.app_name)
-            val descriptionText = "Channel for LightningNodeService"
-            val importance = NotificationManager.IMPORTANCE_LOW
+        val name = "Lightning node notification"
+        val descriptionText = "Channel for LightningNodeService"
+        val importance = NotificationManager.IMPORTANCE_LOW
 
-            val channel = NotificationChannel(BITKIT_CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-
-            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(CHANNEL_ID_NODE, name, importance).apply {
+            description = descriptionText
         }
+
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 }
 

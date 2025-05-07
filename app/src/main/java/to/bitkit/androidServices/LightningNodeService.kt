@@ -64,7 +64,7 @@ class LightningNodeService : Service() {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, BITKIT_CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
@@ -91,7 +91,7 @@ class LightningNodeService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1
-        const val BITKIT_CHANNEL_ID = "bitkit_notification_channel"
+        const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
     }
 }
