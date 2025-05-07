@@ -18,6 +18,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToTransactionSpeedSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.utils.displayText
@@ -42,7 +43,7 @@ fun GeneralSettingsScreen(
         onCloseClick = { navController.navigateToHome() },
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
         onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
-        onTransactionSpeedClick = { /* TODO */ },
+        onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
     )
 }
 
@@ -92,7 +93,7 @@ private fun GeneralSettingsContent(
 
 @Preview(showBackground = true)
 @Composable
-private fun PreviewScreen() {
+private fun Preview() {
     AppThemeSurface {
         GeneralSettingsContent(
             selectedCurrency = "USD",

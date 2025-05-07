@@ -81,6 +81,7 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -243,6 +244,7 @@ fun ContentView(
                 settings(walletViewModel, navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
+                transactionSpeedSettings(navController)
                 securitySettings(navController)
                 disablePin(navController)
                 changePin(navController)
@@ -492,6 +494,12 @@ private fun NavGraphBuilder.nodeState(
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.TransactionSpeedSettings> {
+        TransactionSpeedSettingsScreen(navController)
     }
 }
 
@@ -876,6 +884,10 @@ fun NavController.navigateToLogs() = navigate(
 fun NavController.navigateToLogDetail(fileName: String) = navigate(
     route = Routes.LogDetail(fileName),
 )
+
+fun NavController.navigateToTransactionSpeedSettings() = navigate(
+    route = Routes.TransactionSpeedSettings,
+)
 // endregion
 
 object Routes {
@@ -890,6 +902,9 @@ object Routes {
 
     @Serializable
     data object GeneralSettings
+
+    @Serializable
+    data object TransactionSpeedSettings
 
     @Serializable
     data object SecuritySettings

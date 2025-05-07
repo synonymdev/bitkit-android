@@ -177,7 +177,7 @@ private fun SecuritySettingsContent(
 
 @Preview
 @Composable
-fun Preview() {
+private fun Preview() {
     AppThemeSurface {
         SecuritySettingsContent(
             isPinEnabled = true,
