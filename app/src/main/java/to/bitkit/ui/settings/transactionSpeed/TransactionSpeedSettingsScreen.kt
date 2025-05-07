@@ -1,6 +1,8 @@
 package to.bitkit.ui.settings.transactionSpeed
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,7 +16,9 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.settings.SettingsCheckRow
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -55,28 +59,32 @@ private fun TransactionSpeedSettingsContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            SettingsCheckRow(
+            Spacer(modifier = Modifier.height(16.dp))
+            Caption13Up(text = stringResource(R.string.settings__general__speed_default), color = Colors.White64)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsButtonRow(
                 title = stringResource(R.string.settings__fee__fast__label),
                 subtitle = stringResource(R.string.settings__fee__fast__description),
                 iconRes = R.drawable.ic_speed_fast,
                 iconTint = Colors.Brand,
-                isOn = selectedSpeed == TransactionSpeed.Fast,
+                value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Fast),
                 onClick = { onSpeedSelected(TransactionSpeed.Fast) },
             )
-            SettingsCheckRow(
+            SettingsButtonRow(
                 title = stringResource(R.string.settings__fee__normal__label),
                 subtitle = stringResource(R.string.settings__fee__normal__description),
                 iconRes = R.drawable.ic_speed_normal,
                 iconTint = Colors.Brand,
-                isOn = selectedSpeed == TransactionSpeed.Medium,
+                value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Medium),
                 onClick = { onSpeedSelected(TransactionSpeed.Medium) },
             )
-            SettingsCheckRow(
+            SettingsButtonRow(
                 title = stringResource(R.string.settings__fee__slow__label),
                 subtitle = stringResource(R.string.settings__fee__slow__description),
                 iconRes = R.drawable.ic_speed_slow,
                 iconTint = Colors.Brand,
-                isOn = selectedSpeed == TransactionSpeed.Slow,
+                value = SettingsButtonValue.BooleanValue(selectedSpeed is TransactionSpeed.Slow),
                 onClick = { onSpeedSelected(TransactionSpeed.Slow) },
             )
         }

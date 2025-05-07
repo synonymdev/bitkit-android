@@ -1,5 +1,6 @@
 package to.bitkit.ui.components.settings
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,56 +10,131 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+sealed class SettingsButtonValue {
+    data class BooleanValue(val checked: Boolean) : SettingsButtonValue()
+    data class StringValue(val value: String) : SettingsButtonValue()
+    data object None : SettingsButtonValue()
+}
+
 @Composable
 fun SettingsButtonRow(
     title: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    value: String? = null,
+    subtitle: String? = null,
+    value: SettingsButtonValue = SettingsButtonValue.None,
+    description: String? = null,
+    iconRes: Int? = null,
+    iconTint: Color = Color.Unspecified,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.height(52.dp)
+        modifier = modifier
+            .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
     ) {
         Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp)
-                .clickableAlpha { onClick() }
+                .clickableAlpha(onClick = if (enabled) onClick else null),
         ) {
-            BodyM(text = title, color = Colors.White)
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                value?.let {
-                    BodyM(text = it, color = Colors.White)
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
+            if (iconRes != null) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_chevron_right),
+                    painter = painterResource(iconRes),
                     contentDescription = null,
-                    tint = Colors.White64,
-                    modifier = Modifier.size(24.dp)
+                    tint = iconTint,
+                    modifier = Modifier.size(32.dp),
                 )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Column(
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 16.dp)
+            ) {
+                if (subtitle != null) {
+                    BodyMSB(text = title)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    BodySSB(text = subtitle, color = Colors.White64)
+                } else {
+                    BodyM(text = title)
+                }
+            }
+
+            when (value) {
+                is SettingsButtonValue.BooleanValue -> {
+                    Crossfade(targetState = loading to value.checked) { (isLoading, isChecked) ->
+                        when {
+                            isLoading && isChecked -> CircularProgressIndicator(
+                                color = Colors.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(32.dp),
+                            )
+
+                            isChecked -> Icon(
+                                painter = painterResource(R.drawable.ic_checkmark),
+                                contentDescription = null,
+                                tint = Colors.Brand,
+                                modifier = Modifier.size(32.dp),
+                            )
+
+                            else -> Spacer(modifier = Modifier.size(32.dp))
+                        }
+                    }
+                }
+
+                is SettingsButtonValue.StringValue -> {
+                    BodyM(text = value.value)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        painter = painterResource(R.drawable.ic_chevron_right),
+                        contentDescription = null,
+                        tint = Colors.White64,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                SettingsButtonValue.None -> {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_chevron_right),
+                        contentDescription = null,
+                        tint = Colors.White64,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
         }
-        HorizontalDivider(color = Colors.White10)
+        if (description != null) {
+            BodyS(
+                text = description,
+                color = Colors.White64,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+            )
+        }
+        HorizontalDivider()
     }
 }
 
@@ -66,14 +142,46 @@ fun SettingsButtonRow(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             SettingsButtonRow(
-                title = "Setting Button",
-                value = "Enabled",
+                title = "Selected",
+                subtitle = "Subtitle for selected",
+                value = SettingsButtonValue.BooleanValue(true),
+                iconRes = R.drawable.ic_speed_fast,
+                iconTint = Colors.Brand,
                 onClick = {},
             )
             SettingsButtonRow(
-                title = "Setting Button Without Value",
+                title = "Not Selected",
+                subtitle = "Subtitle of item",
+                value = SettingsButtonValue.BooleanValue(false),
+                iconRes = R.drawable.ic_speed_normal,
+                iconTint = Colors.Brand,
+                onClick = {},
+            )
+            SettingsButtonRow(
+                title = "String Value",
+                value = SettingsButtonValue.StringValue("USD"),
+                iconRes = R.drawable.ic_settings,
+                iconTint = Colors.White,
+                onClick = {},
+            )
+            SettingsButtonRow(
+                title = "No Value",
+                iconRes = R.drawable.ic_users,
+                onClick = {},
+            )
+            SettingsButtonRow(
+                title = "Loading",
+                iconRes = R.drawable.ic_copy,
+                loading = true,
+                value = SettingsButtonValue.BooleanValue(true),
+                onClick = {},
+            )
+            SettingsButtonRow(
+                title = "Disabled With Description",
+                enabled = false,
+                description = "This is a description.",
                 onClick = {},
             )
         }

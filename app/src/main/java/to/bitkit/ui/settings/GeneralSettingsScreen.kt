@@ -23,6 +23,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.utils.displayText
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.theme.AppThemeSurface
@@ -71,20 +72,20 @@ private fun GeneralSettingsContent(
         ) {
             SettingsButtonRow(
                 title = stringResource(R.string.local_currency),
-                value = selectedCurrency,
+                value = SettingsButtonValue.StringValue(selectedCurrency),
                 onClick = onLocalCurrencyClick,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.default_unit),
-                value = when (primaryDisplay) {
+                value = SettingsButtonValue.StringValue(when (primaryDisplay) {
                     PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
                     PrimaryDisplay.FIAT -> selectedCurrency
-                },
+                }),
                 onClick = onDefaultUnitClick,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__speed),
-                value = defaultTransactionSpeed.displayText,
+                value = SettingsButtonValue.StringValue(defaultTransactionSpeed.displayText),
                 onClick = onTransactionSpeedClick,
             )
         }
