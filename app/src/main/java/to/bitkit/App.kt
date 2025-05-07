@@ -29,8 +29,6 @@ internal open class App : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
-        createNotificationChannel()
-
         startService(Intent(this, LightningNodeService::class.java))
 
         Env.initAppStoragePath(filesDir.absolutePath)
@@ -39,19 +37,6 @@ internal open class App : Application(), Configuration.Provider {
     companion object {
         @SuppressLint("StaticFieldLeak") // Should be safe given its manual memory management
         internal var currentActivity: CurrentActivity? = null
-    }
-
-    private fun createNotificationChannel() {
-        val name = "Lightning node notification"
-        val descriptionText = "Channel for LightningNodeService"
-        val importance = NotificationManager.IMPORTANCE_LOW
-
-        val channel = NotificationChannel(CHANNEL_ID_NODE, name, importance).apply {
-            description = descriptionText
-        }
-
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
     }
 }
 

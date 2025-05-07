@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.app.NotificationManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -19,6 +20,7 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.ForgotPinSheet
 import to.bitkit.ui.components.InactivityTracker
@@ -58,6 +60,12 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
+        initNotificationChannel( //TODO EXTRACT TO Strings
+            id = CHANNEL_ID_NODE,
+            name = "Lightning node notification",
+            desc = "Channel for LightningNodeService",
+            importance = NotificationManager.IMPORTANCE_LOW
+        )
         installSplashScreen()
         enableAppEdgeToEdge()
         setContent {
