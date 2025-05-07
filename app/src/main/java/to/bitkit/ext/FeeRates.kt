@@ -3,7 +3,7 @@ package to.bitkit.ext
 import to.bitkit.models.TransactionSpeed
 import uniffi.bitkitcore.FeeRates
 
-fun FeeRates.getSatsPerVbyteFor(speed: TransactionSpeed): UInt {
+fun FeeRates.getSatsPerVByteFor(speed: TransactionSpeed): UInt {
     return when (speed) {
         is TransactionSpeed.Fast -> fast
         is TransactionSpeed.Medium -> mid

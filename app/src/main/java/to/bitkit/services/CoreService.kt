@@ -446,7 +446,7 @@ class BlocktankService(
         return info(refresh)?.onchain?.feeRates
     }
 
-    suspend fun getFeesSafe() : Result<FeeRates> {
+    suspend fun getFees() : Result<FeeRates> {
         var fees = fees(refresh = true)
         if (fees == null) {
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")

@@ -24,9 +24,9 @@ sealed class TransactionSpeed {
 
     companion object {
         fun fromString(value: String): TransactionSpeed = when {
-            value.equals("fast", ignoreCase = true) -> Fast
-            value.equals("medium", ignoreCase = true) -> Medium
-            value.equals("slow", ignoreCase = true) -> Slow
+            value == "fast" -> Fast
+            value == "medium" -> Medium
+            value == "slow" -> Slow
             value.matches(Regex("custom_\\d+")) -> {
                 value.substringAfter("custom_")
                     .toUIntOrNull()
