@@ -115,7 +115,6 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
@@ -155,7 +154,6 @@ class MainActivity : FragmentActivity() {
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.setRestoringWalletState(isRestoringWallet = true)
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(false)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
@@ -178,7 +176,6 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)

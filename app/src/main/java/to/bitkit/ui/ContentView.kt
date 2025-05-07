@@ -189,7 +189,6 @@ fun ContentView(
                     try {
                         walletViewModel.setInitNodeLifecycleState()
                         walletViewModel.start()
-                        walletViewModel.setWalletExistsState()
                     } catch (e: Exception) {
                         Logger.error("Failed to start wallet on retry", e)
                     }

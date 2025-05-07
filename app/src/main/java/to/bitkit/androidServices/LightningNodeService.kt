@@ -49,6 +49,8 @@ class LightningNodeService : Service() {
                     val notification = createNotification()
                     startForeground(NOTIFICATION_ID, notification)
 
+                    walletRepo.setWalletExistsState()
+                    walletRepo.syncBalances()
                     walletRepo.registerForNotifications()
                     walletRepo.refreshBip21()
                 }

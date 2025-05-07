@@ -97,10 +97,6 @@ class WalletViewModel @Inject constructor(
         walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
     }
 
-    fun setWalletExistsState() {
-        walletExists = walletRepo.walletExists()
-    }
-
     fun setInitNodeLifecycleState() {
         lightningRepo.setInitNodeLifecycleState()
     }
@@ -110,6 +106,11 @@ class WalletViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.start(walletIndex)
+                .onSuccess {
+                    walletRepo.setWalletExistsState()
+                    walletRepo.syncBalances()
+                    walletRepo.refreshBip21()
+                }
                 .onFailure { error ->
                     Logger.error("Node startup error", error)
                     ToastEventBus.send(error)
@@ -261,9 +262,6 @@ class WalletViewModel @Inject constructor(
             walletRepo.wipeWallet()
                 .onSuccess {
                     lightningRepo.wipeStorage(walletIndex = 0)
-                        .onSuccess {
-                            setWalletExistsState()
-                        }
                         .onFailure { error ->
                             ToastEventBus.send(error)
                         }
