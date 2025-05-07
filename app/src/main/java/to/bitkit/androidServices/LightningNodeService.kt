@@ -41,18 +41,13 @@ class LightningNodeService : Service() {
             startForeground(NOTIFICATION_ID, createNotification())
 
             launch {
-                lightningRepo.start(
-                    eventHandler = { event ->
-                        walletRepo.refreshBip21ForEvent(event)
-                    }
-                ).onSuccess {
+                lightningRepo.start().onSuccess {
                     val notification = createNotification()
                     startForeground(NOTIFICATION_ID, notification)
 
                     walletRepo.setWalletExistsState()
-                    walletRepo.syncBalances()
                     walletRepo.registerForNotifications()
-                    walletRepo.refreshBip21()
+                    walletRepo.syncWithEvents()
                 }
             }
         }

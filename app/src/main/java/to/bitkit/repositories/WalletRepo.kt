@@ -58,14 +58,14 @@ class WalletRepo @Inject constructor(
     private val network: Network
 ) {
 
-    private val bgScope: CoroutineScope = CoroutineScope(bgDispatcher + SupervisorJob())
-
-    private val _walletState = MutableStateFlow(WalletState(
-        onchainAddress = appStorage.onchainAddress,
-        bolt11 = appStorage.bolt11,
-        bip21 = appStorage.bip21,
-        walletExists = walletExists()
-    ))
+    private val _walletState = MutableStateFlow(
+        WalletState(
+            onchainAddress = appStorage.onchainAddress,
+            bolt11 = appStorage.bolt11,
+            bip21 = appStorage.bip21,
+            walletExists = walletExists()
+        )
+    )
     val walletState = _walletState.asStateFlow()
 
     private val _balanceState = MutableStateFlow(getBalanceState())
@@ -75,16 +75,6 @@ class WalletRepo @Inject constructor(
 
     fun setWalletExistsState() {
         _walletState.update { it.copy(walletExists = walletExists()) }
-    }
-
-    init {
-        bgScope.launch {
-            lightningRepo.getSyncFlow().collect {
-                lightningRepo.sync().onSuccess {
-                    syncBalances()
-                }
-            }
-        }
     }
 
     suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
@@ -119,7 +109,14 @@ class WalletRepo @Inject constructor(
         }
 
         //Reset invoice state
-        _walletState.update { it.copy(selectedTags = emptyList(), bip21Description = "", balanceInput = "", bip21 = "") }
+        _walletState.update {
+            it.copy(
+                selectedTags = emptyList(),
+                bip21Description = "",
+                balanceInput = "",
+                bip21 = ""
+            )
+        }
 
         updateBip21Invoice()
 
@@ -127,6 +124,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun syncBalances() {
+        lightningRepo.sync()
         lightningRepo.getBalances()?.let { balance ->
             val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
 
@@ -143,9 +141,28 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshBip21ForEvent(event: Event) {
+    suspend fun syncWithEvents() = withContext(bgDispatcher) {
+        lightningRepo.listenForNodeEvents().onSuccess { eventFlow ->
+            eventFlow.collect { event ->
+                Logger.debug("Event collected: $event", context = TAG)
+                syncBalancesForEvent(event)
+                refreshBip21ForEvent(event)
+            }
+        }.onFailure { e ->
+            Logger.error("syncWithEvents error ", e, context = TAG)
+        }
+    }
+
+    private suspend fun refreshBip21ForEvent(event: Event) {
         when (event) {
             is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
+        }
+    }
+
+    private suspend fun syncBalancesForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, Event.PaymentSuccessful -> syncBalances()
             else -> Unit
         }
     }
@@ -332,7 +349,7 @@ class WalletRepo @Inject constructor(
     }
 
     // Notification handling
-    suspend fun registerForNotifications(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun registerForNotifications(): Result<Unit> = withContext(bgDispatcher) { //TODO HANDLE Register for notifications error (err: 'Node is not started')
         try {
             val token = firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
