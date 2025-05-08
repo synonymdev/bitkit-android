@@ -49,7 +49,7 @@ fun AllActivityScreen(
     onActivityItemClick: (String) -> Unit,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.all_activity), onBackCLick)
+        AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
         val dateRangeState = rememberDateRangePickerState()
         var currentSheet by remember { mutableStateOf<ActivityFilterSheet?>(null) }
 

@@ -254,7 +254,6 @@ fun ContentView(
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
-                allActivity(activityListViewModel, navController)
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
                 authCheck(navController)
@@ -641,19 +640,6 @@ private fun NavGraphBuilder.regtestSettings(
     }
 }
 
-private fun NavGraphBuilder.allActivity(
-    activityListViewModel: ActivityListViewModel,
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.AllActivity> {
-        AllActivityScreen(
-            viewModel = activityListViewModel,
-            onBackCLick = { navController.popBackStack() },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
-        )
-    }
-}
-
 private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
@@ -835,10 +821,6 @@ fun NavController.navigateToTransferFunding() = navigate(
     route = Routes.Funding,
 )
 
-fun NavController.navigateToAllActivity() = navigate(
-    route = Routes.AllActivity,
-)
-
 fun NavController.navigateToActivityItem(id: String) = navigate(
     route = Routes.ActivityItem(id),
 )
@@ -1010,9 +992,6 @@ object Routes {
 
     @Serializable
     data object ExternalFeeCustom
-
-    @Serializable
-    data object AllActivity
 
     @Serializable
     data class ActivityItem(val id: String)

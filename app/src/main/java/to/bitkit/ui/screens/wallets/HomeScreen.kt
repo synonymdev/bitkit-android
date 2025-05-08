@@ -53,7 +53,6 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
-import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToQrScanner
 import to.bitkit.ui.navigateToTransferSavingsAvailability
 import to.bitkit.ui.navigateToTransferSavingsIntro
@@ -61,6 +60,7 @@ import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
+import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
@@ -132,7 +132,7 @@ fun HomeScreen(
                 ) {
                     val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
                     SavingsWalletScreen(
-                        onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
+                        onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferToSpendingClick = {
                             if (!hasSeenSpendingIntro) {
@@ -151,7 +151,7 @@ fun HomeScreen(
                     val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
                     SpendingWalletScreen(
                         uiState = uiState,
-                        onAllActivityButtonClick = { rootNavController.navigateToAllActivity() },
+                        onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onTransferToSavingsClick = {
                             if (!hasSeenSavingsIntro) {
@@ -161,6 +161,16 @@ fun HomeScreen(
                             }
                         },
                         onBackCLick = { walletNavController.popBackStack() },
+                    )
+                }
+                composable<HomeRoutes.AllActivity>(
+                    enterTransition = { screenSlideIn },
+                    exitTransition = { screenSlideOut },
+                ) {
+                    AllActivityScreen(
+                        viewModel = activityListViewModel,
+                        onBackCLick = { walletNavController.popBackStack() },
+                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }
             }
@@ -245,7 +255,7 @@ private fun HomeContentView(
                     val latestActivities by activity.latestActivities.collectAsState()
                     ActivityList(
                         items = latestActivities,
-                        onAllActivityClick = { rootNavController.navigateToAllActivity() },
+                        onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }
@@ -297,6 +307,9 @@ object HomeRoutes {
 
     @Serializable
     data object Spending
+
+    @Serializable
+    data object AllActivity
 }
 
 @Preview(showBackground = true, showSystemUi = true)
