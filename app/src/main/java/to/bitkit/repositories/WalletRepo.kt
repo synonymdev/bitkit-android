@@ -133,6 +133,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun syncNodeAndWallet() : Result<Unit> = withContext(bgDispatcher) {
+        syncBalances()
         lightningRepo.sync().onSuccess {
             syncBalances()
             return@withContext Result.success(Unit)

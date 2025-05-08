@@ -206,6 +206,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
+        syncState()
         if (_lightningState.value.isSyncingWallet) {
             Logger.warn("Sync already in progress, waiting for existing sync.")
             return@executeWhenNodeRunning Result.success(Unit)
