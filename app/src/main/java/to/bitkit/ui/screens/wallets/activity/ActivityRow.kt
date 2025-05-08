@@ -1,27 +1,17 @@
 package to.bitkit.ui.screens.wallets.activity
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
@@ -30,10 +20,10 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.ActivityIcon
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -63,10 +53,7 @@ fun ActivityRow(
         is Activity.Lightning -> item.v1.txType
         is Activity.Onchain -> item.v1.txType
     }
-    val amountPrefix = when (item) {
-        is Activity.Lightning -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
-        is Activity.Onchain -> if (item.v1.txType == PaymentType.SENT) "-" else "+"
-    }
+    val amountPrefix = if (txType == PaymentType.SENT) "-" else "+"
     val confirmed: Boolean? = when (item) {
         is Activity.Lightning -> null
         is Activity.Onchain -> item.v1.confirmed
@@ -78,9 +65,10 @@ fun ActivityRow(
             .clickableAlpha { onClick(id) }
             .padding(vertical = 16.dp)
     ) {
-        TransactionIcon(item)
+        ActivityIcon(item)
         Spacer(modifier = Modifier.width(12.dp))
 
+        // TODO: use localized status texts
         val lightningStatus = when {
             txType == PaymentType.SENT -> when (status) {
                 PaymentState.FAILED -> "Sending Failed"
@@ -125,25 +113,20 @@ fun ActivityRow(
         }
         amount.let { sats ->
             val currency = currencyViewModel ?: return
-            val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
-            val converted: ConvertedAmount? =
-                if (rates.isNotEmpty()) currency.convert(sats = sats.toLong()) else null
+            val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
 
-            converted?.let { converted ->
+            currency.convert(sats = sats.toLong())?.let { converted ->
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    val btcComponents = converted.bitcoinDisplay(displayUnit)
                     if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                        val btcComponents = converted.bitcoinDisplay(displayUnit)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            BodyMSB(
-                                text = amountPrefix,
-                                color = Colors.White64,
-                            )
+                            BodyMSB(text = amountPrefix, color = Colors.White64)
                             BodyMSB(text = btcComponents.value)
                         }
                         CaptionB(
@@ -155,14 +138,9 @@ fun ActivityRow(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            BodyMSB(
-                                text = amountPrefix,
-                                color = Colors.White64,
-                            )
+                            BodyMSB(text = amountPrefix, color = Colors.White64)
                             BodyMSB(text = "${converted.symbol} ${converted.formatted}")
                         }
-
-                        val btcComponents = converted.bitcoinDisplay(displayUnit)
                         CaptionB(
                             text = btcComponents.value,
                             color = Colors.White64,
@@ -174,74 +152,17 @@ fun ActivityRow(
     }
 }
 
-@Composable
-fun TransactionIcon(item: Activity) {
-    val isLightning = item is Activity.Lightning
-    val status: PaymentState? = when (item) {
-        is Activity.Lightning -> item.v1.status
-        is Activity.Onchain -> null
-    }
-    val confirmed: Boolean? = when (item) {
-        is Activity.Lightning -> null
-        is Activity.Onchain -> item.v1.confirmed
-    }
-    val txType: PaymentType = when (item) {
-        is Activity.Lightning -> item.v1.txType
-        is Activity.Onchain -> item.v1.txType
-    }
-
-    if (isLightning) {
-        if (status == PaymentState.FAILED) {
-            IconInCircle(
-                icon = Icons.Default.Close,
-                tint = Colors.Red,
-            )
-        } else {
-            val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
-            IconInCircle(
-                icon = icon,
-                tint = Colors.Purple,
-            )
-        }
-    } else {
-        val icon = if (txType == PaymentType.SENT) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
-        IconInCircle(
-            icon = icon,
-            tint = if (confirmed == true) Colors.Brand else Colors.Brand50,
-        )
-    }
-}
-
-@Composable
-fun IconInCircle(
-    icon: ImageVector,
-    tint: Color,
-    modifier: Modifier = Modifier,
-    contentDescription: String? = null,
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(32.dp)
-            .background(color = tint.copy(alpha = 0.16f), shape = CircleShape)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
     override val values: Sequence<Activity> get() = testActivityItems.asSequence()
 }
 
-@DarkModePreview
+@Preview(showBackground = true)
 @Composable
 private fun ActivityRowPreview(@PreviewParameter(ActivityItemsPreviewProvider::class) item: Activity) {
     AppThemeSurface {
-        ActivityRow(item, onClick = { })
+        ActivityRow(
+            item = item,
+            onClick = {},
+        )
     }
 }

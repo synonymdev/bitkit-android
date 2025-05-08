@@ -17,6 +17,7 @@ fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
     const val INVOICE_EXPIRY = "MMM dd, h:mm a"
-    const val ACTIVITY_ITEM = "MMMM d yyyy, HH:mm"
+    const val ACTIVITY_DATE = "MMMM d"
+    const val ACTIVITY_TIME = "h:mm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
 }
