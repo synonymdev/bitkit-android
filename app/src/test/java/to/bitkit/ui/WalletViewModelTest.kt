@@ -25,7 +25,6 @@ import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 @Config(application = TestApp::class)
@@ -51,17 +50,6 @@ class WalletViewModelTest : BaseUnitTest() {
             walletRepo = walletRepo,
             lightningRepo = lightningRepo
         )
-    }
-
-    @Test
-    fun `setWalletExistsState should update walletExists`() = test {
-        whenever(walletRepo.walletExists()).thenReturn(true)
-        sut.setWalletExistsState()
-        assertTrue(sut.walletExists)
-
-        whenever(walletRepo.walletExists()).thenReturn(false)
-        sut.setWalletExistsState()
-        assertFalse(sut.walletExists)
     }
 
     @Test
@@ -200,13 +188,13 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `manualRegisterForNotifications should call walletRepo registerForNotifications and send appropriate toasts`() =
+    fun `manualRegisterForNotifications should call lightningRepo registerForNotifications and send appropriate toasts`() =
         test {
-            whenever(walletRepo.registerForNotifications()).thenReturn(Result.success(Unit))
+            whenever(lightningRepo.registerForNotifications()).thenReturn(Result.success(Unit))
 
             sut.manualRegisterForNotifications()
 
-            verify(walletRepo).registerForNotifications()
+            verify(lightningRepo).registerForNotifications()
             // Add verification for ToastEventBus.send
         }
 
@@ -231,12 +219,12 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `debugFcmToken should call walletRepo getFcmToken`() = test {
-        whenever(walletRepo.getFcmToken()).thenReturn(Result.success("test_token"))
+    fun `debugFcmToken should call lightningRepo getFcmToken`() = test {
+        whenever(lightningRepo.getFcmToken()).thenReturn(Result.success("test_token"))
 
         sut.debugFcmToken()
 
-        verify(walletRepo).getFcmToken()
+        verify(lightningRepo).getFcmToken()
     }
 
     @Test
@@ -258,12 +246,12 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `debugLspNotifications should call walletRepo testNotification`() = test {
-        whenever(walletRepo.testNotification()).thenReturn(Result.success(Unit))
+    fun `debugLspNotifications should call lightningRepo testNotification`() = test {
+        whenever(lightningRepo.testNotification()).thenReturn(Result.success(Unit))
 
         sut.debugLspNotifications()
 
-        verify(walletRepo).testNotification()
+        verify(lightningRepo).testNotification()
     }
 
     @Test
