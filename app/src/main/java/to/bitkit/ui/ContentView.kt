@@ -912,7 +912,6 @@ object Routes {
     @Serializable
     data object TransactionSpeedSettings
 
-
     @Serializable
     data object CustomFeeSettings
 
