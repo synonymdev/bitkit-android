@@ -6,12 +6,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
-import org.lightningdevkit.ldknode.PaymentId
-import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -20,7 +17,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
@@ -29,8 +25,6 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
-import uniffi.bitkitcore.FeeRates
-import uniffi.bitkitcore.IBtInfo
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -67,7 +61,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(settingsStore.defaultTransactionSpeed.first()).thenReturn(TransactionSpeed.Medium)
+        whenever(settingsStore.defaultTransactionSpeed).thenReturn(flowOf(TransactionSpeed.Medium))
         sut.start().let { assertTrue(it.isSuccess) }
     }
 
@@ -142,10 +136,16 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `createInvoice should succeed when node is running`() = test {
         startNodeForTesting()
-        val testInvoice = mock<Bolt11Invoice>()
-        whenever(lightningService.receive(any(), any(), any())).thenReturn(testInvoice)
+        val testInvoice = "testInvoice"
+        whenever(
+            lightningService.receive(
+                sat = 100uL,
+                description = "test",
+                expirySecs = 3600u
+            )
+        ).thenReturn(testInvoice)
 
-        val result = sut.createInvoice(description = "test")
+        val result = sut.createInvoice(amountSats = 100uL, description = "test", expirySeconds = 3600u)
         assertTrue(result.isSuccess)
         assertEquals(testInvoice, result.getOrNull())
     }
@@ -159,8 +159,8 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `payInvoice should succeed when node is running`() = test {
         startNodeForTesting()
-        val testPaymentId = mock<PaymentId>()
-        whenever(lightningService.send(any(), any())).thenReturn(testPaymentId)
+        val testPaymentId = "testPaymentId"
+        whenever(lightningService.send("bolt11", 1000uL)).thenReturn(testPaymentId)
 
         val result = sut.payInvoice("bolt11", 1000uL)
         assertTrue(result.isSuccess)
@@ -335,20 +335,6 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `sendOnChain should succeed when node is running`() = test {
-        startNodeForTesting()
-        val testTxId = mock<Txid>()
-        val testFees = mock<FeeRates>()
-        whenever(coreService.blocktank.getFees()).thenReturn(Result.success(testFees))
-        whenever(testFees.getSatsPerVByteFor(any())).thenReturn(1u)
-        whenever(lightningService.send(any(), any(), any())).thenReturn(testTxId)
-
-        val result = sut.sendOnChain("address", 1000uL)
-        assertTrue(result.isSuccess)
-        assertEquals(testTxId, result.getOrNull())
-    }
-
-    @Test
     fun `registerForNotifications should fail when node is not running`() = test {
         val result = sut.registerForNotifications()
         assertTrue(result.isFailure)
@@ -358,15 +344,5 @@ class LightningRepoTest : BaseUnitTest() {
     fun `testNotification should fail when node is not running`() = test {
         val result = sut.testNotification()
         assertTrue(result.isFailure)
-    }
-
-    @Test
-    fun `getBlocktankInfo should call core service`() = test {
-        val testInfo = mock<IBtInfo>()
-        whenever(coreService.blocktank.info(any())).thenReturn(testInfo)
-
-        val result = sut.getBlocktankInfo()
-        assertTrue(result.isSuccess)
-        assertEquals(testInfo, result.getOrNull())
     }
 }

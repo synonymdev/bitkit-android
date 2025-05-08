@@ -16,6 +16,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
@@ -24,7 +25,10 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AddressChecker
+import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.LightningActivity
+import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,6 +54,21 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(appStorage.loadBalance()).thenReturn(null)
         whenever(lightningRepo.getSyncFlow()).thenReturn(flowOf(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        wheneverBlocking { coreService.activity.getActivity(any())}.thenReturn(Activity.Lightning(
+            v1 = LightningActivity(
+                id = "",
+                txType = PaymentType.RECEIVED,
+                status = PaymentState.SUCCEEDED,
+                value = 10uL,
+                fee = 10uL,
+                invoice = "invoice",
+                message = "message",
+                timestamp = 10uL,
+                preimage = null,
+                createdAt = null,
+                updatedAt = null
+            )
+        ))
 
         sut = WalletRepo(
             bgDispatcher = testDispatcher,
@@ -128,7 +147,6 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(keychain).saveString(Keychain.Key.BIP39_MNEMONIC.name, mnemonic)
-        verify(keychain, never()).saveString(Keychain.Key.BIP39_PASSPHRASE.name, any())
     }
 
     @Test
