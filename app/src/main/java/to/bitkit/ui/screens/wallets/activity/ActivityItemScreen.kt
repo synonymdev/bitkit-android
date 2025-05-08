@@ -103,6 +103,13 @@ private fun ActivityItemView(
     }
     val value = when (item) {
         is Activity.Lightning -> item.v1.value
+        is Activity.Onchain -> when {
+            isSent -> item.v1.value + item.v1.fee
+            else -> item.v1.value
+        }
+    }
+    val paymentValue = when (item) {
+        is Activity.Lightning -> item.v1.value
         is Activity.Onchain -> item.v1.value
     }
     val fee = when (item) {
@@ -200,7 +207,7 @@ private fun ActivityItemView(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        BodySSB(text = value.toString())
+                        BodySSB(text = "$paymentValue")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider()

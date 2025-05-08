@@ -17,7 +17,6 @@ import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
-import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ActivityIcon
@@ -53,6 +52,8 @@ fun ActivityRow(
         is Activity.Lightning -> item.v1.txType
         is Activity.Onchain -> item.v1.txType
     }
+    val isSent = txType == PaymentType.SENT
+
     val amountPrefix = if (txType == PaymentType.SENT) "-" else "+"
     val confirmed: Boolean? = when (item) {
         is Activity.Lightning -> null
@@ -107,9 +108,12 @@ fun ActivityRow(
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        val amount: ULong = when (item) {
+        val amount = when (item) {
             is Activity.Lightning -> item.v1.value
-            is Activity.Onchain -> item.v1.value
+            is Activity.Onchain -> when {
+                isSent -> item.v1.value + item.v1.fee
+                else -> item.v1.value
+            }
         }
         amount.let { sats ->
             val currency = currencyViewModel ?: return
