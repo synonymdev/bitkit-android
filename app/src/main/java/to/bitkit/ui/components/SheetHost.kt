@@ -28,6 +28,8 @@ import to.bitkit.ui.theme.Colors
 sealed class BottomSheetType {
     data class Send(val route: SendRoute = SendRoute.Options) : BottomSheetType()
     data object Receive : BottomSheetType()
+    data object ActivityDateRangeSelector : BottomSheetType()
+    data object ActivityTagSelector : BottomSheetType()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

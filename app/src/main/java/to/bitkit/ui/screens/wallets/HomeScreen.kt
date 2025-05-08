@@ -20,7 +20,9 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,6 +63,8 @@ import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.ActivityList
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
+import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
+import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
@@ -75,6 +79,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     walletViewModel: WalletViewModel,
@@ -84,6 +89,7 @@ fun HomeScreen(
 ) {
     val uiState: MainUiState by walletViewModel.uiState.collectAsState()
     val currentSheet by appViewModel.currentSheet
+
     SheetHost(
         shouldExpand = currentSheet != null,
         onDismiss = { appViewModel.hideSheet() },
@@ -103,6 +109,38 @@ fun HomeScreen(
 
                 is BottomSheetType.Receive -> {
                     ReceiveQrSheet(uiState)
+                }
+
+                is BottomSheetType.ActivityDateRangeSelector -> {
+                    val dateRangeState = rememberDateRangePickerState()
+                    DateRangeSelectorSheet(
+                        dateRangeState = dateRangeState,
+                        onClearClick = {
+                            dateRangeState.setSelection(null, null)
+                            activityListViewModel.clearDateRange()
+                            appViewModel.hideSheet()
+                        },
+                        onApplyClick = {
+                            activityListViewModel.setDateRange(
+                                startDate = dateRangeState.selectedStartDateMillis,
+                                endDate = dateRangeState.selectedEndDateMillis,
+                            )
+                            appViewModel.hideSheet()
+                        },
+                    )
+                }
+
+                is BottomSheetType.ActivityTagSelector -> {
+                    TagSelectorSheet(
+                        viewModel = activityListViewModel,
+                        onClearClick = {
+                            activityListViewModel.clearTags()
+                            appViewModel.hideSheet()
+                        },
+                        onApplyClick = {
+                            appViewModel.hideSheet()
+                        },
+                    )
                 }
 
                 null -> Unit

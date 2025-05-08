@@ -17,16 +17,14 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -49,64 +47,27 @@ fun AllActivityScreen(
     onActivityItemClick: (String) -> Unit,
 ) {
     val dateRangeState = rememberDateRangePickerState()
-    var currentSheet by remember { mutableStateOf<ActivityFilterSheet?>(null) }
+    val appViewModel = appViewModel ?: return
 
-    SheetHost(
-        shouldExpand = currentSheet != null,
-        onDismiss = { currentSheet = null },
-        sheets = {
-            when (currentSheet) {
-                is ActivityFilterSheet.DateRangeSelector -> {
-                    DateRangeSelectorSheet(
-                        dateRangeState = dateRangeState,
-                        onClearClick = {
-                            dateRangeState.setSelection(null, null)
-                            viewModel.clearDateRange()
-                            currentSheet = null
-                        },
-                        onApplyClick = {
-                            viewModel.setDateRange(
-                                startDate = dateRangeState.selectedStartDateMillis,
-                                endDate = dateRangeState.selectedEndDateMillis,
-                            )
-                            currentSheet = null
-                        },
-                    )
-                }
+    ScreenColumn {
+        AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
 
-                is ActivityFilterSheet.TagSelector -> {
-                    TagSelectorSheet(
-                        viewModel = viewModel,
-                        onClearClick = {
-                            viewModel.clearTags()
-                            currentSheet = null
-                        },
-                        onApplyClick = {
-                            currentSheet = null
-                        },
-                    )
-                }
-
-                null -> Unit
-            }
-        }
-    ) {
-        ScreenColumn {
-            AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
-
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                ActivityListFilter(
-                    viewModel = viewModel,
-                    onTagClick = { currentSheet = ActivityFilterSheet.TagSelector },
-                    onDateRangeClick = { currentSheet = ActivityFilterSheet.DateRangeSelector },
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                val filteredActivities by viewModel.filteredActivities.collectAsState()
-                ActivityListWithHeaders(
-                    items = filteredActivities,
-                    onActivityItemClick = onActivityItemClick,
-                )
-            }
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            ActivityListFilter(
+                viewModel = viewModel,
+                onTagClick = {
+                    appViewModel.showSheet(BottomSheetType.ActivityTagSelector)
+                },
+                onDateRangeClick = {
+                    appViewModel.showSheet(BottomSheetType.ActivityDateRangeSelector)
+                },
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            val filteredActivities by viewModel.filteredActivities.collectAsState()
+            ActivityListWithHeaders(
+                items = filteredActivities,
+                onActivityItemClick = onActivityItemClick,
+            )
         }
     }
 }
@@ -432,8 +393,3 @@ val testActivityItems: List<Activity> = listOf(
     ),
 )
 // endregion
-
-sealed class ActivityFilterSheet {
-    data object DateRangeSelector : ActivityFilterSheet()
-    data object TagSelector : ActivityFilterSheet()
-}
