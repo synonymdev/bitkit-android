@@ -13,7 +13,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,8 +45,7 @@ fun AllActivityScreen(
     onBackCLick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
-    val dateRangeState = rememberDateRangePickerState()
-    val appViewModel = appViewModel ?: return
+    val app = appViewModel ?: return
 
     ScreenColumn {
         AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
@@ -55,12 +53,8 @@ fun AllActivityScreen(
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListFilter(
                 viewModel = viewModel,
-                onTagClick = {
-                    appViewModel.showSheet(BottomSheetType.ActivityTagSelector)
-                },
-                onDateRangeClick = {
-                    appViewModel.showSheet(BottomSheetType.ActivityDateRangeSelector)
-                },
+                onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
+                onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
             )
             Spacer(modifier = Modifier.height(16.dp))
             val filteredActivities by viewModel.filteredActivities.collectAsState()
@@ -119,7 +113,9 @@ fun ActivityListWithHeaders(
                             TertiaryButton(
                                 text = stringResource(R.string.wallet__activity_show_all),
                                 onClick = onAllActivityButtonClick,
-                                modifier = Modifier.wrapContentWidth().padding(top = 8.dp)
+                                modifier = Modifier
+                                    .wrapContentWidth()
+                                    .padding(top = 8.dp)
                             )
                         }
                     }
@@ -152,7 +148,9 @@ fun ActivityList(
                 TertiaryButton(
                     text = stringResource(R.string.wallet__activity_show_all),
                     onClick = onAllActivityClick,
-                    modifier = Modifier.wrapContentWidth().padding(top = 8.dp)
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .padding(top = 8.dp)
                 )
             }
         }
