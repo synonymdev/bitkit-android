@@ -21,7 +21,7 @@ import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.PinDots
-import to.bitkit.ui.components.PinNumberPad
+import to.bitkit.ui.components.NumberPadSimple
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -58,7 +58,7 @@ fun ChoosePinScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        PinNumberPad(
+        NumberPadSimple(
             onPress = { key ->
                 if (key == KEY_DELETE) {
                     if (pin.isNotEmpty()) {

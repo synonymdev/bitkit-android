@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,13 +31,15 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.util.display
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.display
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.models.PrimaryDisplay
 
 @Composable
 fun DefaultUnitSettingsScreen(
@@ -52,30 +53,30 @@ fun DefaultUnitSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+            val (_, _, _, selectedCurrency, displayUnit, primaryDisplay) = LocalCurrencies.current
             SectionTitle(title = "DISPLAY AMOUNTS IN")
 
             CurrencyOptionRow(
                 leadingIcon = Icons.Default.CurrencyBitcoin,
-                label = "Bitcoin",
+                label = stringResource(R.string.settings__general__unit_bitcoin),
                 isSelected = primaryDisplay == PrimaryDisplay.BITCOIN,
                 onClick = {
                     currencyViewModel.setPrimaryDisplayUnit(PrimaryDisplay.BITCOIN)
                 },
             )
 
-            val convertedCurrency = currencyViewModel.convert(1)?.currency ?: "fiat"
             CurrencyOptionRow(
                 leadingIcon = Icons.Default.Language,
-                label = convertedCurrency,
+                label = selectedCurrency,
                 isSelected = primaryDisplay == PrimaryDisplay.FIAT,
                 onClick = {
                     currencyViewModel.setPrimaryDisplayUnit(PrimaryDisplay.FIAT)
                 },
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            LabelText(
-                text = "Tip: Quickly toggle between Bitcoin and $convertedCurrency by tapping on your wallet balance.",
+            Spacer(modifier = Modifier.height(8.dp))
+            Caption(
+                text = stringResource(R.string.settings__general__unit_note).replace("{currency}", selectedCurrency),
+                color = Colors.White64,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -96,7 +97,7 @@ fun DefaultUnitSettingsScreen(
 
 @Composable
 private fun SectionTitle(title: String) {
-    LabelText(
+    Caption13Up(
         text = title,
         modifier = Modifier.padding(vertical = 8.dp)
     )
@@ -141,7 +142,7 @@ private fun CurrencyOptionRow(
                 )
             }
         }
-        HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+        HorizontalDivider()
     }
 }
 
@@ -165,6 +166,6 @@ private fun BitcoinDenominationRow(unit: BitcoinDisplayUnit, isSelected: Boolean
                 )
             }
         }
-        HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+        HorizontalDivider()
     }
 }

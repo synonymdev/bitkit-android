@@ -27,7 +27,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.PinDots
-import to.bitkit.ui.components.PinNumberPad
+import to.bitkit.ui.components.NumberPadSimple
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -119,7 +119,7 @@ private fun ConfirmPinContent(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        PinNumberPad(
+        NumberPadSimple(
             onPress = onKeyPress,
             modifier = Modifier
                 .height(350.dp)

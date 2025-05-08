@@ -361,17 +361,16 @@ class LightningService @Inject constructor(
         return true
     }
 
-    // TODO: get feeRate from real source
-    suspend fun send(address: Address, sats: ULong, satKwu: ULong = 250uL * 5uL): Txid {
+    suspend fun send(address: Address, sats: ULong, satsPerVByte: UInt): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Sending $sats sats to $address")
+        Logger.info("Sending $sats sats to $address with satsPerVByte=$satsPerVByte")
 
         return ServiceQueue.LDK.background {
             node.onchainPayment().sendToAddress(
                 address = address,
                 amountSats = sats,
-                feeRate = FeeRate.fromSatPerKwu(satKwu)
+                feeRate = convertVByteToKwu(satsPerVByte)
             )
         }
     }
@@ -508,4 +507,11 @@ fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
     return this.filter { it.isChannelReady }
 }
 
+
+private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
+    // 1 vbyte = 4 weight units, so 1 sats/vbyte = 250 sats/kwu
+    val satPerKwu = satsPerVByte.toULong() * 250u
+    // Ensure we're above the minimum relay fee
+    return FeeRate.fromSatPerKwu(maxOf(satPerKwu, 253u)) // FEERATE_FLOOR_SATS_PER_KW is 253 in LDK
+}
 // endregion

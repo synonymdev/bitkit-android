@@ -21,6 +21,7 @@ import uniffi.bitkitcore.BtOrderState2
 import uniffi.bitkitcore.CJitStateEnum
 import uniffi.bitkitcore.CreateCjitOptions
 import uniffi.bitkitcore.CreateOrderOptions
+import uniffi.bitkitcore.FeeRates
 import uniffi.bitkitcore.IBtEstimateFeeResponse2
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
@@ -435,10 +436,27 @@ class BlocktankService(
     private val coreService: CoreService,
     private val lightningService: LightningService,
 ) {
-    suspend fun info(refresh: Boolean = false): IBtInfo? {
+    suspend fun info(refresh: Boolean = true): IBtInfo? {
         return ServiceQueue.CORE.background {
             getInfo(refresh = refresh)
         }
+    }
+
+    private suspend fun fees(refresh: Boolean = true) : FeeRates? {
+        return info(refresh)?.onchain?.feeRates
+    }
+
+    suspend fun getFees() : Result<FeeRates> {
+        var fees = fees(refresh = true)
+        if (fees == null) {
+            Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
+            fees = fees(refresh = false)
+        }
+        if (fees == null) {
+            return Result.failure(AppError("Fees unavailable from bitkit-core"))
+        }
+
+        return Result.success(fees)
     }
 
     suspend fun createCjit(

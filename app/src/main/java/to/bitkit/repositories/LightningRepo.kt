@@ -1,12 +1,10 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
@@ -18,9 +16,13 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.TransactionSpeed
+import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
@@ -36,6 +38,8 @@ class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
+    private val settingsStore: SettingsStore,
+    private val coreService: CoreService,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -267,9 +271,23 @@ class LightningRepo @Inject constructor(
             Result.success(paymentId)
         }
 
-    suspend fun sendOnChain(address: Address, sats: ULong): Result<Txid> =
+    /**
+     * Sends bitcoin to an on-chain address
+     *
+     * @param address The bitcoin address to send to
+     * @param sats The amount in  satoshis to send
+     * @param speed The desired transaction speed determining the fee rate. If null, the user's default speed is used.
+     * @return A `Result` with the `Txid` of sent transaction, or an error if the transaction fails
+     * or the fee rate cannot be retrieved.
+     */
+    suspend fun sendOnChain(address: Address, sats: ULong, speed: TransactionSpeed? = null): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
-            val txId = lightningService.send(address = address, sats = sats)
+            val transactionSpeed = speed ?: settingsStore.defaultTransactionSpeed.first()
+
+            var fees = coreService.blocktank.getFees().getOrThrow()
+            var satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+
+            val txId = lightningService.send(address = address, sats = sats, satsPerVByte = satsPerVByte)
             syncState()
             Result.success(txId)
         }

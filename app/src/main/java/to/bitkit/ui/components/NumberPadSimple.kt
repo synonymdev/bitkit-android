@@ -55,7 +55,7 @@ private fun NumberButton(
 }
 
 @Composable
-fun PinNumberPad(
+fun NumberPadSimple(
     onPress: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +123,7 @@ fun PinNumberPad(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        PinNumberPad(
+        NumberPadSimple(
             onPress = {},
             modifier = Modifier.height(310.dp)
         )

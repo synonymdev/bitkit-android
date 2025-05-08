@@ -81,6 +81,7 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -88,6 +89,7 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.utils.screenScaleIn
 import to.bitkit.ui.utils.screenScaleOut
 import to.bitkit.ui.utils.screenSlideIn
@@ -238,6 +240,7 @@ fun ContentView(
                 settings(walletViewModel, navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
+                transactionSpeedSettings(navController)
                 securitySettings(navController)
                 disablePin(navController)
                 changePin(navController)
@@ -490,11 +493,18 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     }
 }
 
+private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.TransactionSpeedSettings> {
+        TransactionSpeedSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.CustomFeeSettings> {
+        CustomFeeSettingsScreen(navController)
+    }
+}
+
 private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.SecuritySettings> {
-        SecuritySettingsScreen(
-            navController = navController,
-        )
+        SecuritySettingsScreen(navController = navController)
     }
 }
 
@@ -871,6 +881,14 @@ fun NavController.navigateToLogs() = navigate(
 fun NavController.navigateToLogDetail(fileName: String) = navigate(
     route = Routes.LogDetail(fileName),
 )
+
+fun NavController.navigateToTransactionSpeedSettings() = navigate(
+    route = Routes.TransactionSpeedSettings,
+)
+
+fun NavController.navigateToCustomFeeSettings() = navigate(
+    route = Routes.CustomFeeSettings,
+)
 // endregion
 
 object Routes {
@@ -885,6 +903,12 @@ object Routes {
 
     @Serializable
     data object GeneralSettings
+
+    @Serializable
+    data object TransactionSpeedSettings
+
+    @Serializable
+    data object CustomFeeSettings
 
     @Serializable
     data object SecuritySettings

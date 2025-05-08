@@ -17,7 +17,7 @@ import to.bitkit.di.json
 import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
-import to.bitkit.models.blocktank.BlocktankNotificationType
+import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger

@@ -21,7 +21,7 @@ import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.PinDots
-import to.bitkit.ui.components.PinNumberPad
+import to.bitkit.ui.components.NumberPadSimple
 import to.bitkit.ui.navigateToChangePinConfirm
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
@@ -90,7 +90,7 @@ private fun ChangePinNewContent(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            PinNumberPad(
+            NumberPadSimple(
                 modifier = Modifier.height(350.dp),
                 onPress = onKeyPress,
             )
