@@ -52,6 +52,7 @@ class LightningNodeService : Service() {
                     walletRepo.setWalletExistsState()
                     walletRepo.registerForNotifications()
                     walletRepo.refreshBip21()
+                    walletRepo.syncBalances()
                 }
             }
         }
