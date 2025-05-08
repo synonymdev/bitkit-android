@@ -199,7 +199,7 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun wipeWallet(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
         if (network != Network.REGTEST) {
             return@withContext Result.failure(Exception("Can only wipe on regtest."))
         }
@@ -213,7 +213,8 @@ class WalletRepo @Inject constructor(
             _walletState.update { WalletState() }
             _balanceState.update { BalanceState() }
             setWalletExistsState()
-            Result.success(Unit)
+
+            return@withContext lightningRepo.wipeStorage(walletIndex = walletIndex)
         } catch (e: Throwable) {
             Logger.error("Wipe wallet error", e)
             Result.failure(e)
