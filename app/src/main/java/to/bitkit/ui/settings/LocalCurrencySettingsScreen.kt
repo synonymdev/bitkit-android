@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,10 +32,11 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.FxRate
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -45,7 +45,10 @@ fun LocalCurrencySettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.local_currency), onBackClick = { navController.popBackStack() })
+        AppTopBar(
+            titleText = stringResource(R.string.settings__general__currency_local_title),
+            onBackClick = { navController.popBackStack() }
+        )
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -85,7 +88,13 @@ fun LocalCurrencySettingsScreen(
 
             LazyColumn {
                 if (mostUsedRates.isNotEmpty()) {
-                    item { LabelText(text = "MOST USED", modifier = Modifier.padding(vertical = 8.dp)) }
+                    item {
+                        Caption13Up(
+                            text = stringResource(R.string.settings__general__currency_most_used),
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = Colors.White64,
+                        )
+                    }
                     items(mostUsedRates) { rate ->
                         CurrencyRow(
                             rate = rate,
@@ -97,7 +106,13 @@ fun LocalCurrencySettingsScreen(
                 }
 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
-                item { LabelText(text = "OTHER CURRENCIES", modifier = Modifier.padding(vertical = 8.dp)) }
+                item {
+                    Caption13Up(
+                        text = stringResource(R.string.settings__general__currency_other),
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = Colors.White64,
+                    )
+                }
 
                 items(otherCurrencies) { rate ->
                     CurrencyRow(
@@ -137,6 +152,6 @@ private fun CurrencyRow(
                 )
             }
         }
-        HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.25f))
+        HorizontalDivider()
     }
 }

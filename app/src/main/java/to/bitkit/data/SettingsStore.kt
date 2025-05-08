@@ -9,9 +9,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import to.bitkit.di.json
 import to.bitkit.ext.enumValueOfOrNull
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,6 +48,20 @@ class SettingsStore @Inject constructor(
 
     suspend fun setSelectedCurrency(currency: String) {
         store.edit { it[SELECTED_CURRENCY_KEY] = currency }
+    }
+
+    val defaultTransactionSpeed: Flow<TransactionSpeed> = store.data
+        .map {
+            it[DEFAULT_TX_SPEED]?.let { x -> runCatching { json.decodeFromString<TransactionSpeed>(x) }.getOrNull() }
+                ?: TransactionSpeed.Medium
+        }
+
+    suspend fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
+        val encoded = runCatching { json.encodeToString(speed) }.getOrElse {
+            Logger.error("Failed to encode default transaction speed: $it")
+            return
+        }
+        store.edit { it[DEFAULT_TX_SPEED] = encoded }
     }
 
     val showEmptyState: Flow<Boolean> = store.data.map { it[SHOW_EMPTY_STATE] == true }
@@ -92,6 +108,7 @@ class SettingsStore @Inject constructor(
         private val PRIMARY_DISPLAY_UNIT_KEY = stringPreferencesKey("primary_display_unit")
         private val BTC_DISPLAY_UNIT_KEY = stringPreferencesKey("btc_display_unit")
         private val SELECTED_CURRENCY_KEY = stringPreferencesKey("selected_currency")
+        private val DEFAULT_TX_SPEED = stringPreferencesKey("default_tx_speed")
         private val SHOW_EMPTY_STATE = booleanPreferencesKey("show_empty_state")
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
         private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")

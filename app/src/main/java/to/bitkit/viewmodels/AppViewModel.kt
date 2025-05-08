@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
@@ -158,6 +159,15 @@ class AppViewModel @Inject constructor(
     fun setIsBiometricEnabled(value: Boolean) {
         viewModelScope.launch {
             settingsStore.setIsBiometricEnabled(value)
+        }
+    }
+
+    val defaultTransactionSpeed = settingsStore.defaultTransactionSpeed
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5000), TransactionSpeed.Medium)
+
+    fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
+        viewModelScope.launch {
+            settingsStore.setDefaultTransactionSpeed(speed)
         }
     }
 

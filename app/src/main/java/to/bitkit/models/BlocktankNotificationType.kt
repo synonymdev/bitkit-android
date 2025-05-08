@@ -1,4 +1,4 @@
-package to.bitkit.models.blocktank
+package to.bitkit.models
 
 import kotlinx.serialization.Serializable
 
