@@ -88,6 +88,16 @@ class WalletRepo @Inject constructor(
     suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Refreshing bip21", context = TAG)
 
+        //Reset invoice state
+        _walletState.update {
+            it.copy(
+                selectedTags = emptyList(),
+                bip21Description = "",
+                balanceInput = "",
+                bip21 = ""
+            )
+        }
+
         // Check current address or generate new one
         val currentAddress = getOnchainAddress()
         if (currentAddress.isEmpty()) {
@@ -105,18 +115,7 @@ class WalletRepo @Inject constructor(
                 }
         }
 
-        //Reset invoice state
-        _walletState.update {
-            it.copy(
-                selectedTags = emptyList(),
-                bip21Description = "",
-                balanceInput = "",
-                bip21 = ""
-            )
-        }
-
         updateBip21Invoice()
-
         return@withContext Result.success(Unit)
     }
 
