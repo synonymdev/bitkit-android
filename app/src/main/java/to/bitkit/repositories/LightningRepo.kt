@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
@@ -19,16 +21,19 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.IBtInfo
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -42,6 +47,9 @@ class LightningRepo @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
+    private val blocktankNotificationsService: BlocktankNotificationsService,
+    private val firebaseMessaging: FirebaseMessaging,
+    private val keychain: Keychain,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -167,6 +175,7 @@ class LightningRepo @Inject constructor(
                 Logger.error("Failed to connect to trusted peers", e)
             }
             sync()
+            registerForNotifications()
 
             Result.success(Unit)
         } catch (e: Throwable) {
@@ -348,6 +357,57 @@ class LightningRepo @Inject constructor(
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
     fun hasChannels(): Boolean = _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
+
+    // Notification handling
+    suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
+        try {
+            val token = firebaseMessaging.token.await()
+            Result.success(token)
+        } catch (e: Throwable) {
+            Logger.error("Get FCM token error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun registerForNotifications(): Result<Unit> = executeWhenNodeRunning("Register for notifications") {
+        return@executeWhenNodeRunning try {
+            val token = firebaseMessaging.token.await()
+            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
+
+            if (cachedToken == token) {
+                Logger.debug("Skipped registering for notifications, current device token already registered")
+                return@executeWhenNodeRunning Result.success(Unit)
+            }
+
+            blocktankNotificationsService.registerDevice(token)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Register for notifications error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun testNotification(): Result<Unit> = executeWhenNodeRunning("Test notification") {
+        try {
+            val token = firebaseMessaging.token.await()
+            blocktankNotificationsService.testNotification(token)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Test notification error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
+        try {
+            val info = coreService.blocktank.info(refresh = true)
+                ?: return@withContext Result.failure(Exception("Couldn't get info"))
+            Result.success(info)
+        } catch (e: Throwable) {
+            Logger.error("Blocktank info error", e)
+            Result.failure(e)
+        }
+    }
 
     private companion object {
         const val TAG = "LightningRepo"

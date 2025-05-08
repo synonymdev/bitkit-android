@@ -50,7 +50,6 @@ class LightningNodeService : Service() {
                     startForeground(NOTIFICATION_ID, notification)
 
                     walletRepo.setWalletExistsState()
-                    walletRepo.registerForNotifications()
                     walletRepo.refreshBip21()
                     walletRepo.syncBalances()
                 }

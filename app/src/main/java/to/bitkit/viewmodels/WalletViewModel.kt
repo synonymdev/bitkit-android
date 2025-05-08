@@ -287,7 +287,7 @@ class WalletViewModel @Inject constructor(
     // region debug methods
     fun manualRegisterForNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepo.registerForNotifications()
+            lightningRepo.registerForNotifications()
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -317,7 +317,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugFcmToken() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepo.getFcmToken().onSuccess { token ->
+            lightningRepo.getFcmToken().onSuccess { token ->
                 Logger.debug("FCM registration token: $token")
             }
         }
@@ -343,7 +343,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugLspNotifications() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepo.testNotification().onFailure { e ->
+            lightningRepo.testNotification().onFailure { e ->
                 Logger.error("Error in LSP notification test:", e)
             }
         }
@@ -351,7 +351,7 @@ class WalletViewModel @Inject constructor(
 
     fun debugBlocktankInfo() {
         viewModelScope.launch(bgDispatcher) {
-            walletRepo.getBlocktankInfo().onSuccess { info ->
+            lightningRepo.getBlocktankInfo().onSuccess { info ->
                 Logger.debug("Blocktank info: $info")
             }.onFailure { e ->
                 Logger.error("Error getting Blocktank info:", e)

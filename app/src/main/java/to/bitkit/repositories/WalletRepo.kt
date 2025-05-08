@@ -49,8 +49,6 @@ class WalletRepo @Inject constructor(
     private val db: AppDb,
     private val keychain: Keychain,
     private val coreService: CoreService,
-    private val blocktankNotificationsService: BlocktankNotificationsService,
-    private val firebaseMessaging: FirebaseMessaging,
     private val settingsStore: SettingsStore,
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
@@ -348,47 +346,6 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    // Notification handling
-    suspend fun registerForNotifications(): Result<Unit> = withContext(bgDispatcher) { //TODO HANDLE Register for notifications error (err: 'Node is not started')
-        try {
-            val token = firebaseMessaging.token.await()
-            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
-
-            if (cachedToken == token) {
-                Logger.debug("Skipped registering for notifications, current device token already registered")
-                return@withContext Result.success(Unit)
-            }
-
-            blocktankNotificationsService.registerDevice(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Register for notifications error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun testNotification(): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            blocktankNotificationsService.testNotification(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Test notification error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
-        try {
-            val info = coreService.blocktank.info(refresh = true)
-                ?: return@withContext Result.failure(Exception("Couldn't get info"))
-            Result.success(info)
-        } catch (e: Throwable) {
-            Logger.error("Blocktank info error", e)
-            Result.failure(e)
-        }
-    }
-
     // Debug methods
     suspend fun debugKeychain(key: String, value: String): Result<String?> = withContext(bgDispatcher) {
         try {
@@ -414,16 +371,6 @@ class WalletRepo @Inject constructor(
             Result.success(mnemonic)
         } catch (e: Throwable) {
             Logger.error("Get mnemonic error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            Result.success(token)
-        } catch (e: Throwable) {
-            Logger.error("Get FCM token error", e)
             Result.failure(e)
         }
     }
