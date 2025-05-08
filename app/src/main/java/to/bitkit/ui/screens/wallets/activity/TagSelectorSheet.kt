@@ -29,6 +29,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -66,6 +67,7 @@ private fun TagSelectorSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(.5f)
+            .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {

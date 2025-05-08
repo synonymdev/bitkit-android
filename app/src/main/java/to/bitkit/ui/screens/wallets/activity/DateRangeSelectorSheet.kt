@@ -26,6 +26,7 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -64,6 +65,7 @@ private fun DateRangeSelectorSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(.775f)
+            .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
