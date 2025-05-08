@@ -112,22 +112,7 @@ fun HomeScreen(
                 }
 
                 is BottomSheetType.ActivityDateRangeSelector -> {
-                    val dateRangeState = rememberDateRangePickerState()
-                    DateRangeSelectorSheet(
-                        dateRangeState = dateRangeState,
-                        onClearClick = {
-                            dateRangeState.setSelection(null, null)
-                            activityListViewModel.clearDateRange()
-                            appViewModel.hideSheet()
-                        },
-                        onApplyClick = {
-                            activityListViewModel.setDateRange(
-                                startDate = dateRangeState.selectedStartDateMillis,
-                                endDate = dateRangeState.selectedEndDateMillis,
-                            )
-                            appViewModel.hideSheet()
-                        },
-                    )
+                    DateRangeSelectorSheet()
                 }
 
                 is BottomSheetType.ActivityTagSelector -> {
