@@ -194,10 +194,15 @@ class LightningRepoTest : BaseUnitTest() {
     fun `openChannel should succeed when node is running`() = test {
         startNodeForTesting()
         val testPeer = LnPeer("nodeId", "host", "9735")
-        val testChannelId = mock<UserChannelId>()
-        whenever(lightningService.openChannel(any(), any(), any())).thenReturn(Result.success(testChannelId))
+        val testChannelId = "testChannelId"
+        val channelAmountSats = 100000uL
+        whenever(lightningService.openChannel(peer = testPeer, channelAmountSats, null)).thenReturn(
+            Result.success(
+                testChannelId
+            )
+        )
 
-        val result = sut.openChannel(testPeer, 100000uL)
+        val result = sut.openChannel(testPeer, channelAmountSats, null)
         assertTrue(result.isSuccess)
         assertEquals(testChannelId, result.getOrNull())
     }
