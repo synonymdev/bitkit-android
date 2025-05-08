@@ -48,51 +48,52 @@ fun AllActivityScreen(
     onBackCLick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
-    ScreenColumn {
-        AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
-        val dateRangeState = rememberDateRangePickerState()
-        var currentSheet by remember { mutableStateOf<ActivityFilterSheet?>(null) }
+    val dateRangeState = rememberDateRangePickerState()
+    var currentSheet by remember { mutableStateOf<ActivityFilterSheet?>(null) }
 
-        SheetHost(
-            shouldExpand = currentSheet != null,
-            onDismiss = { currentSheet = null },
-            sheets = {
-                when (currentSheet) {
-                    is ActivityFilterSheet.DateRangeSelector -> {
-                        DateRangeSelectorSheet(
-                            dateRangeState = dateRangeState,
-                            onClearClick = {
-                                dateRangeState.setSelection(null, null)
-                                viewModel.clearDateRange()
-                                currentSheet = null
-                            },
-                            onApplyClick = {
-                                viewModel.setDateRange(
-                                    startDate = dateRangeState.selectedStartDateMillis,
-                                    endDate = dateRangeState.selectedEndDateMillis,
-                                )
-                                currentSheet = null
-                            },
-                        )
-                    }
-
-                    is ActivityFilterSheet.TagSelector -> {
-                        TagSelectorSheet(
-                            viewModel = viewModel,
-                            onClearClick = {
-                                viewModel.clearTags()
-                                currentSheet = null
-                            },
-                            onApplyClick = {
-                                currentSheet = null
-                            },
-                        )
-                    }
-
-                    null -> Unit
+    SheetHost(
+        shouldExpand = currentSheet != null,
+        onDismiss = { currentSheet = null },
+        sheets = {
+            when (currentSheet) {
+                is ActivityFilterSheet.DateRangeSelector -> {
+                    DateRangeSelectorSheet(
+                        dateRangeState = dateRangeState,
+                        onClearClick = {
+                            dateRangeState.setSelection(null, null)
+                            viewModel.clearDateRange()
+                            currentSheet = null
+                        },
+                        onApplyClick = {
+                            viewModel.setDateRange(
+                                startDate = dateRangeState.selectedStartDateMillis,
+                                endDate = dateRangeState.selectedEndDateMillis,
+                            )
+                            currentSheet = null
+                        },
+                    )
                 }
+
+                is ActivityFilterSheet.TagSelector -> {
+                    TagSelectorSheet(
+                        viewModel = viewModel,
+                        onClearClick = {
+                            viewModel.clearTags()
+                            currentSheet = null
+                        },
+                        onApplyClick = {
+                            currentSheet = null
+                        },
+                    )
+                }
+
+                null -> Unit
             }
-        ) {
+        }
+    ) {
+        ScreenColumn {
+            AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
+
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 ActivityListFilter(
                     viewModel = viewModel,
