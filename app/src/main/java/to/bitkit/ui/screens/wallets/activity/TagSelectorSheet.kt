@@ -1,12 +1,14 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -18,20 +20,47 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.viewmodels.ActivityListViewModel
+import to.bitkit.ui.theme.AppThemeSurface
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagSelectorSheet(
-    viewModel: ActivityListViewModel,
-    onClearClick: () -> Unit,
-    onApplyClick: () -> Unit,
+fun TagSelectorSheet() {
+    val activity = activityListViewModel ?: return
+    val app = appViewModel ?: return
+    val availableTags by activity.availableTags.collectAsState()
+    val selectedTags by activity.selectedTags.collectAsState()
+
+    TagSelectorSheetContent(
+        availableTags = availableTags,
+        selectedTags = selectedTags,
+        onTagClick = { activity.toggleTag(it) },
+        onClearClick = {
+            activity.clearTags()
+            app.hideSheet()
+        },
+        onApplyClick = {
+            app.hideSheet()
+        },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagSelectorSheetContent(
+    availableTags: List<String>,
+    selectedTags: Set<String>,
+    onTagClick: (String) -> Unit = {},
+    onClearClick: () -> Unit = {},
+    onApplyClick: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -51,14 +80,11 @@ fun TagSelectorSheet(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val availableTags by viewModel.availableTags.collectAsState()
-            val selectedTags by viewModel.selectedTags.collectAsState()
-
             availableTags.forEach { tag ->
                 TagButton(
                     text = tag,
                     isSelected = selectedTags.contains(tag),
-                    onClick = { viewModel.toggleTag(tag) }
+                    onClick = { onTagClick(tag) }
                 )
             }
         }
@@ -82,5 +108,21 @@ fun TagSelectorSheet(
             )
         }
     }
+}
 
+@OptIn(ExperimentalLayoutApi::class)
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        Box(
+            contentAlignment = Alignment.BottomCenter,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            TagSelectorSheetContent(
+                availableTags = listOf("Bitcoin", "Lightning", "Sent", "Received"),
+                selectedTags = setOf("Bitcoin", "Received"),
+            )
+        }
+    }
 }

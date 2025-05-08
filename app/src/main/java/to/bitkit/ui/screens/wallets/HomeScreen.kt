@@ -22,7 +22,6 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -116,16 +115,7 @@ fun HomeScreen(
                 }
 
                 is BottomSheetType.ActivityTagSelector -> {
-                    TagSelectorSheet(
-                        viewModel = activityListViewModel,
-                        onClearClick = {
-                            activityListViewModel.clearTags()
-                            appViewModel.hideSheet()
-                        },
-                        onApplyClick = {
-                            appViewModel.hideSheet()
-                        },
-                    )
+                    TagSelectorSheet()
                 }
 
                 null -> Unit

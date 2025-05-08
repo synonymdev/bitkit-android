@@ -33,22 +33,22 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun DateRangeSelectorSheet() {
     val dateRangeState = rememberDateRangePickerState()
-    val activityListViewModel = activityListViewModel ?: return
-    val appViewModel = appViewModel ?: return
+    val activity = activityListViewModel ?: return
+    val app = appViewModel ?: return
 
     DateRangeSelectorSheetContent(
         dateRangeState = dateRangeState,
         onClearClick = {
             dateRangeState.setSelection(null, null)
-            activityListViewModel.clearDateRange()
-            appViewModel.hideSheet()
+            activity.clearDateRange()
+            app.hideSheet()
         },
         onApplyClick = {
-            activityListViewModel.setDateRange(
+            activity.setDateRange(
                 startDate = dateRangeState.selectedStartDateMillis,
                 endDate = dateRangeState.selectedEndDateMillis,
             )
-            appViewModel.hideSheet()
+            app.hideSheet()
         },
     )
 }
