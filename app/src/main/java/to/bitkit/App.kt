@@ -4,12 +4,10 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
-import android.content.Intent
 import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
-import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.env.Env
 import javax.inject.Inject
 
@@ -27,8 +25,6 @@ internal open class App : Application(), Configuration.Provider {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         Env.initAppStoragePath(filesDir.absolutePath)
-
-        startService(Intent(this, LightningNodeService::class.java))
     }
 
     companion object {
