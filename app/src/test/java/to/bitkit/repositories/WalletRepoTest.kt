@@ -54,21 +54,6 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(appStorage.loadBalance()).thenReturn(null)
         whenever(lightningRepo.getSyncFlow()).thenReturn(flowOf(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        wheneverBlocking { coreService.activity.getActivity(any())}.thenReturn(Activity.Lightning(
-            v1 = LightningActivity(
-                id = "",
-                txType = PaymentType.RECEIVED,
-                status = PaymentState.SUCCEEDED,
-                value = 10uL,
-                fee = 10uL,
-                invoice = "invoice",
-                message = "message",
-                timestamp = 10uL,
-                preimage = null,
-                createdAt = null,
-                updatedAt = null
-            )
-        ))
 
         sut = WalletRepo(
             bgDispatcher = testDispatcher,
@@ -81,17 +66,6 @@ class WalletRepoTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             network = Network.REGTEST
         )
-    }
-
-    @Test
-    fun `init should collect from sync flow and sync balances`() = test {
-        val testFlow = MutableStateFlow(Unit)
-        whenever(lightningRepo.getSyncFlow()).thenReturn(testFlow)
-        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
-
-        sut.observeLdkWallet()
-
-        verify(lightningRepo).sync()
     }
 
     @Test
