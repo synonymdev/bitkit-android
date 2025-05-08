@@ -229,7 +229,7 @@ class LightningRepo @Inject constructor(
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
         stop().onSuccess {
             return@withContext try {
-                Logger.debug("node stopped, calling wipeStorage called", context = TAG)
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lightningService.wipeStorage(walletIndex)
                 _lightningState.update { LightningState(nodeStatus = it.nodeStatus, nodeLifecycleState = it.nodeLifecycleState) }
                 Result.success(Unit)
