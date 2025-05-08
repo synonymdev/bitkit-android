@@ -57,8 +57,8 @@ fun SettingsButtonRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
+                .clickableAlpha(onClick = if (enabled) onClick else null)
                 .padding(vertical = 16.dp)
-                .clickableAlpha(onClick = if (enabled) onClick else null),
         ) {
             if (iconRes != null) {
                 Icon(
