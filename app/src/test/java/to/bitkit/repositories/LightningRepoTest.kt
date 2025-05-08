@@ -81,7 +81,6 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(settingsStore.defaultTransactionSpeed.first()).thenReturn(TransactionSpeed.Medium)
 
         sut.lightningState.test {
             assertEquals(NodeLifecycleState.Initializing, awaitItem().nodeLifecycleState)
