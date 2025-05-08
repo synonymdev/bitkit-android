@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
@@ -32,14 +33,12 @@ class LightningNodeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        startForeground(NOTIFICATION_ID, createNotification())
         setupService()
-        Logger.debug("onCreate", context = TAG)
     }
 
     private fun setupService() {
         serviceScope.launch {
-            startForeground(NOTIFICATION_ID, createNotification())
-
             launch {
                 lightningRepo.start(
                     eventHandler = { event ->
@@ -57,24 +56,51 @@ class LightningNodeService : Service() {
         }
     }
 
+    // Update the createNotification method in LightningNodeService.kt
     private fun createNotification(
-        contentText: String = "Bitkit is running in background so you can receive Lightning payments" //TODO GET FROM RESOURCES
+        contentText: String = "Bitkit is running in background so you can receive Lightning payments"
     ): Notification {
-        val notificationIntent = Intent(this, MainActivity::class.java)
+        val notificationIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Create stop action that will close both service and app
+        val stopIntent = Intent(this, LightningNodeService::class.java).apply {
+            action = ACTION_STOP_SERVICE_AND_APP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_launcher_fg_regtest) //TODO GET PRODUCTION ICON
+            .setSmallIcon(R.drawable.ic_launcher_fg_regtest)
             .setContentIntent(pendingIntent)
+            .addAction(
+                R.drawable.ic_x,
+                "Stop App", // TODO: Get from resources
+                stopPendingIntent
+            )
             .build()
     }
 
+    // Update the onStartCommand method
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Logger.debug("onStartCommand", context = TAG)
+        when (intent?.action) {
+            ACTION_STOP_SERVICE_AND_APP -> {
+                Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
+                // Close all activities
+                App.currentActivity?.value?.finishAffinity()
+                // Stop the service
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
         return START_STICKY
     }
 
@@ -94,5 +120,6 @@ class LightningNodeService : Service() {
         private const val NOTIFICATION_ID = 1
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
+        const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"
     }
 }
