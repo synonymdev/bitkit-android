@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
@@ -35,7 +36,8 @@ fun TagSelectorSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.875f)
+            .fillMaxHeight(.5f)
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(stringResource(R.string.wallet__tags_filter_title))
