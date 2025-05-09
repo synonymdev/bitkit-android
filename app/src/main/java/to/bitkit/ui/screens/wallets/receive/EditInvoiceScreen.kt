@@ -379,7 +379,7 @@ private fun Preview3() {
             onInputChanged = {},
             onContinueGeneral = {},
             onContinueKeyboard = {},
-            tags = listOf("Team", "Dinner"),
+            tags = listOf("Team", "Dinner","Home"),
             onClickAddTag = {},
             onClickTag = {},
             isSoftKeyboardVisible = false,
