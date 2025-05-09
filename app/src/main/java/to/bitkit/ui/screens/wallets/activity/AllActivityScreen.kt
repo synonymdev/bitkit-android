@@ -311,6 +311,7 @@ private val today: Calendar = Calendar.getInstance()
 private val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
 private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
 private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
+private val lastYear: Calendar = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }
 
 val testActivityItems: List<Activity> = listOf(
     // Today
@@ -340,7 +341,7 @@ val testActivityItems: List<Activity> = listOf(
         LightningActivity(
             id = "2",
             txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
+            status = PaymentState.PENDING,
             value = 30_000_u,
             fee = 15_u,
             invoice = "lnbcrt2",
@@ -387,6 +388,22 @@ val testActivityItems: List<Activity> = listOf(
             transferTxId = "transferTxId",
             createdAt = thisMonth.timeInMillis.toULong() / 1000u,
             updatedAt = thisMonth.timeInMillis.toULong() / 1000u,
+        )
+    ),
+    // Last Year
+    Activity.Lightning(
+        LightningActivity(
+            id = "5",
+            txType = PaymentType.SENT,
+            status = PaymentState.SUCCEEDED,
+            value = 200_000_u,
+            fee = 1_u,
+            invoice = "lnbc…",
+            message = "",
+            timestamp = (lastYear.timeInMillis.toULong() / 1000u),
+            preimage = null,
+            createdAt = (lastYear.timeInMillis.toULong() / 1000u),
+            updatedAt = (lastYear.timeInMillis.toULong() / 1000u),
         )
     ),
 )
