@@ -27,6 +27,8 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
+import to.bitkit.ui.screens.wallets.activity.components.ActivityRow
 import to.bitkit.ui.shared.util.DarkModePreview
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors

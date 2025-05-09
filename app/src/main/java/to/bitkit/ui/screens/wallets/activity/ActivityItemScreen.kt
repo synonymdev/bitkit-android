@@ -31,7 +31,7 @@ import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ui.Routes
-import to.bitkit.ui.components.ActivityIcon
+import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize

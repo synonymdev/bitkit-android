@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallets.activity
+package to.bitkit.ui.screens.wallets.activity.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,10 +20,10 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.components.ActivityIcon
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.screens.wallets.activity.testActivityItems
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
