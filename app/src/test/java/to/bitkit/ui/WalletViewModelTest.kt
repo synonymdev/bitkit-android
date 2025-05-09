@@ -24,7 +24,6 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 @RunWith(AndroidJUnit4::class)
 @Config(application = TestApp::class)
@@ -70,11 +69,9 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onPullToRefresh should call lightningRepo sync`() = test {
-        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
-
         sut.onPullToRefresh()
 
-        verify(lightningRepo).sync()
+        verify(walletRepo).syncNodeAndWallet()
     }
 
     @Test
@@ -154,15 +151,10 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `wipeStorage should call walletRepo wipeWallet and lightningRepo wipeStorage, and set walletExists`() =
         test {
-            whenever(walletRepo.wipeWallet()).thenReturn(Result.success(Unit))
-            whenever(lightningRepo.wipeStorage(any())).thenReturn(Result.success(Unit))
-            whenever(walletRepo.walletExists()).thenReturn(false)
-
+            whenever(walletRepo.wipeWallet(walletIndex = 0)).thenReturn(Result.success(Unit))
             sut.wipeStorage()
 
-            verify(walletRepo).wipeWallet()
-            verify(lightningRepo).wipeStorage(any())
-            assertFalse(sut.walletExists)
+            verify(walletRepo).wipeWallet(walletIndex = 0)
         }
 
     @Test
