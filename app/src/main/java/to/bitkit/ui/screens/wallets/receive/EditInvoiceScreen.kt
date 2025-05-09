@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,12 +34,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -76,6 +80,18 @@ fun EditInvoiceScreen(
     val currencyVM = currencyViewModel ?: return
     var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
+    var isSoftKeyboardVisible by remember { mutableStateOf(false) }
+    val view = LocalView.current
+
+    LaunchedEffect(view) {
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val isKeyboardNowVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (isKeyboardNowVisible != isSoftKeyboardVisible) {
+                isSoftKeyboardVisible = isKeyboardNowVisible
+            }
+            insets
+        }
+    }
 
     AmountInputHandler(
         input = walletUiState.balanceInput,
@@ -100,7 +116,8 @@ fun EditInvoiceScreen(
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = { updateInvoice(satsString.toULongOrNull()) },
         onClickAddTag = onClickAddTag,
-        onClickTag = onClickTag
+        onClickTag = onClickTag,
+        isSoftKeyboardVisible = isSoftKeyboardVisible
     )
 }
 
@@ -109,6 +126,7 @@ fun EditInvoiceScreen(
 fun EditInvoiceContent(
     input: String,
     noteText: String,
+    isSoftKeyboardVisible: Boolean,
     keyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
@@ -123,12 +141,18 @@ fun EditInvoiceContent(
     onInputChanged: (String) -> Unit,
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth().gradientBackground()
+        modifier = Modifier
+            .fillMaxWidth()
+            .gradientBackground()
     ) {
 
-        AnimatedVisibility(!keyboardVisible, modifier = Modifier
-            .fillMaxWidth()
-            .align(Alignment.BottomEnd)
+        AnimatedVisibility(
+            visible = !keyboardVisible && !isSoftKeyboardVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomEnd)
         ) {
             Image(
                 painter = painterResource(R.drawable.coin_stack),
@@ -323,7 +347,8 @@ private fun Preview() {
             onContinueKeyboard = {},
             tags = listOf(),
             onClickAddTag = {},
-            onClickTag = {}
+            onClickTag = {},
+            isSoftKeyboardVisible = false,
         )
     }
 }
@@ -346,7 +371,8 @@ private fun Preview2() {
             onContinueKeyboard = {},
             tags = listOf("Team", "Dinner", "Home", "Work"),
             onClickAddTag = {},
-            onClickTag = {}
+            onClickTag = {},
+            isSoftKeyboardVisible = false,
         )
     }
 }
@@ -369,7 +395,8 @@ private fun Preview3() {
             onContinueKeyboard = {},
             tags = listOf("Team", "Dinner"),
             onClickAddTag = {},
-            onClickTag = {}
+            onClickTag = {},
+            isSoftKeyboardVisible = false,
         )
     }
 }
