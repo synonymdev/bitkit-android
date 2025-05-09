@@ -1,14 +1,13 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,13 +19,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun TagButton(
     text: String,
-    isSelected: Boolean,
+    isSelected: Boolean = false,
     displayIconClose: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -39,12 +40,8 @@ fun TagButton(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
             .wrapContentWidth()
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable { onClick() }
+            .border(width = 1.dp, color = borderColor, shape = AppShapes.small)
+            .clickableAlpha { onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Text(
@@ -57,7 +54,8 @@ fun TagButton(
             Icon(
                 painter = painterResource(R.drawable.ic_x),
                 contentDescription = null,
-                tint = Colors.White
+                tint = Colors.White64,
+                modifier = Modifier.size(16.dp)
             )
         }
     }

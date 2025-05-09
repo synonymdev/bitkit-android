@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
@@ -27,6 +29,21 @@ fun BalanceHeaderView(
     prefix: String? = null,
     showBitcoinSymbol: Boolean = true,
 ) {
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) {
+        BalanceHeader(
+            modifier = modifier,
+            smallRowSymbol = "$",
+            smallRowText = "12.34",
+            largeRowPrefix = prefix,
+            largeRowText = "$sats",
+            largeRowSymbol = BITCOIN_SYMBOL,
+            showSymbol = showBitcoinSymbol,
+            onClick = {},
+        )
+        return
+    }
+
     val currency = currencyViewModel ?: return
     val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
@@ -37,7 +54,6 @@ fun BalanceHeaderView(
         if (primaryDisplay == PrimaryDisplay.BITCOIN) {
             BalanceHeader(
                 modifier = modifier,
-                smallRowPrefix = prefix,
                 smallRowSymbol = converted.symbol,
                 smallRowText = converted.formatted,
                 largeRowPrefix = prefix,
@@ -49,7 +65,6 @@ fun BalanceHeaderView(
         } else {
             BalanceHeader(
                 modifier = modifier,
-                smallRowPrefix = prefix,
                 smallRowSymbol = btcComponents.symbol,
                 smallRowText = btcComponents.value,
                 largeRowPrefix = prefix,
@@ -65,7 +80,6 @@ fun BalanceHeaderView(
 @Composable
 fun BalanceHeader(
     modifier: Modifier = Modifier,
-    smallRowPrefix: String? = null,
     smallRowSymbol: String? = null,
     smallRowText: String,
     largeRowPrefix: String? = null,
@@ -80,7 +94,6 @@ fun BalanceHeader(
         modifier = modifier.clickableAlpha { onClick() }
     ) {
         SmallRow(
-            prefix = smallRowPrefix,
             symbol = smallRowSymbol,
             text = smallRowText
         )
@@ -120,17 +133,11 @@ fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean)
 }
 
 @Composable
-private fun SmallRow(prefix: String?, symbol: String?, text: String) {
+private fun SmallRow(symbol: String?, text: String) {
     Row(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (prefix != null) {
-            Caption13Up(
-                text = prefix,
-                color = Colors.White64,
-            )
-        }
         if (symbol != null) {
             Caption13Up(
                 text = symbol,
@@ -149,12 +156,12 @@ private fun SmallRow(prefix: String?, symbol: String?, text: String) {
 private fun Preview() {
     AppThemeSurface {
         BalanceHeader(
-            smallRowPrefix = "$",
+            smallRowSymbol = "$",
             smallRowText = "27.36",
-            largeRowPrefix = "₿",
+            largeRowPrefix = "+",
             largeRowText = "136 825",
-            largeRowSymbol = "sats",
-            showSymbol = false,
+            largeRowSymbol = "₿",
+            showSymbol = true,
             modifier = Modifier.fillMaxWidth(),
             onClick = {}
         )
