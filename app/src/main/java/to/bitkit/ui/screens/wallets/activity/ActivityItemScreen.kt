@@ -14,12 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Tag
@@ -33,7 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -136,6 +133,7 @@ private fun ActivityItemView(
             ActivityIcon(activity = item, size = 48.dp)
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
         StatusSection(item)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
@@ -385,36 +383,50 @@ private fun StatusSection(item: Activity) {
                 is Activity.Lightning -> {
                     when (item.v1.status) {
                         PaymentState.PENDING -> {
-                            StatusIcon(Icons.Default.HourglassEmpty, Colors.Purple)
+                            StatusIcon(painterResource(R.drawable.ic_hourglass_simple), Colors.Purple)
                             StatusText(stringResource(R.string.wallet__activity_pending), Colors.Purple)
                         }
 
                         PaymentState.SUCCEEDED -> {
-                            StatusIcon(Icons.Default.Bolt, Colors.Purple)
+                            StatusIcon(painterResource(R.drawable.ic_lightning_alt), Colors.Purple)
                             StatusText(stringResource(R.string.wallet__activity_successful), Colors.Purple)
                         }
 
                         PaymentState.FAILED -> {
-                            StatusIcon(Icons.Default.Close, Colors.Purple)
+                            StatusIcon(painterResource(R.drawable.ic_x), Colors.Purple)
                             StatusText(stringResource(R.string.wallet__activity_failed), Colors.Purple)
                         }
                     }
-
                 }
 
                 is Activity.Onchain -> {
-                    when (item.v1.confirmed) {
-                        true -> {
-                            StatusIcon(Icons.Outlined.CheckCircle, Colors.Green)
-                            StatusText(stringResource(R.string.wallet__activity_confirmed), Colors.Green)
-                        }
+                    // Default status is confirming
+                    var statusIcon = painterResource(R.drawable.ic_hourglass_simple)
+                    var statusColor = Colors.Brand
+                    var statusText = stringResource(R.string.wallet__activity_confirming)
 
-                        else -> {
-                            StatusIcon(Icons.Default.HourglassEmpty, Colors.Brand)
-                            StatusText(stringResource(R.string.wallet__activity_confirming), Colors.Brand)
-                        }
+                    // TODO: handle isTransfer
+
+                    if (item.v1.isBoosted) {
+                        statusIcon = painterResource(R.drawable.ic_timer_alt)
+                        statusColor = Colors.Yellow
+                        statusText = stringResource(R.string.wallet__activity_boosting)
                     }
 
+                    if (item.v1.confirmed) {
+                        statusIcon = painterResource(R.drawable.ic_check_circle)
+                        statusColor = Colors.Green
+                        statusText = stringResource(R.string.wallet__activity_confirmed)
+                    }
+
+                    if (!item.v1.doesExist) {
+                        statusIcon = painterResource(R.drawable.ic_x)
+                        statusColor = Colors.Red
+                        statusText = stringResource(R.string.wallet__activity_removed)
+                    }
+
+                    StatusIcon(statusIcon, statusColor)
+                    StatusText(statusText, statusColor)
                 }
             }
         }
@@ -423,11 +435,11 @@ private fun StatusSection(item: Activity) {
 
 @Composable
 private fun StatusIcon(
-    icon: ImageVector,
+    icon: Painter,
     tint: Color,
 ) {
     Icon(
-        imageVector = icon,
+        painter = icon,
         contentDescription = null,
         tint = tint,
         modifier = Modifier.size(16.dp)

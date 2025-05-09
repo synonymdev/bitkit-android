@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,7 +54,8 @@ fun TagButton(
             Icon(
                 painter = painterResource(R.drawable.ic_x),
                 contentDescription = null,
-                tint = Colors.White
+                tint = Colors.White64,
+                modifier = Modifier.size(16.dp)
             )
         }
     }
