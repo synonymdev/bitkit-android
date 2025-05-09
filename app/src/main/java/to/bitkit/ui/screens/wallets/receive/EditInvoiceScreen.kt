@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,15 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -64,6 +60,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.viewmodels.CurrencyUiState
 
 @Composable
@@ -80,18 +77,7 @@ fun EditInvoiceScreen(
     val currencyVM = currencyViewModel ?: return
     var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
-    var isSoftKeyboardVisible by remember { mutableStateOf(false) }
-    val view = LocalView.current
-
-    LaunchedEffect(view) {
-        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            val isKeyboardNowVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-            if (isKeyboardNowVisible != isSoftKeyboardVisible) {
-                isSoftKeyboardVisible = isKeyboardNowVisible
-            }
-            insets
-        }
-    }
+    var isSoftKeyboardVisible by keyboardAsState()
 
     AmountInputHandler(
         input = walletUiState.balanceInput,
@@ -110,7 +96,7 @@ fun EditInvoiceScreen(
         tags = walletUiState.selectedTags,
         onBack = onBack,
         onTextChanged = onDescriptionUpdate,
-        keyboardVisible = keyboardVisible,
+        numericKeyboardVisible = keyboardVisible,
         onClickBalance = { keyboardVisible = true },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
@@ -127,7 +113,7 @@ fun EditInvoiceContent(
     input: String,
     noteText: String,
     isSoftKeyboardVisible: Boolean,
-    keyboardVisible: Boolean,
+    numericKeyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
     tags: List<String>,
@@ -147,7 +133,7 @@ fun EditInvoiceContent(
     ) {
 
         AnimatedVisibility(
-            visible = !keyboardVisible && !isSoftKeyboardVisible,
+            visible = !numericKeyboardVisible && !isSoftKeyboardVisible,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -193,7 +179,7 @@ fun EditInvoiceContent(
 
                 // Animated visibility for keyboard section
                 AnimatedVisibility(
-                    visible = keyboardVisible,
+                    visible = numericKeyboardVisible,
                     enter = slideInVertically(
                         initialOffsetY = { fullHeight -> fullHeight },
                         animationSpec = tween(durationMillis = 300)
@@ -245,7 +231,7 @@ fun EditInvoiceContent(
 
                 // Animated visibility for note section
                 AnimatedVisibility(
-                    visible = !keyboardVisible,
+                    visible = !numericKeyboardVisible,
                     enter = fadeIn(animationSpec = tween(durationMillis = 300)),
                     exit = fadeOut(animationSpec = tween(durationMillis = 300))
                 ) {
@@ -340,7 +326,7 @@ private fun Preview() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             onBack = {},
             onTextChanged = {},
-            keyboardVisible = false,
+            numericKeyboardVisible = false,
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
@@ -364,7 +350,7 @@ private fun Preview2() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             onBack = {},
             onTextChanged = {},
-            keyboardVisible = false,
+            numericKeyboardVisible = false,
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
@@ -388,7 +374,7 @@ private fun Preview3() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             onBack = {},
             onTextChanged = {},
-            keyboardVisible = true,
+            numericKeyboardVisible = true,
             onClickBalance = {},
             onInputChanged = {},
             onContinueGeneral = {},
