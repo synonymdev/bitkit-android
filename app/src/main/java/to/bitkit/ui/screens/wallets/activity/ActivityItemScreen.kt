@@ -13,13 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Tag
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -151,7 +144,7 @@ private fun ActivityItemView(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Outlined.CalendarMonth,
+                        painter = painterResource(R.drawable.ic_calendar),
                         contentDescription = null,
                         tint = accentColor,
                         modifier = Modifier.size(16.dp)
@@ -172,7 +165,7 @@ private fun ActivityItemView(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Outlined.Schedule,
+                        painter = painterResource(R.drawable.ic_clock),
                         contentDescription = null,
                         tint = accentColor,
                         modifier = Modifier.size(16.dp)
@@ -199,7 +192,7 @@ private fun ActivityItemView(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Outlined.AccountCircle,
+                            painter = painterResource(R.drawable.ic_user),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
@@ -221,7 +214,7 @@ private fun ActivityItemView(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Outlined.Timer,
+                                painter = painterResource(R.drawable.ic_speed_normal),
                                 contentDescription = null,
                                 tint = accentColor,
                                 modifier = Modifier.size(16.dp)
@@ -295,7 +288,7 @@ private fun ActivityItemView(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Action buttons
-        // TODO add buttons action & disable boost for LN
+        // TODO add buttons action
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
@@ -310,7 +303,7 @@ private fun ActivityItemView(
                     onClick = { /* TODO: Implement assign functionality */ },
                     icon = {
                         Icon(
-                            imageVector = Icons.Outlined.AccountCircle,
+                            painter = painterResource(R.drawable.ic_user_plus),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
@@ -324,7 +317,7 @@ private fun ActivityItemView(
                     onClick = { /* TODO: Implement tag functionality */ },
                     icon = {
                         Icon(
-                            imageVector = Icons.Outlined.Tag,
+                            painter = painterResource(R.drawable.ic_tag),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
@@ -341,9 +334,10 @@ private fun ActivityItemView(
                     text = stringResource(R.string.wallet__activity_boost),
                     size = ButtonSize.Small,
                     onClick = { /* TODO: Implement boost functionality */ },
+                    enabled = !isLightning, // TODO add logic to enable/disable boost for onchain activities
                     icon = {
                         Icon(
-                            imageVector = Icons.Outlined.Timer,
+                            painter = painterResource(R.drawable.ic_timer_alt),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
@@ -357,7 +351,7 @@ private fun ActivityItemView(
                     onClick = { /* TODO: Implement explore functionality */ },
                     icon = {
                         Icon(
-                            imageVector = Icons.Outlined.Explore,
+                            painter = painterResource(R.drawable.ic_git_branch),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)
