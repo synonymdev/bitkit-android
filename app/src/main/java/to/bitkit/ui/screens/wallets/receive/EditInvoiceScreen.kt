@@ -6,7 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -31,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -59,7 +61,6 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.MainUiState
 
 @Composable
 fun EditInvoiceScreen(
@@ -121,165 +122,183 @@ fun EditInvoiceContent(
     onClickTag: (String) -> Unit,
     onInputChanged: (String) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .gradientBackground()
-            .navigationBarsPadding()
-            .testTag("edit_invoice_screen")
+    Box(
+        modifier = Modifier.fillMaxWidth().gradientBackground()
     ) {
-        SheetTopBar(stringResource(R.string.wallet__receive_specify)) {
-            onBack()
+
+        AnimatedVisibility(!keyboardVisible, modifier = Modifier
+            .fillMaxWidth()
+            .align(Alignment.BottomEnd)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.coin_stack),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp)
+            )
         }
 
         Column(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .testTag("edit_invoice_content")
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .testTag("edit_invoice_screen")
         ) {
-            Spacer(Modifier.height(32.dp))
-
-            NumberPadTextField(
-                input = input,
-                displayUnit = displayUnit,
-                primaryDisplay = primaryDisplay,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickableAlpha(onClick = onClickBalance)
-                    .testTag("amount_input_field")
-            )
-
-            // Animated visibility for keyboard section
-            AnimatedVisibility(
-                visible = keyboardVisible,
-                enter = slideInVertically(
-                    initialOffsetY = { fullHeight -> fullHeight },
-                    animationSpec = tween(durationMillis = 300)
-                ) + fadeIn(),
-                exit = slideOutVertically(
-                    targetOffsetY = { fullHeight -> fullHeight },
-                    animationSpec = tween(durationMillis = 300)
-                ) + fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier.testTag("keyboard_section")
-                ) {
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        UnitButton(modifier = Modifier.height(28.dp))
-                    }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-
-                    Keyboard(
-                        onClick = { number ->
-                            onInputChanged(if (input == "0") number else input + number)
-                        },
-                        onClickBackspace = {
-                            onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
-                        },
-                        isDecimal = primaryDisplay == PrimaryDisplay.FIAT,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("amount_keyboard"),
-                    )
-
-                    Spacer(modifier = Modifier.height(41.dp))
-
-                    PrimaryButton(
-                        text = stringResource(R.string.common__continue),
-                        onClick = onContinueKeyboard,
-                        modifier = Modifier.testTag("keyboard_continue_button")
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+            SheetTopBar(stringResource(R.string.wallet__receive_specify)) {
+                onBack()
             }
 
-            // Animated visibility for note section
-            AnimatedVisibility(
-                visible = !keyboardVisible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 300)),
-                exit = fadeOut(animationSpec = tween(durationMillis = 300))
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .testTag("edit_invoice_content")
             ) {
-                Column(
-                    modifier = Modifier.testTag("note_section")
+                Spacer(Modifier.height(32.dp))
+
+                NumberPadTextField(
+                    input = input,
+                    displayUnit = displayUnit,
+                    primaryDisplay = primaryDisplay,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickableAlpha(onClick = onClickBalance)
+                        .testTag("amount_input_field")
+                )
+
+                // Animated visibility for keyboard section
+                AnimatedVisibility(
+                    visible = keyboardVisible,
+                    enter = slideInVertically(
+                        initialOffsetY = { fullHeight -> fullHeight },
+                        animationSpec = tween(durationMillis = 300)
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { fullHeight -> fullHeight },
+                        animationSpec = tween(durationMillis = 300)
+                    ) + fadeOut()
                 ) {
-                    Spacer(modifier = Modifier.height(44.dp))
-
-                    Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    TextField(
-                        placeholder = {
-                            BodySSB(
-                                text = stringResource(R.string.wallet__receive_note_placeholder),
-                                color = Colors.White64
-                            )
-                        },
-                        value = noteText,
-                        onValueChange = onTextChanged,
-                        minLines = 4,
-                        keyboardOptions = KeyboardOptions.Default.copy(
-                            imeAction = ImeAction.Done
-                        ),
-                        colors = AppTextFieldDefaults.semiTransparent,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("note_input_field")
-
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp)
+                    Column(
+                        modifier = Modifier.testTag("keyboard_section")
                     ) {
-                        tags.map { tagText ->
-                            TagButton(
-                                text = tagText,
-                                isSelected = false,
-                                displayIconClose = true,
-                                onClick = { onClickTag(tagText) },
-                            )
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            UnitButton(modifier = Modifier.height(28.dp))
                         }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+                        Keyboard(
+                            onClick = { number ->
+                                onInputChanged(if (input == "0") number else input + number)
+                            },
+                            onClickBackspace = {
+                                onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
+                            },
+                            isDecimal = primaryDisplay == PrimaryDisplay.FIAT,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("amount_keyboard"),
+                        )
+
+                        Spacer(modifier = Modifier.height(41.dp))
+
+                        PrimaryButton(
+                            text = stringResource(R.string.common__continue),
+                            onClick = onContinueKeyboard,
+                            modifier = Modifier.testTag("keyboard_continue_button")
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
-                    PrimaryButton(
-                        text = stringResource(R.string.wallet__tags_add),
-                        size = ButtonSize.Small,
-                        onClick = { onClickAddTag() },
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_tag),
-                                contentDescription = null,
-                                tint = Colors.Brand
-                            )
-                        },
-                        fullWidth = false
-                    )
+                }
 
-                    Spacer(modifier = Modifier.weight(1f))
+                // Animated visibility for note section
+                AnimatedVisibility(
+                    visible = !keyboardVisible,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 300))
+                ) {
+                    Column(
+                        modifier = Modifier.testTag("note_section")
+                    ) {
+                        Spacer(modifier = Modifier.height(44.dp))
 
-                    PrimaryButton(
-                        text = stringResource(R.string.wallet__receive_show_qr),
-                        onClick = onContinueGeneral,
-                        modifier = Modifier.testTag("general_continue_button")
-                    )
+                        Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        TextField(
+                            placeholder = {
+                                BodySSB(
+                                    text = stringResource(R.string.wallet__receive_note_placeholder),
+                                    color = Colors.White64
+                                )
+                            },
+                            value = noteText,
+                            onValueChange = onTextChanged,
+                            minLines = 4,
+                            keyboardOptions = KeyboardOptions.Default.copy(
+                                imeAction = ImeAction.Done
+                            ),
+                            colors = AppTextFieldDefaults.semiTransparent,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("note_input_field")
+
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        ) {
+                            tags.map { tagText ->
+                                TagButton(
+                                    text = tagText,
+                                    isSelected = false,
+                                    displayIconClose = true,
+                                    onClick = { onClickTag(tagText) },
+                                )
+                            }
+                        }
+                        PrimaryButton(
+                            text = stringResource(R.string.wallet__tags_add),
+                            size = ButtonSize.Small,
+                            onClick = { onClickAddTag() },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_tag),
+                                    contentDescription = null,
+                                    tint = Colors.Brand
+                                )
+                            },
+                            fullWidth = false
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        PrimaryButton(
+                            text = stringResource(R.string.wallet__receive_show_qr),
+                            onClick = onContinueGeneral,
+                            modifier = Modifier.testTag("general_continue_button")
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
             }
         }
