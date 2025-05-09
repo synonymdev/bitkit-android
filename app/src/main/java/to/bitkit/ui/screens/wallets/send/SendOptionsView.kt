@@ -32,7 +32,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
-import to.bitkit.ui.composableWithDefaultTransitions
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.util.gradientBackground
