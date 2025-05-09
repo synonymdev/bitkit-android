@@ -168,12 +168,12 @@ fun ReceiveQrSheet(
                 }
             }
             composable(ReceiveRoutes.EDIT_INVOICE) {
-                val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
+                val walletUiState by wallet.walletState.collectAsStateWithLifecycle()
                 EditInvoiceScreen(
                     walletUiState = walletUiState,
                     onBack = { navController.popBackStack() },
-                    updateInvoice = { sats, description ->
-                        wallet.updateBip21Invoice(amountSats = sats, description = description)
+                    updateInvoice = { sats ->
+                        wallet.updateBip21Invoice(amountSats = sats)
                         navController.popBackStack()
                     },
                     onClickAddTag = {
@@ -184,6 +184,9 @@ fun ReceiveQrSheet(
                     },
                     onDescriptionUpdate = { newText ->
                         wallet.updateBip21Description(newText = newText)
+                    },
+                    onInputUpdated = { newText ->
+                        wallet.updateBalanceInput(newText)
                     }
                 )
             }

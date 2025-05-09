@@ -24,7 +24,6 @@ internal open class App : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
-
         Env.initAppStoragePath(filesDir.absolutePath)
     }
 

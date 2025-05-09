@@ -392,7 +392,7 @@ class LightningService @Inject constructor(
     // region events
     private var shouldListenForEvents = true
 
-    private suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
+    suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
         while (shouldListenForEvents) {
             val node = this.node ?: let {
                 Logger.error(ServiceError.NodeNotStarted.message.orEmpty())

@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -19,6 +20,8 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.androidServices.LightningNodeService
+import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.ForgotPinSheet
 import to.bitkit.ui.components.InactivityTracker
@@ -58,6 +61,12 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
+        initNotificationChannel( //TODO EXTRACT TO Strings
+            id = CHANNEL_ID_NODE,
+            name = "Lightning node notification",
+            desc = "Channel for LightningNodeService",
+        )
+        startForegroundService(Intent(this, LightningNodeService::class.java))
         installSplashScreen()
         enableAppEdgeToEdge()
         setContent {
@@ -107,7 +116,6 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
@@ -145,9 +153,8 @@ class MainActivity : FragmentActivity() {
                                         try {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
-                                            walletViewModel.isRestoringWallet = true
+                                            walletViewModel.setRestoringWalletState(isRestoringWallet = true)
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(false)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
@@ -170,7 +177,6 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
-                                            walletViewModel.setWalletExistsState()
                                             appViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)

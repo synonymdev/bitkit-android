@@ -1,10 +1,14 @@
 package to.bitkit.repositories
 
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
@@ -17,33 +21,38 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
+import uniffi.bitkitcore.IBtInfo
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
-    private val addressChecker: AddressChecker,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
+    private val blocktankNotificationsService: BlocktankNotificationsService,
+    private val firebaseMessaging: FirebaseMessaging,
+    private val keychain: Keychain,
 ) {
-    private val _nodeLifecycleState: MutableStateFlow<NodeLifecycleState> = MutableStateFlow(NodeLifecycleState.Stopped)
-    val nodeLifecycleState = _nodeLifecycleState.asStateFlow()
+    private val _lightningState = MutableStateFlow(LightningState())
+    val lightningState = _lightningState.asStateFlow()
 
     /**
      * Executes the provided operation only if the node is running.
@@ -61,25 +70,25 @@ class LightningRepo @Inject constructor(
     ): Result<T> = withContext(bgDispatcher) {
         Logger.debug("Operation called: $operationName", context = TAG)
 
-        if (nodeLifecycleState.value.isRunning()) {
+        if (_lightningState.value.nodeLifecycleState.isRunning()) {
             return@withContext executeOperation(operationName, operation)
         }
 
         // If node is not in a state that can become running, fail fast
-        if (!nodeLifecycleState.value.canRun()) {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                Exception("Cannot execute $operationName: Node is ${nodeLifecycleState.value} and not starting")
+                Exception("Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting")
             )
         }
 
         val nodeRunning = withTimeoutOrNull(waitTimeout) {
-            if (nodeLifecycleState.value.isRunning()) {
+            if (_lightningState.value.nodeLifecycleState.isRunning()) {
                 return@withTimeoutOrNull true
             }
 
             // Otherwise, wait for it to transition to running state
             Logger.debug("Waiting for node runs to execute $operationName", context = TAG)
-            _nodeLifecycleState.first { it.isRunning() }
+            _lightningState.first { it.nodeLifecycleState.isRunning() }
             Logger.debug("Operation executed: $operationName", context = TAG)
             true
         } ?: false
@@ -116,56 +125,94 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun start(
-        walletIndex: Int,
+        walletIndex: Int = 0,
         timeout: Duration? = null,
+        shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null
-    ): Result<Unit> =
-        withContext(bgDispatcher) {
-            if (nodeLifecycleState.value.isRunningOrStarting()) {
-                return@withContext Result.success(Unit)
-            }
-
-            try {
-                _nodeLifecycleState.value = NodeLifecycleState.Starting
-
-                // Setup if not already setup
-                if (lightningService.node == null) {
-                    val setupResult = setup(walletIndex)
-                    if (setupResult.isFailure) {
-                        _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(
-                            setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
-                        )
-                        return@withContext setupResult
-                    }
-                }
-
-                // Start the node service
-                lightningService.start(timeout) { event ->
-                    eventHandler?.invoke(event)
-                    ldkNodeEventBus.emit(event)
-                }
-
-                _nodeLifecycleState.value = NodeLifecycleState.Running
-                Result.success(Unit)
-            } catch (e: Throwable) {
-                Logger.error("Node start error", e, context = TAG)
-                _nodeLifecycleState.value = NodeLifecycleState.ErrorStarting(e)
-                Result.failure(e)
-            }
-        }
-
-    suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        if (nodeLifecycleState.value.isStoppedOrStopping()) {
+    ): Result<Unit> = withContext(bgDispatcher) {
+        if (_lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
             return@withContext Result.success(Unit)
         }
 
         try {
-            executeWhenNodeRunning("stop") {
-                _nodeLifecycleState.value = NodeLifecycleState.Stopping
-                lightningService.stop()
-                _nodeLifecycleState.value = NodeLifecycleState.Stopped
-                Result.success(Unit)
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
+
+            // Setup if not already setup
+            if (lightningService.node == null) {
+                val setupResult = setup(walletIndex)
+                if (setupResult.isFailure) {
+                    _lightningState.update {
+                        it.copy(
+                            nodeLifecycleState = NodeLifecycleState.ErrorStarting(
+                                setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
+                            )
+                        )
+                    }
+                    return@withContext setupResult
+                }
             }
+
+            if (getStatus()?.isRunning == true) {
+                Logger.info("LDK node already running", context = TAG)
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+                lightningService.listenForEvents(onEvent = eventHandler)
+                return@withContext Result.success(Unit)
+            }
+
+            // Start the node service
+            lightningService.start(timeout) { event ->
+                eventHandler?.invoke(event)
+                ldkNodeEventBus.emit(event)
+            }
+
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+
+            // Initial state sync
+            syncState()
+
+            // Perform post-startup tasks
+            connectToTrustedPeers().onFailure { e ->
+                Logger.error("Failed to connect to trusted peers", e)
+            }
+            sync()
+            registerForNotifications()
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            if (shouldRetry) {
+                Logger.warn("Start error, retrying after two seconds...", e = e, context = TAG)
+                delay(2.seconds)
+                return@withContext start(
+                    walletIndex = walletIndex,
+                    timeout = timeout,
+                    shouldRetry = false,
+                    eventHandler = eventHandler
+                )
+            } else {
+                Logger.error("Node start error", e, context = TAG)
+                _lightningState.update {
+                    it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+                }
+                Result.failure(e)
+            }
+        }
+    }
+
+    fun setInitNodeLifecycleState() {
+        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
+    }
+
+    suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
+            return@withContext Result.success(Unit)
+        }
+
+        try {
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+            lightningService.stop()
+            _lightningState.update { LightningState() }
+            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node stop error", e, context = TAG)
             Result.failure(e)
@@ -173,14 +220,27 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
+        syncState()
+        if (_lightningState.value.isSyncingWallet) {
+            Logger.warn("Sync already in progress, waiting for existing sync.")
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
+        _lightningState.update { it.copy(isSyncingWallet = true) }
         lightningService.sync()
+        syncState()
+        _lightningState.update { it.copy(isSyncingWallet = false) }
+
         Result.success(Unit)
     }
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("wipeStorage called, stopping node first", context = TAG)
         stop().onSuccess {
             return@withContext try {
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lightningService.wipeStorage(walletIndex)
+                _lightningState.update { LightningState(nodeStatus = it.nodeStatus, nodeLifecycleState = it.nodeLifecycleState) }
                 Result.success(Unit)
             } catch (e: Throwable) {
                 Logger.error("Wipe storage error", e, context = TAG)
@@ -198,18 +258,13 @@ class LightningRepo @Inject constructor(
 
     suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
         lightningService.disconnectPeer(peer)
+        syncState()
         Result.success(Unit)
     }
 
     suspend fun newAddress(): Result<String> = executeWhenNodeRunning("New address") {
         val address = lightningService.newAddress()
         Result.success(address)
-    }
-
-    suspend fun checkAddressUsage(address: String): Result<Boolean> = executeWhenNodeRunning("Check address usage") {
-        val addressInfo = addressChecker.getAddressInfo(address)
-        val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
-        Result.success(hasTransactions)
     }
 
     suspend fun createInvoice(
@@ -224,6 +279,7 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
         executeWhenNodeRunning("Pay invoice") {
             val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
+            syncState()
             Result.success(paymentId)
         }
 
@@ -244,6 +300,7 @@ class LightningRepo @Inject constructor(
             var satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
 
             val txId = lightningService.send(address = address, sats = sats, satsPerVByte = satsPerVByte)
+            syncState()
             Result.success(txId)
         }
 
@@ -258,34 +315,110 @@ class LightningRepo @Inject constructor(
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null
     ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
-        lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        syncState()
+        result
     }
 
     suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> =
         executeWhenNodeRunning("Close channel") {
             lightningService.closeChannel(userChannelId, counterpartyNodeId)
+            syncState()
             Result.success(Unit)
         }
 
+
+
+    suspend fun syncState() {
+        _lightningState.update {
+            it.copy(
+                nodeId = getNodeId().orEmpty(),
+                nodeStatus = getStatus(),
+                peers = getPeers().orEmpty(),
+                channels = getChannels().orEmpty(),
+            )
+        }
+    }
+
     fun canSend(amountSats: ULong): Boolean =
-        nodeLifecycleState.value.isRunning() && lightningService.canSend(amountSats)
+        _lightningState.value.nodeLifecycleState.isRunning() && lightningService.canSend(amountSats)
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
-    fun getNodeId(): String? = if (nodeLifecycleState.value.isRunning()) lightningService.nodeId else null
+    fun getNodeId(): String? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
 
-    fun getBalances(): BalanceDetails? = if (nodeLifecycleState.value.isRunning()) lightningService.balances else null
+    fun getBalances(): BalanceDetails? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
 
-    fun getStatus(): NodeStatus? = if (nodeLifecycleState.value.isRunning()) lightningService.status else null
+    fun getStatus(): NodeStatus? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.status else null
 
-    fun getPeers(): List<LnPeer>? = if (nodeLifecycleState.value.isRunning()) lightningService.peers else null
+    fun getPeers(): List<LnPeer>? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.peers else null
 
     fun getChannels(): List<ChannelDetails>? =
-        if (nodeLifecycleState.value.isRunning()) lightningService.channels else null
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
-    fun hasChannels(): Boolean = nodeLifecycleState.value.isRunning() && lightningService.channels?.isNotEmpty() == true
+    fun hasChannels(): Boolean = _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
+
+    // Notification handling
+    suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
+        try {
+            val token = firebaseMessaging.token.await()
+            Result.success(token)
+        } catch (e: Throwable) {
+            Logger.error("Get FCM token error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun registerForNotifications(): Result<Unit> = executeWhenNodeRunning("Register for notifications") {
+        return@executeWhenNodeRunning try {
+            val token = firebaseMessaging.token.await()
+            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
+
+            if (cachedToken == token) {
+                Logger.debug("Skipped registering for notifications, current device token already registered")
+                return@executeWhenNodeRunning Result.success(Unit)
+            }
+
+            blocktankNotificationsService.registerDevice(token)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Register for notifications error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun testNotification(): Result<Unit> = executeWhenNodeRunning("Test notification") {
+        try {
+            val token = firebaseMessaging.token.await()
+            blocktankNotificationsService.testNotification(token)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Logger.error("Test notification error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
+        try {
+            val info = coreService.blocktank.info(refresh = true)
+                ?: return@withContext Result.failure(Exception("Couldn't get info"))
+            Result.success(info)
+        } catch (e: Throwable) {
+            Logger.error("Blocktank info error", e)
+            Result.failure(e)
+        }
+    }
 
     private companion object {
         const val TAG = "LightningRepo"
     }
 }
+
+data class LightningState(
+    val nodeId: String = "",
+    val nodeStatus: NodeStatus? = null,
+    val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
+    val peers: List<LnPeer> = emptyList(),
+    val channels: List<ChannelDetails> = emptyList(),
+    val isSyncingWallet: Boolean = false
+)

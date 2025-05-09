@@ -1,19 +1,18 @@
 package to.bitkit.repositories
 
-import android.content.Context
-import android.icu.util.Calendar
-import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
@@ -26,11 +25,10 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
@@ -47,16 +45,127 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @ApplicationContext private val appContext: Context,
     private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
     private val coreService: CoreService,
-    private val blocktankNotificationsService: BlocktankNotificationsService,
-    private val firebaseMessaging: FirebaseMessaging,
     private val settingsStore: SettingsStore,
+    private val addressChecker: AddressChecker,
+    private val lightningRepo: LightningRepo,
+    private val network: Network
 ) {
+
+    private val _walletState = MutableStateFlow(
+        WalletState(
+            onchainAddress = appStorage.onchainAddress,
+            bolt11 = appStorage.bolt11,
+            bip21 = appStorage.bip21,
+            walletExists = walletExists()
+        )
+    )
+    val walletState = _walletState.asStateFlow()
+
+    private val _balanceState = MutableStateFlow(getBalanceState())
+    val balanceState = _balanceState.asStateFlow()
+
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
+
+    fun setWalletExistsState() {
+        _walletState.update { it.copy(walletExists = walletExists()) }
+    }
+
+    suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
+        return@withContext try {
+            val addressInfo = addressChecker.getAddressInfo(address)
+            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
+            Result.success(hasTransactions)
+        } catch (e: Exception) {
+            Logger.error("checkAddressUsage error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Refreshing bip21", context = TAG)
+
+        //Reset invoice state
+        _walletState.update {
+            it.copy(
+                selectedTags = emptyList(),
+                bip21Description = "",
+                balanceInput = "",
+                bip21 = ""
+            )
+        }
+
+        // Check current address or generate new one
+        val currentAddress = getOnchainAddress()
+        if (currentAddress.isEmpty()) {
+            lightningRepo.newAddress()
+                .onSuccess { address -> setOnchainAddress(address) }
+                .onFailure { error -> Logger.error("Error generating new address", error) }
+        } else {
+            // Check if current address has been used
+            checkAddressUsage(currentAddress)
+                .onSuccess { hasTransactions ->
+                    if (hasTransactions) {
+                        // Address has been used, generate a new one
+                        lightningRepo.newAddress().onSuccess { address -> setOnchainAddress(address) }
+                    }
+                }
+        }
+
+        updateBip21Invoice()
+        return@withContext Result.success(Unit)
+    }
+
+    suspend fun observeLdkWallet() = withContext(bgDispatcher) {
+        lightningRepo.getSyncFlow()
+            .filter { lightningRepo.lightningState.value.nodeLifecycleState == NodeLifecycleState.Running }
+            .collect {
+                runCatching {
+                   syncNodeAndWallet()
+                }
+            }
+    }
+
+    suspend fun syncNodeAndWallet() : Result<Unit> = withContext(bgDispatcher) {
+        syncBalances()
+        lightningRepo.sync().onSuccess {
+            syncBalances()
+            return@withContext Result.success(Unit)
+        }.onFailure { e ->
+            return@withContext Result.failure(e)
+        }
+    }
+
+    suspend fun syncBalances() {
+        lightningRepo.getBalances()?.let { balance ->
+            val totalSats = balance.totalLightningBalanceSats + balance.totalOnchainBalanceSats
+
+            val newBalance = BalanceState(
+                totalOnchainSats = balance.totalOnchainBalanceSats,
+                totalLightningSats = balance.totalLightningBalanceSats,
+                totalSats = totalSats,
+            )
+            _balanceState.update { newBalance }
+            _walletState.update { it.copy(balanceDetails = lightningRepo.getBalances()) }
+            saveBalanceState(newBalance)
+
+            setShowEmptyState(totalSats <= 0u)
+        }
+    }
+
+    suspend fun refreshBip21ForEvent(event: Event) {
+        when (event) {
+            is Event.PaymentReceived, is Event.ChannelReady, is Event.ChannelClosed -> refreshBip21()
+            else -> Unit
+        }
+    }
+
+    fun setRestoringWalletState(isRestoring: Boolean) {
+        _walletState.update { it.copy(isRestoringWallet = isRestoring) }
+    }
 
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         try {
@@ -65,9 +174,10 @@ class WalletRepo @Inject constructor(
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Create wallet error", e)
+            Logger.error("Create wallet error", e, context = TAG)
             Result.failure(e)
         }
     }
@@ -78,6 +188,7 @@ class WalletRepo @Inject constructor(
             if (bip39Passphrase != null) {
                 keychain.saveString(Keychain.Key.BIP39_PASSPHRASE.name, bip39Passphrase)
             }
+            setWalletExistsState()
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Restore wallet error", e)
@@ -85,8 +196,8 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun wipeWallet(): Result<Unit> = withContext(bgDispatcher) {
-        if (Env.network != Network.REGTEST) {
+    suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+        if (network != Network.REGTEST) {
             return@withContext Result.failure(Exception("Can only wipe on regtest."))
         }
 
@@ -96,7 +207,11 @@ class WalletRepo @Inject constructor(
             settingsStore.wipe()
             coreService.activity.removeAll()
             deleteAllInvoices()
-            Result.success(Unit)
+            _walletState.update { WalletState() }
+            _balanceState.update { BalanceState() }
+            setWalletExistsState()
+
+            return@withContext lightningRepo.wipeStorage(walletIndex = walletIndex)
         } catch (e: Throwable) {
             Logger.error("Wipe wallet error", e)
             Result.failure(e)
@@ -108,20 +223,23 @@ class WalletRepo @Inject constructor(
 
     fun setOnchainAddress(address: String) {
         appStorage.onchainAddress = address
+        _walletState.update { it.copy(onchainAddress = address) }
     }
 
     // Bolt11 management
-    fun getBolt11(): String = appStorage.bolt11
+    fun getBolt11(): String = _walletState.value.bolt11
 
     fun setBolt11(bolt11: String) {
         appStorage.bolt11 = bolt11
+        _walletState.update { it.copy(bolt11 = bolt11) }
     }
 
     // BIP21 management
-    fun getBip21(): String = appStorage.bip21
+    fun getBip21(): String = _walletState.value.bip21
 
     fun setBip21(bip21: String) {
         appStorage.bip21 = bip21
+        _walletState.update { it.copy(bip21 = bip21) }
     }
 
     fun buildBip21Url(
@@ -141,73 +259,88 @@ class WalletRepo @Inject constructor(
     // Balance management
     fun getBalanceState(): BalanceState = appStorage.loadBalance() ?: BalanceState()
 
-    fun saveBalanceState(balanceState: BalanceState) {
+    suspend fun saveBalanceState(balanceState: BalanceState) {
         appStorage.cacheBalance(balanceState)
+        _balanceState.update { balanceState }
+
+        if (balanceState.totalSats > 0u) {
+            setShowEmptyState(false)
+        }
     }
 
     // Settings
     suspend fun setShowEmptyState(show: Boolean) {
         settingsStore.setShowEmptyState(show)
+        _walletState.update { it.copy(showEmptyState = show) }
     }
 
-    // Notification handling
-    suspend fun registerForNotifications(): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
+    // BIP21 state management
+    fun updateBip21AmountSats(amount: ULong?) {
+        _walletState.update { it.copy(bip21AmountSats = amount) }
+    }
 
-            if (cachedToken == token) {
-                Logger.debug("Skipped registering for notifications, current device token already registered")
-                return@withContext Result.success(Unit)
-            }
+    fun updateBip21Description(description: String) {
+        _walletState.update { it.copy(bip21Description = description) }
+    }
 
-            blocktankNotificationsService.registerDevice(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Register for notifications error", e)
-            Result.failure(e)
+    fun updateBalanceInput(newText: String) {
+        _walletState.update { it.copy(balanceInput = newText) }
+    }
+
+    fun toggleReceiveOnSpendingBalance() {
+        _walletState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+    }
+
+    fun addTagToSelected(newTag: String) {
+        _walletState.update {
+            it.copy(
+                selectedTags = (it.selectedTags + newTag).distinct()
+            )
         }
     }
 
-    suspend fun testNotification(): Result<Unit> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            blocktankNotificationsService.testNotification(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Test notification error", e)
-            Result.failure(e)
+    fun removeTag(tag: String) {
+        _walletState.update {
+            it.copy(
+                selectedTags = it.selectedTags.filterNot { tagItem -> tagItem == tag }
+            )
         }
     }
 
-    suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
-        try {
-            val info = coreService.blocktank.info(refresh = true)
-                ?: return@withContext Result.failure(Exception("Couldn't get info"))
-            Result.success(info)
-        } catch (e: Throwable) {
-            Logger.error("Blocktank info error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun createTransactionSheet(
-        type: NewTransactionSheetType,
-        direction: NewTransactionSheetDirection,
-        sats: Long
+    // BIP21 invoice creation
+    suspend fun updateBip21Invoice(
+        amountSats: ULong? = null,
+        description: String = "",
+        generateBolt11IfAvailable: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         try {
-            NewTransactionSheetDetails.save(
-                appContext,
-                NewTransactionSheetDetails(
-                    type = type,
-                    direction = direction,
-                    sats = sats,
-                )
+            updateBip21AmountSats(amountSats)
+            updateBip21Description(description)
+
+            val hasChannels = lightningRepo.hasChannels()
+
+            if (hasChannels && generateBolt11IfAvailable) {
+                lightningRepo.createInvoice(
+                    amountSats = _walletState.value.bip21AmountSats,
+                    description = _walletState.value.bip21Description
+                ).onSuccess { bolt11 ->
+                    setBolt11(bolt11)
+                }
+            } else {
+                setBolt11("")
+            }
+
+            val newBip21 = buildBip21Url(
+                bitcoinAddress = getOnchainAddress(),
+                amountSats = _walletState.value.bip21AmountSats,
+                message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
+                lightningInvoice = getBolt11()
             )
+            setBip21(newBip21)
+            saveInvoiceWithTags(bip21Invoice = newBip21, tags = _walletState.value.selectedTags)
             Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Create transaction sheet error", e)
+            Logger.error("Update BIP21 invoice error", e, context = TAG)
             Result.failure(e)
         }
     }
@@ -237,16 +370,6 @@ class WalletRepo @Inject constructor(
             Result.success(mnemonic)
         } catch (e: Throwable) {
             Logger.error("Get mnemonic error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            Result.success(token)
-        } catch (e: Throwable) {
-            Logger.error("Get FCM token error", e)
             Result.failure(e)
         }
     }
@@ -419,3 +542,18 @@ class WalletRepo @Inject constructor(
         const val TAG = "WalletRepo"
     }
 }
+
+data class WalletState(
+    val onchainAddress: String = "",
+    val balanceInput: String = "",
+    val bolt11: String = "",
+    val bip21: String = "",
+    val bip21AmountSats: ULong? = null,
+    val bip21Description: String = "",
+    val selectedTags: List<String> = listOf(),
+    val receiveOnSpendingBalance: Boolean = true,
+    val showEmptyState: Boolean = true,
+    val walletExists: Boolean = false,
+    val isRestoringWallet: Boolean = false,
+    val balanceDetails: BalanceDetails? = null, //TODO KEEP ONLY BalanceState IF POSSIBLE
+)
