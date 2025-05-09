@@ -43,17 +43,7 @@ fun ActivityRow(
         is Activity.Onchain -> item.v1.id
         is Activity.Lightning -> item.v1.id
     }
-    ActivityRowContent(
-        item = item,
-        onClick = { onClick(id) },
-    )
-}
 
-@Composable
-private fun ActivityRowContent(
-    item: Activity,
-    onClick: () -> Unit,
-) {
     val status: PaymentState? = when (item) {
         is Activity.Lightning -> item.v1.status
         is Activity.Onchain -> null
@@ -77,7 +67,7 @@ private fun ActivityRowContent(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick() }
+            .clickableAlpha { onClick(id) }
             .padding(vertical = 16.dp)
     ) {
         ActivityIcon(activity = item, size = 32.dp)
@@ -129,14 +119,14 @@ private fun TransactionStatusText(
                     PaymentState.FAILED -> BodyMSB(text = stringResource(R.string.wallet__activity_failed))
                     PaymentState.PENDING -> BodyMSB(text = stringResource(R.string.wallet__activity_pending))
                     PaymentState.SUCCEEDED -> BodyMSB(text = stringResource(R.string.wallet__activity_sent))
-                    else -> {}
+                    else -> Unit
                 }
 
                 else -> when (status) {
                     PaymentState.FAILED -> BodyMSB(text = stringResource(R.string.wallet__activity_failed))
                     PaymentState.PENDING -> BodyMSB(text = stringResource(R.string.wallet__activity_pending))
                     PaymentState.SUCCEEDED -> BodyMSB(text = stringResource(R.string.wallet__activity_received))
-                    else -> {}
+                    else -> Unit
                 }
             }
         }
@@ -221,7 +211,7 @@ private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> 
 @Composable
 private fun Preview(@PreviewParameter(ActivityItemsPreviewProvider::class) item: Activity) {
     AppThemeSurface {
-        ActivityRowContent(
+        ActivityRow(
             item = item,
             onClick = {},
         )
