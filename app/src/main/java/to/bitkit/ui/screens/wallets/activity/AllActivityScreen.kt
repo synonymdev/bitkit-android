@@ -36,7 +36,13 @@ import uniffi.bitkitcore.LightningActivity
 import uniffi.bitkitcore.OnchainActivity
 import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
 import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,50 +172,22 @@ fun ActivityList(
 
 // region utils
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
-    val date = Calendar.getInstance()
+    val now = Instant.now()
+    val zoneId = ZoneId.systemDefault()
+    val today = now.atZone(zoneId).truncatedTo(ChronoUnit.DAYS)
 
-    val beginningOfDay = date.apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    val startOfDay = today.toInstant().epochSecond
+    val startOfYesterday = today.minusDays(1).toInstant().epochSecond
+    val startOfWeek = today.with(TemporalAdjusters.previousOrSame(WeekFields.of(Locale.getDefault()).firstDayOfWeek)).toInstant().epochSecond
+    val startOfMonth = today.withDayOfMonth(1).toInstant().epochSecond
+    val startOfYear = today.withDayOfYear(1).toInstant().epochSecond
 
-    val beginningOfYesterday = date.apply {
-        timeInMillis = beginningOfDay
-        add(Calendar.DATE, -1)
-    }.timeInMillis
-
-    val beginningOfWeek = date.apply {
-        set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val beginningOfMonth = date.apply {
-        set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val beginningOfYear = date.apply {
-        set(Calendar.DAY_OF_YEAR, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val today = mutableListOf<Activity>()
-    val yesterday = mutableListOf<Activity>()
-    val week = mutableListOf<Activity>()
-    val month = mutableListOf<Activity>()
-    val year = mutableListOf<Activity>()
-    val earlier = mutableListOf<Activity>()
+    val todayItems = mutableListOf<Activity>()
+    val yesterdayItems = mutableListOf<Activity>()
+    val weekItems = mutableListOf<Activity>()
+    val monthItems = mutableListOf<Activity>()
+    val yearItems = mutableListOf<Activity>()
+    val earlierItems = mutableListOf<Activity>()
 
     for (item in activityItems) {
         val timestamp = when (item) {
@@ -217,42 +195,41 @@ private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
             is Activity.Onchain -> item.v1.timestamp.toLong()
         }
         when {
-            timestamp >= beginningOfDay -> today.add(item)
-            timestamp >= beginningOfYesterday -> yesterday.add(item)
-            timestamp >= beginningOfWeek -> week.add(item)
-            timestamp >= beginningOfMonth -> month.add(item)
-            timestamp >= beginningOfYear -> year.add(item)
-            else -> earlier.add(item)
+            timestamp >= startOfDay -> todayItems.add(item)
+            timestamp >= startOfYesterday -> yesterdayItems.add(item)
+            timestamp >= startOfWeek -> weekItems.add(item)
+            timestamp >= startOfMonth -> monthItems.add(item)
+            timestamp >= startOfYear -> yearItems.add(item)
+            else -> earlierItems.add(item)
         }
     }
 
-    val result = mutableListOf<Any>()
-    if (today.isNotEmpty()) {
-        result.add("TODAY")
-        result.addAll(today)
+    return buildList {
+        if (todayItems.isNotEmpty()) {
+            add("TODAY")
+            addAll(todayItems)
+        }
+        if (yesterdayItems.isNotEmpty()) {
+            add("YESTERDAY")
+            addAll(yesterdayItems)
+        }
+        if (weekItems.isNotEmpty()) {
+            add("THIS WEEK")
+            addAll(weekItems)
+        }
+        if (monthItems.isNotEmpty()) {
+            add("THIS MONTH")
+            addAll(monthItems)
+        }
+        if (yearItems.isNotEmpty()) {
+            add("THIS YEAR")
+            addAll(yearItems)
+        }
+        if (earlierItems.isNotEmpty()) {
+            add("EARLIER")
+            addAll(earlierItems)
+        }
     }
-    if (yesterday.isNotEmpty()) {
-        result.add("YESTERDAY")
-        result.addAll(yesterday)
-    }
-    if (week.isNotEmpty()) {
-        result.add("THIS WEEK")
-        result.addAll(week)
-    }
-    if (month.isNotEmpty()) {
-        result.add("THIS MONTH")
-        result.addAll(month)
-    }
-    if (year.isNotEmpty()) {
-        result.add("THIS YEAR")
-        result.addAll(year)
-    }
-    if (earlier.isNotEmpty()) {
-        result.add("EARLIER")
-        result.addAll(earlier)
-    }
-
-    return result
 }
 // endregion
 
@@ -323,7 +300,7 @@ val testActivityItems: List<Activity> = listOf(
             value = 42_000_000_u,
             fee = 200_u,
             feeRate = 1_u,
-            address = "bcrt1",
+            address = "bc1",
             confirmed = true,
             timestamp = today.timeInMillis.toULong() / 1000u,
             isBoosted = false,
@@ -344,7 +321,7 @@ val testActivityItems: List<Activity> = listOf(
             status = PaymentState.PENDING,
             value = 30_000_u,
             fee = 15_u,
-            invoice = "lnbcrt2",
+            invoice = "lnbc2",
             message = "Custom message",
             timestamp = yesterday.timeInMillis.toULong() / 1000u,
             preimage = "preimage1",
@@ -360,7 +337,7 @@ val testActivityItems: List<Activity> = listOf(
             status = PaymentState.FAILED,
             value = 217_000_u,
             fee = 17_u,
-            invoice = "lnbcrt3",
+            invoice = "lnbc3",
             message = "",
             timestamp = thisWeek.timeInMillis.toULong() / 1000u,
             preimage = "preimage2",
@@ -377,7 +354,7 @@ val testActivityItems: List<Activity> = listOf(
             value = 950_000_u,
             fee = 110_u,
             feeRate = 1_u,
-            address = "bcrt1",
+            address = "bc1",
             confirmed = false,
             timestamp = thisMonth.timeInMillis.toULong() / 1000u,
             isBoosted = false,

@@ -98,7 +98,7 @@ private fun ActivityRowContent(
                         formattedTime(timestamp)
                     } else {
                         // TODO: calculate confirmsIn text
-                        stringResource(R.string.wallet__activity_confirms_in).replace("{feeRateDescription}", "???")
+                        stringResource(R.string.wallet__activity_confirms_in).replace("{feeRateDescription}", "± 1h")
                     }
                 }
             }
