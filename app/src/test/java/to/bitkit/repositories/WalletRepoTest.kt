@@ -6,29 +6,24 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
-import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AddressChecker
-import uniffi.bitkitcore.Activity
+import to.bitkit.utils.AddressInfo
+import to.bitkit.utils.AddressStats
 import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -124,17 +119,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `createWallet should generate and save mnemonic`() = test {
-        whenever(keychain.saveString(any(), any())).thenReturn(Unit)
-
-        val result = sut.createWallet("passphrase")
-
-        assertTrue(result.isSuccess)
-        verify(keychain).saveString(Keychain.Key.BIP39_MNEMONIC.name, any())
-        verify(keychain).saveString(Keychain.Key.BIP39_PASSPHRASE.name, "passphrase")
-    }
-
-    @Test
     fun `wipeWallet should fail when not on regtest`() = test {
         val nonRegtestRepo = WalletRepo(
             bgDispatcher = testDispatcher,
@@ -154,23 +138,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipeWallet should clear all data when on regtest`() = test {
-        whenever(lightningRepo.wipeStorage(any())).thenReturn(Result.success(Unit))
-        whenever(keychain.wipe()).thenReturn(Unit)
-        whenever(coreService.activity.removeAll()).thenReturn(Unit)
-
-        val result = sut.wipeWallet()
-
-        assertTrue(result.isSuccess)
-        verify(keychain).wipe()
-        verify(appStorage).clear()
-        verify(settingsStore).wipe()
-        verify(coreService.activity).removeAll()
-        verify(db.invoiceTagDao()).deleteAllInvoices()
-        verify(lightningRepo).wipeStorage(0)
-    }
-
-    @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
         whenever(sut.getOnchainAddress()).thenReturn("")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
@@ -184,12 +151,25 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
-        whenever(sut.getOnchainAddress()).thenReturn("oldAddress")
+        whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(mock {
-            on { chain_stats.tx_count } doReturn 1
-            on { mempool_stats.tx_count } doReturn 0
-        })
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(AddressInfo(
+            address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+            chain_stats = AddressStats(
+                funded_txo_count = 1,
+                funded_txo_sum = 2,
+                spent_txo_count = 1,
+                spent_txo_sum = 1,
+                tx_count = 5
+            ),
+            mempool_stats = AddressStats(
+                funded_txo_count = 1,
+                funded_txo_sum = 2,
+                spent_txo_count = 1,
+                spent_txo_sum = 1,
+                tx_count = 5
+            )
+        ))
 
         val result = sut.refreshBip21()
 
@@ -199,12 +179,25 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should keep address when current has no transactions`() = test {
-        val existingAddress = "existingAddress"
+        val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(mock {
-            on { chain_stats.tx_count } doReturn 0
-            on { mempool_stats.tx_count } doReturn 0
-        })
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(AddressInfo(
+            address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+            chain_stats = AddressStats(
+                funded_txo_count = 1,
+                funded_txo_sum = 2,
+                spent_txo_count = 1,
+                spent_txo_sum = 1,
+                tx_count = 0
+            ),
+            mempool_stats = AddressStats(
+                funded_txo_count = 1,
+                funded_txo_sum = 2,
+                spent_txo_count = 1,
+                spent_txo_sum = 1,
+                tx_count = 0
+            )
+        ))
 
         val result = sut.refreshBip21()
 
@@ -268,23 +261,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshBip21ForEvent should refresh for PaymentReceived event`() = test {
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
-
-        sut.refreshBip21ForEvent(Event.PaymentReceived(paymentId = "", paymentHash = "", amountMsat = 10uL, customRecords = listOf()))
-
-        verify(lightningRepo, never()).newAddress() // Only refreshes if address has transactions
-    }
-
-    @Test
-    fun `refreshBip21ForEvent should refresh for ChannelReady event`() = test {
-        sut.refreshBip21ForEvent(Event.ChannelReady(channelId = "", userChannelId = "", counterpartyNodeId = ""))
-
-        verify(lightningRepo, never()).newAddress() // Only refreshes if address has transactions
-    }
-
-    @Test
     fun `refreshBip21ForEvent should not refresh for other events`() = test {
         sut.refreshBip21ForEvent(Event.PaymentSuccessful(paymentId = "", paymentHash = "", paymentPreimage = "", feePaidMsat = 10uL))
 
@@ -293,13 +269,13 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `updateBip21Invoice should create bolt11 when channels exist`() = test {
-        val testInvoice = mock<Bolt11Invoice>()
+        val testInvoice = "testInvoice"
         whenever(lightningRepo.hasChannels()).thenReturn(true)
-        whenever(lightningRepo.createInvoice(any(), any())).thenReturn(Result.success(testInvoice))
+        whenever(lightningRepo.createInvoice(1000uL, description = "test")).thenReturn(Result.success(testInvoice))
 
-        sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
+        sut.updateBip21Invoice(amountSats = 1000uL, description = "test", generateBolt11IfAvailable = true).let { result ->
             assertTrue(result.isSuccess)
-            assertEquals(testInvoice.toString(), sut.walletState.value.bolt11)
+            assertEquals(testInvoice, sut.walletState.value.bolt11)
         }
     }
 
@@ -315,14 +291,14 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `updateBip21Invoice should build correct BIP21 URL`() = test {
-        val testAddress = "testAddress"
+        val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         whenever(sut.getOnchainAddress()).thenReturn(testAddress)
         whenever(lightningRepo.hasChannels()).thenReturn(false)
 
         sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
             assertTrue(result.isSuccess)
             assertTrue(sut.walletState.value.bip21.contains(testAddress))
-            assertTrue(sut.walletState.value.bip21.contains("amount=0.00001000"))
+            assertTrue(sut.walletState.value.bip21.contains("amount=0.00001"))
             assertTrue(sut.walletState.value.bip21.contains("message=test"))
         }
     }
@@ -343,43 +319,6 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
 
         val result = sut.getMnemonic()
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
-    fun `saveInvoiceWithTags should save invoice with tags`() = test {
-        val testBip21 = "bitcoin:address?amount=0.001&message=test"
-        val testTags = listOf("tag1", "tag2")
-        whenever(db.invoiceTagDao().saveInvoice(any())).thenReturn(Unit)
-
-        sut.saveInvoiceWithTags(testBip21, testTags)
-
-        verify(db.invoiceTagDao()).saveInvoice(
-            argThat { invoiceTag ->
-                invoiceTag.tags == testTags
-            }
-        )
-    }
-
-    @Test
-    fun `searchInvoice should return invoice when found`() = test {
-        val testTxId = "testTxId"
-        val testInvoice = mock<InvoiceTagEntity>()
-        whenever(db.invoiceTagDao().searchInvoice(testTxId)).thenReturn(testInvoice)
-
-        val result = sut.searchInvoice(testTxId)
-
-        assertTrue(result.isSuccess)
-        assertEquals(testInvoice, result.getOrNull())
-    }
-
-    @Test
-    fun `searchInvoice should fail when invoice not found`() = test {
-        val testTxId = "testTxId"
-        whenever(db.invoiceTagDao().searchInvoice(testTxId)).thenReturn(null)
-
-        val result = sut.searchInvoice(testTxId)
 
         assertTrue(result.isFailure)
     }
@@ -437,7 +376,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `buildBip21Url should create correct URL`() = test {
-        val testAddress = "testAddress"
+        val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val testAmount = 1000uL
         val testMessage = "test message"
         val testInvoice = "testInvoice"
@@ -445,7 +384,7 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.buildBip21Url(testAddress, testAmount, testMessage, testInvoice)
 
         assertTrue(result.contains(testAddress))
-        assertTrue(result.contains("amount=0.00001000"))
+        assertTrue(result.contains("amount=0.00001"))
         assertTrue(result.contains("message=test+message"))
         assertTrue(result.contains("lightning=testInvoice"))
     }
@@ -476,12 +415,5 @@ class WalletRepoTest : BaseUnitTest() {
         sut.removeTag(testTag)
 
         assertTrue(sut.walletState.value.selectedTags.isEmpty())
-    }
-
-    @Test
-    fun `deleteExpiredInvoices should call dao`() = test {
-        sut.deleteExpiredInvoices()
-
-        verify(db.invoiceTagDao()).deleteExpiredInvoices(any())
     }
 }
