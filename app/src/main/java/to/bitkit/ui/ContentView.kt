@@ -1,9 +1,5 @@
 package to.bitkit.ui
 
-import androidx.compose.animation.AnimatedContentScope
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -20,13 +16,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
-import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptions
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
@@ -66,7 +59,6 @@ import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
-import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
@@ -90,8 +82,7 @@ import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
-import to.bitkit.ui.utils.screenScaleIn
-import to.bitkit.ui.utils.screenScaleOut
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.utils.Logger
@@ -103,7 +94,6 @@ import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.reflect.KType
 
 @Composable
 fun ContentView(
@@ -258,7 +248,6 @@ fun ContentView(
                 lightning(walletViewModel, navController)
                 devSettings(walletViewModel, navController)
                 regtestSettings(navController)
-                allActivity(activityListViewModel, navController)
                 activityItem(activityListViewModel, navController)
                 qrScanner(appViewModel, navController)
                 authCheck(navController)
@@ -645,26 +634,13 @@ private fun NavGraphBuilder.regtestSettings(
     }
 }
 
-private fun NavGraphBuilder.allActivity(
-    viewModel: ActivityListViewModel,
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.AllActivity> {
-        AllActivityScreen(
-            viewModel = viewModel,
-            onBackCLick = { navController.popBackStack() },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
-        )
-    }
-}
-
 private fun NavGraphBuilder.activityItem(
-    viewModel: ActivityListViewModel,
+    activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
     composableWithDefaultTransitions<Routes.ActivityItem> { navBackEntry ->
         ActivityItemScreen(
-            viewModel = viewModel,
+            viewModel = activityListViewModel,
             activityItem = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
@@ -716,29 +692,6 @@ private fun NavGraphBuilder.logs(
     }
 }
 // endregion
-
-/**
- * Adds the [Composable] to the [NavGraphBuilder] with the default screen transitions.
- */
-inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
-    typeMap: Map<KType, NavType<*>> = emptyMap(),
-    deepLinks: List<NavDeepLink> = emptyList(),
-    noinline enterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = { screenSlideIn },
-    noinline exitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = { screenScaleOut },
-    noinline popEnterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = { screenScaleIn },
-    noinline popExitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = { screenSlideOut },
-    noinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
-) {
-    composable<T>(
-        typeMap = typeMap,
-        deepLinks = deepLinks,
-        enterTransition = enterTransition,
-        exitTransition = exitTransition,
-        popEnterTransition = popEnterTransition,
-        popExitTransition = popExitTransition,
-        content = content,
-    )
-}
 
 // region events
 fun NavController.navigateToHome() = navigate(
@@ -860,10 +813,6 @@ fun NavController.navigateToTransferSpendingAmount() = navigate(
 
 fun NavController.navigateToTransferFunding() = navigate(
     route = Routes.Funding,
-)
-
-fun NavController.navigateToAllActivity() = navigate(
-    route = Routes.AllActivity,
 )
 
 fun NavController.navigateToActivityItem(id: String) = navigate(
@@ -1037,9 +986,6 @@ object Routes {
 
     @Serializable
     data object ExternalFeeCustom
-
-    @Serializable
-    data object AllActivity
 
     @Serializable
     data class ActivityItem(val id: String)
