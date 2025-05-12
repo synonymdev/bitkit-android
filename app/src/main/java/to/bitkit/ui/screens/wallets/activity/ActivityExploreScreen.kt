@@ -122,33 +122,19 @@ private fun LightningDetails(
     val invoice = lightning.v1.invoice
 
     if (!preimage.isNullOrEmpty()) {
-        Caption13Up(
-            text = stringResource(R.string.wallet__activity_preimage),
-            color = Colors.White64,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        Section(
+            title = stringResource(R.string.wallet__activity_preimage),
+            value = preimage,
         )
-        BodySSB(text = preimage)
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
     }
-
-    Caption13Up(
-        text = stringResource(R.string.wallet__activity_payment_hash),
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    Section(
+        title = stringResource(R.string.wallet__activity_payment_hash),
+        value = paymentHash,
     )
-    BodySSB(text = paymentHash)
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
-
-    Caption13Up(
-        text = stringResource(R.string.wallet__activity_invoice),
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    Section(
+        title = stringResource(R.string.wallet__activity_invoice),
+        value = invoice,
     )
-    BodySSB(text = invoice)
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
 }
 
 @Composable
@@ -159,44 +145,51 @@ private fun OnchainDetails(
     val inputs = listOf<String>("${onchain.v1.txId}:0")
     val outputs = listOf<String>("bcr1q...output0", "bcr1q...output1")
 
-    Caption13Up(
-        text = stringResource(R.string.wallet__activity_tx_id),
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    Section(
+        title = stringResource(R.string.wallet__activity_tx_id),
+        value = onchain.v1.txId,
     )
-    BodySSB(text = onchain.v1.txId)
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
-
-    // Inputs
-    Caption13Up(
-        text = localizedPlural(R.string.wallet__activity_input, mapOf("count" to inputs.size)),
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    Section(
+        title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to inputs.size)),
+        valueContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                inputs.forEach { input ->
+                    BodySSB(text = input)
+                }
+            }
+        },
     )
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        inputs.forEach { input ->
-            BodySSB(text = input)
-        }
-    }
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
-
-    // Outputs
-    Caption13Up(
-        text = localizedPlural(R.string.wallet__activity_output, mapOf("count" to outputs.size)),
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    Section(
+        title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to outputs.size)),
+        valueContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                outputs.forEach { input ->
+                    BodySSB(text = input)
+                }
+            }
+        },
     )
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        outputs.forEach { input ->
-            BodySSB(text = input)
-        }
-    }
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
-
     // TODO add boosted parents info if boosted
+}
+
+@Composable
+private fun Section(
+    title: String,
+    value: String? = null,
+    valueContent: (@Composable () -> Unit)? = null,
+) {
+    Caption13Up(
+        text = title,
+        color = Colors.White64,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+    )
+    if (valueContent != null) {
+        valueContent()
+    } else if (value != null) {
+        BodySSB(text = value)
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+    HorizontalDivider()
 }
 
 @Composable
