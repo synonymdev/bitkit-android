@@ -26,6 +26,7 @@ import kotlin.math.round
 @Composable
 fun ReceiveLiquidityScreen(
     entry: CjitEntryDetails,
+    isAdditional: Boolean = false,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -41,17 +42,23 @@ fun ReceiveLiquidityScreen(
             .fillMaxWidth()
             .gradientBackground()
     ) {
-        SheetTopBar(stringResource(R.string.wallet__receive_liquidity__nav_title), onBack = onBack)
+        SheetTopBar(
+            stringResource(if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title),
+            onBack = onBack
+        )
         Spacer(Modifier.height(24.dp))
 
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            BodyM(text = stringResource(R.string.wallet__receive_liquidity__text), color = Colors.White64)
+            BodyM(
+                text = stringResource(if (isAdditional) R.string.wallet__receive_liquidity__text_additional else R.string.wallet__receive_liquidity__text),
+                color = Colors.White64
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            BodyMB(text = stringResource(R.string.wallet__receive_liquidity__label))
+            BodyMB(text = stringResource(if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label))
             Spacer(modifier = Modifier.height(16.dp))
 
             LightningChannel(
@@ -72,7 +79,7 @@ fun ReceiveLiquidityScreen(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -85,6 +92,27 @@ private fun Preview() {
                 serviceFeeSat = 150_000L,
                 invoice = "",
             ),
+            isAdditional = false,
+            onContinue = {},
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Additional flow")
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        ReceiveLiquidityScreen(
+            entry = CjitEntryDetails(
+                channelSizeSat = 200_000L,
+                receiveAmountSats = 50_000L,
+                feeSat = 10_000L,
+                networkFeeSat = 5_000L,
+                serviceFeeSat = 150_000L,
+                invoice = "",
+            ),
+            isAdditional = true,
             onContinue = {},
             onBack = {},
         )
