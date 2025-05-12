@@ -341,20 +341,25 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun shouldRequestAdditionalLiquidity() : Boolean  {
-        if (_walletState.value.receiveOnSpendingBalance == false) return false
+    suspend fun shouldRequestAdditionalLiquidity() : Result<Boolean> = withContext(bgDispatcher)  {
+        return@withContext try {
+            if (_walletState.value.receiveOnSpendingBalance == false) return@withContext Result.success(false)
 
-        if (coreService.checkGeoStatus() == true) return false
+            if (coreService.checkGeoStatus() == true) return@withContext Result.success(false)
 
-        val channels = lightningRepo.lightningState.value.channels
-        val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }.toULong()
+            val channels = lightningRepo.lightningState.value.channels
+            val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }.toULong()
 
-        // amount is less than minimum CJIT amount
-        //invoice.amount >= minimumAmount ||
+            // amount is less than minimum CJIT amount
+            //invoice.amount >= minimumAmount ||
             // amount is below the maximum client balance
-        //    invoice.amount <= maxClientBalance
+            //    invoice.amount <= maxClientBalance
 
-        return (_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats
+            Result.success((_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats)
+        } catch (e: Exception) {
+            Logger.error("shouldRequestAdditionalLiquidity error", e, context = TAG)
+            Result.failure(e)
+        }
     }
 
     // Debug methods
