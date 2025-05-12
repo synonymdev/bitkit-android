@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -137,13 +138,17 @@ private fun LightningDetails(
     )
 }
 
+@Suppress("SpellCheckingInspection")
 @Composable
 private fun OnchainDetails(
     onchain: Activity.Onchain,
 ) {
     // TODO get actual tx inputs & outputs
     val inputs = listOf<String>("${onchain.v1.txId}:0")
-    val outputs = listOf<String>("bcr1q...output0", "bcr1q...output1")
+    val outputs = listOf<String>(
+        "bcrt1qyuen4rpqy5fz5wh8pmtpgnpeyek52x54383mke",
+        "bcrt1q48nuzy32yk63zvmzywpz5wxrxlf52g9ajk2s5x"
+    )
 
     Section(
         title = stringResource(R.string.wallet__activity_tx_id),
@@ -164,7 +169,7 @@ private fun OnchainDetails(
         valueContent = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 outputs.forEach { input ->
-                    BodySSB(text = input)
+                    BodySSB(text = input, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 }
             }
         },

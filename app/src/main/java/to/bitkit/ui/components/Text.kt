@@ -9,6 +9,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
@@ -240,11 +241,16 @@ fun BodySSB(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+
 ) {
     BodySSB(
         text = AnnotatedString(text),
         color = color,
         modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
     )
 }
 
@@ -253,6 +259,8 @@ fun BodySSB(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -266,6 +274,8 @@ fun BodySSB(
             textAlign = TextAlign.Start,
         ),
         modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
     )
 }
 
