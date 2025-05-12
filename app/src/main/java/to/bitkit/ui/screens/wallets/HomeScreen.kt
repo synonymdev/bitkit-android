@@ -20,7 +20,6 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,7 +77,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     walletViewModel: WalletViewModel,
@@ -133,7 +131,6 @@ fun HomeScreen(
                         uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
-                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onRefresh = {
                             walletViewModel.onPullToRefresh()
                             activityListViewModel.syncLdkNodePayments()
@@ -209,7 +206,6 @@ private fun HomeContentView(
     uiState: MainUiState,
     rootNavController: NavController,
     walletNavController: NavController,
-    onEmptyActivityRowClick: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     AppScaffold(
@@ -274,7 +270,7 @@ private fun HomeContentView(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onEmptyActivityRowClick = onEmptyActivityRowClick,
+                        onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
                     )
                 }
             }
@@ -338,7 +334,6 @@ private fun HomeContentViewPreview() {
             uiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
-            onEmptyActivityRowClick = {},
             onRefresh = {},
         )
     }
