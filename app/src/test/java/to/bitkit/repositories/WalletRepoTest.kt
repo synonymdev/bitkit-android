@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
@@ -415,5 +416,90 @@ class WalletRepoTest : BaseUnitTest() {
         sut.removeTag(testTag)
 
         assertTrue(sut.walletState.value.selectedTags.isEmpty())
+    }
+
+    @Test
+    fun `shouldRequestAdditionalLiquidity should return false when receiveOnSpendingBalance is false`() = test {
+        // Given
+        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        sut.toggleReceiveOnSpendingBalance() // Set to false (initial is true)
+
+        // When
+        val result = sut.shouldRequestAdditionalLiquidity()
+
+        // Then
+        assertTrue(result.isSuccess)
+        assertFalse(result.getOrThrow())
+    }
+
+    @Test
+    fun `shouldRequestAdditionalLiquidity should return false when geo status is true`() = test {
+        // Given
+        whenever(coreService.checkGeoStatus()).thenReturn(true)
+
+        // When
+        val result = sut.shouldRequestAdditionalLiquidity()
+
+        // Then
+        assertTrue(result.isSuccess)
+        assertFalse(result.getOrThrow())
+    }
+
+    @Test
+    fun `shouldRequestAdditionalLiquidity should return true when amount exceeds inbound capacity`() = test {
+        // Given
+        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        val testChannels = listOf(
+            mock<ChannelDetails> {
+                on { inboundCapacityMsat } doReturn 500_000u // 500 sats
+            },
+            mock<ChannelDetails> {
+                on { inboundCapacityMsat } doReturn 300_000u // 300 sats
+            }
+        )
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = testChannels)))
+        sut.updateBip21Invoice(amountSats = 1000uL) // 1000 sats
+
+        // When
+        val result = sut.shouldRequestAdditionalLiquidity()
+
+        // Then
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow())
+    }
+
+    @Test
+    fun `shouldRequestAdditionalLiquidity should return false when amount is less than inbound capacity`() = test {
+        // Given
+        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        val testChannels = listOf(
+            mock<ChannelDetails> {
+                on { inboundCapacityMsat } doReturn 500_000u // 500 sats
+            },
+            mock<ChannelDetails> {
+                on { inboundCapacityMsat } doReturn 500_000u // 500 sats
+            }
+        )
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = testChannels)))
+        sut.updateBip21Invoice(amountSats = 900uL) // 900 sats
+
+        // When
+        val result = sut.shouldRequestAdditionalLiquidity()
+
+        // Then
+        assertTrue(result.isSuccess)
+        assertFalse(result.getOrThrow())
+    }
+
+    @Test
+    fun `shouldRequestAdditionalLiquidity should return failure when exception occurs`() = test {
+        // Given
+        whenever(coreService.checkGeoStatus()).thenThrow(RuntimeException("Test error"))
+
+        // When
+        val result = sut.shouldRequestAdditionalLiquidity()
+
+        // Then
+        assertTrue(result.isFailure)
     }
 }
