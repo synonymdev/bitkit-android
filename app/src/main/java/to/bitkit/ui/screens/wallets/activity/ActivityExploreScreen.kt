@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,9 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.ext.idValue
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BalanceHeaderView
@@ -37,6 +39,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
+import to.bitkit.utils.TxDetails
 import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.LightningActivity
@@ -55,6 +58,22 @@ fun ActivityExploreScreen(
     val item = activities?.find { it.idValue == route.id }
         ?: return
 
+    val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
+
+    LaunchedEffect(item) {
+        if (item is Activity.Onchain) {
+            viewModel.fetchTransactionDetails(item.v1.txId)
+        } else {
+            viewModel.clearTransactionDetails()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.clearTransactionDetails()
+        }
+    }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(item.getScreenTitleRes()),
@@ -63,6 +82,7 @@ fun ActivityExploreScreen(
         )
         ActivityExploreContent(
             item = item,
+            txDetails = txDetails,
         )
     }
 }
@@ -70,6 +90,7 @@ fun ActivityExploreScreen(
 @Composable
 private fun ActivityExploreContent(
     item: Activity,
+    txDetails: TxDetails?,
 ) {
     Column(
         modifier = Modifier.padding(16.dp)
@@ -103,7 +124,7 @@ private fun ActivityExploreContent(
 
         when (item) {
             is Activity.Onchain -> {
-                OnchainDetails(onchain = item)
+                OnchainDetails(onchain = item, txDetails = txDetails)
                 Spacer(modifier = Modifier.weight(1f))
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explorer),
@@ -117,6 +138,26 @@ private fun ActivityExploreContent(
             }
         }
     }
+}
+
+@Composable
+private fun Section(
+    title: String,
+    value: String? = null,
+    valueContent: (@Composable () -> Unit)? = null,
+) {
+    Caption13Up(
+        text = title,
+        color = Colors.White64,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+    )
+    if (valueContent != null) {
+        valueContent()
+    } else if (value != null) {
+        BodySSB(text = value)
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+    HorizontalDivider()
 }
 
 @Composable
@@ -143,63 +184,46 @@ private fun LightningDetails(
     )
 }
 
-@Suppress("SpellCheckingInspection")
 @Composable
 private fun OnchainDetails(
     onchain: Activity.Onchain,
+    txDetails: TxDetails?,
 ) {
-    // TODO get actual tx inputs & outputs
-    val inputs = listOf<String>("${onchain.v1.txId}:0")
-    val outputs = listOf<String>(
-        "bcrt1qyuen4rpqy5fz5wh8pmtpgnpeyek52x54383mke",
-        "bcrt1q48nuzy32yk63zvmzywpz5wxrxlf52g9ajk2s5x"
-    )
-
     Section(
         title = stringResource(R.string.wallet__activity_tx_id),
         value = onchain.v1.txId,
     )
-    Section(
-        title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to inputs.size)),
-        valueContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                inputs.forEach { input ->
-                    BodySSB(text = input)
+    if (txDetails != null) {
+        Section(
+            title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to txDetails.vin.size)),
+            valueContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    txDetails.vin.forEach { input ->
+                        val text = "${input.txid}:${input.vout}"
+                        BodySSB(text = text)
+                    }
                 }
-            }
-        },
-    )
-    Section(
-        title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to outputs.size)),
-        valueContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                outputs.forEach { input ->
-                    BodySSB(text = input, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            },
+        )
+        Section(
+            title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to txDetails.vout.size)),
+            valueContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    txDetails.vout.forEach { output ->
+                        val address = output.scriptpubkey_address.orEmpty()
+                        BodySSB(text = address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    }
                 }
-            }
-        },
-    )
-    // TODO add boosted parents info if boosted
-}
-
-@Composable
-private fun Section(
-    title: String,
-    value: String? = null,
-    valueContent: (@Composable () -> Unit)? = null,
-) {
-    Caption13Up(
-        text = title,
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-    )
-    if (valueContent != null) {
-        valueContent()
-    } else if (value != null) {
-        BodySSB(text = value)
+            },
+        )
+    } else {
+        CircularProgressIndicator(
+            modifier = Modifier
+                .size(18.dp)
+                .padding(vertical = 16.dp)
+        )
     }
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
+    // TODO add boosted parents info if boosted
 }
 
 @Composable
@@ -207,13 +231,9 @@ private fun handleExploreClick(
     onchain: Activity.Onchain,
 ): () -> Unit {
     val context = LocalContext.current
-    val baseUrl = when(Env.network) {
-        Network.TESTNET -> "https://mempool.space/testnet"
-        else -> "https://mempool.space"
-    }
+    val baseUrl = "https://mempool.space"
     val url = "$baseUrl/tx/${onchain.v1.txId}"
     val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-
     return { context.startActivity(intent) }
 }
 
@@ -237,6 +257,7 @@ private fun PreviewLightning() {
                     updatedAt = null,
                 ),
             ),
+            txDetails = null,
         )
     }
 }
@@ -267,6 +288,7 @@ private fun PreviewOnchain() {
                     updatedAt = null,
                 ),
             ),
+            txDetails = null,
         )
     }
 }
