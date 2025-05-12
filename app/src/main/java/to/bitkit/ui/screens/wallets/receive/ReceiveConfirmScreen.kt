@@ -50,6 +50,7 @@ data class CjitEntryDetails(
 @Composable
 fun ReceiveConfirmScreen(
     entry: CjitEntryDetails,
+    isAdditional: Boolean = false,
     onLearnMore: () -> Unit,
     onContinue: (String) -> Unit,
     onBack: () -> Unit,
@@ -90,6 +91,7 @@ fun ReceiveConfirmScreen(
         serviceFeeFormatted = serviceFeeFormatted,
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
+        isAdditional = isAdditional,
         onContinueClick = { onContinue(entry.invoice) },
         onBackClick = onBack,
     )
@@ -98,6 +100,7 @@ fun ReceiveConfirmScreen(
 @Composable
 private fun ReceiveConfirmContent(
     receiveSats: Long,
+    isAdditional: Boolean,
     networkFeeFormatted: String,
     serviceFeeFormatted: String,
     receiveAmountFormatted: String,
@@ -122,7 +125,7 @@ private fun ReceiveConfirmContent(
             )
             Spacer(modifier = Modifier.height(24.dp))
             BodyM(
-                text = stringResource(R.string.wallet__receive_connect_initial)
+                text = stringResource(if (isAdditional) R.string.wallet__receive_connect_additional else R.string.wallet__receive_connect_initial)
                     .replace("{networkFee}", networkFeeFormatted)
                     .replace("{serviceFee}", serviceFeeFormatted)
                     .withAccent(
@@ -163,12 +166,30 @@ private fun ReceiveConfirmContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name =  "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
         ReceiveConfirmContent(
             receiveSats = 12500L,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+            isAdditional = false
+        )
+    }
+}
+
+@Preview(showBackground = true, name =  "Aditional flow")
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        ReceiveConfirmContent(
+            receiveSats = 12500L,
+            isAdditional = true,
             networkFeeFormatted = "$0.50",
             serviceFeeFormatted = "$1.00",
             receiveAmountFormatted = "$100.00",

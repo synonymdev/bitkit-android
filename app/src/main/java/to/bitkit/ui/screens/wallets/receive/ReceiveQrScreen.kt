@@ -75,6 +75,7 @@ private object ReceiveRoutes {
     const val QR = "qr"
     const val AMOUNT = "amount"
     const val CONFIRM = "confirm"
+    const val CONFIRM_INCREASE_INBOUND = "confirm_increase_inbound"
     const val LIQUIDITY = "liquidity"
     const val EDIT_INVOICE = "edit_invoice"
     const val ADD_TAG = "add_tag"
@@ -154,6 +155,20 @@ fun ReceiveQrSheet(
                             cjitInvoice.value = invoice
                             navController.navigate(ReceiveRoutes.QR) { popUpTo(ReceiveRoutes.QR) { inclusive = true } }
                         },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(ReceiveRoutes.CONFIRM_INCREASE_INBOUND) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ReceiveConfirmScreen(
+                        entry = entryDetails,
+                        onLearnMore = { navController.navigate(ReceiveRoutes.LIQUIDITY) },
+                        onContinue = { invoice ->
+                            cjitInvoice.value = invoice
+                            navController.navigate(ReceiveRoutes.QR) { popUpTo(ReceiveRoutes.QR) { inclusive = true } }
+                        },
+                        isAdditional = true,
                         onBack = { navController.popBackStack() },
                     )
                 }
