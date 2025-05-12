@@ -1,6 +1,7 @@
 package to.bitkit.ui.utils
 
 import androidx.annotation.StringRes
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
@@ -12,6 +13,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
+import to.bitkit.R
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import java.math.BigDecimal
 import java.text.DecimalFormat
@@ -127,7 +131,7 @@ fun localizedRandom(@StringRes id: Int): String {
     }
 }
 
-fun BigDecimal.formatCurrency() : String? {
+fun BigDecimal.formatCurrency(): String? {
     val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
         decimalSeparator = '.'
         groupingSeparator = ','
@@ -140,4 +144,36 @@ fun BigDecimal.formatCurrency() : String? {
     return runCatching { formatter.format(this) }.getOrNull()
 }
 
+/**
+ * Pluralizes a string by resId using the ICU MessageFormat with the provided arguments map.
+ *
+ * @param id The string resource ID to be localized and pluralized.
+ * @param argMap A map of arguments to be formatted into the localized string for pluralization.
+ * @return A localized string with the appropriate pluralization and formatted arguments.
+ *
+ * Example:
+ * ```
+ * localizedPlural(R.string.settings__addr__spend_number, mapOf("fundsToSpend" to "1234", "count" to 2))
+ * ```
+ */
+@Suppress("SpellCheckingInspection")
+@Composable
+fun localizedPlural(@StringRes id: Int, argMap: Map<Any, Any>): String {
+    val resources = LocalContext.current.resources
 
+    return remember(id, argMap) {
+        val pattern = resources.getString(id)
+        val messageFormat = android.icu.text.MessageFormat(pattern)
+        return@remember messageFormat.format(argMap)
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewLocalizedPlural() {
+    AppThemeSurface {
+        Text(
+            localizedPlural(R.string.settings__addr__spend_number, mapOf("fundsToSpend" to "1234", "count" to 2))
+        )
+    }
+}
