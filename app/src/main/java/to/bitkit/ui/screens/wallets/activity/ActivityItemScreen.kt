@@ -28,6 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.idValue
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ui.Routes
@@ -43,6 +44,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.LightningActivity
@@ -55,44 +57,21 @@ fun ActivityItemScreen(
     viewModel: ActivityListViewModel,
     activityItem: Routes.ActivityItem,
     onBackClick: () -> Unit,
+    onExploreClick: (String) -> Unit,
 ) {
-    val filteredActivities by viewModel.filteredActivities.collectAsStateWithLifecycle()
-
-    val item = filteredActivities?.find {
-        val id = when (it) {
-            is Activity.Onchain -> it.v1.id
-            is Activity.Lightning -> it.v1.id
-        }
-        id == activityItem.id
-    } ?: return
-
-    val titleRes = run {
-        val isSent = when (item) {
-            is Activity.Lightning -> item.v1.txType == PaymentType.SENT
-            is Activity.Onchain -> item.v1.txType == PaymentType.SENT
-        }
-
-        var resId = when {
-            isSent -> R.string.wallet__activity_bitcoin_sent
-            else -> R.string.wallet__activity_bitcoin_received
-        }
-
-        val isTransfer = item is Activity.Onchain && item.v1.isTransfer
-        if (isTransfer) {
-            resId = when {
-                isSent -> R.string.wallet__activity_transfer_spending_done
-                else -> R.string.wallet__activity_transfer_savings_done
-            }
-        }
-        return@run resId
-    }
+    val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
+    val item = activities?.find { it.idValue == activityItem.id }
+        ?: return
 
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(titleRes),
+            titleText = stringResource(item.getScreenTitleRes()),
             onBackClick = onBackClick,
         )
-        ActivityItemView(item)
+        ActivityItemView(
+            item = item,
+            onExploreClick = onExploreClick,
+        )
     }
 }
 
@@ -100,6 +79,7 @@ fun ActivityItemScreen(
 @Composable
 private fun ActivityItemView(
     item: Activity,
+    onExploreClick: (String) -> Unit,
 ) {
     val isLightning = item is Activity.Lightning
     val accentColor = if (isLightning) Colors.Purple else Colors.Brand
@@ -139,7 +119,7 @@ private fun ActivityItemView(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
+                .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
                 sats = value.toLong(),
@@ -372,7 +352,7 @@ private fun ActivityItemView(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explore),
                     size = ButtonSize.Small,
-                    onClick = { /* TODO: Implement explore functionality */ },
+                    onClick = { onExploreClick(item.idValue) },
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_git_branch),
@@ -511,7 +491,6 @@ private fun ZigzagDivider() {
 private fun PreviewLightningSent() {
     AppThemeSurface {
         Column {
-            // Lightning example
             ActivityItemView(
                 item = Activity.Lightning(
                     v1 = LightningActivity(
@@ -527,7 +506,8 @@ private fun PreviewLightningSent() {
                         createdAt = null,
                         updatedAt = null,
                     )
-                )
+                ),
+                onExploreClick = {},
             )
         }
     }
@@ -538,7 +518,6 @@ private fun PreviewLightningSent() {
 private fun PreviewOnchain() {
     AppThemeSurface {
         Column {
-            // Onchain example
             ActivityItemView(
                 item = Activity.Onchain(
                     v1 = OnchainActivity(
@@ -560,7 +539,8 @@ private fun PreviewOnchain() {
                         createdAt = null,
                         updatedAt = null,
                     )
-                )
+                ),
+                onExploreClick = {},
             )
         }
     }

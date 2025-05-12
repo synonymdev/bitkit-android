@@ -59,6 +59,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
@@ -643,6 +644,14 @@ private fun NavGraphBuilder.activityItem(
             viewModel = activityListViewModel,
             activityItem = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
+            onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+        )
+    }
+    composableWithDefaultTransitions<Routes.ActivityExplore> { navBackEntry ->
+        ActivityExploreScreen(
+            viewModel = activityListViewModel,
+            route = navBackEntry.toRoute(),
+            onBackClick = { navController.popBackStack() },
         )
     }
 }
@@ -819,6 +828,10 @@ fun NavController.navigateToActivityItem(id: String) = navigate(
     route = Routes.ActivityItem(id),
 )
 
+fun NavController.navigateToActivityExplore(id: String) = navigate(
+    route = Routes.ActivityExplore(id),
+)
+
 fun NavController.navigateToQrScanner() = navigate(
     route = Routes.QrScanner,
 )
@@ -989,6 +1002,9 @@ object Routes {
 
     @Serializable
     data class ActivityItem(val id: String)
+
+    @Serializable
+    data class ActivityExplore(val id: String)
 
     @Serializable
     data object QrScanner
