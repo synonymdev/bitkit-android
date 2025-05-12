@@ -19,15 +19,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.util.DarkModePreview
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
+import to.bitkit.ui.screens.wallets.activity.components.ActivityRow
+import to.bitkit.ui.screens.wallets.activity.components.EmptyActivityRow
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -36,19 +38,25 @@ import uniffi.bitkitcore.LightningActivity
 import uniffi.bitkitcore.OnchainActivity
 import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
 import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
-    onBackCLick: () -> Unit,
+    onBackClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
 
     ScreenColumn {
-        AppTopBar(stringResource(R.string.wallet__activity_all), onBackCLick)
+        AppTopBar(stringResource(R.string.wallet__activity_all), onBackClick)
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListFilter(
@@ -61,6 +69,7 @@ fun AllActivityScreen(
             ActivityListWithHeaders(
                 items = filteredActivities,
                 onActivityItemClick = onActivityItemClick,
+                onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
             )
         }
     }
@@ -72,12 +81,13 @@ fun ActivityListWithHeaders(
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = { },
     onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
-        if (items != null) {
+        if (items != null && items.isNotEmpty()) {
             val groupedItems = groupActivityItems(items)
 
             LazyColumn(
@@ -99,30 +109,27 @@ fun ActivityListWithHeaders(
 
                         is Activity -> {
                             ActivityRow(item, onActivityItemClick)
-                            if (index < groupedItems.size - 1 && groupedItems[index + 1] !is String) {
-                                HorizontalDivider(color = Colors.White10)
+                            val hasNextItem = index < groupedItems.size - 1 && groupedItems[index + 1] !is String
+                            if (hasNextItem) {
+                                HorizontalDivider()
                             }
                         }
                     }
                 }
                 if (showFooter) {
                     item {
-                        if (items.isEmpty()) {
-                            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
-                        } else {
-                            TertiaryButton(
-                                text = stringResource(R.string.wallet__activity_show_all),
-                                onClick = onAllActivityButtonClick,
-                                modifier = Modifier
-                                    .wrapContentWidth()
-                                    .padding(top = 8.dp)
-                            )
-                        }
+                        TertiaryButton(
+                            text = stringResource(R.string.wallet__activity_show_all),
+                            onClick = onAllActivityButtonClick,
+                            modifier = Modifier
+                                .wrapContentWidth()
+                                .padding(top = 8.dp)
+                        )
                     }
                 }
             }
         } else {
-            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
+            EmptyActivityRow(onClick = onEmptyActivityRowClick)
         }
     }
 }
@@ -132,84 +139,49 @@ fun ActivityList(
     items: List<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
 ) {
-    if (items != null) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (items != null && items.isNotEmpty()) {
             items.forEach { item ->
                 ActivityRow(item, onActivityItemClick)
-                HorizontalDivider(color = Colors.White10)
+                HorizontalDivider()
             }
-            if (items.isEmpty()) {
-                BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
-            } else {
-                TertiaryButton(
-                    text = stringResource(R.string.wallet__activity_show_all),
-                    onClick = onAllActivityClick,
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .padding(top = 8.dp)
-                )
-            }
-        }
-    } else {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            BodyMSB(stringResource(R.string.wallet__activity_no), Modifier.padding(16.dp))
+            TertiaryButton(
+                text = stringResource(R.string.wallet__activity_show_all),
+                onClick = onAllActivityClick,
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .padding(top = 8.dp)
+            )
+        } else {
+            EmptyActivityRow(onClick = onEmptyActivityRowClick)
         }
     }
 }
 
 // region utils
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
-    val date = Calendar.getInstance()
+    val now = Instant.now()
+    val zoneId = ZoneId.systemDefault()
+    val today = now.atZone(zoneId).truncatedTo(ChronoUnit.DAYS)
 
-    val beginningOfDay = date.apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    val startOfDay = today.toInstant().epochSecond
+    val startOfYesterday = today.minusDays(1).toInstant().epochSecond
+    val startOfWeek = today.with(TemporalAdjusters.previousOrSame(WeekFields.of(Locale.getDefault()).firstDayOfWeek))
+        .toInstant().epochSecond
+    val startOfMonth = today.withDayOfMonth(1).toInstant().epochSecond
+    val startOfYear = today.withDayOfYear(1).toInstant().epochSecond
 
-    val beginningOfYesterday = date.apply {
-        timeInMillis = beginningOfDay
-        add(Calendar.DATE, -1)
-    }.timeInMillis
-
-    val beginningOfWeek = date.apply {
-        set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val beginningOfMonth = date.apply {
-        set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val beginningOfYear = date.apply {
-        set(Calendar.DAY_OF_YEAR, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val today = mutableListOf<Activity>()
-    val yesterday = mutableListOf<Activity>()
-    val week = mutableListOf<Activity>()
-    val month = mutableListOf<Activity>()
-    val year = mutableListOf<Activity>()
-    val earlier = mutableListOf<Activity>()
+    val todayItems = mutableListOf<Activity>()
+    val yesterdayItems = mutableListOf<Activity>()
+    val weekItems = mutableListOf<Activity>()
+    val monthItems = mutableListOf<Activity>()
+    val yearItems = mutableListOf<Activity>()
+    val earlierItems = mutableListOf<Activity>()
 
     for (item in activityItems) {
         val timestamp = when (item) {
@@ -217,92 +189,82 @@ private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
             is Activity.Onchain -> item.v1.timestamp.toLong()
         }
         when {
-            timestamp >= beginningOfDay -> today.add(item)
-            timestamp >= beginningOfYesterday -> yesterday.add(item)
-            timestamp >= beginningOfWeek -> week.add(item)
-            timestamp >= beginningOfMonth -> month.add(item)
-            timestamp >= beginningOfYear -> year.add(item)
-            else -> earlier.add(item)
+            timestamp >= startOfDay -> todayItems.add(item)
+            timestamp >= startOfYesterday -> yesterdayItems.add(item)
+            timestamp >= startOfWeek -> weekItems.add(item)
+            timestamp >= startOfMonth -> monthItems.add(item)
+            timestamp >= startOfYear -> yearItems.add(item)
+            else -> earlierItems.add(item)
         }
     }
 
-    val result = mutableListOf<Any>()
-    if (today.isNotEmpty()) {
-        result.add("TODAY")
-        result.addAll(today)
+    return buildList {
+        if (todayItems.isNotEmpty()) {
+            add("TODAY")
+            addAll(todayItems)
+        }
+        if (yesterdayItems.isNotEmpty()) {
+            add("YESTERDAY")
+            addAll(yesterdayItems)
+        }
+        if (weekItems.isNotEmpty()) {
+            add("THIS WEEK")
+            addAll(weekItems)
+        }
+        if (monthItems.isNotEmpty()) {
+            add("THIS MONTH")
+            addAll(monthItems)
+        }
+        if (yearItems.isNotEmpty()) {
+            add("THIS YEAR")
+            addAll(yearItems)
+        }
+        if (earlierItems.isNotEmpty()) {
+            add("EARLIER")
+            addAll(earlierItems)
+        }
     }
-    if (yesterday.isNotEmpty()) {
-        result.add("YESTERDAY")
-        result.addAll(yesterday)
-    }
-    if (week.isNotEmpty()) {
-        result.add("THIS WEEK")
-        result.addAll(week)
-    }
-    if (month.isNotEmpty()) {
-        result.add("THIS MONTH")
-        result.addAll(month)
-    }
-    if (year.isNotEmpty()) {
-        result.add("THIS YEAR")
-        result.addAll(year)
-    }
-    if (earlier.isNotEmpty()) {
-        result.add("EARLIER")
-        result.addAll(earlier)
-    }
-
-    return result
 }
 // endregion
 
 // region preview
-@DarkModePreview
+@Preview
 @Composable
 private fun PreviewActivityListWithHeadersView() {
     AppThemeSurface {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListWithHeaders(
                 testActivityItems,
-                onAllActivityButtonClick = { },
-                onActivityItemClick = { },
+                onAllActivityButtonClick = {},
+                onActivityItemClick = {},
+                onEmptyActivityRowClick = {},
             )
         }
     }
 }
 
-@DarkModePreview
+@Preview
 @Composable
 private fun PreviewActivityListItems() {
     AppThemeSurface {
         ActivityList(
             testActivityItems,
-            onAllActivityClick = { },
-            onActivityItemClick = { },
+            onAllActivityClick = {},
+            onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
         )
     }
 }
 
-@DarkModePreview
+@Preview
 @Composable
 private fun PreviewActivityListEmpty() {
     AppThemeSurface {
         ActivityList(
             items = emptyList(),
-            onAllActivityClick = { },
-            onActivityItemClick = { },
-        )
-    }
-}
-
-@DarkModePreview
-@Composable
-private fun PreviewActivityListNull() {
-    AppThemeSurface {
-        ActivityList(
-            items = null,
-            onAllActivityClick = { },
-            onActivityItemClick = { },
+            onAllActivityClick = {},
+            onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
         )
     }
 }
@@ -311,6 +273,7 @@ private val today: Calendar = Calendar.getInstance()
 private val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
 private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
 private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
+private val lastYear: Calendar = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }
 
 val testActivityItems: List<Activity> = listOf(
     // Today
@@ -322,7 +285,7 @@ val testActivityItems: List<Activity> = listOf(
             value = 42_000_000_u,
             fee = 200_u,
             feeRate = 1_u,
-            address = "bcrt1",
+            address = "bc1",
             confirmed = true,
             timestamp = today.timeInMillis.toULong() / 1000u,
             isBoosted = false,
@@ -340,10 +303,10 @@ val testActivityItems: List<Activity> = listOf(
         LightningActivity(
             id = "2",
             txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
+            status = PaymentState.PENDING,
             value = 30_000_u,
             fee = 15_u,
-            invoice = "lnbcrt2",
+            invoice = "lnbc2",
             message = "Custom message",
             timestamp = yesterday.timeInMillis.toULong() / 1000u,
             preimage = "preimage1",
@@ -359,7 +322,7 @@ val testActivityItems: List<Activity> = listOf(
             status = PaymentState.FAILED,
             value = 217_000_u,
             fee = 17_u,
-            invoice = "lnbcrt3",
+            invoice = "lnbc3",
             message = "",
             timestamp = thisWeek.timeInMillis.toULong() / 1000u,
             preimage = "preimage2",
@@ -376,7 +339,7 @@ val testActivityItems: List<Activity> = listOf(
             value = 950_000_u,
             fee = 110_u,
             feeRate = 1_u,
-            address = "bcrt1",
+            address = "bc1",
             confirmed = false,
             timestamp = thisMonth.timeInMillis.toULong() / 1000u,
             isBoosted = false,
@@ -387,6 +350,22 @@ val testActivityItems: List<Activity> = listOf(
             transferTxId = "transferTxId",
             createdAt = thisMonth.timeInMillis.toULong() / 1000u,
             updatedAt = thisMonth.timeInMillis.toULong() / 1000u,
+        )
+    ),
+    // Last Year
+    Activity.Lightning(
+        LightningActivity(
+            id = "5",
+            txType = PaymentType.SENT,
+            status = PaymentState.SUCCEEDED,
+            value = 200_000_u,
+            fee = 1_u,
+            invoice = "lnbc…",
+            message = "",
+            timestamp = (lastYear.timeInMillis.toULong() / 1000u),
+            preimage = null,
+            createdAt = (lastYear.timeInMillis.toULong() / 1000u),
+            updatedAt = (lastYear.timeInMillis.toULong() / 1000u),
         )
     ),
 )

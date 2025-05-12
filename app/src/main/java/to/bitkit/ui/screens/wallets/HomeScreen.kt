@@ -20,11 +20,9 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -78,7 +77,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     walletViewModel: WalletViewModel,
@@ -86,7 +84,7 @@ fun HomeScreen(
     activityListViewModel: ActivityListViewModel,
     rootNavController: NavController,
 ) {
-    val uiState: MainUiState by walletViewModel.uiState.collectAsState()
+    val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
     val currentSheet by appViewModel.currentSheet
 
     SheetHost(
@@ -143,10 +141,11 @@ fun HomeScreen(
                     enterTransition = { screenSlideIn },
                     exitTransition = { screenSlideOut },
                 ) {
-                    val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
+                    val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onTransferToSpendingClick = {
                             if (!hasSeenSpendingIntro) {
                                 rootNavController.navigateToTransferSpendingIntro()
@@ -161,11 +160,12 @@ fun HomeScreen(
                     enterTransition = { screenSlideIn },
                     exitTransition = { screenSlideOut },
                 ) {
-                    val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsState()
+                    val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
                     SpendingWalletScreen(
                         uiState = uiState,
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onTransferToSavingsClick = {
                             if (!hasSeenSavingsIntro) {
                                 rootNavController.navigateToTransferSavingsIntro()
@@ -173,7 +173,7 @@ fun HomeScreen(
                                 rootNavController.navigateToTransferSavingsAvailability()
                             }
                         },
-                        onBackCLick = { walletNavController.popBackStack() },
+                        onBackClick = { walletNavController.popBackStack() },
                     )
                 }
                 composable<HomeRoutes.AllActivity>(
@@ -182,7 +182,7 @@ fun HomeScreen(
                 ) {
                     AllActivityScreen(
                         viewModel = activityListViewModel,
-                        onBackCLick = { walletNavController.popBackStack() },
+                        onBackClick = { walletNavController.popBackStack() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }
@@ -215,7 +215,7 @@ private fun HomeContentView(
         RequestNotificationPermissions()
         val balances = LocalBalances.current
         val app = appViewModel ?: return@AppScaffold
-        val showEmptyStateSetting by app.showEmptyState.collectAsState()
+        val showEmptyStateSetting by app.showEmptyState.collectAsStateWithLifecycle()
         val showEmptyState by remember(balances.totalSats, showEmptyStateSetting) {
             derivedStateOf {
                 showEmptyStateSetting && balances.totalSats == 0uL
@@ -265,11 +265,12 @@ private fun HomeContentView(
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
                     val activity = activityListViewModel ?: return@Column
-                    val latestActivities by activity.latestActivities.collectAsState()
+                    val latestActivities by activity.latestActivities.collectAsStateWithLifecycle()
                     ActivityList(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
                     )
                 }
             }

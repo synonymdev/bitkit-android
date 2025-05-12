@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallets.activity
+package to.bitkit.ui.screens.wallets.activity.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
