@@ -350,11 +350,6 @@ class WalletRepo @Inject constructor(
             val channels = lightningRepo.lightningState.value.channels
             val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }.toULong()
 
-            // amount is less than minimum CJIT amount
-            //invoice.amount >= minimumAmount ||
-            // amount is below the maximum client balance
-            //    invoice.amount <= maxClientBalance
-
             Result.success((_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats)
         } catch (e: Exception) {
             Logger.error("shouldRequestAdditionalLiquidity error", e, context = TAG)
