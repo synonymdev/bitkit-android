@@ -40,6 +40,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.theme.AppThemeSurface
@@ -56,8 +57,9 @@ import uniffi.bitkitcore.PaymentType
 fun ActivityItemScreen(
     viewModel: ActivityListViewModel,
     activityItem: Routes.ActivityItem,
-    onBackClick: () -> Unit,
     onExploreClick: (String) -> Unit,
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
     val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
     val item = activities?.find { it.idValue == activityItem.id }
@@ -67,6 +69,7 @@ fun ActivityItemScreen(
         AppTopBar(
             titleText = stringResource(item.getScreenTitleRes()),
             onBackClick = onBackClick,
+            actions = { CloseNavIcon(onClick = onCloseClick) },
         )
         ActivityItemView(
             item = item,

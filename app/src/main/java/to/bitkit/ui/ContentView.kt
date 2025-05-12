@@ -643,8 +643,9 @@ private fun NavGraphBuilder.activityItem(
         ActivityItemScreen(
             viewModel = activityListViewModel,
             activityItem = navBackEntry.toRoute(),
-            onBackClick = { navController.popBackStack() },
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            onBackClick = { navController.popBackStack() },
+            onCloseClick = { navController.navigateToHome() },
         )
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> { navBackEntry ->
@@ -652,6 +653,7 @@ private fun NavGraphBuilder.activityItem(
             viewModel = activityListViewModel,
             route = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
+            onCloseClick = { navController.navigateToHome() },
         )
     }
 }
