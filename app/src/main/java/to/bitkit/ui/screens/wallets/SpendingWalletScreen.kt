@@ -44,8 +44,9 @@ fun SpendingWalletScreen(
     uiState: MainUiState,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
     onTransferToSavingsClick: () -> Unit,
-    onBackCLick: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     val balances = LocalBalances.current
     val showEmptyState by remember(balances.totalLightningSats) {
@@ -77,7 +78,7 @@ fun SpendingWalletScreen(
             AppTopBar(
                 titleText = stringResource(R.string.wallet__spending__title),
                 icon = painterResource(R.drawable.ic_ln_circle),
-                onBackClick = onBackCLick,
+                onBackClick = onBackClick,
             )
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -109,6 +110,7 @@ fun SpendingWalletScreen(
                         showFooter = true,
                         onAllActivityButtonClick = onAllActivityButtonClick,
                         onActivityItemClick = onActivityItemClick,
+                        onEmptyActivityRowClick = onEmptyActivityRowClick,
                     )
                 }
             }
@@ -132,8 +134,9 @@ private fun SpendingWalletScreenPreview() {
             uiState = MainUiState(),
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
             onTransferToSavingsClick = {},
-            onBackCLick = {},
+            onBackClick = {},
         )
     }
 }

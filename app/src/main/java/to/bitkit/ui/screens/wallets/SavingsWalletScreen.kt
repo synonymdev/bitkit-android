@@ -41,6 +41,7 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun SavingsWalletScreen(
     onAllActivityButtonClick: () -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
@@ -95,6 +96,7 @@ fun SavingsWalletScreen(
                         showFooter = true,
                         onAllActivityButtonClick = onAllActivityButtonClick,
                         onActivityItemClick = onActivityItemClick,
+                        onEmptyActivityRowClick = onEmptyActivityRowClick,
                     )
                 }
             }
@@ -117,8 +119,9 @@ private fun SavingsWalletScreenPreview() {
         SavingsWalletScreen(
             onAllActivityButtonClick = {},
             onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
             onTransferToSpendingClick = {},
-            onBackClick = { },
+            onBackClick = {},
         )
     }
 }
