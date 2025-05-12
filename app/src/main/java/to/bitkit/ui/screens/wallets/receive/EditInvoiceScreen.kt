@@ -91,9 +91,11 @@ fun EditInvoiceScreen(
             when(effect) {
                 is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
                     val receiveSats = satsString.toULongOrNull()
+                    updateInvoice(receiveSats)
+
 
                     if (receiveSats == null) {
-                        updateInvoice(receiveSats)
+                        onBack()
                         return@collect
                     }
 
@@ -111,11 +113,14 @@ fun EditInvoiceScreen(
                             )
                         }.onFailure { e ->
                             Logger.error(e = e, msg = "error creating cjit invoice" ,context = "EditInvoiceScreen")
-                            updateInvoice(receiveSats)
+                            onBack()
                         }
                     }
                 }
-                EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> { updateInvoice(satsString.toULongOrNull()) }
+                EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> {
+                    updateInvoice(satsString.toULongOrNull())
+                    onBack()
+                }
             }
         }
     }
@@ -141,7 +146,10 @@ fun EditInvoiceScreen(
         onClickBalance = { keyboardVisible = true },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { editInvoiceVM.onClickContinue() },
+        onContinueGeneral = {
+            updateInvoice(satsString.toULongOrNull())
+            editInvoiceVM.onClickContinue()
+        },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         isSoftKeyboardVisible = isSoftKeyboardVisible

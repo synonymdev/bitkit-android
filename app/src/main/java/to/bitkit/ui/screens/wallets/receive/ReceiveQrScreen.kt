@@ -174,7 +174,6 @@ fun ReceiveQrSheet(
                     onBack = { navController.popBackStack() },
                     updateInvoice = { sats ->
                         wallet.updateBip21Invoice(amountSats = sats)
-                        navController.popBackStack()
                     },
                     onClickAddTag = {
                         navController.navigate(ReceiveRoutes.ADD_TAG)
