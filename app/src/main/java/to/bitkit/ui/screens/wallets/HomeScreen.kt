@@ -133,6 +133,7 @@ fun HomeScreen(
                         uiState = uiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
+                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onRefresh = {
                             walletViewModel.onPullToRefresh()
                             activityListViewModel.syncLdkNodePayments()
@@ -147,6 +148,7 @@ fun HomeScreen(
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onTransferToSpendingClick = {
                             if (!hasSeenSpendingIntro) {
                                 rootNavController.navigateToTransferSpendingIntro()
@@ -166,6 +168,7 @@ fun HomeScreen(
                         uiState = uiState,
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
                         onTransferToSavingsClick = {
                             if (!hasSeenSavingsIntro) {
                                 rootNavController.navigateToTransferSavingsIntro()
@@ -173,7 +176,7 @@ fun HomeScreen(
                                 rootNavController.navigateToTransferSavingsAvailability()
                             }
                         },
-                        onBackCLick = { walletNavController.popBackStack() },
+                        onBackClick = { walletNavController.popBackStack() },
                     )
                 }
                 composable<HomeRoutes.AllActivity>(
@@ -182,7 +185,7 @@ fun HomeScreen(
                 ) {
                     AllActivityScreen(
                         viewModel = activityListViewModel,
-                        onBackCLick = { walletNavController.popBackStack() },
+                        onBackClick = { walletNavController.popBackStack() },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }
@@ -206,6 +209,7 @@ private fun HomeContentView(
     uiState: MainUiState,
     rootNavController: NavController,
     walletNavController: NavController,
+    onEmptyActivityRowClick: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     AppScaffold(
@@ -270,6 +274,7 @@ private fun HomeContentView(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onEmptyActivityRowClick = onEmptyActivityRowClick,
                     )
                 }
             }
@@ -333,6 +338,7 @@ private fun HomeContentViewPreview() {
             uiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
+            onEmptyActivityRowClick = {},
             onRefresh = {},
         )
     }
