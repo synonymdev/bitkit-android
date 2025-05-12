@@ -12,8 +12,6 @@ import kotlinx.coroutines.launch
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.utils.AddressChecker
-import to.bitkit.utils.TxDetails
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
@@ -24,7 +22,6 @@ class ActivityListViewModel @Inject constructor(
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
-    private val addressChecker: AddressChecker,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -64,9 +61,6 @@ class ActivityListViewModel @Inject constructor(
 
     private val _availableTags = MutableStateFlow<List<String>>(emptyList())
     val availableTags = _availableTags.asStateFlow()
-
-    private val _txDetails = MutableStateFlow<TxDetails?>(null)
-    val txDetails = _txDetails.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -232,20 +226,6 @@ class ActivityListViewModel @Inject constructor(
         viewModelScope.launch {
             coreService.activity.removeAll()
             syncState()
-        }
-    }
-
-    fun clearTransactionDetails() {
-        _txDetails.value = null
-    }
-
-    fun fetchTransactionDetails(txid: String) {
-        viewModelScope.launch {
-            try {
-                _txDetails.value = addressChecker.getTransaction(txid)
-            } catch (e: Exception) {
-                _txDetails.value = null
-            }
         }
     }
 }

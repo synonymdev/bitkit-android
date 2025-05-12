@@ -5,10 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.ext.idValue
 import to.bitkit.ui.Routes
@@ -41,6 +45,7 @@ import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
 import to.bitkit.utils.TxDetails
 import to.bitkit.viewmodels.ActivityListViewModel
+import to.bitkit.viewmodels.ActivityDetailViewModel
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.LightningActivity
 import uniffi.bitkitcore.OnchainActivity
@@ -58,19 +63,20 @@ fun ActivityExploreScreen(
     val item = activities?.find { it.idValue == route.id }
         ?: return
 
-    val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
+    val detailViewModel: ActivityDetailViewModel = hiltViewModel()
+    val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
 
     LaunchedEffect(item) {
         if (item is Activity.Onchain) {
-            viewModel.fetchTransactionDetails(item.v1.txId)
+            detailViewModel.fetchTransactionDetails(item.v1.txId)
         } else {
-            viewModel.clearTransactionDetails()
+            detailViewModel.clearTransactionDetails()
         }
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.clearTransactionDetails()
+            detailViewModel.clearTransactionDetails()
         }
     }
 
@@ -93,7 +99,10 @@ private fun ActivityExploreContent(
     txDetails: TxDetails?,
 ) {
     Column(
-        modifier = Modifier.padding(16.dp)
+        modifier = Modifier
+            .fillMaxHeight()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         // Header
         Row(
