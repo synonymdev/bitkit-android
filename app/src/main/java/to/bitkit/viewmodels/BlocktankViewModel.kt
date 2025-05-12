@@ -114,7 +114,7 @@ class BlocktankViewModel @Inject constructor(
         }
     }
 
-    suspend fun createCjit(amountSats: ULong, description: String): IcJitEntry {
+    suspend fun createCjit(amountSats: ULong, description: String = Env.DEFAULT_INVOICE_MESSAGE): IcJitEntry {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         val lspBalance = getDefaultLspBalance(clientBalance = amountSats)

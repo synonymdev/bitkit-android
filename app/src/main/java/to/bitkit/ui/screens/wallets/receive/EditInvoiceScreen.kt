@@ -46,6 +46,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -79,6 +80,7 @@ fun EditInvoiceScreen(
     navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
+    val blocktankVM = blocktankViewModel ?: return
     var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
@@ -87,7 +89,30 @@ fun EditInvoiceScreen(
         editInvoiceVM.editInvoiceEffect.collect { effect ->
             when(effect) {
                 is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
-                    navigateReceiveConfirm(effect.cjit)
+                    val receiveSats = satsString.toULongOrNull()
+
+                    if (receiveSats == null) {
+                        updateInvoice(receiveSats)
+                        return@collect
+                    }
+
+                    satsString.toULongOrNull()?.let { sats ->
+                        runCatching { blocktankVM.createCjit(sats) }.onSuccess { entry ->
+                            navigateReceiveConfirm(
+                                CjitEntryDetails(
+                                    networkFeeSat = entry.networkFeeSat.toLong(),
+                                    serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                    channelSizeSat = entry.channelSizeSat.toLong(),
+                                    feeSat = entry.feeSat.toLong(),
+                                    receiveAmountSats = receiveSats.toLong(),
+                                    invoice = entry.invoice.request,
+                                )
+                            )
+                        }.onFailure{
+                            updateInvoice(receiveSats)
+                        }
+
+                    }
                 }
                 EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> { updateInvoice(satsString.toULongOrNull()) }
             }

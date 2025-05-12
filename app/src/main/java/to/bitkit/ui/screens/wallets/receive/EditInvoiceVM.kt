@@ -23,14 +23,7 @@ class EditInvoiceVM @Inject constructor(
         viewModelScope.launch {
             walletRepo.shouldRequestAdditionalLiquidity().onSuccess { shouldRequest ->
                 if (shouldRequest) {
-                    editInvoiceEffect(EditInvoiceScreenEffects.NavigateAddLiquidity(CjitEntryDetails( //todo implement
-                        networkFeeSat = 0,
-                        serviceFeeSat = 5,
-                        channelSizeSat = 10L,
-                        feeSat = 10L,
-                        receiveAmountSats = 10,
-                        invoice = ""
-                    )))
+                    editInvoiceEffect(EditInvoiceScreenEffects.NavigateAddLiquidity)
                 } else {
                     editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
                 }
@@ -42,8 +35,8 @@ class EditInvoiceVM @Inject constructor(
     }
 
     sealed interface EditInvoiceScreenEffects {
-        object UpdateInvoice : EditInvoiceScreenEffects
-        data class NavigateAddLiquidity(val cjit: CjitEntryDetails) : EditInvoiceScreenEffects
+        data object UpdateInvoice : EditInvoiceScreenEffects
+        data object NavigateAddLiquidity : EditInvoiceScreenEffects
     }
 
     companion object {
