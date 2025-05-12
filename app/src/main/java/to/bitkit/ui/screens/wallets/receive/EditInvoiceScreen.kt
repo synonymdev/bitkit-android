@@ -64,6 +64,7 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.keyboardAsState
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.CurrencyUiState
 
 @Composable
@@ -108,10 +109,10 @@ fun EditInvoiceScreen(
                                     invoice = entry.invoice.request,
                                 )
                             )
-                        }.onFailure{
+                        }.onFailure { e ->
+                            Logger.error(e = e, msg = "error creating cjit invoice" ,context = "EditInvoiceScreen")
                             updateInvoice(receiveSats)
                         }
-
                     }
                 }
                 EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> { updateInvoice(satsString.toULongOrNull()) }
