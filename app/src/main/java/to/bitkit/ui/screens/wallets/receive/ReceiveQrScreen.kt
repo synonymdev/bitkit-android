@@ -187,6 +187,10 @@ fun ReceiveQrSheet(
                     },
                     onInputUpdated = { newText ->
                         wallet.updateBalanceInput(newText)
+                    },
+                    navigateReceiveConfirm = { entry ->
+                        cjitEntryDetails.value = entry
+                        navController.navigate(ReceiveRoutes.CONFIRM) //TODO aditional parameter
                     }
                 )
             }

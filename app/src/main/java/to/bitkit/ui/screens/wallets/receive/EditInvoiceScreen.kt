@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -66,6 +68,7 @@ import to.bitkit.viewmodels.CurrencyUiState
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
+    editInvoiceVM: EditInvoiceVM = hiltViewModel(),
     walletUiState: WalletState,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
@@ -73,11 +76,23 @@ fun EditInvoiceScreen(
     onInputUpdated: (String) -> Unit,
     onDescriptionUpdate: (String) -> Unit,
     onBack: () -> Unit,
+    navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
     var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
+
+    LaunchedEffect(Unit) {
+        editInvoiceVM.editInvoiceEffect.collect { effect ->
+            when(effect) {
+                is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
+                    navigateReceiveConfirm(effect.cjit)
+                }
+                EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> { updateInvoice(satsString.toULongOrNull()) }
+            }
+        }
+    }
 
     AmountInputHandler(
         input = walletUiState.balanceInput,
@@ -100,7 +115,7 @@ fun EditInvoiceScreen(
         onClickBalance = { keyboardVisible = true },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull()) },
+        onContinueGeneral = { editInvoiceVM.onClickContinue() },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         isSoftKeyboardVisible = isSoftKeyboardVisible
