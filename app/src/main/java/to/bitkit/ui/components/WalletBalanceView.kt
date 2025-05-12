@@ -73,10 +73,7 @@ fun RowScope.WalletBalanceView(
                             .padding(end = 4.dp)
                             .size(24.dp)
                     )
-                    BodyMSB(
-                        text = converted.symbol,
-                        modifier = Modifier.alpha(0.6f)
-                    )
+                    BodyMSB(text = converted.symbol)
                     BodyMSB(text = converted.formatted)
                 }
             }
