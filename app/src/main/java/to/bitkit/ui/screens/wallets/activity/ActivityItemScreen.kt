@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,11 +26,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ui.Routes
-import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -41,6 +40,7 @@ import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -56,7 +56,8 @@ fun ActivityItemScreen(
     activityItem: Routes.ActivityItem,
     onBackClick: () -> Unit,
 ) {
-    val filteredActivities by viewModel.filteredActivities.collectAsState()
+    val filteredActivities by viewModel.filteredActivities.collectAsStateWithLifecycle()
+
     val item = filteredActivities?.find {
         val id = when (it) {
             is Activity.Onchain -> it.v1.id
@@ -65,9 +66,32 @@ fun ActivityItemScreen(
         id == activityItem.id
     } ?: return
 
+    val titleRes = run {
+        val isSent = when (item) {
+            is Activity.Lightning -> item.v1.txType == PaymentType.SENT
+            is Activity.Onchain -> item.v1.txType == PaymentType.SENT
+        }
+
+        var resId = when {
+            isSent -> R.string.wallet__activity_bitcoin_sent
+            else -> R.string.wallet__activity_bitcoin_received
+        }
+
+        val isTransfer = item is Activity.Onchain && item.v1.isTransfer
+        if (isTransfer) {
+            resId = when {
+                isSent -> R.string.wallet__activity_transfer_spending_done
+                else -> R.string.wallet__activity_transfer_savings_done
+            }
+        }
+        return@run resId
+    }
+
     ScreenColumn {
-        // TODO update title based on txType
-        AppTopBar("Activity Details", onBackClick = onBackClick)
+        AppTopBar(
+            titleText = stringResource(titleRes),
+            onBackClick = onBackClick,
+        )
         ActivityItemView(item)
     }
 }
