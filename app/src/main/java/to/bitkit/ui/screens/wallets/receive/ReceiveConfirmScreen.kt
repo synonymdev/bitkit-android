@@ -174,7 +174,7 @@ private fun ReceiveConfirmContent(
     }
 }
 
-@Preview(showBackground = true, name =  "Initial flow")
+@Preview(showBackground = true, name = "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -191,7 +191,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true, name =  "Aditional flow")
+@Preview(showBackground = true, name = "Aditional flow")
 @Composable
 private fun Preview2() {
     AppThemeSurface {
@@ -208,7 +208,7 @@ private fun Preview2() {
     }
 }
 
-@Preview(showBackground = true, name =  "Small device", widthDp = 400, heightDp = 620)
+@Preview(showBackground = true, name = "Small device", widthDp = 400, heightDp = 620)
 @Composable
 private fun Preview3() {
     AppThemeSurface {
@@ -224,7 +224,8 @@ private fun Preview3() {
         )
     }
 }
-@Preview(showBackground = true, name =  "Tablet", device = PIXEL_TABLET)
+
+@Preview(showBackground = true, name = "Tablet", device = PIXEL_TABLET)
 @Composable
 private fun Preview4() {
     AppThemeSurface {
