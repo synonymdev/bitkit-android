@@ -28,10 +28,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.idValue
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
+import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -43,8 +46,10 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
@@ -65,6 +70,9 @@ fun ActivityItemScreen(
     val item = activities?.find { it.idValue == activityItem.id }
         ?: return
 
+    val app = appViewModel ?: return
+    val copyToastTitle = stringResource(R.string.common__copied)
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(item.getScreenTitleRes()),
@@ -74,6 +82,13 @@ fun ActivityItemScreen(
         ActivityItemView(
             item = item,
             onExploreClick = onExploreClick,
+            onCopy = { text ->
+                app.toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = copyToastTitle,
+                    description = text.ellipsisMiddle(40)
+                )
+            }
         )
     }
 }
@@ -83,6 +98,7 @@ fun ActivityItemScreen(
 private fun ActivityItemView(
     item: Activity,
     onExploreClick: (String) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     val isLightning = item is Activity.Lightning
     val accentColor = if (isLightning) Colors.Purple else Colors.Brand
@@ -267,7 +283,14 @@ private fun ActivityItemView(
 
         // Note section for Lightning payments with message
         if (item is Activity.Lightning && item.v1.message.isNotEmpty()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            val message = item.v1.message
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickableAlpha(onClick = copyToClipboard(message) {
+                        onCopy(message)
+                    })
+            ) {
                 Caption13Up(
                     text = stringResource(R.string.wallet__activity_invoice_note),
                     color = Colors.White64,
@@ -283,7 +306,7 @@ private fun ActivityItemView(
                             .background(Colors.White10)
                     ) {
                         Title(
-                            text = item.v1.message,
+                            text = message,
                             color = Colors.White,
                             modifier = Modifier.padding(24.dp),
                         )
@@ -511,6 +534,7 @@ private fun PreviewLightningSent() {
                     )
                 ),
                 onExploreClick = {},
+                onCopy = {},
             )
         }
     }
@@ -544,6 +568,7 @@ private fun PreviewOnchain() {
                     )
                 ),
                 onExploreClick = {},
+                onCopy = {},
             )
         }
     }
