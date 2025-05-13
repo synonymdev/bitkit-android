@@ -27,13 +27,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.idValue
+import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
@@ -42,13 +45,15 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
 import to.bitkit.utils.TxDetails
-import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.ActivityDetailViewModel
+import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.LightningActivity
 import uniffi.bitkitcore.OnchainActivity
@@ -66,8 +71,10 @@ fun ActivityExploreScreen(
     val item = activities?.find { it.idValue == route.id }
         ?: return
 
+    val app = appViewModel ?: return
     val detailViewModel: ActivityDetailViewModel = hiltViewModel()
     val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
+    val copyToastTitle = stringResource(R.string.common__copied)
 
     LaunchedEffect(item) {
         if (item is Activity.Onchain) {
@@ -92,6 +99,13 @@ fun ActivityExploreScreen(
         ActivityExploreContent(
             item = item,
             txDetails = txDetails,
+            onCopy = { text ->
+                app.toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = copyToastTitle,
+                    description = text.ellipsisMiddle(40)
+                )
+            }
         )
     }
 }
@@ -100,6 +114,7 @@ fun ActivityExploreScreen(
 private fun ActivityExploreContent(
     item: Activity,
     txDetails: TxDetails?,
+    onCopy: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -136,7 +151,7 @@ private fun ActivityExploreContent(
 
         when (item) {
             is Activity.Onchain -> {
-                OnchainDetails(onchain = item, txDetails = txDetails)
+                OnchainDetails(onchain = item, onCopy = onCopy, txDetails = txDetails)
                 Spacer(modifier = Modifier.weight(1f))
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explorer),
@@ -145,7 +160,7 @@ private fun ActivityExploreContent(
             }
 
             is Activity.Lightning -> {
-                LightningDetails(lightning = item)
+                LightningDetails(lightning = item, onCopy = onCopy)
                 Spacer(modifier = Modifier.weight(1f))
             }
         }
@@ -153,28 +168,9 @@ private fun ActivityExploreContent(
 }
 
 @Composable
-private fun Section(
-    title: String,
-    value: String? = null,
-    valueContent: (@Composable () -> Unit)? = null,
-) {
-    Caption13Up(
-        text = title,
-        color = Colors.White64,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-    )
-    if (valueContent != null) {
-        valueContent()
-    } else if (value != null) {
-        BodySSB(text = value)
-    }
-    Spacer(modifier = Modifier.height(16.dp))
-    HorizontalDivider()
-}
-
-@Composable
 private fun LightningDetails(
     lightning: Activity.Lightning,
+    onCopy: (String) -> Unit,
 ) {
     val paymentHash = lightning.v1.id
     val preimage = lightning.v1.preimage
@@ -184,26 +180,40 @@ private fun LightningDetails(
         Section(
             title = stringResource(R.string.wallet__activity_preimage),
             value = preimage,
+            modifier = Modifier.clickableAlpha(onClick = copyToClipboard(preimage) {
+                onCopy(preimage)
+            }),
         )
     }
     Section(
         title = stringResource(R.string.wallet__activity_payment_hash),
         value = paymentHash,
+        modifier = Modifier.clickableAlpha(onClick = copyToClipboard(paymentHash) {
+            onCopy(paymentHash)
+        }),
     )
     Section(
         title = stringResource(R.string.wallet__activity_invoice),
         value = invoice,
+        modifier = Modifier.clickableAlpha(onClick = copyToClipboard(invoice) {
+            onCopy(invoice)
+        }),
     )
 }
 
 @Composable
 private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
+    onCopy: (String) -> Unit,
     txDetails: TxDetails?,
 ) {
+    val txId = onchain.v1.txId
     Section(
         title = stringResource(R.string.wallet__activity_tx_id),
-        value = onchain.v1.txId,
+        value = txId,
+        modifier = Modifier.clickableAlpha(onClick = copyToClipboard(txId) {
+            onCopy(txId)
+        }),
     )
     if (txDetails != null) {
         Section(
@@ -234,10 +244,33 @@ private fun ColumnScope.OnchainDetails(
             modifier = Modifier
                 .size(16.dp)
                 .padding(vertical = 16.dp)
-                .align(Alignment.CenterHorizontally)
+                .align(Alignment.CenterHorizontally),
         )
     }
     // TODO add boosted parents info if boosted
+}
+
+@Composable
+private fun Section(
+    title: String,
+    modifier: Modifier = Modifier,
+    value: String? = null,
+    valueContent: (@Composable () -> Unit)? = null,
+) {
+    Column(modifier = modifier) {
+        Caption13Up(
+            text = title,
+            color = Colors.White64,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+        )
+        if (valueContent != null) {
+            valueContent()
+        } else if (value != null) {
+            BodySSB(text = value)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider()
+    }
 }
 
 @Composable
@@ -245,7 +278,7 @@ private fun handleExploreClick(
     onchain: Activity.Onchain,
 ): () -> Unit {
     val context = LocalContext.current
-    val baseUrl = when(Env.network) {
+    val baseUrl = when (Env.network) {
         Network.TESTNET -> "https://mempool.space/testnet"
         else -> "https://mempool.space"
     }
@@ -276,6 +309,7 @@ private fun PreviewLightning() {
                 ),
             ),
             txDetails = null,
+            onCopy = {},
         )
     }
 }
@@ -307,6 +341,7 @@ private fun PreviewOnchain() {
                 ),
             ),
             txDetails = null,
+            onCopy = {},
         )
     }
 }
