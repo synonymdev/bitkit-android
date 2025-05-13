@@ -15,7 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +34,8 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.LocalCurrencyViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -42,21 +46,29 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.ModalSheetTopPadding
 import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun NewTransactionSheet(
     appViewModel: AppViewModel,
+    currencyViewModel: CurrencyViewModel
 ) {
+    val currencies by currencyViewModel.uiState.collectAsState()
 
-    NewTransactionSheet(
-        onDismissRequest = { appViewModel.hideNewTransactionSheet() },
-        details = appViewModel.newTransaction,
-        onCloseClick = { appViewModel.hideNewTransactionSheet() },
-        onDetailClick = {
-            appViewModel.hideNewTransactionSheet()
-            appViewModel.onClickActivityDetail()
-        },
-    )
+    CompositionLocalProvider(
+        LocalCurrencyViewModel provides currencyViewModel,
+        LocalCurrencies provides currencies,
+    ) {
+        NewTransactionSheet(
+            onDismissRequest = { appViewModel.hideNewTransactionSheet() },
+            details = appViewModel.newTransaction,
+            onCloseClick = { appViewModel.hideNewTransactionSheet() },
+            onDetailClick = {
+                appViewModel.hideNewTransactionSheet()
+                appViewModel.onClickActivityDetail()
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -237,7 +237,7 @@ class MainActivity : FragmentActivity() {
                 )
 
                 if (appViewModel.showNewTransaction) {
-                    NewTransactionSheet(appViewModel)
+                    NewTransactionSheet(appViewModel = appViewModel, currencyViewModel = currencyViewModel)
                 }
 
                 SplashScreen(appViewModel.splashVisible)
