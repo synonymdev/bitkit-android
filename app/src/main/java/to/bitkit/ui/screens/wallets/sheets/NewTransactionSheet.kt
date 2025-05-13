@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.sheets
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
@@ -173,12 +175,17 @@ fun NewTransactionSheetView(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            BalanceHeaderView(
-                sats = details.sats,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("balance_header")
-            )
+                    .clickable { onDetailClick() }
+            ) {
+                BalanceHeaderView(
+                    sats = details.sats,
+                    modifier = Modifier
+                        .testTag("balance_header")
+                )
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 
