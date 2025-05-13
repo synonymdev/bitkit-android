@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
+import to.bitkit.ext.idValue
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
@@ -39,11 +40,6 @@ fun ActivityRow(
     item: Activity,
     onClick: (String) -> Unit,
 ) {
-    val id = when (item) {
-        is Activity.Onchain -> item.v1.id
-        is Activity.Lightning -> item.v1.id
-    }
-
     val status: PaymentState? = when (item) {
         is Activity.Lightning -> item.v1.status
         is Activity.Onchain -> null
@@ -67,7 +63,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick(id) }
+            .clickableAlpha { onClick(item.idValue) }
             .padding(vertical = 16.dp)
     ) {
         ActivityIcon(activity = item, size = 32.dp)

@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="add">Add</string>
-    <string name="address">Address</string>
-    <string name="address_placeholder">Enter a Bitcoin address or a Lighting invoice</string>
-    <string name="all_activity">All Activity</string>
-    <string name="amount_placeholder">Enter Bitcoin Amount</string>
     <string name="app_name" translatable="false">Bitkit</string>
     <string name="app_notifications_channel_desc">Main Notification Channel for generic notifications.</string>
     <string name="app_notifications_channel_id" translatable="false">channel_app</string>

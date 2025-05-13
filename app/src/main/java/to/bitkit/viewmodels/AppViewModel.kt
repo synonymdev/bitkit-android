@@ -29,6 +29,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.idValue
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
@@ -635,12 +636,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            val id = when(activity) {
-                is Activity.Lightning -> activity.v1.id
-                is Activity.Onchain -> activity.v1.id
-            }
-
-            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(id))
+            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(activity.idValue))
         }
     }
 

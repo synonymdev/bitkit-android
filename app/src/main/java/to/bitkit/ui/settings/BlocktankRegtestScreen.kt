@@ -74,7 +74,7 @@ fun BlocktankRegtestScreen(
 
             InfoField(
                 value = Env.blocktankBaseUrl,
-                label = stringResource(R.string.address),
+                label = stringResource(R.string.wallet__activity_address),
             )
             Text(
                 text = "These actions are executed on the staging Blocktank server node.",
