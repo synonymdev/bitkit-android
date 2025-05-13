@@ -127,6 +127,9 @@ fun ActivityListWithHeaders(
                         )
                     }
                 }
+                item {
+                    Spacer(modifier = Modifier.height(120.dp))
+                }
             }
         } else {
             EmptyActivityRow(onClick = onEmptyActivityRowClick)
@@ -135,7 +138,7 @@ fun ActivityListWithHeaders(
 }
 
 @Composable
-fun ActivityList(
+fun HomeActivityList(
     items: List<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
@@ -247,7 +250,7 @@ private fun PreviewActivityListWithHeadersView() {
 @Composable
 private fun PreviewActivityListItems() {
     AppThemeSurface {
-        ActivityList(
+        HomeActivityList(
             testActivityItems,
             onAllActivityClick = {},
             onActivityItemClick = {},
@@ -260,7 +263,7 @@ private fun PreviewActivityListItems() {
 @Composable
 private fun PreviewActivityListEmpty() {
     AppThemeSurface {
-        ActivityList(
+        HomeActivityList(
             items = emptyList(),
             onAllActivityClick = {},
             onActivityItemClick = {},

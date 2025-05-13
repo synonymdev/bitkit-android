@@ -59,7 +59,7 @@ import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.ActivityList
+import to.bitkit.ui.screens.wallets.activity.HomeActivityList
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
@@ -266,7 +266,7 @@ private fun HomeContentView(
                     Spacer(modifier = Modifier.height(16.dp))
                     val activity = activityListViewModel ?: return@Column
                     val latestActivities by activity.latestActivities.collectAsStateWithLifecycle()
-                    ActivityList(
+                    HomeActivityList(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
