@@ -2,21 +2,23 @@ package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Devices.PIXEL_TABLET
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.Serializable
@@ -50,6 +52,7 @@ data class CjitEntryDetails(
 @Composable
 fun ReceiveConfirmScreen(
     entry: CjitEntryDetails,
+    isAdditional: Boolean = false,
     onLearnMore: () -> Unit,
     onContinue: (String) -> Unit,
     onBack: () -> Unit,
@@ -90,6 +93,7 @@ fun ReceiveConfirmScreen(
         serviceFeeFormatted = serviceFeeFormatted,
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
+        isAdditional = isAdditional,
         onContinueClick = { onContinue(entry.invoice) },
         onBackClick = onBack,
     )
@@ -98,6 +102,7 @@ fun ReceiveConfirmScreen(
 @Composable
 private fun ReceiveConfirmContent(
     receiveSats: Long,
+    isAdditional: Boolean,
     networkFeeFormatted: String,
     serviceFeeFormatted: String,
     receiveAmountFormatted: String,
@@ -113,62 +118,120 @@ private fun ReceiveConfirmContent(
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBackClick)
         Spacer(Modifier.height(24.dp))
 
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+        Box(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            BalanceHeaderView(
-                sats = receiveSats,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            BodyM(
-                text = stringResource(R.string.wallet__receive_connect_initial)
-                    .replace("{networkFee}", networkFeeFormatted)
-                    .replace("{serviceFee}", serviceFeeFormatted)
-                    .withAccent(
-                        defaultColor = Colors.White64,
-                        accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)
-                    )
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            Column {
-                Caption13Up(text = stringResource(R.string.wallet__receive_will), color = Colors.White64)
-                Spacer(Modifier.height(4.dp))
-                Title(text = receiveAmountFormatted)
-            }
-            Spacer(modifier = Modifier.weight(1f))
+
             Image(
                 painter = painterResource(R.drawable.lightning),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .heightIn(max = 256.dp)
+                    .padding(bottom = 150.dp)
                     .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
             )
-            Spacer(modifier = Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__learn_more),
-                    onClick = onLearnMoreClick,
-                    modifier = Modifier.weight(1f)
+
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                BalanceHeaderView(
+                    sats = receiveSats,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                PrimaryButton(
-                    text = stringResource(R.string.common__continue),
-                    onClick = onContinueClick,
-                    modifier = Modifier.weight(1f)
+                Spacer(modifier = Modifier.height(24.dp))
+                BodyM(
+                    text = stringResource(if (isAdditional) R.string.wallet__receive_connect_additional else R.string.wallet__receive_connect_initial)
+                        .replace("{networkFee}", networkFeeFormatted)
+                        .replace("{serviceFee}", serviceFeeFormatted)
+                        .withAccent(
+                            defaultColor = Colors.White64,
+                            accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)
+                        )
                 )
+                Spacer(modifier = Modifier.height(32.dp))
+                Column {
+                    Caption13Up(text = stringResource(R.string.wallet__receive_will), color = Colors.White64)
+                    Spacer(Modifier.height(4.dp))
+                    Title(text = receiveAmountFormatted)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SecondaryButton(
+                        text = stringResource(R.string.common__learn_more),
+                        onClick = onLearnMoreClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.common__continue),
+                        onClick = onContinueClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
             }
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
         ReceiveConfirmContent(
             receiveSats = 12500L,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+            isAdditional = false
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Aditional flow")
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        ReceiveConfirmContent(
+            receiveSats = 12500L,
+            isAdditional = true,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Small device", widthDp = 400, heightDp = 620)
+@Composable
+private fun Preview3() {
+    AppThemeSurface {
+        ReceiveConfirmContent(
+            receiveSats = 12500L,
+            isAdditional = true,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Tablet", device = PIXEL_TABLET)
+@Composable
+private fun Preview4() {
+    AppThemeSurface {
+        ReceiveConfirmContent(
+            receiveSats = 12500L,
+            isAdditional = true,
             networkFeeFormatted = "$0.50",
             serviceFeeFormatted = "$1.00",
             receiveAmountFormatted = "$100.00",

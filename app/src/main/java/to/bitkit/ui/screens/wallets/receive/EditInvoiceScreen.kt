@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,11 +40,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
@@ -61,11 +64,13 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.keyboardAsState
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.CurrencyUiState
 
 @Composable
 fun EditInvoiceScreen(
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
+    editInvoiceVM: EditInvoiceVM = hiltViewModel(),
     walletUiState: WalletState,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
@@ -73,11 +78,52 @@ fun EditInvoiceScreen(
     onInputUpdated: (String) -> Unit,
     onDescriptionUpdate: (String) -> Unit,
     onBack: () -> Unit,
+    navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
+    val blocktankVM = blocktankViewModel ?: return
     var satsString by rememberSaveable { mutableStateOf("") }
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
+
+    LaunchedEffect(Unit) {
+        editInvoiceVM.editInvoiceEffect.collect { effect ->
+            when(effect) {
+                is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
+                    val receiveSats = satsString.toULongOrNull()
+                    updateInvoice(receiveSats)
+
+
+                    if (receiveSats == null) {
+                        onBack()
+                        return@collect
+                    }
+
+                    satsString.toULongOrNull()?.let { sats ->
+                        runCatching { blocktankVM.createCjit(sats) }.onSuccess { entry ->
+                            navigateReceiveConfirm(
+                                CjitEntryDetails(
+                                    networkFeeSat = entry.networkFeeSat.toLong(),
+                                    serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                    channelSizeSat = entry.channelSizeSat.toLong(),
+                                    feeSat = entry.feeSat.toLong(),
+                                    receiveAmountSats = receiveSats.toLong(),
+                                    invoice = entry.invoice.request,
+                                )
+                            )
+                        }.onFailure { e ->
+                            Logger.error(e = e, msg = "error creating cjit invoice" ,context = "EditInvoiceScreen")
+                            onBack()
+                        }
+                    }
+                }
+                EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> {
+                    updateInvoice(satsString.toULongOrNull())
+                    onBack()
+                }
+            }
+        }
+    }
 
     AmountInputHandler(
         input = walletUiState.balanceInput,
@@ -100,7 +146,10 @@ fun EditInvoiceScreen(
         onClickBalance = { keyboardVisible = true },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { updateInvoice(satsString.toULongOrNull()) },
+        onContinueGeneral = {
+            updateInvoice(satsString.toULongOrNull())
+            editInvoiceVM.onClickContinue()
+        },
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         isSoftKeyboardVisible = isSoftKeyboardVisible

@@ -75,7 +75,9 @@ private object ReceiveRoutes {
     const val QR = "qr"
     const val AMOUNT = "amount"
     const val CONFIRM = "confirm"
+    const val CONFIRM_INCREASE_INBOUND = "confirm_increase_inbound"
     const val LIQUIDITY = "liquidity"
+    const val LIQUIDITY_ADDITIONAL = "liquidity_additional"
     const val EDIT_INVOICE = "edit_invoice"
     const val ADD_TAG = "add_tag"
 }
@@ -158,11 +160,35 @@ fun ReceiveQrSheet(
                     )
                 }
             }
+            composable(ReceiveRoutes.CONFIRM_INCREASE_INBOUND) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ReceiveConfirmScreen(
+                        entry = entryDetails,
+                        onLearnMore = { navController.navigate(ReceiveRoutes.LIQUIDITY_ADDITIONAL) },
+                        onContinue = { invoice ->
+                            cjitInvoice.value = invoice
+                            navController.navigate(ReceiveRoutes.QR) { popUpTo(ReceiveRoutes.QR) { inclusive = true } }
+                        },
+                        isAdditional = true,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
             composable(ReceiveRoutes.LIQUIDITY) {
                 cjitEntryDetails.value?.let { entryDetails ->
                     ReceiveLiquidityScreen(
                         entry = entryDetails,
                         onContinue = { navController.popBackStack() },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(ReceiveRoutes.LIQUIDITY_ADDITIONAL) {
+                cjitEntryDetails.value?.let { entryDetails ->
+                    ReceiveLiquidityScreen(
+                        entry = entryDetails,
+                        onContinue = { navController.popBackStack() },
+                        isAdditional = true,
                         onBack = { navController.popBackStack() },
                     )
                 }
@@ -174,7 +200,6 @@ fun ReceiveQrSheet(
                     onBack = { navController.popBackStack() },
                     updateInvoice = { sats ->
                         wallet.updateBip21Invoice(amountSats = sats)
-                        navController.popBackStack()
                     },
                     onClickAddTag = {
                         navController.navigate(ReceiveRoutes.ADD_TAG)
@@ -187,6 +212,10 @@ fun ReceiveQrSheet(
                     },
                     onInputUpdated = { newText ->
                         wallet.updateBalanceInput(newText)
+                    },
+                    navigateReceiveConfirm = { entry ->
+                        cjitEntryDetails.value = entry
+                        navController.navigate(ReceiveRoutes.CONFIRM_INCREASE_INBOUND)
                     }
                 )
             }

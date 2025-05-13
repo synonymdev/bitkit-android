@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -8,7 +7,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -26,14 +24,12 @@ import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import uniffi.bitkitcore.decode
@@ -341,6 +337,22 @@ class WalletRepo @Inject constructor(
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Update BIP21 invoice error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun shouldRequestAdditionalLiquidity() : Result<Boolean> = withContext(bgDispatcher)  {
+        return@withContext try {
+            if (_walletState.value.receiveOnSpendingBalance == false) return@withContext Result.success(false)
+
+            if (coreService.checkGeoStatus() == true) return@withContext Result.success(false)
+
+            val channels = lightningRepo.lightningState.value.channels
+            val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }.toULong()
+
+            Result.success((_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats)
+        } catch (e: Exception) {
+            Logger.error("shouldRequestAdditionalLiquidity error", e, context = TAG)
             Result.failure(e)
         }
     }
