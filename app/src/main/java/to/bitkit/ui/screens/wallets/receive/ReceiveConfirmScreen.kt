@@ -17,6 +17,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
+import androidx.compose.ui.tooling.preview.Devices.PIXEL
+import androidx.compose.ui.tooling.preview.Devices.PIXEL_2
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.Serializable
@@ -186,6 +189,23 @@ private fun Preview() {
 @Preview(showBackground = true, name =  "Aditional flow")
 @Composable
 private fun Preview2() {
+    AppThemeSurface {
+        ReceiveConfirmContent(
+            receiveSats = 12500L,
+            isAdditional = true,
+            networkFeeFormatted = "$0.50",
+            serviceFeeFormatted = "$1.00",
+            receiveAmountFormatted = "$100.00",
+            onLearnMoreClick = {},
+            onContinueClick = {},
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, name =  "Small device", widthDp = 400, heightDp = 620)
+@Composable
+private fun Preview3() {
     AppThemeSurface {
         ReceiveConfirmContent(
             receiveSats = 12500L,
