@@ -52,7 +52,7 @@ fun SendAddressScreen(
             Caption13Up(text = stringResource(R.string.wallet__send_to))
             Spacer(modifier = Modifier.height(16.dp))
             TextField(
-                placeholder = { Text(stringResource(R.string.address_placeholder)) },
+                placeholder = { Text(stringResource(R.string.wallet__send_address_placeholder)) },
                 value = uiState.addressInput,
                 onValueChange = { onEvent(SendEvent.AddressChange(it)) },
                 minLines = 12,

@@ -57,7 +57,7 @@ fun DevSettingsScreen(
             NodeDetails(uiState)
             InfoField(
                 value = uiState.onchainAddress,
-                label = stringResource(R.string.address),
+                label = stringResource(R.string.wallet__activity_address),
                 maxLength = 36,
                 trailingIcon = {
                     Row {
