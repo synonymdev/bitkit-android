@@ -28,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.idValue
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BalanceHeaderView
@@ -240,9 +242,13 @@ private fun handleExploreClick(
     onchain: Activity.Onchain,
 ): () -> Unit {
     val context = LocalContext.current
-    val baseUrl = "https://mempool.space"
+    val baseUrl = when(Env.network) {
+        Network.TESTNET -> "https://mempool.space/testnet"
+        else -> "https://mempool.space"
+    }
     val url = "$baseUrl/tx/${onchain.v1.txId}"
     val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+
     return { context.startActivity(intent) }
 }
 
