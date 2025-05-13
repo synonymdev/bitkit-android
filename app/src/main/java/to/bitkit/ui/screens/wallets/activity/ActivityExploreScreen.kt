@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -196,7 +197,7 @@ private fun LightningDetails(
 }
 
 @Composable
-private fun OnchainDetails(
+private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
     txDetails: TxDetails?,
 ) {
@@ -229,9 +230,11 @@ private fun OnchainDetails(
         )
     } else {
         CircularProgressIndicator(
+            strokeWidth = 2.dp,
             modifier = Modifier
-                .size(18.dp)
+                .size(16.dp)
                 .padding(vertical = 16.dp)
+                .align(Alignment.CenterHorizontally)
         )
     }
     // TODO add boosted parents info if boosted
