@@ -272,6 +272,11 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = 86_400u
     ): Result<Bolt11Invoice> = executeWhenNodeRunning("Create invoice") {
+
+        if (coreService.checkGeoStatus() == true && !coreService.hasExternalLsp()) {
+            return@executeWhenNodeRunning Result.failure(Exception("Geo blocked user"))
+        }
+
         val invoice = lightningService.receive(amountSats, description, expirySeconds)
         Result.success(invoice)
     }

@@ -12,6 +12,7 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
+import to.bitkit.models.LnPeer
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -122,6 +123,10 @@ class CoreService @Inject constructor(
             }
         }
     }
+
+    suspend fun getTrustedLnPeers(): List<LnPeer> = Env.trustedLnPeers //TODO THIS SHOULD BE CALLED DYNAMICALLY
+
+    suspend fun hasExternalLsp() = getTrustedLnPeers().any { peer -> Env.trustedLnPeers.all { trustedPeer -> peer != trustedPeer } }
 }
 
 // endregion
