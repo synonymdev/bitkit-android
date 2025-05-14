@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.idValue
+import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.models.Toast
@@ -67,7 +67,7 @@ fun ActivityItemScreen(
     onCloseClick: () -> Unit,
 ) {
     val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.idValue == activityItem.id }
+    val item = activities?.find { it.rawId() == activityItem.id }
         ?: return
 
     val app = appViewModel ?: return
@@ -378,7 +378,7 @@ private fun ActivityItemView(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explore),
                     size = ButtonSize.Small,
-                    onClick = { onExploreClick(item.idValue) },
+                    onClick = { onExploreClick(item.rawId()) },
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_git_branch),

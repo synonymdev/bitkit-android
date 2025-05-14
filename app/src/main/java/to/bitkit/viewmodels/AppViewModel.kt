@@ -29,7 +29,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
-import to.bitkit.ext.idValue
+import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
@@ -51,7 +51,6 @@ import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ResourceProvider
-import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
@@ -636,7 +635,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(activity.idValue))
+            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(activity.rawId()))
         }
     }
 

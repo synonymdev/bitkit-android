@@ -33,7 +33,7 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.idValue
+import to.bitkit.ext.rawId
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -68,7 +68,7 @@ fun ActivityExploreScreen(
     onCloseClick: () -> Unit,
 ) {
     val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.idValue == route.id }
+    val item = activities?.find { it.rawId() == route.id }
         ?: return
 
     val app = appViewModel ?: return
