@@ -21,7 +21,7 @@ class TagsViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     init {
-        getPossibleTags()
+        loadTagSuggestions()
     }
 
     fun addTags(activityId: String, tags: List<String>) {
@@ -42,7 +42,7 @@ class TagsViewModel @Inject constructor(
         _uiState.update { it.copy(tagInput = input) }
     }
 
-    private fun getPossibleTags() {
+    fun loadTagSuggestions() {
         viewModelScope.launch(Dispatchers.IO) {
             val tags = coreService.activity.allPossibleTags()
             _uiState.update { it.copy(tagsSuggestions = tags) }
