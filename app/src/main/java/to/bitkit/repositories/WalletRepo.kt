@@ -29,6 +29,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.PaymentType
@@ -290,8 +291,14 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(balanceInput = newText) }
     }
 
-    fun toggleReceiveOnSpendingBalance() {
+    suspend fun toggleReceiveOnSpendingBalance(): Result<Unit> = withContext(bgDispatcher) {
+        if (_walletState.value.receiveOnSpendingBalance == false && coreService.shouldBlockLightning()) {
+            return@withContext Result.failure(ServiceError.GeoBlocked)
+        }
+
         _walletState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+
+        return@withContext Result.success(Unit)
     }
 
     fun addTagToSelected(newTag: String) {
