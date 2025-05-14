@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,8 @@ fun ActivityListFilter(
     val searchText by viewModel.searchText.collectAsState()
     val selectedTags by viewModel.selectedTags.collectAsState()
     val startDate by viewModel.startDate.collectAsState()
+
+    val focusManager = LocalFocusManager.current
 
     Column {
         Row(
@@ -74,7 +77,10 @@ fun ActivityListFilter(
                     tint = if (selectedTags.isNotEmpty()) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha { onTagClick() }
+                        .clickableAlpha {
+                            focusManager.clearFocus()
+                            onTagClick()
+                        }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -84,7 +90,10 @@ fun ActivityListFilter(
                     tint = if (startDate != null) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha { onDateRangeClick() }
+                        .clickableAlpha {
+                            focusManager.clearFocus()
+                            onDateRangeClick()
+                        }
                 )
             }
         }
