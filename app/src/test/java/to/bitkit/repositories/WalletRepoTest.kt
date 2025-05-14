@@ -15,6 +15,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
@@ -44,6 +45,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
         whenever(appStorage.onchainAddress).thenReturn("")
         whenever(appStorage.bolt11).thenReturn("")
         whenever(appStorage.bip21).thenReturn("")
@@ -274,7 +276,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(lightningRepo.hasChannels()).thenReturn(true)
         whenever(lightningRepo.createInvoice(1000uL, description = "test")).thenReturn(Result.success(testInvoice))
 
-        sut.updateBip21Invoice(amountSats = 1000uL, description = "test", generateBolt11IfAvailable = true).let { result ->
+        sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
             assertTrue(result.isSuccess)
             assertEquals(testInvoice, sut.walletState.value.bolt11)
         }

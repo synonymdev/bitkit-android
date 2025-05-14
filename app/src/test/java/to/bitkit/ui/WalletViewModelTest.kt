@@ -112,11 +112,11 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `updateBip21Invoice should call walletRepo updateBip21Invoice and send failure toast`() = test {
         val testError = Exception("Test error")
-        whenever(walletRepo.updateBip21Invoice(anyOrNull(), any(), any())).thenReturn(Result.failure(testError))
+        whenever(walletRepo.updateBip21Invoice(anyOrNull(), any())).thenReturn(Result.failure(testError))
 
         sut.updateBip21Invoice()
 
-        verify(walletRepo).updateBip21Invoice(anyOrNull(), any(), any())
+        verify(walletRepo).updateBip21Invoice(anyOrNull(), any())
         // Add verification for ToastEventBus.send
     }
 
