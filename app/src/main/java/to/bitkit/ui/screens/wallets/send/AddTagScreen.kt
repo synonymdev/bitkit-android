@@ -124,6 +124,7 @@ fun AddTagContent(
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
+
             Spacer(modifier = Modifier.height(16.dp))
             Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -65,7 +66,7 @@ fun PrimaryButton(
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .height(size.height)
+            .requiredHeight(size.height)
             .then(modifier)
     ) {
         if (isLoading) {
