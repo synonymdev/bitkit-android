@@ -94,7 +94,7 @@ fun ActivityDetailScreen(
             onBackClick = onBackClick,
             actions = { CloseNavIcon(onClick = onCloseClick) },
         )
-        ActivityItemView(
+        ActivityDetailContent(
             item = item,
             tags = tags,
             onRemoveTag = { detailViewModel.removeTag(it) },
@@ -119,7 +119,7 @@ fun ActivityDetailScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ActivityItemView(
+private fun ActivityDetailContent(
     item: Activity,
     tags: List<String>,
     onRemoveTag: (String) -> Unit,
@@ -538,7 +538,7 @@ private fun ZigzagDivider() {
 @Composable
 private fun PreviewLightningSent() {
     AppThemeSurface {
-        ActivityItemView(
+        ActivityDetailContent(
             item = Activity.Lightning(
                 v1 = LightningActivity(
                     id = "test-lightning-1",
@@ -567,7 +567,7 @@ private fun PreviewLightningSent() {
 @Composable
 private fun PreviewOnchain() {
     AppThemeSurface {
-        ActivityItemView(
+        ActivityDetailContent(
             item = Activity.Onchain(
                 v1 = OnchainActivity(
                     id = "test-onchain-1",
