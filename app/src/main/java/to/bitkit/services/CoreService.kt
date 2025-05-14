@@ -127,6 +127,8 @@ class CoreService @Inject constructor(
     suspend fun getTrustedLnPeers(): List<LnPeer> = Env.trustedLnPeers //TODO THIS SHOULD BE CALLED DYNAMICALLY
 
     suspend fun hasExternalLsp() = getTrustedLnPeers().any { peer -> Env.trustedLnPeers.all { trustedPeer -> peer != trustedPeer } }
+    //TODO this is business logic, should be moved to the domain layer in the future
+    suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalLsp()
 }
 
 // endregion

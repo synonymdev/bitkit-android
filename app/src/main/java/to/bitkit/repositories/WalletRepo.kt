@@ -85,6 +85,12 @@ class WalletRepo @Inject constructor(
     suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Refreshing bip21", context = TAG)
 
+        if (coreService.shouldBlockLightning()) {
+            _walletState.update {
+                it.copy(receiveOnSpendingBalance = false)
+            }
+        }
+
         //Reset invoice state
         _walletState.update {
             it.copy(

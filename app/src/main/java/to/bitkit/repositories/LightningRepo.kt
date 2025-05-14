@@ -273,7 +273,7 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = 86_400u
     ): Result<Bolt11Invoice> = executeWhenNodeRunning("Create invoice") {
 
-        if (coreService.checkGeoStatus() == true && !coreService.hasExternalLsp()) {
+        if (coreService.shouldBlockLightning()) {
             return@executeWhenNodeRunning Result.failure(Exception("Geo blocked user"))
         }
 
