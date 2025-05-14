@@ -81,6 +81,7 @@ private object ReceiveRoutes {
     const val LIQUIDITY_ADDITIONAL = "liquidity_additional"
     const val EDIT_INVOICE = "edit_invoice"
     const val ADD_TAG = "add_tag"
+    const val LOCATION_BLOCK = "location_block"
 }
 
 @Composable
@@ -128,7 +129,7 @@ fun ReceiveQrSheet(
                     wallet.walletEffect.collect { effect ->
                         when(effect) {
                             WalletViewModelEffects.NavigateGeoBlockScreen -> {
-                                //TODO ANN NAVIGATION LOGIC
+                                navController.navigate(ReceiveRoutes.LOCATION_BLOCK)
                             }
                         }
                     }
@@ -157,6 +158,12 @@ fun ReceiveQrSheet(
                         navController.navigate(ReceiveRoutes.CONFIRM)
                     },
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(ReceiveRoutes.LOCATION_BLOCK) {
+                LocationBlockScreen(
+                    onBackPressed = { navController.popBackStack() },
+                    navigateAdvancedSetup = {  /*TODO IMPLEMENT*/}
                 )
             }
             composable(ReceiveRoutes.CONFIRM) {
