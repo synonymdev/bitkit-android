@@ -58,7 +58,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
-import to.bitkit.ui.screens.wallets.activity.ActivityItemScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
@@ -148,7 +148,7 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityItem(it.activityId))
+                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityDetail(it.activityId))
                 else -> Unit
             }
         }
@@ -639,10 +639,10 @@ private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.ActivityItem> { navBackEntry ->
-        ActivityItemScreen(
-            viewModel = activityListViewModel,
-            activityItem = navBackEntry.toRoute(),
+    composableWithDefaultTransitions<Routes.ActivityDetail> { navBackEntry ->
+        ActivityDetailScreen(
+            listViewModel = activityListViewModel,
+            route = navBackEntry.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
@@ -650,7 +650,7 @@ private fun NavGraphBuilder.activityItem(
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> { navBackEntry ->
         ActivityExploreScreen(
-            viewModel = activityListViewModel,
+            listViewModel = activityListViewModel,
             route = navBackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
@@ -827,7 +827,7 @@ fun NavController.navigateToTransferFunding() = navigate(
 )
 
 fun NavController.navigateToActivityItem(id: String) = navigate(
-    route = Routes.ActivityItem(id),
+    route = Routes.ActivityDetail(id),
 )
 
 fun NavController.navigateToActivityExplore(id: String) = navigate(
@@ -1003,7 +1003,7 @@ object Routes {
     data object ExternalFeeCustom
 
     @Serializable
-    data class ActivityItem(val id: String)
+    data class ActivityDetail(val id: String)
 
     @Serializable
     data class ActivityExplore(val id: String)

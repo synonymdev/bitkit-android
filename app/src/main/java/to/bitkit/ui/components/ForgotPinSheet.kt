@@ -1,8 +1,6 @@
 package to.bitkit.ui.components
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -42,16 +39,7 @@ fun ForgotPinSheet(
         sheetState = sheetState,
         shape = AppShapes.sheet,
         containerColor = Colors.Black,
-        dragHandle = {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(color = Colors.Gray6)
-            ) {
-                BottomSheetDefaults.DragHandle()
-            }
-        },
+        dragHandle = { ModalBottomSheetHandle() },
         modifier = Modifier
             .fillMaxSize()
             .padding(top = ModalSheetTopPadding)

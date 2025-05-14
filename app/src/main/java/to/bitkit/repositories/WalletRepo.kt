@@ -21,7 +21,6 @@ import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.idValue
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
@@ -529,6 +528,12 @@ class WalletRepo @Inject constructor(
         is Activity.Lightning -> paymentHashOrTxId == v1.id
         is Activity.Onchain -> paymentHashOrTxId == v1.txId
     }
+
+    private val Activity.idValue: String
+        get() = when (this) {
+            is Activity.Lightning -> v1.id
+            is Activity.Onchain -> v1.txId
+        }
 
     private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
         val address = this.invoice.address
