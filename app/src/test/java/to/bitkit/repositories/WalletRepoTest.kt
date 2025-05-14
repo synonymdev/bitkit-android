@@ -153,6 +153,19 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshBip21 should set receiveOnSpendingBalance as false if shouldBlockLightning is true`() = test {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
+        whenever(sut.getOnchainAddress()).thenReturn("")
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
+
+        val result = sut.refreshBip21()
+
+        assertTrue(result.isSuccess)
+        assertEquals(false, sut.walletState.value.receiveOnSpendingBalance)
+    }
+
+    @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
         whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
