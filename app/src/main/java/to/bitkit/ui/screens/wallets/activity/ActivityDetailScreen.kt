@@ -89,7 +89,9 @@ fun ActivityDetailScreen(
         detailViewModel.setActivity(item)
     }
 
-    ScreenColumn {
+    Column(
+        modifier = Modifier.background(Colors.Black)
+    ) {
         AppTopBar(
             titleText = stringResource(item.getScreenTitleRes()),
             onBackClick = onBackClick,
