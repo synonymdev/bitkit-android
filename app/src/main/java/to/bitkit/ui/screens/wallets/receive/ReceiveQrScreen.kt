@@ -70,6 +70,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletViewModelEffects
 
 private object ReceiveRoutes {
     const val QR = "qr"
@@ -122,6 +123,17 @@ fun ReceiveQrSheet(
                 LaunchedEffect(cjitInvoice.value) {
                     showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
                 }
+
+                LaunchedEffect(Unit) {
+                    wallet.walletEffect.collect { effect ->
+                        when(effect) {
+                            WalletViewModelEffects.NavigateGeoBlockScreen -> {
+                                //TODO ANN NAVIGATION LOGIC
+                            }
+                        }
+                    }
+                }
+
                 ReceiveQrScreen(
                     cjitInvoice = cjitInvoice,
                     cjitActive = showCreateCjit,
