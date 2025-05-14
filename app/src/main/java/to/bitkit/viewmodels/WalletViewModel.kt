@@ -181,13 +181,11 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch {
             walletRepo.updateBip21Invoice(
                 amountSats = amountSats,
                 description = walletState.value.bip21Description,
-                generateBolt11IfAvailable = generateBolt11IfAvailable,
             ).onFailure { error ->
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
@@ -202,7 +200,6 @@ class WalletViewModel @Inject constructor(
         walletRepo.toggleReceiveOnSpendingBalance()
         updateBip21Invoice(
             amountSats = walletState.value.bip21AmountSats,
-            generateBolt11IfAvailable = walletState.value.receiveOnSpendingBalance
         )
     }
 

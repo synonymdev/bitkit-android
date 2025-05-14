@@ -308,7 +308,6 @@ class WalletRepo @Inject constructor(
     suspend fun updateBip21Invoice(
         amountSats: ULong? = null,
         description: String = "",
-        generateBolt11IfAvailable: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         try {
             updateBip21AmountSats(amountSats)
@@ -316,7 +315,7 @@ class WalletRepo @Inject constructor(
 
             val hasChannels = lightningRepo.hasChannels()
 
-            if (hasChannels && generateBolt11IfAvailable) {
+            if (hasChannels && _walletState.value.receiveOnSpendingBalance) {
                 lightningRepo.createInvoice(
                     amountSats = _walletState.value.bip21AmountSats,
                     description = _walletState.value.bip21Description
