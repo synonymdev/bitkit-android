@@ -196,11 +196,19 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateReceiveOnSpending() {
-        walletRepo.toggleReceiveOnSpendingBalance()
-        updateBip21Invoice(
-            amountSats = walletState.value.bip21AmountSats,
-        )
+    fun toggleReceiveOnSpending() {
+        viewModelScope.launch {
+            walletRepo.toggleReceiveOnSpendingBalance().onSuccess {
+                updateBip21Invoice(
+                    amountSats = walletState.value.bip21AmountSats,
+                )
+            }.onFailure {
+                // todo navigate to geo blocked screen
+                updateBip21Invoice(
+                    amountSats = walletState.value.bip21AmountSats,
+                )
+            }
+        }
     }
 
     fun refreshBip21() {

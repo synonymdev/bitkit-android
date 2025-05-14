@@ -135,7 +135,7 @@ fun ReceiveQrSheet(
                         }
                     },
                     onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
-                    onClickReceiveOnSpending = { wallet.updateReceiveOnSpending() }
+                    onClickReceiveOnSpending = { wallet.toggleReceiveOnSpending() }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
