@@ -66,26 +66,26 @@ import uniffi.bitkitcore.PaymentState
 import uniffi.bitkitcore.PaymentType
 
 @Composable
-fun ActivityItemScreen(
-    viewModel: ActivityListViewModel,
-    activityDetailViewModel: ActivityDetailViewModel = hiltViewModel(),
-    activityItem: Routes.ActivityItem,
+fun ActivityDetailScreen(
+    listViewModel: ActivityListViewModel,
+    detailViewModel: ActivityDetailViewModel = hiltViewModel(),
+    route: Routes.ActivityDetail,
     onExploreClick: (String) -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.rawId() == activityItem.id }
+    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
+    val item = activities?.find { it.rawId() == route.id }
         ?: return
 
     val app = appViewModel ?: return
     val copyToastTitle = stringResource(R.string.common__copied)
 
-    val tags by activityDetailViewModel.tags.collectAsStateWithLifecycle()
+    val tags by detailViewModel.tags.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
-        activityDetailViewModel.setActivity(item)
+        detailViewModel.setActivity(item)
     }
 
     ScreenColumn {
@@ -97,7 +97,7 @@ fun ActivityItemScreen(
         ActivityItemView(
             item = item,
             tags = tags,
-            onRemoveTag = { activityDetailViewModel.removeTag(it) },
+            onRemoveTag = { detailViewModel.removeTag(it) },
             onAddTagClick = { showAddTagSheet = true },
             onExploreClick = onExploreClick,
             onCopy = { text ->
@@ -110,7 +110,7 @@ fun ActivityItemScreen(
         )
         if (showAddTagSheet) {
             ActivityAddTagSheet(
-                activityViewModel = activityDetailViewModel,
+                activityViewModel = detailViewModel,
                 onDismiss = { showAddTagSheet = false },
             )
         }

@@ -62,17 +62,17 @@ import uniffi.bitkitcore.PaymentType
 
 @Composable
 fun ActivityExploreScreen(
-    viewModel: ActivityListViewModel,
+    listViewModel: ActivityListViewModel,
+    detailViewModel: ActivityDetailViewModel = hiltViewModel(),
     route: Routes.ActivityExplore,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
+    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
     val item = activities?.find { it.rawId() == route.id }
         ?: return
 
     val app = appViewModel ?: return
-    val detailViewModel: ActivityDetailViewModel = hiltViewModel()
     val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
     val copyToastTitle = stringResource(R.string.common__copied)
 
