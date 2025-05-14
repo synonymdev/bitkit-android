@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,8 +45,9 @@ fun LocationBlockScreen(
 
             Image(
                 painter = painterResource(R.drawable.globe),
+                contentScale = ContentScale.FillWidth,
                 contentDescription = null,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 60.dp)
             )
 
             Spacer(modifier = Modifier.weight(1f))
