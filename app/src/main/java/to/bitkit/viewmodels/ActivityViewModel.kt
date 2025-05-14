@@ -139,7 +139,7 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    private fun updateAvailableTags() {
+    fun updateAvailableTags() {
         viewModelScope.launch {
             try {
                 _availableTags.value = coreService.activity.allPossibleTags()
