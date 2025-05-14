@@ -26,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -38,14 +40,49 @@ fun ActivityListFilter(
     viewModel: ActivityListViewModel,
     onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val searchText by viewModel.searchText.collectAsState()
     val selectedTags by viewModel.selectedTags.collectAsState()
     val startDate by viewModel.startDate.collectAsState()
-
     val focusManager = LocalFocusManager.current
+    var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
 
-    Column {
+    ActivityListFilterContent(
+        searchText = searchText,
+        onSearchTextChange = { viewModel.setSearchText(it) },
+        hasTagFilter = selectedTags.isNotEmpty(),
+        onTagClick = {
+            focusManager.clearFocus()
+            onTagClick()
+        },
+        hasDateRangeFilter = startDate != null,
+        onDateRangeClick = {
+            focusManager.clearFocus()
+            onDateRangeClick()
+        },
+        selectedTab = selectedTab,
+        onTabSelected = {
+            // TODO on tab change: update filtered activities
+            selectedTab = it
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun ActivityListFilterContent(
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    hasTagFilter: Boolean,
+    onTagClick: () -> Unit,
+    hasDateRangeFilter: Boolean,
+    onDateRangeClick: () -> Unit,
+    selectedTab: ActivityTab,
+    onTabSelected: (ActivityTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -63,7 +100,7 @@ fun ActivityListFilter(
 
             TextField(
                 value = searchText,
-                onValueChange = { viewModel.setSearchText(it) },
+                onValueChange = onSearchTextChange,
                 placeholder = { Text(text = stringResource(R.string.common__search)) },
                 colors = AppTextFieldDefaults.transparent,
                 modifier = Modifier.weight(1f)
@@ -74,42 +111,30 @@ fun ActivityListFilter(
                 Icon(
                     painter = painterResource(R.drawable.ic_tag),
                     contentDescription = null,
-                    tint = if (selectedTags.isNotEmpty()) Colors.Brand else Colors.White64,
+                    tint = if (hasTagFilter) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha {
-                            focusManager.clearFocus()
-                            onTagClick()
-                        }
+                        .clickableAlpha { onTagClick() }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-
                 Icon(
                     painter = painterResource(R.drawable.ic_calendar),
                     contentDescription = null,
-                    tint = if (startDate != null) Colors.Brand else Colors.White64,
+                    tint = if (hasDateRangeFilter) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha {
-                            focusManager.clearFocus()
-                            onDateRangeClick()
-                        }
+                        .clickableAlpha { onDateRangeClick() }
                 )
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Column {
-            var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
-
             TabRow(selectedTabIndex = ActivityTab.entries.indexOf(selectedTab)) {
                 ActivityTab.entries.forEach { tab ->
                     Tab(
                         text = { Text(tab.title) },
                         selected = selectedTab == tab,
-                        onClick = {
-                            selectedTab = tab
-                            // TODO on tab change: update filtered activities
-                        }
+                        onClick = { onTabSelected(tab) },
                     )
                 }
             }
@@ -129,3 +154,20 @@ val ActivityTab.title: String
         ActivityTab.RECEIVED -> "Received"
         ActivityTab.OTHER -> "Other"
     }
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        ActivityListFilterContent(
+            searchText = "",
+            onSearchTextChange = {},
+            hasTagFilter = false,
+            onTagClick = {},
+            hasDateRangeFilter = false,
+            onDateRangeClick = {},
+            selectedTab = ActivityTab.ALL,
+            onTabSelected = {},
+        )
+    }
+}
