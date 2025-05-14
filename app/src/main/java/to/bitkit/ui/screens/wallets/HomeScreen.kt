@@ -59,7 +59,7 @@ import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.HomeActivityList
+import to.bitkit.ui.screens.wallets.activity.components.HomeActivityList
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet

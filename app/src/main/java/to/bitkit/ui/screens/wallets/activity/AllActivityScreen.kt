@@ -137,35 +137,6 @@ fun ActivityListWithHeaders(
     }
 }
 
-@Composable
-fun HomeActivityList(
-    items: List<Activity>?,
-    onAllActivityClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
-    onEmptyActivityRowClick: () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        if (items != null && items.isNotEmpty()) {
-            items.forEach { item ->
-                ActivityRow(item, onActivityItemClick)
-                HorizontalDivider()
-            }
-            TertiaryButton(
-                text = stringResource(R.string.wallet__activity_show_all),
-                onClick = onAllActivityClick,
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .padding(top = 8.dp)
-            )
-        } else {
-            EmptyActivityRow(onClick = onEmptyActivityRowClick)
-        }
-    }
-}
-
 // region utils
 private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val now = Instant.now()
@@ -246,41 +217,18 @@ private fun PreviewActivityListWithHeadersView() {
     }
 }
 
-@Preview
-@Composable
-private fun PreviewActivityListItems() {
-    AppThemeSurface {
-        HomeActivityList(
-            testActivityItems,
-            onAllActivityClick = {},
-            onActivityItemClick = {},
-            onEmptyActivityRowClick = {},
-        )
-    }
-}
 
-@Preview
-@Composable
-private fun PreviewActivityListEmpty() {
-    AppThemeSurface {
-        HomeActivityList(
-            items = emptyList(),
-            onAllActivityClick = {},
-            onActivityItemClick = {},
-            onEmptyActivityRowClick = {},
-        )
-    }
-}
+val testActivityItems = buildList {
+    val today: Calendar = Calendar.getInstance()
+    val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
+    val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
+    val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
+    val lastYear: Calendar = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }
 
-private val today: Calendar = Calendar.getInstance()
-private val yesterday: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
-private val thisWeek: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -3) }
-private val thisMonth: Calendar = Calendar.getInstance().apply { add(Calendar.DATE, -10) }
-private val lastYear: Calendar = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }
+    fun Calendar.epochSecond() = (timeInMillis / 1000).toULong()
 
-val testActivityItems: List<Activity> = listOf(
     // Today
-    Activity.Onchain(
+    add(Activity.Onchain(
         OnchainActivity(
             id = "1",
             txType = PaymentType.RECEIVED,
@@ -290,19 +238,20 @@ val testActivityItems: List<Activity> = listOf(
             feeRate = 1_u,
             address = "bc1",
             confirmed = true,
-            timestamp = today.timeInMillis.toULong() / 1000u,
+            timestamp = today.epochSecond(),
             isBoosted = false,
             isTransfer = true,
             doesExist = true,
-            confirmTimestamp = today.timeInMillis.toULong() / 1000u,
+            confirmTimestamp = today.epochSecond(),
             channelId = "channelId",
             transferTxId = "transferTxId",
-            createdAt = today.timeInMillis.toULong() / 1000u,
-            updatedAt = today.timeInMillis.toULong() / 1000u,
+            createdAt = today.epochSecond(),
+            updatedAt = today.epochSecond(),
         )
-    ),
+    ))
+
     // Yesterday
-    Activity.Lightning(
+    add(Activity.Lightning(
         LightningActivity(
             id = "2",
             txType = PaymentType.SENT,
@@ -311,14 +260,15 @@ val testActivityItems: List<Activity> = listOf(
             fee = 15_u,
             invoice = "lnbc2",
             message = "Custom message",
-            timestamp = yesterday.timeInMillis.toULong() / 1000u,
+            timestamp = yesterday.epochSecond(),
             preimage = "preimage1",
-            createdAt = yesterday.timeInMillis.toULong() / 1000u,
-            updatedAt = yesterday.timeInMillis.toULong() / 1000u,
+            createdAt = yesterday.epochSecond(),
+            updatedAt = yesterday.epochSecond(),
         )
-    ),
+    ))
+
     // This Week
-    Activity.Lightning(
+    add(Activity.Lightning(
         LightningActivity(
             id = "3",
             txType = PaymentType.RECEIVED,
@@ -327,14 +277,15 @@ val testActivityItems: List<Activity> = listOf(
             fee = 17_u,
             invoice = "lnbc3",
             message = "",
-            timestamp = thisWeek.timeInMillis.toULong() / 1000u,
+            timestamp = thisWeek.epochSecond(),
             preimage = "preimage2",
-            createdAt = thisWeek.timeInMillis.toULong() / 1000u,
-            updatedAt = thisWeek.timeInMillis.toULong() / 1000u,
+            createdAt = thisWeek.epochSecond(),
+            updatedAt = thisWeek.epochSecond(),
         )
-    ),
+    ))
+
     // This Month
-    Activity.Onchain(
+    add(Activity.Onchain(
         OnchainActivity(
             id = "4",
             txType = PaymentType.RECEIVED,
@@ -344,19 +295,20 @@ val testActivityItems: List<Activity> = listOf(
             feeRate = 1_u,
             address = "bc1",
             confirmed = false,
-            timestamp = thisMonth.timeInMillis.toULong() / 1000u,
+            timestamp = thisMonth.epochSecond(),
             isBoosted = false,
             isTransfer = true,
             doesExist = true,
-            confirmTimestamp = (today.timeInMillis + 3600_000).toULong() / 1000u,
+            confirmTimestamp = today.epochSecond() + 3600u,
             channelId = "channelId",
             transferTxId = "transferTxId",
-            createdAt = thisMonth.timeInMillis.toULong() / 1000u,
-            updatedAt = thisMonth.timeInMillis.toULong() / 1000u,
+            createdAt = thisMonth.epochSecond(),
+            updatedAt = thisMonth.epochSecond(),
         )
-    ),
+    ))
+
     // Last Year
-    Activity.Lightning(
+    add(Activity.Lightning(
         LightningActivity(
             id = "5",
             txType = PaymentType.SENT,
@@ -365,11 +317,11 @@ val testActivityItems: List<Activity> = listOf(
             fee = 1_u,
             invoice = "lnbc…",
             message = "",
-            timestamp = (lastYear.timeInMillis.toULong() / 1000u),
+            timestamp = lastYear.epochSecond(),
             preimage = null,
-            createdAt = (lastYear.timeInMillis.toULong() / 1000u),
-            updatedAt = (lastYear.timeInMillis.toULong() / 1000u),
+            createdAt = lastYear.epochSecond(),
+            updatedAt = lastYear.epochSecond(),
         )
-    ),
-)
+    ))
+}
 // endregion
