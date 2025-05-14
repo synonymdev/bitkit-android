@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.scaffold.AppTopBar
@@ -132,7 +133,17 @@ fun ActivityListWithHeaders(
                 }
             }
         } else {
-            EmptyActivityRow(onClick = onEmptyActivityRowClick)
+            if (showFooter) {
+                // In Spending and Savings wallet
+                EmptyActivityRow(onClick = onEmptyActivityRowClick)
+            } else {
+                // On all activity screen when filtered list is empty
+                BodyM(
+                    text = stringResource(R.string.wallet__activity_no),
+                    color = Colors.White64,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }
@@ -216,7 +227,6 @@ private fun PreviewActivityListWithHeadersView() {
         }
     }
 }
-
 
 val testActivityItems = buildList {
     val today: Calendar = Calendar.getInstance()
