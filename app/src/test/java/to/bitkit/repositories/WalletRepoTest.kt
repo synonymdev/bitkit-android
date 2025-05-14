@@ -415,6 +415,19 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `toggleReceiveOnSpendingBalance should return failure if shouldBlockLightning is true`() = test {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
+
+        if (sut.walletState.value.receiveOnSpendingBalance == true) {
+            sut.toggleReceiveOnSpendingBalance()
+        }
+
+        val result = sut.toggleReceiveOnSpendingBalance()
+
+        assert(result.isFailure)
+    }
+
+    @Test
     fun `addTagToSelected should add tag`() = test {
         val testTag = "testTag"
 
