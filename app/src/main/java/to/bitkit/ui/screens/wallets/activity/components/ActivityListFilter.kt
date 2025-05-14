@@ -137,7 +137,7 @@ fun ActivityListFilterContent(
             ) {
                 ActivityTab.entries.forEach { tab ->
                     Tab(
-                        text = { Text(tab.title) },
+                        text = { Text(tab.uiText) },
                         selected = selectedTab == tab,
                         onClick = { onTabSelected(tab) },
                     )
@@ -149,16 +149,16 @@ fun ActivityListFilterContent(
 
 enum class ActivityTab {
     ALL, SENT, RECEIVED, OTHER;
-}
 
-val ActivityTab.title: String
-    @Composable
-    get() = when (this) {
-        ActivityTab.ALL -> "All"
-        ActivityTab.SENT -> "Sent"
-        ActivityTab.RECEIVED -> "Received"
-        ActivityTab.OTHER -> "Other"
-    }
+    val uiText: String
+        @Composable
+        get() = when (this) {
+            ALL -> stringResource(R.string.wallet__activity_tabs__all)
+            SENT -> stringResource(R.string.wallet__activity_tabs__sent)
+            RECEIVED -> stringResource(R.string.wallet__activity_tabs__received)
+            OTHER -> stringResource(R.string.wallet__activity_tabs__other)
+        }
+}
 
 @Preview
 @Composable
