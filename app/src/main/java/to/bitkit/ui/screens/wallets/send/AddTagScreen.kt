@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.AppShapes
@@ -77,8 +78,7 @@ fun AddTagContent(
         SheetTopBar(stringResource(R.string.wallet__tags_add)) {
             onBack()
         }
-
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
@@ -124,6 +124,14 @@ fun AddTagContent(
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
+            PrimaryButton(
+                text = stringResource(R.string.wallet__tags_add_button),
+                onClick = { onTagConfirmed(uiState.tagInput) },
+                enabled = uiState.tagInput.isNotBlank(),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -149,7 +157,7 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         AddTagContent(
-            uiState = AddTagUiState(),
+            uiState = AddTagUiState(tagInput = "Lunch"),
             onTagSelected = {},
             onInputUpdated = {},
             onTagConfirmed = {},
