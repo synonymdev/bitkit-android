@@ -44,6 +44,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.requiresPermission
 import to.bitkit.ui.LocalBalances
+import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
@@ -105,7 +106,12 @@ fun HomeScreen(
                 }
 
                 is BottomSheetType.Receive -> {
-                    ReceiveQrSheet(uiState)
+                    ReceiveQrSheet(
+                        walletState = uiState,
+                        navigateToExternalConnection = {
+                            rootNavController.navigate(Routes.ExternalConnection)
+                        }
+                    )
                 }
 
                 is BottomSheetType.ActivityDateRangeSelector -> {

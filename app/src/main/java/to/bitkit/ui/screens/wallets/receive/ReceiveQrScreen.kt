@@ -86,6 +86,7 @@ private object ReceiveRoutes {
 
 @Composable
 fun ReceiveQrSheet(
+    navigateToExternalConnection: () -> Unit,
     walletState: MainUiState,
     modifier: Modifier = Modifier,
 ) {
@@ -163,7 +164,7 @@ fun ReceiveQrSheet(
             composable(ReceiveRoutes.LOCATION_BLOCK) {
                 LocationBlockScreen(
                     onBackPressed = { navController.popBackStack() },
-                    navigateAdvancedSetup = {  /*TODO IMPLEMENT*/}
+                    navigateAdvancedSetup = navigateToExternalConnection
                 )
             }
             composable(ReceiveRoutes.CONFIRM) {
