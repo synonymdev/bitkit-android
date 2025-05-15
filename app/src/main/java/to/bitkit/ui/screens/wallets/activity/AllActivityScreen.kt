@@ -57,11 +57,10 @@ import java.time.temporal.WeekFields
 import java.util.Calendar
 import java.util.Locale
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
-
-const val SwipeVelocityThreshold = 1500f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,26 +75,6 @@ fun AllActivityScreen(
     var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
     val tabEntries = ActivityTab.entries
     val currentTabIndex = tabEntries.indexOf(selectedTab)
-    val velocityTracker = remember { VelocityTracker() }
-    val gestureModifier = Modifier.pointerInput(selectedTab) {
-        detectHorizontalDragGestures(
-            onHorizontalDrag = { change, dragAmount ->
-                velocityTracker.addPosition(change.uptimeMillis, change.position)
-            },
-            onDragEnd = {
-                val velocity = velocityTracker.calculateVelocity().x
-                if (velocity >= SwipeVelocityThreshold && currentTabIndex > 0) {
-                    selectedTab = tabEntries[currentTabIndex - 1]
-                } else if (velocity <= -SwipeVelocityThreshold && currentTabIndex < tabEntries.lastIndex) {
-                    selectedTab = tabEntries[currentTabIndex + 1]
-                }
-                velocityTracker.resetTracking()
-            },
-            onDragCancel = {
-                velocityTracker.resetTracking()
-            },
-        )
-    }
 
     Column {
         // Header with gradient background
@@ -133,7 +112,50 @@ fun AllActivityScreen(
             items = filteredActivities,
             onActivityItemClick = onActivityItemClick,
             onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
-            modifier = gestureModifier.padding(horizontal = 16.dp),
+            modifier = Modifier
+                .swipeToChangeTab(
+                    currentTabIndex = currentTabIndex,
+                    tabCount = tabEntries.size,
+                    onTabChange = { selectedTab = tabEntries[it] }
+                )
+                .padding(horizontal = 16.dp)
+        )
+    }
+}
+
+fun Modifier.swipeToChangeTab(
+    currentTabIndex: Int,
+    tabCount: Int,
+    onTabChange: (Int) -> Unit,
+) = composed(
+    inspectorInfo = {
+        name = "swipeToChangeTab"
+        value = currentTabIndex
+    }
+) {
+    val threshold = remember { 1500f }
+    val velocityTracker = remember { VelocityTracker() }
+
+    pointerInput(currentTabIndex) {
+        detectHorizontalDragGestures(
+            onHorizontalDrag = { change, _ ->
+                velocityTracker.addPosition(change.uptimeMillis, change.position)
+            },
+            onDragEnd = {
+                val velocity = velocityTracker.calculateVelocity().x
+                when {
+                    velocity >= threshold && currentTabIndex > 0 -> {
+                        onTabChange(currentTabIndex - 1)
+                    }
+                    velocity <= -threshold && currentTabIndex < tabCount - 1 -> {
+                        onTabChange(currentTabIndex + 1)
+                    }
+                }
+                velocityTracker.resetTracking()
+            },
+            onDragCancel = {
+                velocityTracker.resetTracking()
+            },
         )
     }
 }
