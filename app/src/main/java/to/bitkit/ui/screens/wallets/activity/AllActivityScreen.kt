@@ -34,6 +34,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
 
@@ -94,7 +95,9 @@ private fun AllActivityScreenContent(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
-    Column {
+    Column(
+        modifier = Modifier.background(Colors.Black)
+    ) {
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
@@ -159,12 +162,34 @@ private fun Modifier.swipeToChangeTab(currentTabIndex: Int, tabCount: Int, onTab
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         AllActivityScreenContent(
             filteredActivities = previewActivityItems,
+            searchText = "",
+            onSearchTextChange = {},
+            hasTagFilter = false,
+            hasDateRangeFilter = false,
+            tabs = ActivityTab.entries,
+            currentTabIndex = 0,
+            onTabChange = {},
+            onBackClick = {},
+            onTagClick = {},
+            onDateRangeClick = {},
+            onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewEmpty() {
+    AppThemeSurface {
+        AllActivityScreenContent(
+            filteredActivities = emptyList(),
             searchText = "",
             onSearchTextChange = {},
             hasTagFilter = false,

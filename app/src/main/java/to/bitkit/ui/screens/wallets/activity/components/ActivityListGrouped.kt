@@ -99,7 +99,9 @@ fun ActivityListGrouped(
                 BodyM(
                     text = stringResource(R.string.wallet__activity_no),
                     color = Colors.White64,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
                 )
             }
         }
