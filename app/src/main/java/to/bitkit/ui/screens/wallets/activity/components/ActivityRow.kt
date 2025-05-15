@@ -20,6 +20,7 @@ import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
 import to.bitkit.ext.rawId
+import to.bitkit.ext.totalValue
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
@@ -145,13 +146,7 @@ private fun AmountView(
     item: Activity,
     prefix: String,
 ) {
-    val amount = when (item) {
-        is Activity.Lightning -> item.v1.value
-        is Activity.Onchain -> when (item.v1.txType) {
-            PaymentType.SENT -> item.v1.value + item.v1.fee
-            else -> item.v1.value
-        }
-    }
+    val amount = item.totalValue()
 
     val isPreview = LocalInspectionMode.current
     if (isPreview) {

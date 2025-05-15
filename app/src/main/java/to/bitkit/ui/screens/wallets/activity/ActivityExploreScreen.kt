@@ -34,6 +34,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.rawId
+import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -133,16 +134,9 @@ private fun ActivityExploreContent(
                 is Activity.Lightning -> item.v1.txType == PaymentType.SENT
                 is Activity.Onchain -> item.v1.txType == PaymentType.SENT
             }
-            val value = when (item) {
-                is Activity.Lightning -> item.v1.value
-                is Activity.Onchain -> when {
-                    isSent -> item.v1.value + item.v1.fee
-                    else -> item.v1.value
-                }
-            }
             val amountPrefix = if (isSent) "-" else "+"
             BalanceHeaderView(
-                sats = value.toLong(),
+                sats = item.totalValue().toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f),

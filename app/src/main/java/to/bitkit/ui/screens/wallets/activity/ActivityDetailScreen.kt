@@ -38,6 +38,7 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
+import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -144,13 +145,7 @@ private fun ActivityDetailContent(
             else -> item.v1.timestamp
         }
     }
-    val value = when (item) {
-        is Activity.Lightning -> item.v1.value
-        is Activity.Onchain -> when {
-            isSent -> item.v1.value + item.v1.fee
-            else -> item.v1.value
-        }
-    }
+    val totalValue = item.totalValue()
     val paymentValue = when (item) {
         is Activity.Lightning -> item.v1.value
         is Activity.Onchain -> item.v1.value
@@ -173,7 +168,7 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = value.toLong(),
+                sats = totalValue.toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f)

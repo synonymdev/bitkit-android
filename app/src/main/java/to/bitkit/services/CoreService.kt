@@ -236,8 +236,8 @@ class ActivityService(
                                 txType = payment.direction.toPaymentType(),
                                 status = state,
                                 value = payment.amountSats ?: 0u,
-                                fee = null, // TODO
-                                invoice = "lnbc123", // TODO
+                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                invoice = "lnbc123_todo", // TODO
                                 message = "",
                                 timestamp = payment.latestUpdateTimestamp,
                                 preimage = kind.preimage,
