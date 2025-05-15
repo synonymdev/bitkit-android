@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -8,18 +9,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -27,14 +29,9 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
-import to.bitkit.viewmodels.ActivityListViewModel
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.composed
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
+import to.bitkit.viewmodels.ActivityListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,19 +57,12 @@ fun AllActivityScreen(
     }
 
     Column {
-        // Header with gradient background
-        var headerWidth by remember { mutableFloatStateOf(0f) }
         Column(
             modifier = Modifier
-                .onSizeChanged { headerWidth = it.width.toFloat() }
                 .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
                 .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Color(0xFF1e1e1e), Color(0xFF161616)),
-                        start = Offset(0f, 0f),
-                        end = Offset(headerWidth, 0f),
-                    ),
-                ),
+                    Brush.horizontalGradient(listOf(Color(0xFF1e1e1e), Color(0xFF161616)))
+                )
         ) {
             AppTopBar(stringResource(R.string.wallet__activity_all), onBackClick)
             Column(
@@ -107,16 +97,7 @@ fun AllActivityScreen(
     }
 }
 
-fun Modifier.swipeToChangeTab(
-    currentTabIndex: Int,
-    tabCount: Int,
-    onTabChange: (Int) -> Unit,
-) = composed(
-    inspectorInfo = {
-        name = "swipeToChangeTab"
-        value = currentTabIndex
-    }
-) {
+private fun Modifier.swipeToChangeTab(currentTabIndex: Int, tabCount: Int, onTabChange: (Int) -> Unit) = composed {
     val threshold = remember { 1500f }
     val velocityTracker = remember { VelocityTracker() }
 
@@ -128,12 +109,8 @@ fun Modifier.swipeToChangeTab(
             onDragEnd = {
                 val velocity = velocityTracker.calculateVelocity().x
                 when {
-                    velocity >= threshold && currentTabIndex > 0 -> {
-                        onTabChange(currentTabIndex - 1)
-                    }
-                    velocity <= -threshold && currentTabIndex < tabCount - 1 -> {
-                        onTabChange(currentTabIndex + 1)
-                    }
+                    velocity >= threshold && currentTabIndex > 0 -> onTabChange(currentTabIndex - 1)
+                    velocity <= -threshold && currentTabIndex < tabCount - 1 -> onTabChange(currentTabIndex + 1)
                 }
                 velocityTracker.resetTracking()
             },
@@ -143,5 +120,3 @@ fun Modifier.swipeToChangeTab(
         )
     }
 }
-
-// endregion
