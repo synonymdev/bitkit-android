@@ -144,7 +144,8 @@ fun ReceiveQrSheet(
                     walletState = walletState,
                     onCjitToggle = { active ->
                         when {
-                            active && lightningState.shouldBlockLightning -> navigateToExternalConnection()
+                            active && lightningState.shouldBlockLightning -> navController.navigate(ReceiveRoutes.LOCATION_BLOCK)
+
                             !active -> {
                                 showCreateCjit.value = false
                                 cjitInvoice.value = null
