@@ -240,7 +240,7 @@ class ActivityService(
                                 invoice = "lnbc123", // TODO
                                 message = "",
                                 timestamp = payment.latestUpdateTimestamp,
-                                preimage = null,
+                                preimage = kind.preimage,
                                 createdAt = payment.latestUpdateTimestamp,
                                 updatedAt = payment.latestUpdateTimestamp,
                             )
