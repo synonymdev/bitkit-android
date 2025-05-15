@@ -49,6 +49,7 @@ import to.bitkit.R
 import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodeLifecycleState.Running
+import to.bitkit.repositories.LightningState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
@@ -99,6 +100,7 @@ fun ReceiveQrSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+    val lightningState : LightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         try {
@@ -141,11 +143,16 @@ fun ReceiveQrSheet(
                     cjitActive = showCreateCjit,
                     walletState = walletState,
                     onCjitToggle = { active ->
-                        showCreateCjit.value = active
-                        if (!active) {
-                            cjitInvoice.value = null
-                        } else if (cjitInvoice.value == null) {
-                            navController.navigate(ReceiveRoutes.AMOUNT)
+                        when {
+                            active && lightningState.shouldBlockLightning -> navigateToExternalConnection()
+                            !active -> {
+                                showCreateCjit.value = false
+                                cjitInvoice.value = null
+                            }
+                            active && cjitInvoice.value == null -> {
+                                showCreateCjit.value = true
+                                navController.navigate(ReceiveRoutes.AMOUNT)
+                            }
                         }
                     },
                     onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
