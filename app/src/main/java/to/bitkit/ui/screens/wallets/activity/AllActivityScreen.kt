@@ -57,10 +57,12 @@ import java.time.temporal.WeekFields
 import java.util.Calendar
 import java.util.Locale
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,14 +191,14 @@ fun ActivityListWithHeaders(
 
             LazyColumn(
                 horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(top = 20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 itemsIndexed(groupedItems) { index, item ->
                     when (item) {
                         is String -> {
-                            Text(
+                            Caption13Up(
                                 text = item,
-                                style = MaterialTheme.typography.titleSmall,
                                 color = Colors.White64,
                                 modifier = Modifier
                                     .fillMaxWidth()
