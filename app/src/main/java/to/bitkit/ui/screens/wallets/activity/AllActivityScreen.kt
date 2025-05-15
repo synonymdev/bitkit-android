@@ -57,6 +57,7 @@ import java.time.temporal.WeekFields
 import java.util.Calendar
 import java.util.Locale
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -72,9 +73,18 @@ fun AllActivityScreen(
     val app = appViewModel ?: return
     val filteredActivities by viewModel.filteredActivities.collectAsState()
 
+    val searchText by viewModel.searchText.collectAsState()
+    val selectedTags by viewModel.selectedTags.collectAsState()
+    val startDate by viewModel.startDate.collectAsState()
+
     var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
-    val tabEntries = ActivityTab.entries
-    val currentTabIndex = tabEntries.indexOf(selectedTab)
+    val tabs = ActivityTab.entries
+    val currentTabIndex = tabs.indexOf(selectedTab)
+
+    LaunchedEffect(selectedTab) {
+        // TODO on tab change: update filtered activities
+        println("Selected filter tab: $selectedTab")
+    }
 
     Column {
         // Header with gradient background
@@ -96,14 +106,15 @@ fun AllActivityScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
                 ActivityListFilter(
-                    viewModel = viewModel,
+                    searchText = searchText,
+                    onSearchTextChange = { viewModel.setSearchText(it) },
+                    hasTagFilter = selectedTags.isNotEmpty(),
+                    hasDateRangeFilter = startDate != null,
                     onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
                     onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
-                    selectedTab = selectedTab,
-                    onTabSelected = {
-                        // TODO on tab change: update filtered activities
-                        selectedTab = it
-                    },
+                    tabs = tabs,
+                    currentTabIndex = currentTabIndex,
+                    onTabChange = { selectedTab = it },
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -115,8 +126,8 @@ fun AllActivityScreen(
             modifier = Modifier
                 .swipeToChangeTab(
                     currentTabIndex = currentTabIndex,
-                    tabCount = tabEntries.size,
-                    onTabChange = { selectedTab = tabEntries[it] }
+                    tabCount = tabs.size,
+                    onTabChange = { selectedTab = tabs[it] }
                 )
                 .padding(horizontal = 16.dp)
         )

@@ -16,11 +16,6 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,54 +29,22 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.ActivityListViewModel
 
 @Composable
 fun ActivityListFilter(
-    viewModel: ActivityListViewModel,
-    onTagClick: () -> Unit,
-    onDateRangeClick: () -> Unit,
-    selectedTab: ActivityTab,
-    onTabSelected: (ActivityTab) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val searchText by viewModel.searchText.collectAsState()
-    val selectedTags by viewModel.selectedTags.collectAsState()
-    val startDate by viewModel.startDate.collectAsState()
-
-    val focusManager = LocalFocusManager.current
-
-    ActivityListFilterContent(
-        searchText = searchText,
-        onSearchTextChange = { viewModel.setSearchText(it) },
-        hasTagFilter = selectedTags.isNotEmpty(),
-        onTagClick = {
-            focusManager.clearFocus()
-            onTagClick()
-        },
-        hasDateRangeFilter = startDate != null,
-        onDateRangeClick = {
-            focusManager.clearFocus()
-            onDateRangeClick()
-        },
-        selectedTab = selectedTab,
-        onTabSelected = onTabSelected,
-        modifier = modifier,
-    )
-}
-
-@Composable
-fun ActivityListFilterContent(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
     hasTagFilter: Boolean,
-    onTagClick: () -> Unit,
     hasDateRangeFilter: Boolean,
+    onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
-    selectedTab: ActivityTab,
-    onTabSelected: (ActivityTab) -> Unit,
+    tabs: List<ActivityTab>,
+    currentTabIndex: Int,
+    onTabChange: (ActivityTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
+
     Column(modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -114,7 +77,10 @@ fun ActivityListFilterContent(
                     tint = if (hasTagFilter) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha { onTagClick() }
+                        .clickableAlpha {
+                            focusManager.clearFocus()
+                            onTagClick()
+                        }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
@@ -123,21 +89,24 @@ fun ActivityListFilterContent(
                     tint = if (hasDateRangeFilter) Colors.Brand else Colors.White64,
                     modifier = Modifier
                         .size(24.dp)
-                        .clickableAlpha { onDateRangeClick() }
+                        .clickableAlpha {
+                            focusManager.clearFocus()
+                            onDateRangeClick()
+                        }
                 )
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Column {
             TabRow(
-                selectedTabIndex = ActivityTab.entries.indexOf(selectedTab),
+                selectedTabIndex = currentTabIndex,
                 containerColor = Color.Transparent,
             ) {
-                ActivityTab.entries.forEach { tab ->
+                tabs.map { tab ->
                     Tab(
                         text = { Text(tab.uiText) },
-                        selected = selectedTab == tab,
-                        onClick = { onTabSelected(tab) },
+                        selected = tabs[currentTabIndex] == tab,
+                        onClick = { onTabChange(tab) },
                     )
                 }
             }
@@ -162,15 +131,16 @@ enum class ActivityTab {
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ActivityListFilterContent(
+        ActivityListFilter(
             searchText = "",
             onSearchTextChange = {},
             hasTagFilter = false,
             onTagClick = {},
             hasDateRangeFilter = false,
             onDateRangeClick = {},
-            selectedTab = ActivityTab.ALL,
-            onTabSelected = {},
+            tabs = ActivityTab.entries,
+            currentTabIndex = 0,
+            onTabChange = {},
         )
     }
 }
