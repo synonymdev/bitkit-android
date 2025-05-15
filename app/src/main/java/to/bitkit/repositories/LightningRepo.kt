@@ -33,6 +33,7 @@ import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.IBtInfo
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -272,6 +273,11 @@ class LightningRepo @Inject constructor(
         description: String,
         expirySeconds: UInt = 86_400u
     ): Result<Bolt11Invoice> = executeWhenNodeRunning("Create invoice") {
+
+        if (coreService.shouldBlockLightning()) {
+            return@executeWhenNodeRunning Result.failure(ServiceError.GeoBlocked)
+        }
+
         val invoice = lightningService.receive(amountSats, description, expirySeconds)
         Result.success(invoice)
     }
@@ -336,6 +342,7 @@ class LightningRepo @Inject constructor(
                 nodeStatus = getStatus(),
                 peers = getPeers().orEmpty(),
                 channels = getChannels().orEmpty(),
+                shouldBlockLightning = coreService.shouldBlockLightning()
             )
         }
     }
@@ -420,5 +427,6 @@ data class LightningState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
-    val isSyncingWallet: Boolean = false
+    val isSyncingWallet: Boolean = false,
+    val shouldBlockLightning: Boolean = false
 )
