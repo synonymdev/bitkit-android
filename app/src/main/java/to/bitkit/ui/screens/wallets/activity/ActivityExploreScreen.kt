@@ -129,13 +129,16 @@ private fun ActivityExploreContent(
                 .fillMaxWidth()
                 .padding(vertical = 16.dp)
         ) {
-            val value = when (item) {
-                is Activity.Lightning -> item.v1.value
-                is Activity.Onchain -> item.v1.value
-            }
             val isSent = when (item) {
                 is Activity.Lightning -> item.v1.txType == PaymentType.SENT
                 is Activity.Onchain -> item.v1.txType == PaymentType.SENT
+            }
+            val value = when (item) {
+                is Activity.Lightning -> item.v1.value
+                is Activity.Onchain -> when {
+                    isSent -> item.v1.value + item.v1.fee
+                    else -> item.v1.value
+                }
             }
             val amountPrefix = if (isSent) "-" else "+"
             BalanceHeaderView(
