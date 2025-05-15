@@ -342,6 +342,7 @@ class LightningRepo @Inject constructor(
                 nodeStatus = getStatus(),
                 peers = getPeers().orEmpty(),
                 channels = getChannels().orEmpty(),
+                shouldBlockLightning = coreService.shouldBlockLightning()
             )
         }
     }
@@ -426,5 +427,6 @@ data class LightningState(
     val nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
-    val isSyncingWallet: Boolean = false
+    val isSyncingWallet: Boolean = false,
+    val shouldBlockLightning: Boolean = false
 )
