@@ -3,12 +3,14 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -19,6 +21,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -66,7 +69,7 @@ class ActivityListViewModel @Inject constructor(
     val availableTags = _availableTags.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             ldkNodeEventBus.events.collect {
                 // TODO: sync only on specific events for better performance
                 syncLdkNodePayments()
@@ -177,7 +180,7 @@ class ActivityListViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             isSyncingLdkNodePayments = true
             lightningRepo.getPayments()
                 .onSuccess {
@@ -190,46 +193,15 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    fun addTags(activityId: String, tags: List<String>) {
-        viewModelScope.launch {
-            try {
-                coreService.activity.appendTags(toActivityId = activityId, tags = tags)
-                syncState()
-            } catch (e: Exception) {
-                Logger.error("Failed to add tags to activity", e)
-            }
-        }
-    }
-
-    fun removeTags(activityId: String, tags: List<String>) {
-        viewModelScope.launch {
-            try {
-                coreService.activity.dropTags(fromActivityId = activityId, tags = tags)
-                syncState()
-            } catch (e: Exception) {
-                Logger.error("Failed to remove tags from activity", e)
-            }
-        }
-    }
-
-    suspend fun getActivitiesWithTag(tag: String): List<Activity> {
-        return try {
-            coreService.activity.get(tags = listOf(tag))
-        } catch (e: Exception) {
-            Logger.error("Failed get activities by tag", e)
-            emptyList()
-        }
-    }
-
     fun generateRandomTestData() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             coreService.activity.generateRandomTestData()
             syncState()
         }
     }
 
     fun removeAllActivities() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             coreService.activity.removeAll()
             syncState()
         }
