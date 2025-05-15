@@ -33,7 +33,7 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.idValue
+import to.bitkit.ext.rawId
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -62,17 +62,17 @@ import uniffi.bitkitcore.PaymentType
 
 @Composable
 fun ActivityExploreScreen(
-    viewModel: ActivityListViewModel,
+    listViewModel: ActivityListViewModel,
+    detailViewModel: ActivityDetailViewModel = hiltViewModel(),
     route: Routes.ActivityExplore,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    val activities by viewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.idValue == route.id }
+    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
+    val item = activities?.find { it.rawId() == route.id }
         ?: return
 
     val app = appViewModel ?: return
-    val detailViewModel: ActivityDetailViewModel = hiltViewModel()
     val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
     val copyToastTitle = stringResource(R.string.common__copied)
 

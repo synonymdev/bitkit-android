@@ -8,13 +8,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -25,8 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -42,6 +45,10 @@ fun AddTagScreen(
 ) {
     val uiState: AddTagUiState by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.loadTagSuggestions()
+    }
+
     AddTagContent(
         uiState = uiState,
         onTagSelected = onTagSelected,
@@ -49,7 +56,8 @@ fun AddTagScreen(
             onTagSelected(tag)
         },
         onInputUpdated = { newText -> viewModel.onInputUpdated(newText) },
-        onBack = onBack
+        onBack = onBack,
+        modifier = Modifier.fillMaxSize()
     )
 }
 
@@ -61,16 +69,16 @@ fun AddTagContent(
     onTagConfirmed: (String) -> Unit,
     onInputUpdated: (String) -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = modifier.navigationBarsPadding()
     ) {
 
         SheetTopBar(stringResource(R.string.wallet__tags_add)) {
             onBack()
         }
-
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
@@ -106,8 +114,8 @@ fun AddTagContent(
                 onValueChange = onInputUpdated,
                 maxLines = 1,
                 singleLine = true,
-                colors = AppTextFieldDefaults.noIndicatorColors,
-                shape = MaterialTheme.shapes.small,
+                colors = AppTextFieldDefaults.semiTransparent,
+                shape = AppShapes.small,
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done
                 ),
@@ -116,6 +124,15 @@ fun AddTagContent(
                 }),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
+            PrimaryButton(
+                text = stringResource(R.string.wallet__tags_add_button),
+                onClick = { onTagConfirmed(uiState.tagInput) },
+                enabled = uiState.tagInput.isNotBlank(),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -141,7 +158,7 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         AddTagContent(
-            uiState = AddTagUiState(),
+            uiState = AddTagUiState(tagInput = "Lunch"),
             onTagSelected = {},
             onInputUpdated = {},
             onTagConfirmed = {},

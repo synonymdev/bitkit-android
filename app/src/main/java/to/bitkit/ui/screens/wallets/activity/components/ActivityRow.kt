@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
-import to.bitkit.ext.idValue
+import to.bitkit.ext.rawId
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
@@ -63,7 +63,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick(item.idValue) }
+            .clickableAlpha { onClick(item.rawId()) }
             .padding(vertical = 16.dp)
     ) {
         ActivityIcon(activity = item, size = 32.dp)
