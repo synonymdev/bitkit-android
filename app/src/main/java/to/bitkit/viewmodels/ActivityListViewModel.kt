@@ -46,7 +46,7 @@ class ActivityListViewModel @Inject constructor(
     val startDate = _startDate.asStateFlow()
 
     private val _endDate = MutableStateFlow<Long?>(null)
-    // val endDate = _endDate.asStateFlow()
+    val endDate = _endDate.asStateFlow()
 
     private val _selectedTags = MutableStateFlow<Set<String>>(emptySet())
     val selectedTags = _selectedTags.asStateFlow()

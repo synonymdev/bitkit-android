@@ -17,6 +17,8 @@ import androidx.compose.material3.DateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,9 +35,16 @@ import to.bitkit.ui.theme.Colors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateRangeSelectorSheet() {
-    val dateRangeState = rememberDateRangePickerState()
     val activity = activityListViewModel ?: return
     val app = appViewModel ?: return
+
+    val startDate by activity.startDate.collectAsState()
+    val endDate by activity.endDate.collectAsState()
+
+    val dateRangeState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = startDate,
+        initialSelectedEndDateMillis = endDate,
+    )
 
     DateRangeSelectorSheetContent(
         dateRangeState = dateRangeState,
