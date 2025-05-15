@@ -1,8 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,9 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -86,7 +82,9 @@ fun AllActivityScreen(
                 ),
         ) {
             AppTopBar(stringResource(R.string.wallet__activity_all), onBackClick)
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
                 ActivityListFilter(
                     viewModel = viewModel,
                     onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
@@ -268,100 +266,110 @@ val testActivityItems = buildList {
     fun Calendar.epochSecond() = (timeInMillis / 1000).toULong()
 
     // Today
-    add(Activity.Onchain(
-        OnchainActivity(
-            id = "1",
-            txType = PaymentType.RECEIVED,
-            txId = "01",
-            value = 42_000_000_u,
-            fee = 200_u,
-            feeRate = 1_u,
-            address = "bc1",
-            confirmed = true,
-            timestamp = today.epochSecond(),
-            isBoosted = false,
-            isTransfer = true,
-            doesExist = true,
-            confirmTimestamp = today.epochSecond(),
-            channelId = "channelId",
-            transferTxId = "transferTxId",
-            createdAt = today.epochSecond(),
-            updatedAt = today.epochSecond(),
+    add(
+        Activity.Onchain(
+            OnchainActivity(
+                id = "1",
+                txType = PaymentType.RECEIVED,
+                txId = "01",
+                value = 42_000_000_u,
+                fee = 200_u,
+                feeRate = 1_u,
+                address = "bc1",
+                confirmed = true,
+                timestamp = today.epochSecond(),
+                isBoosted = false,
+                isTransfer = true,
+                doesExist = true,
+                confirmTimestamp = today.epochSecond(),
+                channelId = "channelId",
+                transferTxId = "transferTxId",
+                createdAt = today.epochSecond(),
+                updatedAt = today.epochSecond(),
+            )
         )
-    ))
+    )
 
     // Yesterday
-    add(Activity.Lightning(
-        LightningActivity(
-            id = "2",
-            txType = PaymentType.SENT,
-            status = PaymentState.PENDING,
-            value = 30_000_u,
-            fee = 15_u,
-            invoice = "lnbc2",
-            message = "Custom message",
-            timestamp = yesterday.epochSecond(),
-            preimage = "preimage1",
-            createdAt = yesterday.epochSecond(),
-            updatedAt = yesterday.epochSecond(),
+    add(
+        Activity.Lightning(
+            LightningActivity(
+                id = "2",
+                txType = PaymentType.SENT,
+                status = PaymentState.PENDING,
+                value = 30_000_u,
+                fee = 15_u,
+                invoice = "lnbc2",
+                message = "Custom message",
+                timestamp = yesterday.epochSecond(),
+                preimage = "preimage1",
+                createdAt = yesterday.epochSecond(),
+                updatedAt = yesterday.epochSecond(),
+            )
         )
-    ))
+    )
 
     // This Week
-    add(Activity.Lightning(
-        LightningActivity(
-            id = "3",
-            txType = PaymentType.RECEIVED,
-            status = PaymentState.FAILED,
-            value = 217_000_u,
-            fee = 17_u,
-            invoice = "lnbc3",
-            message = "",
-            timestamp = thisWeek.epochSecond(),
-            preimage = "preimage2",
-            createdAt = thisWeek.epochSecond(),
-            updatedAt = thisWeek.epochSecond(),
+    add(
+        Activity.Lightning(
+            LightningActivity(
+                id = "3",
+                txType = PaymentType.RECEIVED,
+                status = PaymentState.FAILED,
+                value = 217_000_u,
+                fee = 17_u,
+                invoice = "lnbc3",
+                message = "",
+                timestamp = thisWeek.epochSecond(),
+                preimage = "preimage2",
+                createdAt = thisWeek.epochSecond(),
+                updatedAt = thisWeek.epochSecond(),
+            )
         )
-    ))
+    )
 
     // This Month
-    add(Activity.Onchain(
-        OnchainActivity(
-            id = "4",
-            txType = PaymentType.RECEIVED,
-            txId = "04",
-            value = 950_000_u,
-            fee = 110_u,
-            feeRate = 1_u,
-            address = "bc1",
-            confirmed = false,
-            timestamp = thisMonth.epochSecond(),
-            isBoosted = false,
-            isTransfer = true,
-            doesExist = true,
-            confirmTimestamp = today.epochSecond() + 3600u,
-            channelId = "channelId",
-            transferTxId = "transferTxId",
-            createdAt = thisMonth.epochSecond(),
-            updatedAt = thisMonth.epochSecond(),
+    add(
+        Activity.Onchain(
+            OnchainActivity(
+                id = "4",
+                txType = PaymentType.RECEIVED,
+                txId = "04",
+                value = 950_000_u,
+                fee = 110_u,
+                feeRate = 1_u,
+                address = "bc1",
+                confirmed = false,
+                timestamp = thisMonth.epochSecond(),
+                isBoosted = false,
+                isTransfer = true,
+                doesExist = true,
+                confirmTimestamp = today.epochSecond() + 3600u,
+                channelId = "channelId",
+                transferTxId = "transferTxId",
+                createdAt = thisMonth.epochSecond(),
+                updatedAt = thisMonth.epochSecond(),
+            )
         )
-    ))
+    )
 
     // Last Year
-    add(Activity.Lightning(
-        LightningActivity(
-            id = "5",
-            txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
-            value = 200_000_u,
-            fee = 1_u,
-            invoice = "lnbc…",
-            message = "",
-            timestamp = lastYear.epochSecond(),
-            preimage = null,
-            createdAt = lastYear.epochSecond(),
-            updatedAt = lastYear.epochSecond(),
+    add(
+        Activity.Lightning(
+            LightningActivity(
+                id = "5",
+                txType = PaymentType.SENT,
+                status = PaymentState.SUCCEEDED,
+                value = 200_000_u,
+                fee = 1_u,
+                invoice = "lnbc…",
+                message = "",
+                timestamp = lastYear.epochSecond(),
+                preimage = null,
+                createdAt = lastYear.epochSecond(),
+                updatedAt = lastYear.epochSecond(),
+            )
         )
-    ))
+    )
 }
 // endregion
