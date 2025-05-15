@@ -22,8 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import to.bitkit.R
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
@@ -80,32 +82,33 @@ private fun DateRangeSelectorSheetContent(
     ) {
         DateRangePicker(
             state = dateRangeState,
-            modifier = Modifier.weight(1f),
             showModeToggle = false,
             colors = DatePickerDefaults.colors(
                 containerColor = Color.Transparent,
                 selectedDayContainerColor = Colors.Brand,
                 dayInSelectionRangeContainerColor = Colors.Brand16,
             ),
+            modifier = Modifier.weight(1f)
         )
-        Spacer(modifier = Modifier.height(32.dp))
+
+        Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(vertical = 16.dp)
                 .fillMaxWidth(),
         ) {
             SecondaryButton(
                 onClick = onClearClick,
-                text = "Clear",
+                text = stringResource(R.string.wallet__filter_clear),
                 modifier = Modifier.weight(1f),
             )
             PrimaryButton(
                 onClick = onApplyClick,
-                text = "Apply",
+                text = stringResource(R.string.wallet__filter_apply),
                 modifier = Modifier.weight(1f),
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

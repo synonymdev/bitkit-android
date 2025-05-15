@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
@@ -37,8 +37,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun TagSelectorSheet() {
     val activity = activityListViewModel ?: return
     val app = appViewModel ?: return
-    val availableTags by activity.availableTags.collectAsState()
-    val selectedTags by activity.selectedTags.collectAsState()
+    val availableTags by activity.availableTags.collectAsStateWithLifecycle()
+    val selectedTags by activity.selectedTags.collectAsStateWithLifecycle()
 
     TagSelectorSheetContent(
         availableTags = availableTags,
@@ -92,23 +92,24 @@ private fun TagSelectorSheetContent(
         }
 
         Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(vertical = 16.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
         ) {
             SecondaryButton(
                 onClick = onClearClick,
-                text = "Clear",
+                text = stringResource(R.string.wallet__filter_clear),
                 modifier = Modifier.weight(1f),
             )
             PrimaryButton(
                 onClick = onApplyClick,
-                text = "Apply",
+                text = stringResource(R.string.wallet__filter_apply),
                 modifier = Modifier.weight(1f),
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
