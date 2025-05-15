@@ -88,7 +88,7 @@ fun SavingsWalletScreen(
                             )
                         }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
                     val activity = activityListViewModel ?: return@Column
                     val onchainActivities by activity.onchainActivities.collectAsState()
                     ActivityListGrouped(
