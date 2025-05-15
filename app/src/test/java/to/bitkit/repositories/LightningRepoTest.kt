@@ -15,6 +15,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.LnPeer
@@ -44,6 +45,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,

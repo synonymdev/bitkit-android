@@ -49,6 +49,7 @@ import to.bitkit.R
 import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodeLifecycleState.Running
+import to.bitkit.repositories.LightningState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
@@ -70,6 +71,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.WalletViewModelEffects
 
 private object ReceiveRoutes {
     const val QR = "qr"
@@ -80,10 +82,12 @@ private object ReceiveRoutes {
     const val LIQUIDITY_ADDITIONAL = "liquidity_additional"
     const val EDIT_INVOICE = "edit_invoice"
     const val ADD_TAG = "add_tag"
+    const val LOCATION_BLOCK = "location_block"
 }
 
 @Composable
 fun ReceiveQrSheet(
+    navigateToExternalConnection: () -> Unit,
     walletState: MainUiState,
     modifier: Modifier = Modifier,
 ) {
@@ -96,6 +100,7 @@ fun ReceiveQrSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+    val lightningState : LightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         try {
@@ -122,20 +127,37 @@ fun ReceiveQrSheet(
                 LaunchedEffect(cjitInvoice.value) {
                     showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
                 }
+
+                LaunchedEffect(Unit) {
+                    wallet.walletEffect.collect { effect ->
+                        when(effect) {
+                            WalletViewModelEffects.NavigateGeoBlockScreen -> {
+                                navController.navigate(ReceiveRoutes.LOCATION_BLOCK)
+                            }
+                        }
+                    }
+                }
+
                 ReceiveQrScreen(
                     cjitInvoice = cjitInvoice,
                     cjitActive = showCreateCjit,
                     walletState = walletState,
                     onCjitToggle = { active ->
-                        showCreateCjit.value = active
-                        if (!active) {
-                            cjitInvoice.value = null
-                        } else if (cjitInvoice.value == null) {
-                            navController.navigate(ReceiveRoutes.AMOUNT)
+                        when {
+                            active && lightningState.shouldBlockLightning -> navController.navigate(ReceiveRoutes.LOCATION_BLOCK)
+
+                            !active -> {
+                                showCreateCjit.value = false
+                                cjitInvoice.value = null
+                            }
+                            active && cjitInvoice.value == null -> {
+                                showCreateCjit.value = true
+                                navController.navigate(ReceiveRoutes.AMOUNT)
+                            }
                         }
                     },
                     onClickEditInvoice = { navController.navigate(ReceiveRoutes.EDIT_INVOICE) },
-                    onClickReceiveOnSpending = { wallet.updateReceiveOnSpending() }
+                    onClickReceiveOnSpending = { wallet.toggleReceiveOnSpending() }
                 )
             }
             composable(ReceiveRoutes.AMOUNT) {
@@ -145,6 +167,12 @@ fun ReceiveQrSheet(
                         navController.navigate(ReceiveRoutes.CONFIRM)
                     },
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(ReceiveRoutes.LOCATION_BLOCK) {
+                LocationBlockScreen(
+                    onBackPressed = { navController.popBackStack() },
+                    navigateAdvancedSetup = navigateToExternalConnection
                 )
             }
             composable(ReceiveRoutes.CONFIRM) {

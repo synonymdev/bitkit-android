@@ -28,6 +28,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.PaymentType
@@ -83,6 +84,12 @@ class WalletRepo @Inject constructor(
 
     suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Refreshing bip21", context = TAG)
+
+        if (coreService.shouldBlockLightning()) {
+            _walletState.update {
+                it.copy(receiveOnSpendingBalance = false)
+            }
+        }
 
         //Reset invoice state
         _walletState.update {
@@ -283,8 +290,14 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(balanceInput = newText) }
     }
 
-    fun toggleReceiveOnSpendingBalance() {
+    suspend fun toggleReceiveOnSpendingBalance(): Result<Unit> = withContext(bgDispatcher) {
+        if (_walletState.value.receiveOnSpendingBalance == false && coreService.shouldBlockLightning()) {
+            return@withContext Result.failure(ServiceError.GeoBlocked)
+        }
+
         _walletState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
+
+        return@withContext Result.success(Unit)
     }
 
     fun addTagToSelected(newTag: String) {
@@ -307,7 +320,6 @@ class WalletRepo @Inject constructor(
     suspend fun updateBip21Invoice(
         amountSats: ULong? = null,
         description: String = "",
-        generateBolt11IfAvailable: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         try {
             updateBip21AmountSats(amountSats)
@@ -315,7 +327,7 @@ class WalletRepo @Inject constructor(
 
             val hasChannels = lightningRepo.hasChannels()
 
-            if (hasChannels && generateBolt11IfAvailable) {
+            if (hasChannels && _walletState.value.receiveOnSpendingBalance) {
                 lightningRepo.createInvoice(
                     amountSats = _walletState.value.bip21AmountSats,
                     description = _walletState.value.bip21Description

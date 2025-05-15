@@ -9,7 +9,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,6 +30,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 
 @HiltViewModel
@@ -52,6 +55,10 @@ class WalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
     val uiState = _uiState.asStateFlow()
+
+    private val _walletEffect = MutableSharedFlow<WalletViewModelEffects>(extraBufferCapacity = 1)
+    val walletEffect = _walletEffect.asSharedFlow()
+    private fun walletEffect(effect: WalletViewModelEffects) = viewModelScope.launch { _walletEffect.emit(effect) }
 
     init {
         collectStates()
@@ -181,13 +188,11 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(
         amountSats: ULong? = null,
-        generateBolt11IfAvailable: Boolean = true
     ) {
         viewModelScope.launch {
             walletRepo.updateBip21Invoice(
                 amountSats = amountSats,
                 description = walletState.value.bip21Description,
-                generateBolt11IfAvailable = generateBolt11IfAvailable,
             ).onFailure { error ->
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
@@ -198,12 +203,23 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateReceiveOnSpending() {
-        walletRepo.toggleReceiveOnSpendingBalance()
-        updateBip21Invoice(
-            amountSats = walletState.value.bip21AmountSats,
-            generateBolt11IfAvailable = walletState.value.receiveOnSpendingBalance
-        )
+    fun toggleReceiveOnSpending() {
+        viewModelScope.launch {
+            walletRepo.toggleReceiveOnSpendingBalance().onSuccess {
+                updateBip21Invoice(
+                    amountSats = walletState.value.bip21AmountSats,
+                )
+            }.onFailure { e ->
+                if (e is ServiceError.GeoBlocked) {
+                    walletEffect(WalletViewModelEffects.NavigateGeoBlockScreen)
+                    return@launch
+                }
+
+                updateBip21Invoice(
+                    amountSats = walletState.value.bip21AmountSats,
+                )
+            }
+        }
     }
 
     fun refreshBip21() {
@@ -424,3 +440,7 @@ data class MainUiState(
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
 )
+
+sealed interface WalletViewModelEffects {
+    data object NavigateGeoBlockScreen: WalletViewModelEffects
+}

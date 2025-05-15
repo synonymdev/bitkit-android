@@ -15,6 +15,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
@@ -44,6 +45,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
         whenever(appStorage.onchainAddress).thenReturn("")
         whenever(appStorage.bolt11).thenReturn("")
         whenever(appStorage.bip21).thenReturn("")
@@ -148,6 +150,19 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningRepo).newAddress()
+    }
+
+    @Test
+    fun `refreshBip21 should set receiveOnSpendingBalance as false if shouldBlockLightning is true`() = test {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
+        whenever(sut.getOnchainAddress()).thenReturn("")
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
+
+        val result = sut.refreshBip21()
+
+        assertTrue(result.isSuccess)
+        assertEquals(false, sut.walletState.value.receiveOnSpendingBalance)
     }
 
     @Test
@@ -274,7 +289,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(lightningRepo.hasChannels()).thenReturn(true)
         whenever(lightningRepo.createInvoice(1000uL, description = "test")).thenReturn(Result.success(testInvoice))
 
-        sut.updateBip21Invoice(amountSats = 1000uL, description = "test", generateBolt11IfAvailable = true).let { result ->
+        sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
             assertTrue(result.isSuccess)
             assertEquals(testInvoice, sut.walletState.value.bolt11)
         }
@@ -397,6 +412,19 @@ class WalletRepoTest : BaseUnitTest() {
         sut.toggleReceiveOnSpendingBalance()
 
         assertEquals(!initialValue, sut.walletState.value.receiveOnSpendingBalance)
+    }
+
+    @Test
+    fun `toggleReceiveOnSpendingBalance should return failure if shouldBlockLightning is true`() = test {
+        wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
+
+        if (sut.walletState.value.receiveOnSpendingBalance == true) {
+            sut.toggleReceiveOnSpendingBalance()
+        }
+
+        val result = sut.toggleReceiveOnSpendingBalance()
+
+        assert(result.isFailure)
     }
 
     @Test

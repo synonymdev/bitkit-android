@@ -12,6 +12,7 @@ import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
+import to.bitkit.models.LnPeer
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -122,6 +123,21 @@ class CoreService @Inject constructor(
             }
         }
     }
+
+    suspend fun getLspPeers(): List<LnPeer> {
+        val blocktankPeers = Env.trustedLnPeers
+        // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
+        // pseudocode idea:
+        // val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }.orEmpty()
+        return blocktankPeers
+    }
+
+    suspend fun getConnectedPeers(): List<LnPeer> = lightningService.peers.orEmpty()
+
+    suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
+
+    //TODO this is business logic, should be moved to the domain layer in the future
+    suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalNode()
 }
 
 // endregion
