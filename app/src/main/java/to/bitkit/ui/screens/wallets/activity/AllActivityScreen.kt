@@ -37,6 +37,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityListViewModel
 import uniffi.bitkitcore.Activity
+import androidx.compose.runtime.DisposableEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +60,12 @@ fun AllActivityScreen(
     LaunchedEffect(selectedTab) {
         // TODO on tab change: update filtered activities
         println("Selected filter tab: $selectedTab")
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.clearFilters()
+        }
     }
 
     AllActivityScreenContent(
