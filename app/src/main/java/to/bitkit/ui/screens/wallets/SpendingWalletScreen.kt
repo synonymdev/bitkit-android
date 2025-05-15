@@ -33,7 +33,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -105,7 +105,7 @@ fun SpendingWalletScreen(
 
                     val activity = activityListViewModel ?: return@Column
                     val lightningActivities by activity.lightningActivities.collectAsState()
-                    ActivityListWithHeaders(
+                    ActivityListGrouped(
                         items = lightningActivities,
                         showFooter = true,
                         onAllActivityButtonClick = onAllActivityButtonClick,

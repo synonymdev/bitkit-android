@@ -18,7 +18,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import uniffi.bitkitcore.Activity
 
 @Composable
-fun HomeActivityList(
+fun ActivityListSimple(
     items: List<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
@@ -51,8 +51,8 @@ fun HomeActivityList(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HomeActivityList(
-            testActivityItems,
+        ActivityListSimple(
+            items = testActivityItems,
             onAllActivityClick = {},
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
@@ -64,7 +64,7 @@ private fun Preview() {
 @Composable
 private fun PreviewEmpty() {
     AppThemeSurface {
-        HomeActivityList(
+        ActivityListSimple(
             items = emptyList(),
             onAllActivityClick = {},
             onActivityItemClick = {},
