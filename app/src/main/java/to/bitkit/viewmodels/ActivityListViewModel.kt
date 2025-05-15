@@ -18,6 +18,8 @@ import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
 import javax.inject.Inject
+import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
+import uniffi.bitkitcore.PaymentType
 
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
@@ -66,6 +68,16 @@ class ActivityListViewModel @Inject constructor(
     val availableTags = _availableTags.asStateFlow()
 
     private var isClearingFilters = false
+
+    private val _selectedTab = MutableStateFlow(ActivityTab.ALL)
+    val selectedTab = _selectedTab.asStateFlow()
+
+    fun setTab(tab: ActivityTab) {
+        _selectedTab.value = tab
+        viewModelScope.launch(bgDispatcher) {
+            updateFilteredActivities()
+        }
+    }
 
     init {
         viewModelScope.launch(bgDispatcher) {
@@ -138,13 +150,25 @@ class ActivityListViewModel @Inject constructor(
 
     private suspend fun updateFilteredActivities() {
         try {
-            _filteredActivities.value = coreService.activity.get(
+            var txType: PaymentType? = when (_selectedTab.value) {
+                ActivityTab.SENT -> PaymentType.SENT
+                ActivityTab.RECEIVED -> PaymentType.RECEIVED
+                ActivityTab.OTHER, ActivityTab.ALL -> null
+            }
+
+            val activities = coreService.activity.get(
                 filter = ActivityFilter.ALL,
+                txType = txType,
                 tags = _selectedTags.value.takeIf { it.isNotEmpty() }?.toList(),
                 search = _searchText.value.takeIf { it.isNotEmpty() },
                 minDate = _startDate.value?.let { it / 1000 }?.toULong(),
                 maxDate = _endDate.value?.let { it / 1000 }?.toULong(),
             )
+
+            _filteredActivities.value = when (_selectedTab.value) {
+                ActivityTab.OTHER -> activities.filter { it is Activity.Onchain && it.v1.isTransfer }
+                else -> activities
+            }
         } catch (e: Exception) {
             Logger.error("Failed to filter activities", e)
         }

@@ -53,14 +53,9 @@ fun AllActivityScreen(
     val selectedTags by viewModel.selectedTags.collectAsState()
     val startDate by viewModel.startDate.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
+    val selectedTab by viewModel.selectedTab.collectAsState()
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
-
-    LaunchedEffect(selectedTab) {
-        // TODO on tab change: update filtered activities
-        println("Selected filter tab: $selectedTab")
-    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -76,7 +71,7 @@ fun AllActivityScreen(
         hasDateRangeFilter = startDate != null,
         tabs = tabs,
         currentTabIndex = currentTabIndex,
-        onTabChange = { selectedTab = tabs[it] },
+        onTabChange = { viewModel.setTab(tabs[it]) },
         onBackClick = onBackClick,
         onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
         onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
