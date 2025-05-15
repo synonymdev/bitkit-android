@@ -41,12 +41,13 @@ fun ActivityListFilter(
     viewModel: ActivityListViewModel,
     onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
+    selectedTab: ActivityTab,
+    onTabSelected: (ActivityTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val searchText by viewModel.searchText.collectAsState()
     val selectedTags by viewModel.selectedTags.collectAsState()
     val startDate by viewModel.startDate.collectAsState()
-    var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
 
     val focusManager = LocalFocusManager.current
 
@@ -64,10 +65,7 @@ fun ActivityListFilter(
             onDateRangeClick()
         },
         selectedTab = selectedTab,
-        onTabSelected = {
-            // TODO on tab change: update filtered activities
-            selectedTab = it
-        },
+        onTabSelected = onTabSelected,
         modifier = modifier,
     )
 }

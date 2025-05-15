@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,12 @@ import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
+
+const val SwipeVelocityThreshold = 1500f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +72,30 @@ fun AllActivityScreen(
 ) {
     val app = appViewModel ?: return
     val filteredActivities by viewModel.filteredActivities.collectAsState()
+
+    var selectedTab by remember { mutableStateOf(ActivityTab.ALL) }
+    val tabEntries = ActivityTab.entries
+    val currentTabIndex = tabEntries.indexOf(selectedTab)
+    val velocityTracker = remember { VelocityTracker() }
+    val gestureModifier = Modifier.pointerInput(selectedTab) {
+        detectHorizontalDragGestures(
+            onHorizontalDrag = { change, dragAmount ->
+                velocityTracker.addPosition(change.uptimeMillis, change.position)
+            },
+            onDragEnd = {
+                val velocity = velocityTracker.calculateVelocity().x
+                if (velocity >= SwipeVelocityThreshold && currentTabIndex > 0) {
+                    selectedTab = tabEntries[currentTabIndex - 1]
+                } else if (velocity <= -SwipeVelocityThreshold && currentTabIndex < tabEntries.lastIndex) {
+                    selectedTab = tabEntries[currentTabIndex + 1]
+                }
+                velocityTracker.resetTracking()
+            },
+            onDragCancel = {
+                velocityTracker.resetTracking()
+            },
+        )
+    }
 
     Column {
         // Header with gradient background
@@ -89,16 +120,20 @@ fun AllActivityScreen(
                     viewModel = viewModel,
                     onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
                     onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
+                    selectedTab = selectedTab,
+                    onTabSelected = {
+                        // TODO on tab change: update filtered activities
+                        selectedTab = it
+                    },
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
-
         ActivityListWithHeaders(
             items = filteredActivities,
             onActivityItemClick = onActivityItemClick,
             onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = gestureModifier.padding(horizontal = 16.dp),
         )
     }
 }
