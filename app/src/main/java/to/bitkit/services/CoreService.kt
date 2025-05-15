@@ -354,7 +354,8 @@ class ActivityService(
                 "Gift for mom",
                 "Split dinner bill",
                 "Monthly rent",
-                "Gym membership"
+                "Gym membership",
+                "Very long invoice message to test truncation in list",
             )
 
             repeat(count) { i ->
