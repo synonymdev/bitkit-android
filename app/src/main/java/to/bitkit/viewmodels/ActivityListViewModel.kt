@@ -129,10 +129,10 @@ class ActivityListViewModel @Inject constructor(
         try {
             _filteredActivities.value = coreService.activity.get(
                 filter = ActivityFilter.ALL,
-                tags = if (_selectedTags.value.isEmpty()) null else _selectedTags.value.toList(),
-                search = if (_searchText.value.isEmpty()) null else _searchText.value,
-                minDate = _startDate.value?.toULong(),
-                maxDate = _endDate.value?.toULong(),
+                tags = _selectedTags.value.takeIf { it.isNotEmpty() }?.toList(),
+                search = _searchText.value.takeIf { it.isNotEmpty() },
+                minDate = _startDate.value?.let { it / 1000 }?.toULong(),
+                maxDate = _endDate.value?.let { it / 1000 }?.toULong(),
             )
         } catch (e: Exception) {
             Logger.error("Failed to filter activities", e)

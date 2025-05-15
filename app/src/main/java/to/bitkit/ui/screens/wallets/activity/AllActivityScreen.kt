@@ -55,9 +55,6 @@ fun AllActivityScreen(
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
 
-    val hasTagFilter = selectedTags.isNotEmpty()
-    val hasDateRangeFilter = startDate != null
-
     LaunchedEffect(selectedTab) {
         // TODO on tab change: update filtered activities
         println("Selected filter tab: $selectedTab")
@@ -67,8 +64,8 @@ fun AllActivityScreen(
         filteredActivities = filteredActivities,
         searchText = searchText,
         onSearchTextChange = { viewModel.setSearchText(it) },
-        hasTagFilter = hasTagFilter,
-        hasDateRangeFilter = hasDateRangeFilter,
+        hasTagFilter = selectedTags.isNotEmpty(),
+        hasDateRangeFilter = startDate != null,
         tabs = tabs,
         currentTabIndex = currentTabIndex,
         onTabChange = { selectedTab = tabs[it] },
