@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
@@ -31,7 +32,10 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.ActivityListViewModel
+import uniffi.bitkitcore.Activity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,11 +55,48 @@ fun AllActivityScreen(
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
 
+    val hasTagFilter = selectedTags.isNotEmpty()
+    val hasDateRangeFilter = startDate != null
+
     LaunchedEffect(selectedTab) {
         // TODO on tab change: update filtered activities
         println("Selected filter tab: $selectedTab")
     }
 
+    AllActivityScreenContent(
+        filteredActivities = filteredActivities,
+        searchText = searchText,
+        onSearchTextChange = { viewModel.setSearchText(it) },
+        hasTagFilter = hasTagFilter,
+        hasDateRangeFilter = hasDateRangeFilter,
+        tabs = tabs,
+        currentTabIndex = currentTabIndex,
+        onTabChange = { selectedTab = tabs[it] },
+        onBackClick = onBackClick,
+        onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
+        onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
+        onActivityItemClick = onActivityItemClick,
+        onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AllActivityScreenContent(
+    filteredActivities: List<Activity>?,
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    hasTagFilter: Boolean,
+    hasDateRangeFilter: Boolean,
+    tabs: List<ActivityTab>,
+    currentTabIndex: Int,
+    onTabChange: (Int) -> Unit,
+    onBackClick: () -> Unit,
+    onTagClick: () -> Unit,
+    onDateRangeClick: () -> Unit,
+    onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
+) {
     Column {
         Column(
             modifier = Modifier
@@ -70,14 +111,14 @@ fun AllActivityScreen(
             ) {
                 ActivityListFilter(
                     searchText = searchText,
-                    onSearchTextChange = { viewModel.setSearchText(it) },
-                    hasTagFilter = selectedTags.isNotEmpty(),
-                    hasDateRangeFilter = startDate != null,
-                    onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
-                    onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
+                    onSearchTextChange = onSearchTextChange,
+                    hasTagFilter = hasTagFilter,
+                    hasDateRangeFilter = hasDateRangeFilter,
+                    onTagClick = onTagClick,
+                    onDateRangeClick = onDateRangeClick,
                     tabs = tabs,
                     currentTabIndex = currentTabIndex,
-                    onTabChange = { selectedTab = it },
+                    onTabChange = { onTabChange(tabs.indexOf(it)) },
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -85,12 +126,12 @@ fun AllActivityScreen(
         ActivityListGrouped(
             items = filteredActivities,
             onActivityItemClick = onActivityItemClick,
-            onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
+            onEmptyActivityRowClick = onEmptyActivityRowClick,
             modifier = Modifier
                 .swipeToChangeTab(
                     currentTabIndex = currentTabIndex,
                     tabCount = tabs.size,
-                    onTabChange = { selectedTab = tabs[it] }
+                    onTabChange = onTabChange,
                 )
                 .padding(horizontal = 16.dp)
         )
@@ -117,6 +158,28 @@ private fun Modifier.swipeToChangeTab(currentTabIndex: Int, tabCount: Int, onTab
             onDragCancel = {
                 velocityTracker.resetTracking()
             },
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        AllActivityScreenContent(
+            filteredActivities = previewActivityItems,
+            searchText = "",
+            onSearchTextChange = {},
+            hasTagFilter = false,
+            hasDateRangeFilter = false,
+            tabs = ActivityTab.entries,
+            currentTabIndex = 0,
+            onTabChange = {},
+            onBackClick = {},
+            onTagClick = {},
+            onDateRangeClick = {},
+            onActivityItemClick = {},
+            onEmptyActivityRowClick = {},
         )
     }
 }
