@@ -112,7 +112,7 @@ fun ActivityDetailScreen(
         )
         if (showAddTagSheet) {
             ActivityAddTagSheet(
-                listViewModel =  listViewModel,
+                listViewModel = listViewModel,
                 activityViewModel = detailViewModel,
                 onDismiss = { showAddTagSheet = false },
             )
