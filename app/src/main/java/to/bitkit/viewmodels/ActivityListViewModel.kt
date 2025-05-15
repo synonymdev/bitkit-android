@@ -23,6 +23,9 @@ class ActivityListViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
+    private val _allActivityItems = MutableStateFlow<List<Activity>?>(null)
+    val allActivityItems = _allActivityItems.asStateFlow()
+
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
 
@@ -111,6 +114,9 @@ class ActivityListViewModel @Inject constructor(
                 // Fetch latest activities for the home screen
                 val limitLatest = 3u
                 _latestActivities.value = coreService.activity.get(filter = ActivityFilter.ALL, limit = limitLatest)
+
+                // Fetch all activities (unfiltered)
+                _allActivityItems.value = coreService.activity.get(filter = ActivityFilter.ALL)
 
                 // Fetch lightning and onchain activities
                 _lightningActivities.value = coreService.activity.get(filter = ActivityFilter.LIGHTNING)

@@ -75,7 +75,7 @@ fun ActivityDetailScreen(
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
+    val activities by listViewModel.allActivityItems.collectAsStateWithLifecycle()
     val item = activities?.find { it.rawId() == route.id }
         ?: return
 
