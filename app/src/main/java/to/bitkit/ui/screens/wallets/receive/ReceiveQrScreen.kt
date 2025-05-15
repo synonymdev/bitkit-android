@@ -444,7 +444,8 @@ private fun ReceiveQrSlide(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            modifier = Modifier.weight(1f, fill = false)
+            tipMessage = stringResource(R.string.wallet__receive_copied),
+            modifier = Modifier.weight(1f, fill = false),
         )
 
         Spacer(modifier = Modifier.height(16.dp))

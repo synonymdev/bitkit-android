@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import android.content.ClipData
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -12,11 +13,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,9 +29,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,14 +50,22 @@ import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import androidx.core.graphics.createBitmap
+import to.bitkit.ui.shared.util.clickableAlpha
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrCodeImage(
     content: String,
     modifier: Modifier = Modifier,
     logoPainter: Painter? = null,
+    tipMessage: String = "",
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
 ) {
+    val clipboard = LocalClipboardManager.current
+
+    val tooltipState = rememberTooltipState()
+    val coroutineScope = rememberCoroutineScope()
+
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
@@ -59,11 +76,24 @@ fun QrCodeImage(
         val bitmap = rememberQrBitmap(content, size)
 
         if (bitmap != null) {
-            Image(
-                painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
-                contentDescription = null,
-                contentScale = ContentScale.Inside,
-            )
+            Tooltip(
+                text = tipMessage,
+                tooltipState = tooltipState
+            ) {
+                Image(
+                    painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
+                    contentDescription = null,
+                    contentScale = ContentScale.Inside,
+                    modifier = if (tipMessage.isNotBlank()) {
+                        Modifier.clickableAlpha {
+                            coroutineScope.launch {
+                                tooltipState.show()
+                                clipboard.setText(AnnotatedString(content))
+                            }
+                        }
+                    } else Modifier
+                )
+            }
             logoPainter?.let {
                 Box(
                     contentAlignment = Alignment.Center,
