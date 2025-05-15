@@ -10,16 +10,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
+import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
-import javax.inject.Inject
-import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import uniffi.bitkitcore.PaymentType
+import javax.inject.Inject
 
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
@@ -96,7 +97,7 @@ class ActivityListViewModel @Inject constructor(
 
     @OptIn(FlowPreview::class)
     private fun observeSearchText() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             _searchText
                 .debounce(300)
                 .collect {
@@ -108,7 +109,7 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private fun observeDateRange() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             combine(_startDate, _endDate) { _, _ -> }
                 .collect {
                     if (!isClearingFilters) {
@@ -119,7 +120,7 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private fun observeSelectedTags() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             _selectedTags.collect {
                 if (!isClearingFilters) {
                     updateFilteredActivities()
@@ -129,7 +130,7 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private fun syncState() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 // Fetch latest activities for the home screen
                 val limitLatest = 3u
@@ -148,12 +149,12 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    private suspend fun updateFilteredActivities() {
+    private suspend fun updateFilteredActivities() = withContext(bgDispatcher) {
         try {
             var txType: PaymentType? = when (_selectedTab.value) {
                 ActivityTab.SENT -> PaymentType.SENT
                 ActivityTab.RECEIVED -> PaymentType.RECEIVED
-                ActivityTab.OTHER, ActivityTab.ALL -> null
+                else -> null
             }
 
             val activities = coreService.activity.get(
@@ -175,7 +176,7 @@ class ActivityListViewModel @Inject constructor(
     }
 
     fun updateAvailableTags() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 _availableTags.value = coreService.activity.allPossibleTags()
             } catch (e: Exception) {
