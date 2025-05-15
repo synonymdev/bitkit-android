@@ -24,7 +24,7 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -200,7 +200,7 @@ private fun formattedTime(timestamp: ULong): String {
 }
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
-    override val values: Sequence<Activity> get() = testActivityItems.asSequence()
+    override val values: Sequence<Activity> get() = previewActivityItems.asSequence()
 }
 
 @Preview(showBackground = true)

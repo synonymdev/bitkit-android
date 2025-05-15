@@ -21,7 +21,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.TertiaryButton
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import uniffi.bitkitcore.Activity
@@ -176,7 +176,7 @@ private fun Preview() {
     AppThemeSurface {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             ActivityListGrouped(
-                items = testActivityItems,
+                items = previewActivityItems,
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
             )

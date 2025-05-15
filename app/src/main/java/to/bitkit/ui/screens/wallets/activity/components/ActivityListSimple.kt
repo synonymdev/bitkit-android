@@ -13,7 +13,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.TertiaryButton
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
 import uniffi.bitkitcore.Activity
 
@@ -52,7 +52,7 @@ fun ActivityListSimple(
 private fun Preview() {
     AppThemeSurface {
         ActivityListSimple(
-            items = testActivityItems,
+            items = previewActivityItems,
             onAllActivityClick = {},
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
