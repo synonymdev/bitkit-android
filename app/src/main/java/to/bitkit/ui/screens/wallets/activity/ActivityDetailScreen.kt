@@ -145,7 +145,6 @@ private fun ActivityDetailContent(
             else -> item.v1.timestamp
         }
     }
-    val totalValue = item.totalValue()
     val paymentValue = when (item) {
         is Activity.Lightning -> item.v1.value
         is Activity.Onchain -> item.v1.value
@@ -168,7 +167,7 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = totalValue.toLong(),
+                sats = item.totalValue().toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f)

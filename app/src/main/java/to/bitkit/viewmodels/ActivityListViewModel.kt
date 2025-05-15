@@ -212,7 +212,6 @@ class ActivityListViewModel @Inject constructor(
 
                 updateFilteredActivities()
             } finally {
-                // Always re-enable automatic updates
                 isClearingFilters = false
             }
         }
