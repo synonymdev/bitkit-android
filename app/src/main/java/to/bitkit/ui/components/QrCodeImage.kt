@@ -87,8 +87,8 @@ fun QrCodeImage(
                     modifier = if (tipMessage.isNotBlank()) {
                         Modifier.clickableAlpha {
                             coroutineScope.launch {
-                                tooltipState.show()
                                 clipboard.setText(AnnotatedString(content))
+                                tooltipState.show()
                             }
                         }
                     } else Modifier
