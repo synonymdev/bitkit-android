@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -59,6 +62,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.PagerWithIndicator
@@ -100,7 +104,7 @@ fun ReceiveQrSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
-    val lightningState : LightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         try {
@@ -130,7 +134,7 @@ fun ReceiveQrSheet(
 
                 LaunchedEffect(Unit) {
                     wallet.walletEffect.collect { effect ->
-                        when(effect) {
+                        when (effect) {
                             WalletViewModelEffects.NavigateGeoBlockScreen -> {
                                 navController.navigate(ReceiveRoutes.LOCATION_BLOCK)
                             }
@@ -150,6 +154,7 @@ fun ReceiveQrSheet(
                                 showCreateCjit.value = false
                                 cjitInvoice.value = null
                             }
+
                             active && cjitInvoice.value == null -> {
                                 showCreateCjit.value = true
                                 navController.navigate(ReceiveRoutes.AMOUNT)
@@ -419,6 +424,7 @@ private fun ReceiveLightningFunds(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReceiveQrSlide(
     uri: String,
@@ -429,6 +435,9 @@ private fun ReceiveQrSlide(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
+    val qrButtonTooltipState = rememberTooltipState()
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -436,7 +445,8 @@ private fun ReceiveQrSlide(
         QrCodeImage(
             content = uri,
             logoPainter = qrLogoPainter,
-            modifier = Modifier.weight(1f, fill = false)
+            tipMessage = stringResource(R.string.wallet__receive_copied),
+            modifier = Modifier.weight(1f, fill = false),
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -459,21 +469,29 @@ private fun ReceiveQrSlide(
                     )
                 }
             )
-            PrimaryButton(
-                text = stringResource(R.string.common__copy),
-                size = ButtonSize.Small,
-                onClick = { clipboard.setText(AnnotatedString(uri)) },
-                fullWidth = false,
-                color = Colors.White10,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_copy),
-                        contentDescription = null,
-                        tint = Colors.Brand,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
+            Tooltip(
+                text = stringResource(R.string.wallet__receive_copied),
+                tooltipState = qrButtonTooltipState
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__copy),
+                    size = ButtonSize.Small,
+                    onClick = {
+                        clipboard.setText(AnnotatedString(uri))
+                        coroutineScope.launch { qrButtonTooltipState.show() }
+                    },
+                    fullWidth = false,
+                    color = Colors.White10,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = null,
+                            tint = Colors.Brand,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
@@ -532,6 +550,7 @@ private fun CopyValuesSlide(
 
 enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CopyAddressCard(
     title: String,
@@ -540,6 +559,10 @@ private fun CopyAddressCard(
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+
+    val tooltipState = rememberTooltipState()
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -559,21 +582,30 @@ private fun CopyAddressCard(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            PrimaryButton(
-                text = stringResource(R.string.common__copy),
-                size = ButtonSize.Small,
-                onClick = { clipboard.setText(AnnotatedString(address)) },
-                fullWidth = false,
-                color = Colors.White10,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_copy),
-                        contentDescription = null,
-                        tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
+
+            Tooltip(
+                text = stringResource(R.string.wallet__receive_copied),
+                tooltipState = tooltipState
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.common__copy),
+                    size = ButtonSize.Small,
+                    onClick = {
+                        clipboard.setText(AnnotatedString(address))
+                        coroutineScope.launch { tooltipState.show() }
+                    },
+                    fullWidth = false,
+                    color = Colors.White10,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_copy),
+                            contentDescription = null,
+                            tint = if (type == CopyAddressType.ONCHAIN) Colors.Brand else Colors.Purple,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,

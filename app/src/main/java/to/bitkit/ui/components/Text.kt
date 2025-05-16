@@ -349,6 +349,7 @@ fun CaptionB(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
@@ -361,7 +362,7 @@ fun CaptionB(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
         modifier = modifier,
         maxLines = maxLines,

@@ -5,18 +5,19 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,12 +26,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.WriterException
@@ -38,17 +42,24 @@ import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import androidx.core.graphics.createBitmap
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrCodeImage(
     content: String,
     modifier: Modifier = Modifier,
     logoPainter: Painter? = null,
+    tipMessage: String = "",
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
 ) {
+    val clipboard = LocalClipboardManager.current
+
+    val tooltipState = rememberTooltipState()
+    val coroutineScope = rememberCoroutineScope()
+
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
@@ -59,11 +70,24 @@ fun QrCodeImage(
         val bitmap = rememberQrBitmap(content, size)
 
         if (bitmap != null) {
-            Image(
-                painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
-                contentDescription = null,
-                contentScale = ContentScale.Inside,
-            )
+            Tooltip(
+                text = tipMessage,
+                tooltipState = tooltipState
+            ) {
+                Image(
+                    painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
+                    contentDescription = null,
+                    contentScale = ContentScale.Inside,
+                    modifier = if (tipMessage.isNotBlank()) {
+                        Modifier.clickableAlpha {
+                            coroutineScope.launch {
+                                clipboard.setText(AnnotatedString(content))
+                                tooltipState.show()
+                            }
+                        }
+                    } else Modifier
+                )
+            }
             logoPainter?.let {
                 Box(
                     contentAlignment = Alignment.Center,
