@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import to.bitkit.ui.theme.Colors
@@ -59,10 +60,10 @@ fun Modifier.clickableAlpha(
         )
 }
 
-fun Modifier.gradientBackground(): Modifier {
+fun Modifier.gradientBackground(startColor: Color = Colors.Gray6, endColor: Color = Colors.Black): Modifier {
     return this.background(
         brush = Brush.verticalGradient(
-            colors = listOf(Colors.Gray6, Colors.Black)
+            colors = listOf(startColor, endColor)
         )
     )
 }
