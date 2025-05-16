@@ -285,7 +285,7 @@ private fun OnChainDescription(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "± 20-60 minutes") //TODO GET FROM STATE
+                    BodySSB(text = "± 20-60 minutes")
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
