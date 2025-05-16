@@ -72,7 +72,6 @@ fun SendAndReviewScreen(
     onNavigateToPin: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    // TODO handle loading via uiState?
     var isLoading by rememberSaveable { mutableStateOf(false) }
     var showBiometrics by remember { mutableStateOf(false) }
 
@@ -285,7 +284,7 @@ private fun OnChainDescription(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "± 20-60 minutes")
+                    BodySSB(text = "± 20-60 minutes") //TODO GET FROM STATE
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
@@ -331,7 +330,7 @@ private fun LightningDescription(
                         tint = Colors.Purple,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
+                    BodySSB(text = "Instant (±$0.01)")
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
