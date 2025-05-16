@@ -209,6 +209,7 @@ class ActivityListViewModel @Inject constructor(
                 _selectedTags.value = emptySet()
                 _startDate.value = null
                 _endDate.value = null
+                _selectedTab.value = ActivityTab.ALL
 
                 updateFilteredActivities()
             } finally {
