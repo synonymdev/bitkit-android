@@ -60,10 +60,10 @@ import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
@@ -188,7 +188,10 @@ fun HomeScreen(
                 ) {
                     AllActivityScreen(
                         viewModel = activityListViewModel,
-                        onBackClick = { walletNavController.popBackStack() },
+                        onBack = {
+                            activityListViewModel.clearFilters()
+                            walletNavController.popBackStack()
+                        },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }

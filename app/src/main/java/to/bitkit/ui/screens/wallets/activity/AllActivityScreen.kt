@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Column
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -40,7 +40,7 @@ import uniffi.bitkitcore.Activity
 @Composable
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
-    onBackClick: () -> Unit,
+    onBack: () -> Unit,
     onActivityItemClick: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
@@ -54,11 +54,7 @@ fun AllActivityScreen(
     val tabs = ActivityTab.entries
     val currentTabIndex = tabs.indexOf(selectedTab)
 
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.clearFilters()
-        }
-    }
+    BackHandler { onBack() }
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
@@ -69,7 +65,7 @@ fun AllActivityScreen(
         tabs = tabs,
         currentTabIndex = currentTabIndex,
         onTabChange = { viewModel.setTab(tabs[it]) },
-        onBackClick = onBackClick,
+        onBackClick = onBack,
         onTagClick = { app.showSheet(BottomSheetType.ActivityTagSelector) },
         onDateRangeClick = { app.showSheet(BottomSheetType.ActivityDateRangeSelector) },
         onActivityItemClick = onActivityItemClick,
