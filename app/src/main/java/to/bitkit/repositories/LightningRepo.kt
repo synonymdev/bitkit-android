@@ -318,8 +318,15 @@ class LightningRepo @Inject constructor(
     suspend fun estimateFee(addressOrInvoice: String): Result<String> = executeWhenNodeRunning("Estimate fee") {
         val decoded = scannerService.decode(addressOrInvoice)
         when(decoded) {
-            is Scanner.Lightning -> TODO()
-            is Scanner.OnChain -> TODO()
+            is Scanner.Lightning -> {
+                decoded.invoice
+                return@executeWhenNodeRunning Result.success("")
+            }
+            is Scanner.OnChain -> {
+                val result = scannerService.validateBitcoinAddress(decoded.invoice.address)
+                val addressType = result.addressType
+                return@executeWhenNodeRunning Result.success("")
+            }
             is Scanner.OrangeTicket -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
             is Scanner.LnurlAddress -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
             is Scanner.LnurlAuth -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
