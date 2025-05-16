@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,6 +40,7 @@ fun SuggestionCard(
     Box(
         modifier = modifier
             .size(152.dp)
+            .clip(ShapeDefaults.Large)
             .gradientBackground(gradientColor)
             .clickableAlpha { onClick() }
     ) {
@@ -55,25 +58,27 @@ fun SuggestionCard(
                 Image(
                     painter = painterResource(icon),
                     contentDescription = null,
-                    modifier = Modifier.size(95.24.dp)
+                    modifier = Modifier.weight(1f)
                 )
 
                 IconButton(
-                    onClick = onClose
+                    onClick = onClose,
+                    modifier = Modifier.size(16.dp)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_x),
-                        contentDescription = null
+                        contentDescription = null,
+                        tint = Colors.White,
                     )
                 }
             }
 
-            Headline(
+            Headline20(
                 text = AnnotatedString(title),
                 color = Colors.White,
             )
 
-            BodyM(
+            CaptionB(
                 text = description,
                 color = Colors.White,
             )
