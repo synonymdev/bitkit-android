@@ -32,9 +32,12 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.ScannerService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.IBtInfo
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.validateBitcoinAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -51,6 +54,7 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
+    private val scannerService: ScannerService
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -309,6 +313,24 @@ class LightningRepo @Inject constructor(
             syncState()
             Result.success(txId)
         }
+
+
+    suspend fun estimateFee(addressOrInvoice: String): Result<String> = executeWhenNodeRunning("Estimate fee") {
+        val decoded = scannerService.decode(addressOrInvoice)
+        when(decoded) {
+            is Scanner.Lightning -> TODO()
+            is Scanner.OnChain -> TODO()
+            is Scanner.OrangeTicket -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.LnurlAddress -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.LnurlAuth -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.LnurlChannel -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.LnurlPay -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.LnurlWithdraw -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.NodeId -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.PubkyAuth -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+            is Scanner.TreasureHunt -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
+        }
+    }
 
     suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("Get payments") {
         val payments = lightningService.payments
