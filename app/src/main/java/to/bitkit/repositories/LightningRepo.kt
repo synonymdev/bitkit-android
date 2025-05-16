@@ -315,7 +315,7 @@ class LightningRepo @Inject constructor(
         }
 
 
-    suspend fun estimateFee(addressOrInvoice: String): Result<String> = executeWhenNodeRunning("Estimate fee") {
+    suspend fun estimateFee(addressOrInvoice: String, speed: TransactionSpeed? = null): Result<String> = executeWhenNodeRunning("Estimate fee") {
         val decoded = scannerService.decode(addressOrInvoice)
         when(decoded) {
             is Scanner.Lightning -> {
@@ -324,7 +324,13 @@ class LightningRepo @Inject constructor(
             }
             is Scanner.OnChain -> {
                 val result = scannerService.validateBitcoinAddress(decoded.invoice.address)
+
                 val addressType = result.addressType
+                var fees = coreService.blocktank.getFees().getOrThrow()
+                val transactionSpeed = speed ?: settingsStore.defaultTransactionSpeed.first()
+                var satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+
+
                 return@executeWhenNodeRunning Result.success("")
             }
             is Scanner.OrangeTicket -> return@executeWhenNodeRunning Result.failure<String>(Exception("Not supported $decoded"))
