@@ -7,10 +7,10 @@ import to.bitkit.R
 import to.bitkit.ui.theme.Colors
 
 enum class Suggestion(
-    @StringRes title: Int,
-    @StringRes description: Int,
-    @DrawableRes icon: Int,
-    color: Color
+    @StringRes val title: Int,
+    @StringRes val description: Int,
+    @DrawableRes val icon: Int,
+    val color: Color
 ) {
     BUY(
         title = R.string.cards__buyBitcoin__title,
