@@ -38,6 +38,7 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
+import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -50,7 +51,6 @@ import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -89,7 +89,9 @@ fun ActivityDetailScreen(
         detailViewModel.setActivity(item)
     }
 
-    ScreenColumn {
+    Column(
+        modifier = Modifier.background(Colors.Black)
+    ) {
         AppTopBar(
             titleText = stringResource(item.getScreenTitleRes()),
             onBackClick = onBackClick,
@@ -111,6 +113,7 @@ fun ActivityDetailScreen(
         )
         if (showAddTagSheet) {
             ActivityAddTagSheet(
+                listViewModel = listViewModel,
                 activityViewModel = detailViewModel,
                 onDismiss = { showAddTagSheet = false },
             )
@@ -142,13 +145,6 @@ private fun ActivityDetailContent(
             else -> item.v1.timestamp
         }
     }
-    val value = when (item) {
-        is Activity.Lightning -> item.v1.value
-        is Activity.Onchain -> when {
-            isSent -> item.v1.value + item.v1.fee
-            else -> item.v1.value
-        }
-    }
     val paymentValue = when (item) {
         is Activity.Lightning -> item.v1.value
         is Activity.Onchain -> item.v1.value
@@ -171,7 +167,7 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = value.toLong(),
+                sats = item.totalValue().toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f)

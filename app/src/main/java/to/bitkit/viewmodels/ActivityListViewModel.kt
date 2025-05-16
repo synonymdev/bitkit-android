@@ -3,22 +3,28 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
+import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.PaymentType
 import javax.inject.Inject
 
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -43,7 +49,7 @@ class ActivityListViewModel @Inject constructor(
     val startDate = _startDate.asStateFlow()
 
     private val _endDate = MutableStateFlow<Long?>(null)
-    // val endDate = _endDate.asStateFlow()
+    val endDate = _endDate.asStateFlow()
 
     private val _selectedTags = MutableStateFlow<Set<String>>(emptySet())
     val selectedTags = _selectedTags.asStateFlow()
@@ -62,8 +68,20 @@ class ActivityListViewModel @Inject constructor(
     private val _availableTags = MutableStateFlow<List<String>>(emptyList())
     val availableTags = _availableTags.asStateFlow()
 
+    private var isClearingFilters = false
+
+    private val _selectedTab = MutableStateFlow(ActivityTab.ALL)
+    val selectedTab = _selectedTab.asStateFlow()
+
+    fun setTab(tab: ActivityTab) {
+        _selectedTab.value = tab
+        viewModelScope.launch(bgDispatcher) {
+            updateFilteredActivities()
+        }
+    }
+
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             ldkNodeEventBus.events.collect {
                 // TODO: sync only on specific events for better performance
                 syncLdkNodePayments()
@@ -79,34 +97,40 @@ class ActivityListViewModel @Inject constructor(
 
     @OptIn(FlowPreview::class)
     private fun observeSearchText() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             _searchText
                 .debounce(300)
                 .collect {
-                    updateFilteredActivities()
+                    if (!isClearingFilters) {
+                        updateFilteredActivities()
+                    }
                 }
         }
     }
 
     private fun observeDateRange() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             combine(_startDate, _endDate) { _, _ -> }
                 .collect {
-                    updateFilteredActivities()
+                    if (!isClearingFilters) {
+                        updateFilteredActivities()
+                    }
                 }
         }
     }
 
     private fun observeSelectedTags() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             _selectedTags.collect {
-                updateFilteredActivities()
+                if (!isClearingFilters) {
+                    updateFilteredActivities()
+                }
             }
         }
     }
 
     private fun syncState() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 // Fetch latest activities for the home screen
                 val limitLatest = 3u
@@ -125,22 +149,34 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    private suspend fun updateFilteredActivities() {
+    private suspend fun updateFilteredActivities() = withContext(bgDispatcher) {
         try {
-            _filteredActivities.value = coreService.activity.get(
+            var txType: PaymentType? = when (_selectedTab.value) {
+                ActivityTab.SENT -> PaymentType.SENT
+                ActivityTab.RECEIVED -> PaymentType.RECEIVED
+                else -> null
+            }
+
+            val activities = coreService.activity.get(
                 filter = ActivityFilter.ALL,
-                tags = if (_selectedTags.value.isEmpty()) null else _selectedTags.value.toList(),
-                search = if (_searchText.value.isEmpty()) null else _searchText.value,
-                minDate = _startDate.value?.toULong(),
-                maxDate = _endDate.value?.toULong(),
+                txType = txType,
+                tags = _selectedTags.value.takeIf { it.isNotEmpty() }?.toList(),
+                search = _searchText.value.takeIf { it.isNotEmpty() },
+                minDate = _startDate.value?.let { it / 1000 }?.toULong(),
+                maxDate = _endDate.value?.let { it / 1000 }?.toULong(),
             )
+
+            _filteredActivities.value = when (_selectedTab.value) {
+                ActivityTab.OTHER -> activities.filter { it is Activity.Onchain && it.v1.isTransfer }
+                else -> activities
+            }
         } catch (e: Exception) {
             Logger.error("Failed to filter activities", e)
         }
     }
 
-    private fun updateAvailableTags() {
-        viewModelScope.launch {
+    fun updateAvailableTags() {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 _availableTags.value = coreService.activity.allPossibleTags()
             } catch (e: Exception) {
@@ -164,6 +200,23 @@ class ActivityListViewModel @Inject constructor(
         _selectedTags.value = mutableSetOf()
     }
 
+    fun clearFilters() {
+        viewModelScope.launch(bgDispatcher) {
+            try {
+                isClearingFilters = true
+
+                _searchText.value = ""
+                _selectedTags.value = emptySet()
+                _startDate.value = null
+                _endDate.value = null
+
+                updateFilteredActivities()
+            } finally {
+                isClearingFilters = false
+            }
+        }
+    }
+
     var isSyncingLdkNodePayments = false
     fun syncLdkNodePayments() {
         if (isSyncingLdkNodePayments) {
@@ -171,7 +224,7 @@ class ActivityListViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             isSyncingLdkNodePayments = true
             lightningRepo.getPayments()
                 .onSuccess {
@@ -184,46 +237,15 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    fun addTags(activityId: String, tags: List<String>) {
-        viewModelScope.launch {
-            try {
-                coreService.activity.appendTags(toActivityId = activityId, tags = tags)
-                syncState()
-            } catch (e: Exception) {
-                Logger.error("Failed to add tags to activity", e)
-            }
-        }
-    }
-
-    fun removeTags(activityId: String, tags: List<String>) {
-        viewModelScope.launch {
-            try {
-                coreService.activity.dropTags(fromActivityId = activityId, tags = tags)
-                syncState()
-            } catch (e: Exception) {
-                Logger.error("Failed to remove tags from activity", e)
-            }
-        }
-    }
-
-    suspend fun getActivitiesWithTag(tag: String): List<Activity> {
-        return try {
-            coreService.activity.get(tags = listOf(tag))
-        } catch (e: Exception) {
-            Logger.error("Failed get activities by tag", e)
-            emptyList()
-        }
-    }
-
     fun generateRandomTestData() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             coreService.activity.generateRandomTestData()
             syncState()
         }
     }
 
     fun removeAllActivities() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             coreService.activity.removeAll()
             syncState()
         }

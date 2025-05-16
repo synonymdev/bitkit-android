@@ -33,7 +33,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.ActivityListWithHeaders
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -88,10 +88,10 @@ fun SavingsWalletScreen(
                             )
                         }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
                     val activity = activityListViewModel ?: return@Column
                     val onchainActivities by activity.onchainActivities.collectAsState()
-                    ActivityListWithHeaders(
+                    ActivityListGrouped(
                         items = onchainActivities,
                         showFooter = true,
                         onAllActivityButtonClick = onAllActivityButtonClick,

@@ -252,11 +252,11 @@ class ActivityService(
                                 txType = payment.direction.toPaymentType(),
                                 status = state,
                                 value = payment.amountSats ?: 0u,
-                                fee = null, // TODO
-                                invoice = "lnbc123", // TODO
+                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                invoice = "lnbc123_todo", // TODO
                                 message = "",
                                 timestamp = payment.latestUpdateTimestamp,
-                                preimage = null,
+                                preimage = kind.preimage,
                                 createdAt = payment.latestUpdateTimestamp,
                                 updatedAt = payment.latestUpdateTimestamp,
                             )
@@ -370,7 +370,8 @@ class ActivityService(
                 "Gift for mom",
                 "Split dinner bill",
                 "Monthly rent",
-                "Gym membership"
+                "Gym membership",
+                "Very long invoice message to test truncation in list",
             )
 
             repeat(count) { i ->

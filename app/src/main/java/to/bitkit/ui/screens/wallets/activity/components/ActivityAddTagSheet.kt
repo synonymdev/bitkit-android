@@ -20,11 +20,13 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.ActivityDetailViewModel
+import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.TagsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityAddTagSheet(
+    listViewModel: ActivityListViewModel,
     activityViewModel: ActivityDetailViewModel,
     tagsViewModel: TagsViewModel = hiltViewModel(),
     onDismiss: () -> Unit,
@@ -38,6 +40,7 @@ fun ActivityAddTagSheet(
 
     DisposableEffect(Unit) {
         onDispose {
+            listViewModel.updateAvailableTags()
             tagsViewModel.onInputUpdated("")
         }
     }

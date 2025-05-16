@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -19,12 +20,14 @@ import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
 import to.bitkit.ext.rawId
+import to.bitkit.ext.totalValue
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.screens.wallets.activity.testActivityItems
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -70,6 +73,7 @@ fun ActivityRow(
         Spacer(modifier = Modifier.width(16.dp))
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(1f)
         ) {
             TransactionStatusText(
                 txType = txType,
@@ -91,9 +95,10 @@ fun ActivityRow(
             CaptionB(
                 text = subtitleText,
                 color = Colors.White64,
+                maxLines = 1,
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.width(16.dp))
         AmountView(
             item = item,
             prefix = amountPrefix,
@@ -141,47 +146,62 @@ private fun AmountView(
     item: Activity,
     prefix: String,
 ) {
+    val amount = item.totalValue()
+
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) {
+        AmountViewContent(
+            title = amount.toLong().formatToModernDisplay(),
+            titlePrefix = prefix,
+            subtitle = "$ 123.45",
+        )
+        return
+    }
+
     val currency = currencyViewModel ?: return
     val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
-    val amount = when (item) {
-        is Activity.Lightning -> item.v1.value
-        is Activity.Onchain -> when (item.v1.txType) {
-            PaymentType.SENT -> item.v1.value + item.v1.fee
-            else -> item.v1.value
-        }
-    }
+
     currency.convert(sats = amount.toLong())?.let { converted ->
         val btcComponents = converted.bitcoinDisplay(displayUnit)
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
-                ) {
-                    BodyMSB(text = prefix, color = Colors.White64)
-                    BodyMSB(text = btcComponents.value)
-                }
-                CaptionB(
-                    text = "${converted.symbol} ${converted.formatted}",
-                    color = Colors.White64,
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(1.dp),
-                ) {
-                    BodyMSB(text = prefix, color = Colors.White64)
-                    BodyMSB(text = "${converted.symbol} ${converted.formatted}")
-                }
-                CaptionB(
-                    text = btcComponents.value,
-                    color = Colors.White64,
-                )
-            }
+        if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+            AmountViewContent(
+                title = btcComponents.value,
+                titlePrefix = prefix,
+                subtitle = "${converted.symbol} ${converted.formatted}",
+            )
+        } else {
+            AmountViewContent(
+                title = "${converted.symbol} ${converted.formatted}",
+                titlePrefix = prefix,
+                subtitle = btcComponents.value,
+            )
         }
+    }
+}
+
+@Composable
+private fun AmountViewContent(
+    title: String,
+    titlePrefix: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            BodyMSB(text = titlePrefix, color = Colors.White64)
+            BodyMSB(text = title)
+        }
+        CaptionB(
+            text = subtitle,
+            color = Colors.White64,
+        )
     }
 }
 
@@ -200,7 +220,7 @@ private fun formattedTime(timestamp: ULong): String {
 }
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
-    override val values: Sequence<Activity> get() = testActivityItems.asSequence()
+    override val values: Sequence<Activity> get() = previewActivityItems.asSequence()
 }
 
 @Preview(showBackground = true)

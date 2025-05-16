@@ -3,9 +3,11 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
@@ -16,6 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val addressChecker: AddressChecker,
     private val coreService: CoreService,
 ) : ViewModel() {
@@ -34,7 +37,7 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun loadTags() {
         val id = activity?.rawId() ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 val activityTags = coreService.activity.tags(forActivityId = id)
                 _tags.value = activityTags
@@ -47,7 +50,7 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun removeTag(tag: String) {
         val id = activity?.rawId() ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 coreService.activity.dropTags(fromActivityId = id, tags = listOf(tag))
                 loadTags()
@@ -59,7 +62,7 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun addTag(tag: String) {
         val id = activity?.rawId() ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 val result = coreService.activity.appendTags(toActivityId = id, tags = listOf(tag))
                 if (result.isSuccess) {
@@ -72,7 +75,7 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun fetchTransactionDetails(txid: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             try {
                 // TODO replace with bitkit-core method when available
                 _txDetails.value = addressChecker.getTransaction(txid)
