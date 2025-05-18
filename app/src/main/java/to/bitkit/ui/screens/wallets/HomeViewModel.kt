@@ -26,51 +26,58 @@ class HomeViewModel @Inject constructor(
         setupSuggestionList()
     }
 
+    fun removeSuggestion(suggestion: Suggestion) {
+        appStorage.addSuggestionToRemovedList(suggestion)
+        _suggestions.update { it.filterNot { it == suggestion } }
+    }
+
     private fun setupSuggestionList() {
         viewModelScope.launch {
             val removedList = appStorage.getRemovedSuggestionList().mapNotNull { it.toSuggestionOrNull() }
 
             walletRepo.balanceState.collect { balanceState ->
-                    when {
-                        balanceState.totalLightningSats > 0uL -> { //With Lightning
-                            val filteredSuggestions = listOf(
-                                Suggestion.BACK_UP,
-                                Suggestion.SECURE,
-                                Suggestion.BUY,
-                                Suggestion.SUPPORT,
-                                Suggestion.INVITE,
-                                Suggestion.QUICK_PAY,
-                                Suggestion.SHOP,
-                                Suggestion.PROFILE,
-                            )
-                            _suggestions.update { filteredSuggestions }
-                        }
-                        balanceState.totalOnchainSats > 0uL -> { //Only on chain balance
-                            val filteredSuggestions = listOf(
-                                Suggestion.BACK_UP,
-                                Suggestion.SPEND,
-                                Suggestion.SECURE,
-                                Suggestion.BUY,
-                                Suggestion.SUPPORT,
-                                Suggestion.INVITE,
-                                Suggestion.SHOP,
-                                Suggestion.PROFILE,
-                            ).filterNot { it in removedList }
-                            _suggestions.update { filteredSuggestions }
-                        }
-                        else -> { //Empty wallet
-                            val filteredSuggestions = listOf(
-                                Suggestion.BUY,
-                                Suggestion.SPEND,
-                                Suggestion.BACK_UP,
-                                Suggestion.SECURE,
-                                Suggestion.SUPPORT,
-                                Suggestion.INVITE,
-                                Suggestion.PROFILE,
-                            ).filterNot { it in removedList }
-                            _suggestions.update { filteredSuggestions }
-                        }
+                when {
+                    balanceState.totalLightningSats > 0uL -> { //With Lightning
+                        val filteredSuggestions = listOf(
+                            Suggestion.BACK_UP,
+                            Suggestion.SECURE,
+                            Suggestion.BUY,
+                            Suggestion.SUPPORT,
+                            Suggestion.INVITE,
+                            Suggestion.QUICK_PAY,
+                            Suggestion.SHOP,
+                            Suggestion.PROFILE,
+                        )
+                        _suggestions.update { filteredSuggestions }
                     }
+
+                    balanceState.totalOnchainSats > 0uL -> { //Only on chain balance
+                        val filteredSuggestions = listOf(
+                            Suggestion.BACK_UP,
+                            Suggestion.SPEND,
+                            Suggestion.SECURE,
+                            Suggestion.BUY,
+                            Suggestion.SUPPORT,
+                            Suggestion.INVITE,
+                            Suggestion.SHOP,
+                            Suggestion.PROFILE,
+                        ).filterNot { it in removedList }
+                        _suggestions.update { filteredSuggestions }
+                    }
+
+                    else -> { //Empty wallet
+                        val filteredSuggestions = listOf(
+                            Suggestion.BUY,
+                            Suggestion.SPEND,
+                            Suggestion.BACK_UP,
+                            Suggestion.SECURE,
+                            Suggestion.SUPPORT,
+                            Suggestion.INVITE,
+                            Suggestion.PROFILE,
+                        ).filterNot { it in removedList }
+                        _suggestions.update { filteredSuggestions }
+                    }
+                }
             }
         }
     }

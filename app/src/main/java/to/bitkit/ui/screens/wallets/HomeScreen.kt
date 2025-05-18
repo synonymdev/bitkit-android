@@ -150,6 +150,12 @@ fun HomeScreen(
                             walletViewModel.onPullToRefresh()
                             activityListViewModel.syncLdkNodePayments()
                         },
+                        onRemoveSuggestion = { suggestion ->
+                            homeViewModel.removeSuggestion(suggestion)
+                        },
+                        onClickSuggestion = { suggestion ->
+
+                        },
                     )
                 }
                 composable<HomeRoutes.Savings>(
@@ -220,6 +226,8 @@ fun HomeScreen(
 private fun HomeContentView(
     uiState: MainUiState,
     suggestions: List<Suggestion>,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -290,8 +298,8 @@ private fun HomeContentView(
                                 title = stringResource(item.title),
                                 description = stringResource(item.description),
                                 icon = item.icon,
-                                onClose = {},
-                                onClick = {}
+                                onClose = { onRemoveSuggestion(item) },
+                                onClick = { onClickSuggestion(item) }
                             )
                         }
                     }
@@ -370,6 +378,8 @@ private fun HomeContentViewPreview() {
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
+            onClickSuggestion = {},
+            onRemoveSuggestion = {},
         )
     }
 }
