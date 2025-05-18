@@ -38,6 +38,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -138,8 +139,11 @@ fun HomeScreen(
                 startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
+                    val homeViewModel: HomeViewModel = hiltViewModel()
+                    val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     HomeContentView(
                         uiState = uiState,
+                        suggestions = suggestions,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
                         onRefresh = {
@@ -215,6 +219,7 @@ fun HomeScreen(
 @Composable
 private fun HomeContentView(
     uiState: MainUiState,
+    suggestions: List<Suggestion>,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -279,7 +284,7 @@ private fun HomeContentView(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(Suggestion.entries) { item ->
+                        items(suggestions) { item ->
                             SuggestionCard(
                                 gradientColor = item.color,
                                 title = stringResource(item.title),
@@ -361,6 +366,7 @@ private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
             uiState = MainUiState(),
+            suggestions = Suggestion.entries.toList(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
