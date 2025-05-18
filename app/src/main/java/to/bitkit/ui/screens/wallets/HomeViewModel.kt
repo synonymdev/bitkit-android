@@ -47,7 +47,7 @@ class HomeViewModel @Inject constructor(
                             Suggestion.QUICK_PAY,
                             Suggestion.SHOP,
                             Suggestion.PROFILE,
-                        )
+                        ).filterNot { it in removedList }
                         _suggestions.update { filteredSuggestions }
                     }
 
@@ -81,6 +81,4 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
-
-
 }

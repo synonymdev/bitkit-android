@@ -52,7 +52,9 @@ class AppStorage @Inject constructor(
 
         removedSuggestions.add(suggestion.name)
 
-        sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, removedSuggestions.toSet())
+        sharedPreferences.edit {
+            putStringSet(Key.REMOVED_SUGGESTION.name, removedSuggestions.toSet())
+        }
     }
 
     fun getRemovedSuggestionList() = sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toList()
