@@ -10,6 +10,8 @@
     <string name="cards__invite__description">Share Bitkit</string>
     <string name="cards__lightning__title">Spend</string>
     <string name="cards__lightning__description">Instant payments</string>
+    <string name="cards__shop__title">Shop</string>
+    <string name="cards__shop__description">Shop with Bitcoin</string>
     <string name="cards__lightningSettingUp__title">Transfer</string>
     <string name="cards__lightningSettingUp__description">In progress...</string>
     <string name="cards__lightningConnecting__title">Connecting</string>

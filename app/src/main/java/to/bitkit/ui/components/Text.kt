@@ -84,6 +84,27 @@ fun Headline(
 }
 
 @Composable
+fun Headline20(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    lineHeight: TextUnit = 20.sp,
+    color: Color = Colors.White,
+) {
+    Text(
+        text = text.toUpperCase(),
+        style = TextStyle(
+            fontWeight = FontWeight.Black,
+            fontSize = 20.sp,
+            lineHeight = lineHeight,
+            letterSpacing = (-.5).sp,
+            fontFamily = InterFontFamily,
+            color = color,
+        ),
+        modifier = modifier,
+    )
+}
+
+@Composable
 fun Title(
     text: String,
     modifier: Modifier = Modifier,
