@@ -165,23 +165,28 @@ fun HomeScreen(
                             homeViewModel.removeSuggestion(suggestion)
                         },
                         onClickSuggestion = { suggestion ->
-                            when(suggestion) {
+                            when (suggestion) {
                                 Suggestion.BUY -> {
-                                   rootNavController.navigate(Routes.BuyIntro)
-                            }
+                                    rootNavController.navigate(Routes.BuyIntro)
+                                }
+
                                 Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
                                     rootNavController.navigate(Routes.Funding)
                                 }
+
                                 Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.BackupWalletSettings)
                                 }
+
                                 Suggestion.SECURE -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.SecuritySettings)
                                 }
+
                                 Suggestion.SUPPORT -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: SUPPORT"))
                                 }
+
                                 Suggestion.INVITE -> {
                                     shareText(
                                         context,
@@ -190,14 +195,21 @@ fun HomeScreen(
                                             .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
                                     )
                                 }
+
                                 Suggestion.PROFILE -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: PROFILE"))
                                 }
+
                                 Suggestion.SHOP -> {
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
-                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
+                                    startActivity(
+                                        context,
+                                        intent,
+                                        null
+                                    ) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
                                 }
+
                                 Suggestion.QUICK_PAY -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: QUICK_PAY"))
