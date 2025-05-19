@@ -47,7 +47,7 @@ class HomeViewModel @Inject constructor(
                             Suggestion.QUICK_PAY,
                             Suggestion.SHOP,
                             Suggestion.PROFILE,
-                        )/*.filterNot { it in removedList } TODO DONT COMMIT */
+                        ).filterNot { it in removedList }
                         _suggestions.update { filteredSuggestions }
                     }
 
