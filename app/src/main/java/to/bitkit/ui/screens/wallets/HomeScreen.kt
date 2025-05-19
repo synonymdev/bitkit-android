@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -319,22 +320,26 @@ private fun HomeContentView(
                                 .padding(start = 16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LazyRow( //todo check onboarding visibility
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(suggestions, key = { it.name }) { item ->
-                            SuggestionCard(
-                                gradientColor = item.color,
-                                title = stringResource(item.title),
-                                description = stringResource(item.description),
-                                icon = item.icon,
-                                onClose = { onRemoveSuggestion(item) },
-                                onClick = { onClickSuggestion(item) }
-                            )
+                    AnimatedVisibility(suggestions.isNotEmpty()) { //todo check onboarding visibility
+                        Column {
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(suggestions, key = { it.name }) { item ->
+                                    SuggestionCard(
+                                        gradientColor = item.color,
+                                        title = stringResource(item.title),
+                                        description = stringResource(item.description),
+                                        icon = item.icon,
+                                        onClose = { onRemoveSuggestion(item) },
+                                        onClick = { onClickSuggestion(item) }
+                                    )
+                                }
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(32.dp))
