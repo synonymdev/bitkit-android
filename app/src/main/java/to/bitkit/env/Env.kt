@@ -120,4 +120,6 @@ internal object Env {
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
+    const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
+    const val BIT_REFILL_URL = "https://www.bitrefill.com/br/en/gift-cards/"
 }

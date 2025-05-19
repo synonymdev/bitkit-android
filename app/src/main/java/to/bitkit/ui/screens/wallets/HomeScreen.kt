@@ -165,7 +165,7 @@ fun HomeScreen(
                         onClickSuggestion = { suggestion ->
                             when(suggestion) {
                                 Suggestion.BUY -> {
-                                    val intent = Intent(Intent.ACTION_VIEW, "https://bitcoin.org/en/exchanges#international".toUri())
+                                    val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
                                     startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
                             }
                                 Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
@@ -186,8 +186,13 @@ fun HomeScreen(
                                             .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
                                     )
                                 }
-                                Suggestion.PROFILE -> TODO()
-                                Suggestion.SHOP -> TODO()
+                                Suggestion.PROFILE -> {
+                                    //TODO IMPLEMENT
+                                }
+                                Suggestion.SHOP -> {
+                                    val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
+                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
+                                }
                                 Suggestion.QUICK_PAY -> TODO()
                             }
                         },
