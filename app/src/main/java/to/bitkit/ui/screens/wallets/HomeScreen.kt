@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -177,7 +178,9 @@ fun HomeScreen(
                                 Suggestion.SECURE -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.SecuritySettings)
                                 }
-                                Suggestion.SUPPORT -> TODO()
+                                Suggestion.SUPPORT -> {
+                                    //TODO IMPLEMENT
+                                }
                                 Suggestion.INVITE -> {
                                     shareText(
                                         context,
@@ -193,7 +196,9 @@ fun HomeScreen(
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
                                     startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
                                 }
-                                Suggestion.QUICK_PAY -> TODO()
+                                Suggestion.QUICK_PAY -> {
+                                    //TODO IMPLEMENT
+                                }
                             }
                         },
                     )
@@ -341,7 +346,8 @@ private fun HomeContentView(
                                         description = stringResource(item.description),
                                         icon = item.icon,
                                         onClose = { onRemoveSuggestion(item) },
-                                        onClick = { onClickSuggestion(item) }
+                                        onClick = { onClickSuggestion(item) },
+                                        modifier = Modifier.testTag("SUGGESTION_${item.name}")
                                     )
                                 }
                             }
