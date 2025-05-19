@@ -132,7 +132,7 @@ fun HomeScreen(
                 is BottomSheetType.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                 is BottomSheetType.ActivityTagSelector -> TagSelectorSheet()
 
-                is BottomSheetType.Secure -> PinNavigationSheet(
+                is BottomSheetType.PinSetup -> PinNavigationSheet(
                     onDismiss = { appViewModel.hideSheet() },
                 )
 
@@ -175,8 +175,8 @@ fun HomeScreen(
                                 Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.BackupWalletSettings)
                                 }
-                                Suggestion.SECURE -> { //TODO IMPLEMENT BOTTOM SHEET
-                                    rootNavController.navigate(Routes.SecuritySettings)
+                                Suggestion.SECURE -> {
+                                    appViewModel.showSheet(BottomSheetType.PinSetup)
                                 }
                                 Suggestion.SUPPORT -> {
                                     //TODO IMPLEMENT
