@@ -14,7 +14,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat.startActivity
 import androidx.core.net.toUri
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -60,7 +59,7 @@ fun BuyIntroScreen(
             Spacer(Modifier.height(32.dp))
             PrimaryButton(text = stringResource(R.string.other__buy_button), onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
-                startActivity(context, intent, null)
+                context.startActivity(intent, null)
             })
             Spacer(Modifier.height(16.dp))
         }
