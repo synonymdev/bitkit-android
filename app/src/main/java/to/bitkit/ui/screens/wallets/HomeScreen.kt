@@ -166,7 +166,9 @@ fun HomeScreen(
                                     val intent = Intent(Intent.ACTION_VIEW, "https://bitcoin.org/en/exchanges#international".toUri())
                                     startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
                             }
-                                Suggestion.SPEND -> TODO()
+                                Suggestion.SPEND -> { //TODO IMPLEMENT BOTTOM SHEET
+                                    rootNavController.navigate(Routes.Funding)
+                                }
                                 Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.BackupWalletSettings)
                                 }
