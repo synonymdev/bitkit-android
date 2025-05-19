@@ -180,6 +180,7 @@ fun HomeScreen(
                                 }
                                 Suggestion.SUPPORT -> {
                                     //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: SUPPORT"))
                                 }
                                 Suggestion.INVITE -> {
                                     shareText(
@@ -191,6 +192,7 @@ fun HomeScreen(
                                 }
                                 Suggestion.PROFILE -> {
                                     //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: PROFILE"))
                                 }
                                 Suggestion.SHOP -> {
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
@@ -198,6 +200,7 @@ fun HomeScreen(
                                 }
                                 Suggestion.QUICK_PAY -> {
                                     //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: QUICK_PAY"))
                                 }
                             }
                         },
