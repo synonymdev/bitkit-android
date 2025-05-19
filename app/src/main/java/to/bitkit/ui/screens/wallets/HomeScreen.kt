@@ -66,6 +66,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -114,13 +115,12 @@ fun HomeScreen(
                     )
                 }
 
-                is BottomSheetType.ActivityDateRangeSelector -> {
-                    DateRangeSelectorSheet()
-                }
+                is BottomSheetType.ActivityDateRangeSelector -> DateRangeSelectorSheet()
+                is BottomSheetType.ActivityTagSelector -> TagSelectorSheet()
 
-                is BottomSheetType.ActivityTagSelector -> {
-                    TagSelectorSheet()
-                }
+                is BottomSheetType.Secure -> PinNavigationSheet(
+                    onDismiss = { appViewModel.hideSheet() },
+                )
 
                 null -> Unit
             }
