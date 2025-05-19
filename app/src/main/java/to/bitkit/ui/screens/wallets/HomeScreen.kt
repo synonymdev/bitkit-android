@@ -167,7 +167,9 @@ fun HomeScreen(
                                     startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
                             }
                                 Suggestion.SPEND -> TODO()
-                                Suggestion.BACK_UP -> TODO()
+                                Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
+                                    rootNavController.navigate(Routes.BackupWalletSettings)
+                                }
                                 Suggestion.SECURE -> TODO()
                                 Suggestion.SUPPORT -> TODO()
                                 Suggestion.INVITE -> TODO()
