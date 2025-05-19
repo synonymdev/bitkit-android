@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +40,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.startActivity
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -66,10 +70,10 @@ import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
+import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
@@ -83,6 +87,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
+
 
 @Composable
 fun HomeScreen(
@@ -141,6 +146,8 @@ fun HomeScreen(
                 composable<HomeRoutes.Home> {
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
+                    val context = LocalContext.current
+
                     HomeContentView(
                         uiState = uiState,
                         suggestions = suggestions,
@@ -154,7 +161,20 @@ fun HomeScreen(
                             homeViewModel.removeSuggestion(suggestion)
                         },
                         onClickSuggestion = { suggestion ->
-
+                            when(suggestion) {
+                                Suggestion.BUY -> {
+                                    val intent = Intent(Intent.ACTION_VIEW, "https://bitcoin.org/en/exchanges#international".toUri())
+                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
+                            }
+                                Suggestion.SPEND -> TODO()
+                                Suggestion.BACK_UP -> TODO()
+                                Suggestion.SECURE -> TODO()
+                                Suggestion.SUPPORT -> TODO()
+                                Suggestion.INVITE -> TODO()
+                                Suggestion.PROFILE -> TODO()
+                                Suggestion.SHOP -> TODO()
+                                Suggestion.QUICK_PAY -> TODO()
+                            }
                         },
                     )
                 }
@@ -288,7 +308,7 @@ private fun HomeContentView(
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
-                    LazyRow(
+                    LazyRow( //todo check onboarding visibility
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
