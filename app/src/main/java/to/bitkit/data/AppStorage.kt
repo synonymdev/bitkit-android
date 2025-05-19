@@ -4,21 +4,33 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import to.bitkit.di.json
 import to.bitkit.models.BalanceState
 import to.bitkit.models.Suggestion
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.reflect.KProperty
 
 const val APP_PREFS = "bitkit_prefs"
 
 // TODO use dataStore
+@Singleton
 class AppStorage @Inject constructor(
     @ApplicationContext private val appContext: Context,
 ) {
     val sharedPreferences: SharedPreferences
         get() = appContext.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+
+    private val _removedSuggestionsFlow = MutableStateFlow<List<String>>(emptyList())
+    val removedSuggestionsFlow: Flow<List<String>> = _removedSuggestionsFlow.asStateFlow()
+
+    init {
+        _removedSuggestionsFlow.value = getRemovedSuggestionList()
+    }
 
     var onchainAddress: String by SharedPrefDelegate(Key.ONCHAIN_ADDRESS)
     var bolt11: String by SharedPrefDelegate(Key.BOLT11)
@@ -46,8 +58,8 @@ class AppStorage @Inject constructor(
     }
 
     fun addSuggestionToRemovedList(suggestion: Suggestion) {
-
-        val removedSuggestions = sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toMutableList()
+        val removedSuggestions =
+            sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toMutableList()
         if (removedSuggestions.contains(suggestion.name)) return
 
         removedSuggestions.add(suggestion.name)
@@ -55,9 +67,12 @@ class AppStorage @Inject constructor(
         sharedPreferences.edit {
             putStringSet(Key.REMOVED_SUGGESTION.name, removedSuggestions.toSet())
         }
+
+        _removedSuggestionsFlow.value = removedSuggestions
     }
 
-    fun getRemovedSuggestionList() = sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toList()
+    private fun getRemovedSuggestionList() =
+        sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toList()
 
     enum class Key {
         ONCHAIN_ADDRESS,
@@ -69,9 +84,11 @@ class AppStorage @Inject constructor(
 
     fun clear() {
         sharedPreferences.edit { clear() }
+        _removedSuggestionsFlow.value = emptyList()
     }
 }
 
+@Suppress("unused")
 private class SharedPrefDelegate(private val key: AppStorage.Key) {
     operator fun getValue(thisRef: AppStorage, property: KProperty<*>): String {
         return thisRef.sharedPreferences.getString(key.name, "") ?: ""

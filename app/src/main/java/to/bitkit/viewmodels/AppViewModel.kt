@@ -24,6 +24,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.R
+import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -35,6 +36,7 @@ import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
@@ -69,6 +71,7 @@ class AppViewModel @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
     private val resourceProvider: ResourceProvider,
+    private val appStorage: AppStorage,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -827,6 +830,7 @@ class AppViewModel @Inject constructor(
 
     fun addPin(pin: String) {
         setIsPinOnLaunchEnabled(true)
+        appStorage.addSuggestionToRemovedList(Suggestion.SECURE)
         editPin(pin)
     }
 
