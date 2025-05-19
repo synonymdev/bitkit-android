@@ -59,7 +59,7 @@ fun BuyIntroScreen(
             Spacer(Modifier.height(32.dp))
             PrimaryButton(text = stringResource(R.string.other__buy_button), onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
-                context.startActivity(intent, null)
+                context.startActivity(intent)
             })
             Spacer(Modifier.height(16.dp))
         }

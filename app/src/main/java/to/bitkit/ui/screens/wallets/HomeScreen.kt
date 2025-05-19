@@ -168,7 +168,7 @@ fun HomeScreen(
                                     rootNavController.navigate(Routes.BuyIntro)
                                 }
 
-                                Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
+                                Suggestion.SPEND -> {
                                     rootNavController.navigate(Routes.Funding)
                                 }
 
@@ -203,7 +203,6 @@ fun HomeScreen(
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
                                     context.startActivity(
                                         intent,
-                                        null
                                     ) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
                                 }
 
