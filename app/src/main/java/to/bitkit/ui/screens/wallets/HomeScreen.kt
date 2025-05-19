@@ -370,6 +370,9 @@ private fun HomeContentView(
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
                     )
+
+                    // Scrollable empty space behind bottom buttons
+                    Spacer(modifier = Modifier.height(120.dp))
                 }
             }
             if (showEmptyState) {
