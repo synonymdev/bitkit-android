@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets
 
 import android.Manifest
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,6 +49,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.LocalBalances
@@ -78,6 +78,7 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.screenSlideIn
@@ -176,7 +177,14 @@ fun HomeScreen(
                                     rootNavController.navigate(Routes.SecuritySettings)
                                 }
                                 Suggestion.SUPPORT -> TODO()
-                                Suggestion.INVITE -> TODO()
+                                Suggestion.INVITE -> {
+                                    shareText(
+                                        context,
+                                        context.getString(R.string.settings__about__shareText)
+                                            .replace("{appStoreUrl}", Env.APP_STORE_URL)
+                                            .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
+                                    )
+                                }
                                 Suggestion.PROFILE -> TODO()
                                 Suggestion.SHOP -> TODO()
                                 Suggestion.QUICK_PAY -> TODO()

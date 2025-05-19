@@ -118,4 +118,6 @@ internal object Env {
     const val PIN_ATTEMPTS = 8
     const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
     const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
+    const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
+    const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 }
