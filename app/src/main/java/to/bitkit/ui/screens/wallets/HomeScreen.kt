@@ -41,7 +41,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat.startActivity
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -164,24 +163,28 @@ fun HomeScreen(
                             homeViewModel.removeSuggestion(suggestion)
                         },
                         onClickSuggestion = { suggestion ->
-                            when(suggestion) {
+                            when (suggestion) {
                                 Suggestion.BUY -> {
-                                    val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
-                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
-                            }
-                                Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
+                                    rootNavController.navigate(Routes.BuyIntro)
+                                }
+
+                                Suggestion.SPEND -> {
                                     rootNavController.navigate(Routes.Funding)
                                 }
+
                                 Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
                                     rootNavController.navigate(Routes.BackupWalletSettings)
                                 }
+
                                 Suggestion.SECURE -> {
                                     appViewModel.showSheet(BottomSheetType.PinSetup)
                                 }
+
                                 Suggestion.SUPPORT -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: SUPPORT"))
                                 }
+
                                 Suggestion.INVITE -> {
                                     shareText(
                                         context,
@@ -190,14 +193,18 @@ fun HomeScreen(
                                             .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
                                     )
                                 }
+
                                 Suggestion.PROFILE -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: PROFILE"))
                                 }
+
                                 Suggestion.SHOP -> {
+                                    //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
-                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
+                                    context.startActivity(intent)
                                 }
+
                                 Suggestion.QUICK_PAY -> {
                                     //TODO IMPLEMENT
                                     appViewModel.toast(Exception("Coming soon: QUICK_PAY"))
