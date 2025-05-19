@@ -326,7 +326,7 @@ private fun HomeContentView(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(suggestions) { item ->
+                        items(suggestions, key = { it.name }) { item ->
                             SuggestionCard(
                                 gradientColor = item.color,
                                 title = stringResource(item.title),
