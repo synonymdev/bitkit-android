@@ -21,7 +21,7 @@ fun PinNavigationSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.725f)
+            .fillMaxHeight(.775f)
     ) {
         NavHost(
             navController = navController,
