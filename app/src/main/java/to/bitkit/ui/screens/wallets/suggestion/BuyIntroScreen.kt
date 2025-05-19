@@ -20,7 +20,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -67,12 +67,12 @@ fun BuyIntroContent(
                     .weight(1f)
             )
 
-            Headline(
+            Display(
                 text = stringResource(R.string.other__buy_header).withAccent(accentColor = Colors.Brand),
                 color = Colors.White
             )
             Spacer(Modifier.height(8.dp))
-            BodyM(text = stringResource(R.string.other__buy_text), color = Colors.White)
+            BodyM(text = stringResource(R.string.other__buy_text), color = Colors.White64)
             Spacer(Modifier.height(32.dp))
             PrimaryButton(
                 text = stringResource(R.string.other__buy_button),
@@ -91,6 +91,6 @@ fun BuyIntroContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BuyIntroScreen(onBackClick = {})
+        BuyIntroContent(onBackClick = {}, removeSuggestion = {})
     }
 }
