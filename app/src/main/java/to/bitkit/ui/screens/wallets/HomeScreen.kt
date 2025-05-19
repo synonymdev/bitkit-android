@@ -1,9 +1,12 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -14,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
@@ -31,10 +36,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.startActivity
+import androidx.core.net.toUri
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -42,7 +51,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
+import to.bitkit.models.Suggestion
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -51,6 +62,7 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SheetHost
+import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
@@ -69,6 +81,7 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.screenSlideIn
@@ -78,6 +91,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
+
 
 @Composable
 fun HomeScreen(
@@ -133,13 +147,62 @@ fun HomeScreen(
                 startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
+                    val homeViewModel: HomeViewModel = hiltViewModel()
+                    val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
+                    val context = LocalContext.current
+
                     HomeContentView(
                         uiState = uiState,
+                        suggestions = suggestions,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
                         onRefresh = {
                             walletViewModel.onPullToRefresh()
                             activityListViewModel.syncLdkNodePayments()
+                        },
+                        onRemoveSuggestion = { suggestion ->
+                            homeViewModel.removeSuggestion(suggestion)
+                        },
+                        onClickSuggestion = { suggestion ->
+                            when(suggestion) {
+                                Suggestion.BUY -> {
+                                    val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
+                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
+                            }
+                                Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
+                                    rootNavController.navigate(Routes.Funding)
+                                }
+                                Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
+                                    rootNavController.navigate(Routes.BackupWalletSettings)
+                                }
+                                Suggestion.SECURE -> { //TODO IMPLEMENT BOTTOM SHEET
+                                    rootNavController.navigate(Routes.SecuritySettings)
+                                }
+                                Suggestion.SUPPORT -> {
+                                    //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: SUPPORT"))
+                                }
+                                Suggestion.INVITE -> {
+                                    shareText(
+                                        context,
+                                        context.getString(R.string.settings__about__shareText)
+                                            .replace("{appStoreUrl}", Env.APP_STORE_URL)
+                                            .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
+                                    )
+                                }
+                                Suggestion.PROFILE -> {
+                                    //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: PROFILE"))
+                                }
+                                Suggestion.SHOP -> {
+                                    val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
+                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
+                                }
+                                Suggestion.QUICK_PAY -> {
+                                    //TODO IMPLEMENT
+                                    appViewModel.toast(Exception("Coming soon: QUICK_PAY"))
+                                }
+                            }
                         },
                     )
                 }
@@ -213,6 +276,9 @@ fun HomeScreen(
 @Composable
 private fun HomeContentView(
     uiState: MainUiState,
+    suggestions: List<Suggestion>,
+    onRemoveSuggestion: (Suggestion) -> Unit,
+    onClickSuggestion: (Suggestion) -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -269,6 +335,29 @@ private fun HomeContentView(
                                 .padding(vertical = 4.dp)
                                 .padding(start = 16.dp)
                         )
+                    }
+                    AnimatedVisibility(suggestions.isNotEmpty()) {
+                        Column {
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(suggestions, key = { it.name }) { item ->
+                                    SuggestionCard(
+                                        gradientColor = item.color,
+                                        title = stringResource(item.title),
+                                        description = stringResource(item.description),
+                                        icon = item.icon,
+                                        onClose = { onRemoveSuggestion(item) },
+                                        onClick = { onClickSuggestion(item) },
+                                        modifier = Modifier.testTag("SUGGESTION_${item.name}")
+                                    )
+                                }
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
@@ -341,9 +430,12 @@ private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
             uiState = MainUiState(),
+            suggestions = Suggestion.entries.toList(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
+            onClickSuggestion = {},
+            onRemoveSuggestion = {},
         )
     }
 }

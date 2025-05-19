@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import to.bitkit.di.json
 import to.bitkit.models.BalanceState
+import to.bitkit.models.Suggestion
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.reflect.KProperty
@@ -44,11 +45,26 @@ class AppStorage @Inject constructor(
         }
     }
 
+    fun addSuggestionToRemovedList(suggestion: Suggestion) {
+
+        val removedSuggestions = sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toMutableList()
+        if (removedSuggestions.contains(suggestion.name)) return
+
+        removedSuggestions.add(suggestion.name)
+
+        sharedPreferences.edit {
+            putStringSet(Key.REMOVED_SUGGESTION.name, removedSuggestions.toSet())
+        }
+    }
+
+    fun getRemovedSuggestionList() = sharedPreferences.getStringSet(Key.REMOVED_SUGGESTION.name, setOf<String>()).orEmpty().toList()
+
     enum class Key {
         ONCHAIN_ADDRESS,
         BOLT11,
         BIP21,
         BALANCE,
+        REMOVED_SUGGESTION
     }
 
     fun clear() {
