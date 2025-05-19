@@ -330,7 +330,7 @@ private fun HomeContentView(
                                 .padding(start = 16.dp)
                         )
                     }
-                    AnimatedVisibility(suggestions.isNotEmpty()) { //todo check onboarding visibility
+                    AnimatedVisibility(suggestions.isNotEmpty()) {
                         Column {
                             Spacer(modifier = Modifier.height(32.dp))
                             Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
