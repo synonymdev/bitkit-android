@@ -57,9 +57,11 @@ import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
+import to.bitkit.ui.screens.wallets.HomeRoutes
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
+import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
@@ -253,6 +255,7 @@ fun ContentView(
                 qrScanner(appViewModel, navController)
                 authCheck(navController)
                 logs(navController)
+                suggestions(navController)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -702,6 +705,20 @@ private fun NavGraphBuilder.logs(
         )
     }
 }
+
+private fun NavGraphBuilder.suggestions(
+    navController: NavHostController,
+) {
+    composable<Routes.BuyIntro>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        BuyIntroScreen(
+            onBackClick = { navController.popBackStack() }
+        )
+    }
+}
+
 // endregion
 
 // region events
@@ -1010,4 +1027,7 @@ object Routes {
 
     @Serializable
     data object QrScanner
+
+    @Serializable
+    data object BuyIntro
 }

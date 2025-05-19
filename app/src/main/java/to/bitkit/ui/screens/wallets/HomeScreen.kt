@@ -78,6 +78,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
@@ -166,8 +167,7 @@ fun HomeScreen(
                         onClickSuggestion = { suggestion ->
                             when(suggestion) {
                                 Suggestion.BUY -> {
-                                    val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
-                                    startActivity(context, intent, null) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-203707&t=E5H5HCNBHpeWkaMf-4
+                                   rootNavController.navigate(Routes.BuyIntro)
                             }
                                 Suggestion.SPEND -> { //TODO IMPLEMENT SCREEN
                                     rootNavController.navigate(Routes.Funding)
