@@ -32,7 +32,7 @@ fun BuyIntroScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-    
+
     ScreenColumn {
 
         AppTopBar(
@@ -62,7 +62,7 @@ fun BuyIntroScreen(
                 val intent = Intent(Intent.ACTION_VIEW, Env.EXCHANGES_URL.toUri())
                 startActivity(context, intent, null)
             })
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
