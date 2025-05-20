@@ -126,7 +126,7 @@ internal object Env {
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
     const val SYNONYM_X = "https://twitter.com/bitkitwallet/"
     const val BITKIT_DISCORD = "https://discord.gg/DxTBJXvJxn"
-    const val BITKIT_TELEGRAM = "https://discord.gg/DxTBJXvJxn"
+    const val BITKIT_TELEGRAM = "https://t.me/bitkitchat"
     const val BITKIT_GITHUB = "https://github.com/synonymdev"
     const val BITKIT_HELP_CENTER = "https://help.bitkit.to"
 }
