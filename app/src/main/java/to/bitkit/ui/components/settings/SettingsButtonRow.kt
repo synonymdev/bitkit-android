@@ -65,7 +65,6 @@ fun SettingsButtonRow(
                     .fillMaxWidth()
                     .height(rowHeight)
                     .clickableAlpha(onClick = if (enabled) onClick else null)
-                    .padding(vertical = 0.dp)
             ) {
                 if (iconRes != null) {
                     Icon(
