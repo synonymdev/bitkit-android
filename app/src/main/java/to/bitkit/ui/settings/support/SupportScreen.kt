@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.support
 
 import android.content.Intent
 import androidx.compose.foundation.Image

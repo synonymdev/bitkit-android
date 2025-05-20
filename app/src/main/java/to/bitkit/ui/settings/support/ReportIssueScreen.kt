@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.support
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer

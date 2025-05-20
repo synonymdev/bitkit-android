@@ -57,7 +57,6 @@ import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
-import to.bitkit.ui.screens.wallets.HomeRoutes
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
@@ -74,10 +73,10 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
-import to.bitkit.ui.settings.ReportIssueScreen
+import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.SupportScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
