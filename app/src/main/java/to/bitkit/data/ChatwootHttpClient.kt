@@ -15,7 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ChatWootHttpClient @Inject constructor(
+class ChatwootHttpClient @Inject constructor(
     private val client: HttpClient,
 ) {
 
