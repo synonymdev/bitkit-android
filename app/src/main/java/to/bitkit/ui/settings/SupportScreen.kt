@@ -34,6 +34,7 @@ import to.bitkit.ui.theme.Colors
 fun SupportScreen(
     onBack: () -> Unit,
     onClose: () -> Unit,
+    navigateReportIssue: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -53,9 +54,7 @@ fun SupportScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            SettingsButtonRow(title = stringResource(R.string.settings__support__report), onClick = {
-                //TODO IMPLEMENT IN THE NEXT PR
-            })
+            SettingsButtonRow(title = stringResource(R.string.settings__support__report), onClick = navigateReportIssue)
             SettingsButtonRow(title = stringResource(R.string.settings__support__help), onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_HELP_CENTER.toUri())
                 context.startActivity(intent)
@@ -175,7 +174,8 @@ private fun Preview() {
     AppThemeSurface {
         SupportScreen(
             onBack = {},
-            onClose = {}
+            onClose = {},
+            navigateReportIssue = {}
         )
     }
 }

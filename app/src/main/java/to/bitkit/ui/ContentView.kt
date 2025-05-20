@@ -74,6 +74,7 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
+import to.bitkit.ui.settings.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.SupportScreen
@@ -725,6 +726,17 @@ private fun NavGraphBuilder.suggestions(
         SupportScreen (
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
+            navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
+        )
+    }
+
+    composable<Routes.ReportIssue>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueScreen (
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
         )
     }
 }
@@ -1043,4 +1055,7 @@ object Routes {
 
     @Serializable
     data object Support
+
+    @Serializable
+    data object ReportIssue
 }
