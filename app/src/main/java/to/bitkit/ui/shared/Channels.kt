@@ -21,12 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.lightningdevkit.ldknode.ChannelDetails
-import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ui.theme.Colors
 
@@ -40,7 +38,7 @@ fun Channels(
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = stringResource(R.string.channels),
+                text = "Channels",
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -104,7 +102,7 @@ private fun ChannelItemUi(
             ) {
                 Icon(
                     imageVector = Icons.Default.RemoveCircleOutline,
-                    contentDescription = stringResource(R.string.close),
+                    contentDescription = null,
                     tint = Colors.Red,
                     modifier = Modifier.size(16.dp)
                 )

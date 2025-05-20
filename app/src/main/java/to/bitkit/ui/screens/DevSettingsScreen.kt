@@ -46,8 +46,9 @@ fun DevSettingsScreen(
     navController: NavController,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     ScreenColumn {
-        AppTopBar(stringResource(R.string.dev_settings), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.settings__dev_title), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
@@ -131,7 +132,7 @@ fun NodeDetails(contentState: MainUiState) {
         }
         InfoField(
             value = contentState.nodeId,
-            label = stringResource(R.string.node_id),
+            label = stringResource(R.string.lightning__node_id),
             maxLength = 44,
             trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
         )

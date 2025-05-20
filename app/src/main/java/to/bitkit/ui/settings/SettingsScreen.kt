@@ -2,8 +2,6 @@ package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,8 +15,6 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.viewmodels.WalletViewModel
-import to.bitkit.ui.components.LabelText
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToBackupSettings
@@ -26,12 +22,13 @@ import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
 import to.bitkit.ui.navigateToLightning
+import to.bitkit.ui.navigateToLogs
 import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.navigateToSecuritySettings
-import to.bitkit.ui.navigateToLogs
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun SettingsScreen(
@@ -41,7 +38,7 @@ fun SettingsScreen(
     val activity = activityListViewModel ?: return
 
     ScreenColumn {
-        AppTopBar(stringResource(R.string.settings), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.settings__settings), onBackClick = { navController.popBackStack() })
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)

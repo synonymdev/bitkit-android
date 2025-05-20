@@ -43,7 +43,7 @@ fun BackupWalletScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.title_backup_wallet), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.security__mnemonic_your), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier

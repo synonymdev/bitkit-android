@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,12 +20,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import to.bitkit.R
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.NavButton
 import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.FullWidthTextButton
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -36,7 +37,7 @@ fun LightningSettingsScreen(
 ) {
     ScreenColumn {
         AppTopBar(
-            stringResource(R.string.lightning),
+            titleText = stringResource(R.string.lightning__connections),
             onBackClick = { navController.popBackStack() },
             actions = {
                 IconButton(onClick = { navController.navigateToTransferFunding() }) {
@@ -54,19 +55,11 @@ fun LightningSettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Column {
-                Text(
-                    text = "LDK",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(12.dp)
-                )
-                NavButton("Node State") { navController.navigateToNodeState() }
+                Caption13Up(text = "LDK", color = Colors.White64, modifier = Modifier.padding(12.dp))
+                NavButton(stringResource(R.string.settings__adv__lightning_node)) { navController.navigateToNodeState() }
             }
             Column {
-                Text(
-                    text = "Blocktank",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Caption13Up(text = "Blocktank", color = Colors.White64, modifier = Modifier.padding(12.dp))
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("Register for notifications") }
                     FullWidthTextButton(viewModel::debugLspNotifications) { Text("Self test notification") }

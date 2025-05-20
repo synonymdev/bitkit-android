@@ -2,18 +2,16 @@ package to.bitkit.ui.shared
 
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import to.bitkit.R
 import java.text.NumberFormat
 
 @Composable
 internal fun moneyString(
     value: Long?,
-    currency: String? = stringResource(R.string.sat),
+    currency: String? = "sat",
 ): AnnotatedString {
     if (value == null) return AnnotatedString("")
     val locale = java.util.Locale.GERMANY // hack to use periods, replace with:

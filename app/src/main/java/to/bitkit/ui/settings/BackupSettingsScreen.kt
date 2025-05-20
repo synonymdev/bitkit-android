@@ -22,15 +22,15 @@ fun BackupSettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.title_backup_settings), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.settings__backup__title), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            NavButton(stringResource(R.string.button_backup_wallet)) { navController.navigateToBackupWalletSettings() }
-            NavButton(stringResource(R.string.button_restore_wallet)) { navController.navigateToRestoreWalletSettings() }
+            NavButton(stringResource(R.string.settings__backup__wallet)) { navController.navigateToBackupWalletSettings() }
+            NavButton(stringResource(R.string.settings__backup__reset)) { navController.navigateToRestoreWalletSettings() }
         }
     }
 }

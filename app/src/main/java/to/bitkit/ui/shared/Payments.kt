@@ -25,12 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import to.bitkit.R
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -62,7 +60,7 @@ fun Payments(
                 ) {
                     Icon(
                         imageVector = Icons.Default.RocketLaunch,
-                        contentDescription = stringResource(R.string.pay),
+                        contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
                 }

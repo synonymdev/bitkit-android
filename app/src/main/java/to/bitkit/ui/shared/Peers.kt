@@ -37,7 +37,7 @@ internal fun Peers(
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = stringResource(R.string.peers),
+                text = "Peers",
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(modifier = Modifier.weight(1f))

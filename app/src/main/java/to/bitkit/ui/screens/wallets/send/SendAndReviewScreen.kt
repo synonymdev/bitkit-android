@@ -143,7 +143,7 @@ private fun SendAndReviewContent(
 ) {
     Box {
         Column(modifier = Modifier.fillMaxSize()) {
-            SheetTopBar(stringResource(R.string.title_send_review)) {
+            SheetTopBar(stringResource(R.string.wallet__send_review)) {
                 onBack()
             }
 

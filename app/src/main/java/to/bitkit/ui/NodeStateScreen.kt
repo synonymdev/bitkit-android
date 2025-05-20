@@ -47,13 +47,13 @@ fun NodeStateScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     ScreenColumn {
         AppTopBar(
-            stringResource(R.string.node_state),
+            stringResource(R.string.settings__adv__lightning_node),
             onBackClick = { navController.popBackStack() },
             actions = {
                 IconButton(viewModel::refreshState) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.sync),
+                        contentDescription = "Sync",
                     )
                 }
             })
@@ -135,7 +135,7 @@ fun NodeStateScreen(
             }
             InfoField(
                 value = uiState.nodeId,
-                label = stringResource(R.string.node_id),
+                label = stringResource(R.string.lightning__node_id),
                 maxLength = 44,
                 trailingIcon = { CopyToClipboardButton(uiState.nodeId) },
             )

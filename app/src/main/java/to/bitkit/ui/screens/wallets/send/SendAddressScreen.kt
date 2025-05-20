@@ -36,7 +36,7 @@ fun SendAddressScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        SheetTopBar(stringResource(R.string.title_send)) {
+        SheetTopBar(stringResource(R.string.wallet__send_bitcoin)) {
             onEvent(SendEvent.AddressReset)
             onBack()
         }
@@ -65,7 +65,7 @@ fun SendAddressScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             PrimaryButton(
-                text = stringResource(R.string.continue_button),
+                text = stringResource(R.string.common__continue),
                 enabled = uiState.isAddressInputValid,
                 onClick = { onEvent(SendEvent.AddressContinue(uiState.addressInput)) },
             )

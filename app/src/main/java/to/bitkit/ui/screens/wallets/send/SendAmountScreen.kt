@@ -100,7 +100,7 @@ fun SendAmountContent(
             .gradientBackground()
             .testTag("send_amount_screen")
     ) {
-        SheetTopBar(stringResource(R.string.title_send_amount)) {
+        SheetTopBar(stringResource(R.string.wallet__send_amount)) {
             onEvent(SendEvent.AmountReset)
             onBack()
         }
@@ -195,7 +195,7 @@ private fun SendAmountNodeRunning(
         Spacer(modifier = Modifier.height(41.dp))
 
         PrimaryButton(
-            text = stringResource(R.string.continue_button),
+            text = stringResource(R.string.common__continue),
             enabled = uiState.isAmountInputValid,
             onClick = { onEvent(SendEvent.AmountContinue(uiState.amountInput)) },
             modifier = Modifier.testTag("continue_button")
@@ -221,8 +221,8 @@ private fun PaymentMethodButton(
     ) {
         Text13Up(
             text = when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> stringResource(R.string.savings)
-                SendMethod.LIGHTNING -> stringResource(R.string.spending)
+                SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
+                SendMethod.LIGHTNING -> stringResource(R.string.wallet__spending__title)
             },
             color = when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> Colors.Brand

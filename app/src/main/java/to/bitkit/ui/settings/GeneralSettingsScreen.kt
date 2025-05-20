@@ -13,20 +13,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToDefaultUnitSettings
+import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToLocalCurrencySettings
 import to.bitkit.ui.navigateToTransactionSpeedSettings
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.utils.displayText
-import to.bitkit.models.TransactionSpeed
-import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.CloseNavIcon
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.displayText
 
 @Composable
 fun GeneralSettingsScreen(
@@ -71,16 +71,18 @@ private fun GeneralSettingsContent(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             SettingsButtonRow(
-                title = stringResource(R.string.local_currency),
+                title = stringResource(R.string.settings__general__currency_local),
                 value = SettingsButtonValue.StringValue(selectedCurrency),
                 onClick = onLocalCurrencyClick,
             )
             SettingsButtonRow(
-                title = stringResource(R.string.default_unit),
-                value = SettingsButtonValue.StringValue(when (primaryDisplay) {
-                    PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
-                    PrimaryDisplay.FIAT -> selectedCurrency
-                }),
+                title = stringResource(R.string.settings__general__unit),
+                value = SettingsButtonValue.StringValue(
+                    when (primaryDisplay) {
+                        PrimaryDisplay.BITCOIN -> stringResource(R.string.settings__general__unit_bitcoin)
+                        PrimaryDisplay.FIAT -> selectedCurrency
+                    }
+                ),
                 onClick = onDefaultUnitClick,
             )
             SettingsButtonRow(
