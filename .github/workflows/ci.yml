@@ -41,6 +41,8 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build for debug with gradle
+        env:
+          CHATWOOT_API_KEY: ${{ secrets.CHATWOOT_API_KEY }}
         run: ./gradlew assembleDebug
 
       - name: Run tests
