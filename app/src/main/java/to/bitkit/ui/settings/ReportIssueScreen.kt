@@ -35,6 +35,7 @@ fun ReportIssueScreen(
 ) {
 
     var emailInput: String by rememberSaveable { mutableStateOf("") }
+    var questionInput: String by rememberSaveable { mutableStateOf("") }
 
     ScreenColumn {
         AppTopBar(
@@ -59,7 +60,7 @@ fun ReportIssueScreen(
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_address),
                 value = emailInput,
-                onValueChange = { emailInput = emailInput.removeSpaces() },
+                onValueChange = { newText -> emailInput = newText },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Next
@@ -75,8 +76,8 @@ fun ReportIssueScreen(
 
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
-                value = emailInput,
-                onValueChange = { emailInput = emailInput.removeSpaces() },
+                value = questionInput,
+                onValueChange = { newText -> questionInput = newText },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
