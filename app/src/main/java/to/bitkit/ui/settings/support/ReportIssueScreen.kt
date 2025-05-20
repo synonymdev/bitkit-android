@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
@@ -27,11 +28,29 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-
 @Composable
 fun ReportIssueScreen(
+    viewModel: ReportIssueViewModel = hiltViewModel(),
     onBack: () -> Unit,
     onClose: () -> Unit,
+) {
+
+    //TODO HANDLE NAVIGATION
+
+    ReportIssueContent(
+        onBack = onBack,
+        onClose = onClose,
+        onConfirm = { email, message ->
+            viewModel.sendMessage(email = email, message = message)
+        }
+    )
+}
+
+@Composable
+fun ReportIssueContent(
+    onBack: () -> Unit,
+    onClose: () -> Unit,
+    onConfirm: (String, String) -> Unit
 ) {
 
     var emailInput: String by rememberSaveable { mutableStateOf("") }
@@ -93,7 +112,10 @@ fun ReportIssueScreen(
             PrimaryButton(
                 stringResource(R.string.settings__support__text_button),
                 enabled = isSendEnabled,
-                onClick = { })
+                onClick = {
+                    onConfirm(emailInput, questionInput)
+                }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
