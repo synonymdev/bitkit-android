@@ -1,0 +1,32 @@
+package to.bitkit.repositories
+
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+import to.bitkit.data.ChatwootHttpClient
+import to.bitkit.di.BgDispatcher
+import to.bitkit.models.ChatwootMessage
+import to.bitkit.utils.Logger
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class SupportRepo @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    private val chatwootHttpClient: ChatwootHttpClient
+
+) {
+
+    suspend fun postQuestion(message : ChatwootMessage) : Result<Unit> = withContext(bgDispatcher){
+        return@withContext try {
+            chatwootHttpClient.postQuestion(message = message)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Logger.error(msg = e.message, e = e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
+    private companion object {
+        const val TAG = "SupportRepo"
+    }
+}
