@@ -76,6 +76,7 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
@@ -717,6 +718,15 @@ private fun NavGraphBuilder.suggestions(
             onBackClick = { navController.popBackStack() }
         )
     }
+    composable<Routes.Support>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        SupportScreen (
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
+    }
 }
 
 // endregion
@@ -1030,4 +1040,7 @@ object Routes {
 
     @Serializable
     data object BuyIntro
+
+    @Serializable
+    data object Support
 }

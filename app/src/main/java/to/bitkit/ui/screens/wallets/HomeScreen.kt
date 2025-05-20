@@ -181,8 +181,7 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SUPPORT -> {
-                                    //TODO IMPLEMENT
-                                    appViewModel.toast(Exception("Coming soon: SUPPORT"))
+                                    rootNavController.navigate(Routes.Support)
                                 }
 
                                 Suggestion.INVITE -> {
