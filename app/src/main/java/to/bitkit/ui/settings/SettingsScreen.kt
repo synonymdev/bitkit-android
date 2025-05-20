@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -14,9 +13,9 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.activityListViewModel
-import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.NavButton
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateToBackupSettings
 import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToDevSettings
@@ -27,7 +26,6 @@ import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.navigateToSecuritySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -83,30 +81,19 @@ fun SettingsScreen(
                 onClick = { navController.navigateToDevSettings() },
             )
 
-            Caption13Up(
-                text = stringResource(R.string.settings__adv__section_other),
-                color = Colors.White64,
-                modifier = Modifier.padding(top = 24.dp)
-            )
+            SectionHeader(title = stringResource(R.string.settings__adv__section_other))
+
             SettingsButtonRow("Lightning") { navController.navigateToLightning() }
             SettingsButtonRow("Channel Orders") { navController.navigateToChannelOrdersSettings() }
             SettingsButtonRow("Logs") { navController.navigateToLogs() }
 
             if (Env.network == Network.REGTEST) {
-                Caption13Up(
-                    text = "REGTEST ONLY",
-                    color = Colors.White64,
-                    modifier = Modifier.padding(top = 24.dp)
-                )
-                SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
+                SectionHeader(title = "REGTEST ONLY")
 
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    NavButton("Reset All Activities", showIcon = false) { activity.removeAllActivities() }
-                    NavButton("Generate Test Activities", showIcon = false) { activity.generateRandomTestData() }
-                    NavButton("Wipe Wallet", showIcon = false) { viewModel.wipeStorage() }
-                }
+                SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
+                SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
+                SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
+                SettingsTextButtonRow(stringResource(R.string.security__wipe_app)) { viewModel.wipeStorage() }
             }
         }
     }

@@ -32,7 +32,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.InfoField
@@ -292,12 +292,4 @@ fun BlocktankRegtestScreen(
             }
         }
     }
-}
-
-@Composable
-fun SectionHeader(title: String) {
-    LabelText(
-        text = title,
-        modifier = Modifier.padding(top = 16.dp)
-    )
 }
