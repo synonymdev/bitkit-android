@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="common__delete_yes">نعم، احذف</string>
-    <string name="settings__backup__category_contacts">جهات الاتصال</string>
     <string name="slashtags__your_name">اسمك</string>
     <string name="slashtags__your_name_capital">اسمك</string>
     <string name="slashtags__contact_name">اسم جهة الاتصال</string>
@@ -26,7 +25,7 @@
     <string name="slashtags__contact_delete_yes">نعم، احذف</string>
     <string name="slashtags__contact_select">اختر جهة اتصال</string>
     <string name="slashtags__profile_delete_dialogue_yes">نعم، احذف</string>
-    <string name="slashtags__widget_delete_yes">نعم، احذف</string>
+    <string name="wallet__drawer__contacts">جهات الاتصال</string>
     <string name="wallet__recipient_contact">جهة الاتصال</string>
     <string name="wallet__activity_contact">جهة الاتصال</string>
 </resources>

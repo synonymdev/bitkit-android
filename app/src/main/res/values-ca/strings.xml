@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="cards__backupSeedPhrase__title">Sauvegarde</string>
     <string name="cards__backupSeedPhrase__description">Emmagatzema els teus bitcoin</string>
     <string name="cards__discount__title">Descompte</string>
     <string name="cards__discount__description">Balanç de despesa</string>
+    <string name="cards__quickpay__title">QuickPay</string>
     <string name="cards__quickpay__description">Escaneja i paga</string>
     <string name="cards__invite__title">Convidar</string>
     <string name="cards__invite__description">Comparteix Bitkit</string>
@@ -16,6 +18,7 @@
     <string name="cards__lightningReady__description">Conectat!</string>
     <string name="cards__transferPending__title">Transferir</string>
     <string name="cards__transferPending__description">Llest en ±{duration}</string>
+    <string name="cards__transferClosingChannel__title">Initialisation</string>
     <string name="cards__transferClosingChannel__description">Mantenir l\'aplicació oberta</string>
     <string name="cards__pin__title">Segur</string>
     <string name="cards__pin__description">Configurar un codi PIN</string>
@@ -48,6 +51,7 @@
     <string name="common__delete">Suprimir</string>
     <string name="common__delete_yes">Sí, Elimina</string>
     <string name="common__ok">OK</string>
+    <string name="common__reset">Reinicia</string>
     <string name="common__retry">Reintentar</string>
     <string name="common__later">Després</string>
     <string name="common__skip">Salta</string>
@@ -234,6 +238,9 @@
     <string name="other__update_nav_title">Actualització disponible</string>
     <string name="other__update_text">Si us plau, actualitzeu Bitkit a la darrera versió per a noves funcionalitats i correccions de errors!</string>
     <string name="other__update_button">Actualització</string>
+    <string name="other__gift__error__button">OK</string>
+    <string name="other__gift__used__button">OK</string>
+    <string name="other__shop__intro__button">Començar</string>
     <string name="security__backup_wallet">Còpia de seguretat de la cartera</string>
     <string name="security__backup_funds">Ara que tens alguns fons a la teva cartera, és hora de fer una còpia de seguretat del teu diners!</string>
     <string name="security__backup_funds_no">Encara no hi ha fons a la teva cartera, però pots fer una còpia de seguretat si ho desitges.</string>
@@ -332,6 +339,7 @@
     <string name="settings__general__tags_previously">Etiquetes prèviament utilitzades</string>
     <string name="settings__widgets__nav_title">Ginys</string>
     <string name="settings__widgets__showWidgets">Ginys</string>
+    <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__security__title">Seguretat i privacitat</string>
     <string name="settings__security__pin">Codi Pin</string>
     <string name="settings__security__pin_change">Canviar el codi PIN</string>
@@ -341,14 +349,6 @@
     <string name="settings__security__pin_enabled">Activat</string>
     <string name="settings__security__pin_disabled">Desactivat</string>
     <string name="settings__security__use_bio">Utilitza {biometryTypeName} enlloc</string>
-    <string name="settings__backup__status_failed">Error de còpia de seguretat: {time}</string>
-    <string name="settings__backup__status_success">Última còpia de seguretat: {time}</string>
-    <string name="settings__backup__category_connections">Connexions</string>
-    <string name="settings__backup__category_settings">Configuracions</string>
-    <string name="settings__backup__category_widgets">Ginys</string>
-    <string name="settings__backup__category_tags">Etiquetes</string>
-    <string name="settings__backup__category_profile">Perfil</string>
-    <string name="settings__backup__category_contacts">Contactes</string>
     <string name="settings__support__title">Suport</string>
     <string name="settings__support__help">Centre d\'ajuda</string>
     <string name="settings__support__status">Estat de l\'Aplicació</string>
@@ -363,9 +363,9 @@
     <string name="settings__status__internet__ready">Conectat</string>
     <string name="settings__status__internet__pending">Reconectant ...</string>
     <string name="settings__status__internet__error">Desconectat</string>
-    <string name="settings__status__bitcoin_node__title">Node Bitcoin</string>
-    <string name="settings__status__bitcoin_node__ready">Conectat</string>
-    <string name="settings__status__bitcoin_node__pending">Conectant ...</string>
+    <string name="settings__status__electrum__title">Node Bitcoin</string>
+    <string name="settings__status__electrum__ready">Conectat</string>
+    <string name="settings__status__electrum__pending">Conectant ...</string>
     <string name="settings__status__lightning_node__title">Node de Lightning</string>
     <string name="settings__status__lightning_node__ready">Sincronitzat</string>
     <string name="settings__status__lightning_node__pending">Sincronitzant ...</string>
@@ -376,7 +376,6 @@
     <string name="settings__adv__section_other">Altres</string>
     <string name="settings__adv__coin_selection">Selecció de monedes</string>
     <string name="settings__adv__cs_manual">Manual</string>
-    <string name="settings__adv__cs_max">Més privacitat</string>
     <string name="settings__adv__payment_preference">Preferències de pagament</string>
     <string name="settings__adv__pp_footer">* Això requereix compartir les dades de pagament.</string>
     <string name="settings__adv__pp_contacts_switch">Habilitar pagaments amb contactes*</string>
@@ -457,30 +456,15 @@
     <string name="slashtags__profile_delete_dialogue_yes">Sí, Elimina</string>
     <string name="slashtags__offline_enable">Habilitar pagaments amb contactes*</string>
     <string name="slashtags__offline_enable_explain">* Això requereix compartir les dades de pagament.</string>
-    <string name="slashtags__widgets">Ginys</string>
-    <string name="slashtags__widget_add">Afegir ginys</string>
-    <string name="slashtags__widget_loading_description">Carregant la descripció del giny...</string>
-    <string name="slashtags__widget_failed_description">Ha fallat en carregar el giny</string>
-    <string name="slashtags__widget_source">Origen</string>
-    <string name="slashtags__widget_price">Preu de Bitcoin</string>
-    <string name="slashtags__widget_headlines">Capçaleres de Bitcoin</string>
-    <string name="slashtags__widget_blocks">Blocs de Bitcoin</string>
-    <string name="slashtags__widget_facts">Bitcoin Fets</string>
-    <string name="slashtags__widget_qr">O escaneja el codi QR</string>
-    <string name="slashtags__widget_error_drive">No s\'ha pogut obtenir les dades</string>
-    <string name="slashtags__widget_feed">Giny</string>
-    <string name="slashtags__widget_edit">Alimentar el Giny</string>
-    <string name="slashtags__widget_edit_default">Predeterminat</string>
-    <string name="slashtags__widget_edit_custom">Personalitzat</string>
-    <string name="slashtags__widget_loading_options">Carregant les opcions del giny...</string>
-    <string name="slashtags__widget_reset">Reinicia</string>
-    <string name="slashtags__widget_preview">Previsualització</string>
-    <string name="slashtags__widget_delete_yes">Sí, Elimina</string>
-    <string name="slashtags__widget_delete_title">Esborrar el giny?</string>
-    <string name="slashtags__widget_delete_desc">Estàs segur que vols eliminar \'{name}\' dels teus ginys?</string>
     <string name="slashtags__error_saving_contact">No s\'ha pogut desar el contacte.</string>
     <string name="slashtags__error_saving_profile">No es pot desar el perfil</string>
     <string name="slashtags__error_pay_title">No s\'ha pogut pagar el contacte.</string>
+    <string name="wallet__drawer__activity">Activitat</string>
+    <string name="wallet__drawer__contacts">Contactes</string>
+    <string name="wallet__drawer__profile">Perfil</string>
+    <string name="wallet__drawer__widgets">Ginys</string>
+    <string name="wallet__drawer__settings">Configuracions</string>
+    <string name="wallet__drawer__status">Estat de l\'Aplicació</string>
     <string name="wallet__send">Envia</string>
     <string name="wallet__receive">Rebre</string>
     <string name="wallet__create_wallet_mnemonic_error">Frase de recuperació no vàlida.</string>
@@ -511,6 +495,7 @@
     <string name="wallet__send_dialog5_title">La comissió és massa baixa</string>
     <string name="wallet__send_sent">Bitcoin Enviat</string>
     <string name="wallet__send_pending">Pagament pendent</string>
+    <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_instant_failed">Pagament Instantani Fallit</string>
     <string name="wallet__send_regular">Pagament regular</string>
     <string name="wallet__send_error_slash_ln">Desafortunadament, el contacte no es pot pagar instantàniament. Podeu provar un pagament regular (més car, més lent).</string>
@@ -616,4 +601,17 @@
     <string name="wallet__lnurl_w_text">Els fons que retiris seran dipositats al teu saldo de despesa de Bitkit.</string>
     <string name="wallet__lnurl_w_button">Retirar</string>
     <string name="wallet__lnurl_p_max">Quantitat màxima</string>
+    <string name="widgets__widgets">Ginys</string>
+    <string name="widgets__widget__nav_title">Giny</string>
+    <string name="widgets__widget__edit">Alimentar el Giny</string>
+    <string name="widgets__widget__edit_default">Predeterminat</string>
+    <string name="widgets__widget__edit_custom">Personalitzat</string>
+    <string name="widgets__widget__source">Origen</string>
+    <string name="widgets__add">Afegir ginys</string>
+    <string name="widgets__delete__title">Esborrar el giny?</string>
+    <string name="widgets__delete__description">Estàs segur que vols eliminar \'{name}\' dels teus ginys?</string>
+    <string name="widgets__price__name">Preu de Bitcoin</string>
+    <string name="widgets__news__name">Capçaleres de Bitcoin</string>
+    <string name="widgets__blocks__name">Blocs de Bitcoin</string>
+    <string name="widgets__facts__name">Bitcoin Fets</string>
 </resources>
