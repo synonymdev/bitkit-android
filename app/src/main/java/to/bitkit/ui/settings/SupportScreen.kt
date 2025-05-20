@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,11 +14,14 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
@@ -31,6 +35,8 @@ fun SupportScreen(
     onBack: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__support_title),
@@ -47,7 +53,6 @@ fun SupportScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-
             SettingsButtonRow(title = stringResource(R.string.settings__support__report), onClick = {})
             SettingsButtonRow(title = stringResource(R.string.settings__support__help), onClick = {})
             SettingsButtonRow(title = stringResource(R.string.settings__support__status), onClick = {})
@@ -60,12 +65,15 @@ fun SupportScreen(
                     .weight(1f)
             )
 
-            FlowRow (
+            FlowRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_WEBSITE.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
@@ -76,7 +84,10 @@ fun SupportScreen(
                     )
                 }
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_MEDIUM.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
@@ -87,7 +98,10 @@ fun SupportScreen(
                     )
                 }
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_X.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
@@ -98,7 +112,10 @@ fun SupportScreen(
                     )
                 }
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_DISCORD.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
@@ -109,7 +126,10 @@ fun SupportScreen(
                     )
                 }
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_TELEGRAM.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
@@ -120,7 +140,10 @@ fun SupportScreen(
                     )
                 }
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_GITHUB.toUri())
+                        context.startActivity(intent)
+                    },
                     containerColor = Colors.White16,
                     modifier = Modifier.size(48.dp)
                 ) {
