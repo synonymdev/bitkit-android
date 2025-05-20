@@ -2,8 +2,10 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import to.bitkit.BuildConfig
 import to.bitkit.data.ChatwootHttpClient
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.models.ChatwootMessage
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -16,9 +18,18 @@ class SupportRepo @Inject constructor(
 
 ) {
 
-    suspend fun postQuestion(message : ChatwootMessage) : Result<Unit> = withContext(bgDispatcher){
+    suspend fun postQuestion(email: String, message: String) : Result<Unit> = withContext(bgDispatcher){
         return@withContext try {
-            chatwootHttpClient.postQuestion(message = message)
+            chatwootHttpClient.postQuestion(message = ChatwootMessage(
+                email = email,
+                message = message,
+                platform = "${Env.PLATFORM}", //GET SYSTEM VERSION
+                version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
+                ldkVersion = "",
+                ldkNodeId = "",
+                logs = "",
+                logsFileName = ""
+            ))
             Result.success(Unit)
         } catch (e: Exception) {
             Logger.error(msg = e.message, e = e, context = TAG)
