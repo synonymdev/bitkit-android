@@ -19,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
@@ -47,9 +48,8 @@ fun SecuritySettingsScreen(
     val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isPinForPaymentsEnabled by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
-    PinNavigationSheet(
+    PinNavigationSheetHost(
         showSheet = showPinSheet,
-        showLaterButton = false,
         onDismiss = { showPinSheet = false },
     ) {
         SecuritySettingsContent(
@@ -176,6 +176,24 @@ private fun SecuritySettingsContent(
             }
         }
     }
+}
+
+@Composable
+private fun PinNavigationSheetHost(
+    showSheet: Boolean,
+    onDismiss: () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    SheetHost(
+        shouldExpand = showSheet,
+        onDismiss = onDismiss,
+        sheets = {
+            if (showSheet) {
+                PinNavigationSheet(showLaterButton = false, onDismiss)
+            }
+        },
+        content = content,
+    )
 }
 
 @Preview

@@ -77,6 +77,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.shared.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
@@ -127,13 +128,12 @@ fun HomeScreen(
                     )
                 }
 
-                is BottomSheetType.ActivityDateRangeSelector -> {
-                    DateRangeSelectorSheet()
-                }
+                is BottomSheetType.ActivityDateRangeSelector -> DateRangeSelectorSheet()
+                is BottomSheetType.ActivityTagSelector -> TagSelectorSheet()
 
-                is BottomSheetType.ActivityTagSelector -> {
-                    TagSelectorSheet()
-                }
+                is BottomSheetType.PinSetup -> PinNavigationSheet(
+                    onDismiss = { appViewModel.hideSheet() },
+                )
 
                 null -> Unit
             }
@@ -176,8 +176,8 @@ fun HomeScreen(
                                     rootNavController.navigate(Routes.BackupWalletSettings)
                                 }
 
-                                Suggestion.SECURE -> { //TODO IMPLEMENT BOTTOM SHEET
-                                    rootNavController.navigate(Routes.SecuritySettings)
+                                Suggestion.SECURE -> {
+                                    appViewModel.showSheet(BottomSheetType.PinSetup)
                                 }
 
                                 Suggestion.SUPPORT -> {
@@ -200,10 +200,9 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SHOP -> {
+                                    //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
                                     val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
-                                    context.startActivity(
-                                        intent,
-                                    ) //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
+                                    context.startActivity(intent)
                                 }
 
                                 Suggestion.QUICK_PAY -> {
@@ -259,7 +258,10 @@ fun HomeScreen(
                 ) {
                     AllActivityScreen(
                         viewModel = activityListViewModel,
-                        onBackClick = { walletNavController.popBackStack() },
+                        onBack = {
+                            activityListViewModel.clearFilters()
+                            walletNavController.popBackStack()
+                        },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                     )
                 }
@@ -375,6 +377,9 @@ private fun HomeContentView(
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
                     )
+
+                    // Scrollable empty space behind bottom buttons
+                    Spacer(modifier = Modifier.height(120.dp))
                 }
             }
             if (showEmptyState) {

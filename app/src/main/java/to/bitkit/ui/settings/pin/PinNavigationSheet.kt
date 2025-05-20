@@ -10,80 +10,67 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
-import to.bitkit.ui.components.SheetHost
 
 @Composable
 fun PinNavigationSheet(
-    showSheet: Boolean,
     showLaterButton: Boolean = true,
-    onDismiss: () -> Unit = {},
-    content: @Composable () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val navController = rememberNavController()
 
-    SheetHost(
-        shouldExpand = showSheet,
-        onDismiss = {
-            navController.popBackStack(PinRoute.PinPrompt, inclusive = false)
-            onDismiss()
-        },
-        sheets = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(.725f)
-            ) {
-                NavHost(
-                    navController = navController,
-                    startDestination = PinRoute.PinPrompt,
-                ) {
-                    composable<PinRoute.PinPrompt> {
-                        PinPromptScreen(
-                            showLaterButton = showLaterButton,
-                            onContinue = { navController.navigate(PinRoute.ChoosePin) },
-                            onLater = onDismiss,
-                        )
-                    }
-                    composable<PinRoute.ChoosePin> {
-                        ChoosePinScreen(
-                            onPinChosen = { pin ->
-                                navController.navigate(PinRoute.ConfirmPin(pin))
-                            },
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                    composable<PinRoute.ConfirmPin> { backStackEntry ->
-                        val route = backStackEntry.toRoute<PinRoute.ConfirmPin>()
-                        ConfirmPinScreen(
-                            originalPin = route.pin,
-                            onPinConfirmed = {
-                                navController.navigate(PinRoute.AskForBiometrics)
-                            },
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                    composable<PinRoute.AskForBiometrics> {
-                        AskForBiometricsScreen(
-                            onContinue = { isBioOn ->
-                                navController.navigate(PinRoute.Result(isBioOn))
-                            },
-                            onSkip = { navController.navigate(PinRoute.Result(isBioOn = false)) },
-                            onBack = onDismiss,
-                        )
-                    }
-                    composable<PinRoute.Result> { backStackEntry ->
-                        val route = backStackEntry.toRoute<PinRoute.Result>()
-                        PinResultScreen(
-                            isBioOn = route.isBioOn,
-                            onDismiss = onDismiss,
-                            onBack = onDismiss,
-                        )
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(.775f)
+    ) {
+        NavHost(
+            navController = navController,
+            startDestination = PinRoute.PinPrompt,
+        ) {
+            composable<PinRoute.PinPrompt> {
+                PinPromptScreen(
+                    showLaterButton = showLaterButton,
+                    onContinue = { navController.navigate(PinRoute.ChoosePin) },
+                    onLater = onDismiss,
+                )
             }
-        },
-        content = content,
-    )
+            composable<PinRoute.ChoosePin> {
+                ChoosePinScreen(
+                    onPinChosen = { pin ->
+                        navController.navigate(PinRoute.ConfirmPin(pin))
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable<PinRoute.ConfirmPin> { backStackEntry ->
+                val route = backStackEntry.toRoute<PinRoute.ConfirmPin>()
+                ConfirmPinScreen(
+                    originalPin = route.pin,
+                    onPinConfirmed = {
+                        navController.navigate(PinRoute.AskForBiometrics)
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable<PinRoute.AskForBiometrics> {
+                AskForBiometricsScreen(
+                    onContinue = { isBioOn ->
+                        navController.navigate(PinRoute.Result(isBioOn))
+                    },
+                    onSkip = { navController.navigate(PinRoute.Result(isBioOn = false)) },
+                    onBack = onDismiss,
+                )
+            }
+            composable<PinRoute.Result> { backStackEntry ->
+                val route = backStackEntry.toRoute<PinRoute.Result>()
+                PinResultScreen(
+                    isBioOn = route.isBioOn,
+                    onDismiss = onDismiss,
+                    onBack = onDismiss,
+                )
+            }
+        }
+    }
 }
 
 object PinRoute {
