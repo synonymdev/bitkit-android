@@ -53,12 +53,18 @@ fun SettingsButtonRow(
         modifier = modifier
             .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
     ) {
+        val rowHeight = when {
+            subtitle != null && iconRes != null -> 90.dp
+            subtitle != null -> 74.dp
+            else -> 52.dp
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
+                .height(rowHeight)
                 .clickableAlpha(onClick = if (enabled) onClick else null)
-                .padding(vertical = 16.dp)
+                .padding(vertical = 0.dp)
         ) {
             if (iconRes != null) {
                 Icon(
