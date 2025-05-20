@@ -54,7 +54,10 @@ fun SupportScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             SettingsButtonRow(title = stringResource(R.string.settings__support__report), onClick = {})
-            SettingsButtonRow(title = stringResource(R.string.settings__support__help), onClick = {})
+            SettingsButtonRow(title = stringResource(R.string.settings__support__help), onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_HELP_CENTER.toUri())
+                context.startActivity(intent)
+            })
             SettingsButtonRow(title = stringResource(R.string.settings__support__status), onClick = {})
 
             Image(
