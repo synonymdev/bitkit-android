@@ -4,8 +4,8 @@ import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.ext.ensureDir
-import to.bitkit.models.LnPeer
 import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.models.LnPeer
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
@@ -122,4 +122,11 @@ internal object Env {
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BIT_REFILL_URL = "https://www.bitrefill.com/br/en/gift-cards/"
+    const val BITKIT_WEBSITE = "https://bitkit.to/"
+    const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
+    const val SYNONYM_X = "https://twitter.com/bitkitwallet/"
+    const val BITKIT_DISCORD = "https://discord.gg/DxTBJXvJxn"
+    const val BITKIT_TELEGRAM = "https://t.me/bitkitchat"
+    const val BITKIT_GITHUB = "https://github.com/synonymdev"
+    const val BITKIT_HELP_CENTER = "https://help.bitkit.to"
 }
