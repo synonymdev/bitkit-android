@@ -168,7 +168,7 @@ fun HomeScreen(
                                     rootNavController.navigate(Routes.BuyIntro)
                                 }
 
-                                Suggestion.SPEND -> {
+                                Suggestion.SPEND -> { //TODO DISPLAY TRANSFER INTRO TO THE FIRST TIME CLICKED
                                     rootNavController.navigate(Routes.Funding)
                                 }
 

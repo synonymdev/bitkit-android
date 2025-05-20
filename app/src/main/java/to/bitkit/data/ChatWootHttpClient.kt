@@ -30,12 +30,12 @@ class ChatWootHttpClient @Inject constructor(
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
-                    throw ChatWootHttpError.InvalidResponse(it.message.orEmpty())
+                    throw ChatwootHttpError.InvalidResponse(it.message.orEmpty())
                 }
                 responseBody
             }
 
-            else -> throw ChatWootHttpError.InvalidResponse(response.status.description)
+            else -> throw ChatwootHttpError.InvalidResponse(response.status.description)
         }
     }
 
@@ -49,16 +49,16 @@ class ChatWootHttpClient @Inject constructor(
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
-                    throw ChatWootHttpError.InvalidResponse(it.message.orEmpty())
+                    throw ChatwootHttpError.InvalidResponse(it.message.orEmpty())
                 }
                 responseBody
             }
 
-            else -> throw ChatWootHttpError.InvalidResponse(response.status.description)
+            else -> throw ChatwootHttpError.InvalidResponse(response.status.description)
         }
     }
 }
 
-sealed class ChatWootHttpError(message: String) : AppError(message) {
-    data class InvalidResponse(override val message: String) : ChatWootHttpError(message)
+sealed class ChatwootHttpError(message: String) : AppError(message) {
+    data class InvalidResponse(override val message: String) : ChatwootHttpError(message)
 }
