@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -73,13 +74,26 @@ fun ReportIssueScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-
             Spacer(modifier = Modifier.height(32.dp))
 
             BodyM(text = stringResource(R.string.settings__support__label_message), color = Colors.White64)
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            TextField(
+                placeholder = { Text(stringResource(R.string.settings__support__placeholder_message)) },
+                value = emailInput,
+                onValueChange = { emailInput = emailInput.removeSpaces() },
+                colors = AppTextFieldDefaults.semiTransparent,
+                shape = AppShapes.small,
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            PrimaryButton(stringResource(R.string.settings__support__text_button), onClick = { })
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
     }
