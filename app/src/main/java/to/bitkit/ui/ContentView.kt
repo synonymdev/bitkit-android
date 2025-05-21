@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -85,6 +86,7 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
@@ -736,6 +738,35 @@ private fun NavGraphBuilder.suggestions(
         ReportIssueScreen (
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
+            navigateResultScreen = { isSuccess ->
+                if (isSuccess) {
+                    navController.navigate(Routes.ReportIssueSuccess)
+                } else {
+                    navController.navigate(Routes.ReportIssueFailure)
+                }
+            }
+        )
+    }
+
+    composable<Routes.ReportIssueSuccess>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueResultScreen (
+            isSuccess = true,
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
+    }
+
+    composable<Routes.ReportIssueFailure>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueResultScreen (
+            isSuccess = false,
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
         )
     }
 }
@@ -1057,4 +1088,10 @@ object Routes {
 
     @Serializable
     data object ReportIssue
+
+    @Serializable
+    data object ReportIssueSuccess
+
+    @Serializable
+    data object ReportIssueFailure
 }

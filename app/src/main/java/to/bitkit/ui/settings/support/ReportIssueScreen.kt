@@ -35,9 +35,19 @@ fun ReportIssueScreen(
     viewModel: ReportIssueViewModel = hiltViewModel(),
     onBack: () -> Unit,
     onClose: () -> Unit,
+    navigateResultScreen: (Boolean) -> Unit,
 ) {
 
     //TODO HANDLE NAVIGATION
+    LaunchedEffect(Unit) {
+        viewModel.reportIssueEffect.collect { event ->
+            when(event) {
+                ReportIssueEffects.NavigateError -> navigateResultScreen(true)
+                ReportIssueEffects.NavigateSuccess -> navigateResultScreen(false)
+            }
+        }
+    }
+
 
     ReportIssueContent(
         onBack = onBack,
@@ -135,7 +145,8 @@ private fun Preview() {
     AppThemeSurface {
         ReportIssueScreen(
             onBack = {},
-            onClose = {}
+            onClose = {},
+            navigateResultScreen = {}
         )
     }
 }
