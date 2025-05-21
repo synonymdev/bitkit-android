@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,7 +26,19 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import androidx.compose.runtime.getValue
+
+object ReportIssueTestTags {
+    const val SCREEN = "report_issue_screen"
+    const val TITLE = "report_issue_title"
+    const val DESCRIPTION = "report_issue_description"
+    const val EMAIL_LABEL = "report_issue_email_label"
+    const val EMAIL_INPUT = "report_issue_email_input"
+    const val MESSAGE_LABEL = "report_issue_message_label"
+    const val MESSAGE_INPUT = "report_issue_message_input"
+    const val SEND_BUTTON = "report_issue_send_button"
+    const val CLOSE_BUTTON = "report_issue_close_button"
+}
+
 
 @Composable
 fun ReportIssueScreen(
@@ -34,10 +48,9 @@ fun ReportIssueScreen(
     navigateResultScreen: (Boolean) -> Unit,
 ) {
 
-    //TODO HANDLE NAVIGATION
     LaunchedEffect(Unit) {
         viewModel.reportIssueEffect.collect { event ->
-            when(event) {
+            when (event) {
                 ReportIssueEffects.NavigateError -> navigateResultScreen(false)
                 ReportIssueEffects.NavigateSuccess -> navigateResultScreen(true)
             }
@@ -65,7 +78,6 @@ fun ReportIssueContent(
     onUpdateMessage: (String) -> Unit,
     uiState: ReportIssueUiState
 ) {
-
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__support__report),
@@ -74,15 +86,25 @@ fun ReportIssueContent(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag(ReportIssueTestTags.SCREEN)
         ) {
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyM(text = stringResource(R.string.settings__support__report_text), color = Colors.White64)
+            BodyM(
+                text = stringResource(R.string.settings__support__report_text),
+                color = Colors.White64,
+                modifier = Modifier.testTag(ReportIssueTestTags.DESCRIPTION)
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyM(text = stringResource(R.string.settings__support__label_address), color = Colors.White64)
+            BodyM(
+                text = stringResource(R.string.settings__support__label_address),
+                color = Colors.White64,
+                modifier = Modifier.testTag(ReportIssueTestTags.EMAIL_LABEL)
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -92,15 +114,19 @@ fun ReportIssueContent(
                 onValueChange = onUpdateEmail,
                 isError = uiState.errorEmail,
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Next
-                ),
-                modifier = Modifier.fillMaxWidth()
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ReportIssueTestTags.EMAIL_INPUT)
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyM(text = stringResource(R.string.settings__support__label_message), color = Colors.White64)
+            BodyM(
+                text = stringResource(R.string.settings__support__label_message),
+                color = Colors.White64,
+                modifier = Modifier.testTag(ReportIssueTestTags.MESSAGE_LABEL)
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -108,29 +134,27 @@ fun ReportIssueContent(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
                 value = uiState.messageInput,
                 onValueChange = onUpdateMessage,
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Done
-                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .testTag(ReportIssueTestTags.MESSAGE_INPUT)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             PrimaryButton(
-                stringResource(R.string.settings__support__text_button),
+                text = stringResource(R.string.settings__support__text_button),
                 enabled = uiState.isSendEnabled,
                 isLoading = uiState.isLoading,
-                onClick = onConfirm
+                onClick = onConfirm,
+                modifier = Modifier.testTag(ReportIssueTestTags.SEND_BUTTON)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable
