@@ -23,7 +23,6 @@ import to.bitkit.repositories.WalletState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
 import to.bitkit.viewmodels.WalletViewModel
-import kotlin.test.assertEquals
 
 @RunWith(AndroidJUnit4::class)
 @Config(application = TestApp::class)
@@ -98,18 +97,6 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `send should call lightningRepo payInvoice and send failure toast`() = test {
-        val testBolt11 = "test_bolt11"
-        val testError = Exception("Test error")
-        whenever(lightningRepo.payInvoice(testBolt11)).thenReturn(Result.failure(testError))
-
-        sut.send(testBolt11)
-
-        verify(lightningRepo).payInvoice(testBolt11)
-        // Add verification for ToastEventBus.send
-    }
-
-    @Test
     fun `updateBip21Invoice should call walletRepo updateBip21Invoice and send failure toast`() = test {
         val testError = Exception("Test error")
         whenever(walletRepo.updateBip21Invoice(anyOrNull(), any())).thenReturn(Result.failure(testError))
@@ -124,17 +111,6 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `refreshBip21 should call walletRepo refreshBip21`() = test {
         sut.refreshBip21()
         verify(walletRepo).refreshBip21()
-    }
-
-    @Test
-    fun `createInvoice should call lightningRepo createInvoice`() = test {
-        val testInvoice = "test_invoice"
-        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(testInvoice))
-
-        val result = sut.createInvoice(description = "test")
-
-        verify(lightningRepo).createInvoice(anyOrNull(), any(), any())
-        assertEquals("test_invoice", result)
     }
 
     @Test

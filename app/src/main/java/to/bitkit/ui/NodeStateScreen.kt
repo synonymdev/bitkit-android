@@ -1,16 +1,21 @@
 package to.bitkit.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,23 +24,29 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.R
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
+import to.bitkit.models.LnPeer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.BoxButton
 import to.bitkit.ui.shared.Channels
 import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
-import to.bitkit.ui.shared.Peers
 import to.bitkit.ui.shared.moneyString
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
 import java.time.Instant
 
@@ -286,5 +297,60 @@ fun LightningBalance.channelIdString(): String {
         is LightningBalance.MaybeTimeoutClaimableHtlc -> this.channelId
         is LightningBalance.MaybePreimageClaimableHtlc -> this.channelId
         is LightningBalance.CounterpartyRevokedOutputClaimable -> this.channelId
+    }
+}
+
+@Composable
+private fun Peers(
+    peers: List<LnPeer>,
+    onDisconnect: (LnPeer) -> Unit,
+) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "Peers",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "${peers.size}",
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        HorizontalDivider()
+        peers.forEach {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Companion.CenterVertically,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.Companion
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color = Colors.Green)
+                )
+                Text(
+                    text = "${it.nodeId.ellipsisMiddle(25)}@${it.address}",
+                    style = MaterialTheme.typography.labelSmall,
+                    overflow = TextOverflow.Companion.Ellipsis,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                BoxButton(
+                    onClick = { onDisconnect(it) },
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RemoveCircleOutline,
+                        contentDescription = stringResource(R.string.common__close),
+                        tint = Colors.Red,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
     }
 }

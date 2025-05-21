@@ -19,7 +19,6 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -53,6 +52,7 @@ class WalletViewModel @Inject constructor(
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
+
     @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
     val uiState = _uiState.asStateFlow()
 
@@ -64,7 +64,7 @@ class WalletViewModel @Inject constructor(
         collectStates()
     }
 
-    private fun collectStates() { //This is necessary to avoid a bigger refactor in all application
+    private fun collectStates() { // This is necessary to avoid a bigger refactor in all application
         viewModelScope.launch(bgDispatcher) {
             walletState.collect { state ->
                 walletExists = state.walletExists
@@ -173,19 +173,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun send(bolt11: String) {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.payInvoice(bolt11)
-                .onFailure { error ->
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = "Error sending",
-                        description = error.message ?: "Unknown error"
-                    )
-                }
-        }
-    }
-
     fun updateBip21Invoice(
         amountSats: ULong? = null,
     ) {
@@ -226,19 +213,6 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             walletRepo.refreshBip21()
         }
-    }
-
-    suspend fun createInvoice(
-        amountSats: ULong? = null,
-        description: String,
-        expirySeconds: UInt = 86_400u, // 1 day
-    ): String {
-        val result = lightningRepo.createInvoice(
-            amountSats,
-            description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
-            expirySeconds
-        )
-        return result.getOrThrow()
     }
 
     fun openChannel() {
@@ -434,5 +408,5 @@ data class MainUiState(
 )
 
 sealed interface WalletViewModelEffects {
-    data object NavigateGeoBlockScreen: WalletViewModelEffects
+    data object NavigateGeoBlockScreen : WalletViewModelEffects
 }

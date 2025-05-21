@@ -2,24 +2,16 @@ package to.bitkit.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -42,12 +34,7 @@ import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.Channels
-import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.FullWidthTextButton
-import to.bitkit.ui.shared.InfoField
-import to.bitkit.ui.shared.Payments
-import to.bitkit.ui.shared.Peers
-import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -82,9 +69,7 @@ fun DevSettingsScreen(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Peers(uiState.peers, viewModel::disconnectPeer)
                 Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-                Payments(viewModel)
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Debug",
