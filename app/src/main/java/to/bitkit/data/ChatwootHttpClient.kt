@@ -20,7 +20,7 @@ class ChatwootHttpClient @Inject constructor(
 ) {
 
     suspend fun postQuestion(message: ChatwootMessage) {
-        return post(BuildConfig.CHATWOOT_API_KEY, message)
+        return post(BuildConfig.CHATWOOT_API, message)
     }
 
     // region utils

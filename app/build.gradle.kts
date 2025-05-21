@@ -55,8 +55,8 @@ android {
 
         buildConfigField(
             "String",
-            "CHATWOOT_API_KEY",
-            "\"${localProperties.getProperty("CHATWOOT_API_KEY") ?: System.getenv("CHATWOOT_API_KEY")}\""
+            "CHATWOOT_API",
+            "\"${localProperties.getProperty("CHATWOOT_API") ?: System.getenv("CHATWOOT_API")}\""
         )
     }
     signingConfigs {
