@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,7 +56,11 @@ fun ReportIssueContent(
 
     var emailInput: String by rememberSaveable { mutableStateOf("") }
     var questionInput: String by rememberSaveable { mutableStateOf("") }
-    var isSendEnabled: Boolean by rememberSaveable { mutableStateOf(false) }
+    val isSendEnabled: Boolean by rememberSaveable {
+        derivedStateOf {
+            emailInput.isNotBlank() && questionInput.isNotBlank() //TODO VALIDATE EMAIL
+        }
+    }
 
     ScreenColumn {
         AppTopBar(
@@ -63,10 +68,6 @@ fun ReportIssueContent(
             onBackClick = onBack,
             actions = { CloseNavIcon(onClick = onClose) },
         )
-
-        LaunchedEffect(emailInput, questionInput) {
-            isSendEnabled = emailInput.isNotBlank() && questionInput.isNotBlank() //TODO VALIDATE EMAIL
-        }
 
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)

@@ -19,6 +19,7 @@ internal object Env {
     val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
+    val androidSDKVersion = android.os.Build.VERSION.SDK_INT
 
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
