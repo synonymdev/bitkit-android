@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -56,7 +57,7 @@ fun ReportIssueContent(
 
     var emailInput: String by rememberSaveable { mutableStateOf("") }
     var questionInput: String by rememberSaveable { mutableStateOf("") }
-    val isSendEnabled: Boolean by rememberSaveable {
+    val isSendEnabled: Boolean by remember {
         derivedStateOf {
             emailInput.isNotBlank() && questionInput.isNotBlank() //TODO VALIDATE EMAIL
         }
@@ -103,6 +104,9 @@ fun ReportIssueContent(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
                 value = questionInput,
                 onValueChange = { newText -> questionInput = newText },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
