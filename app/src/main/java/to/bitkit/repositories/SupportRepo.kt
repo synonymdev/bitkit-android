@@ -28,6 +28,7 @@ class SupportRepo @Inject constructor(
             val lastLog = getLogs().getOrNull()?.lastOrNull()
 
             val logsList = if (lastLog == null) {
+                Logger.warn("lastLog null", context = TAG)
                 emptyList()
             } else {
                 loadLogContent(lastLog).getOrElse { emptyList() }
