@@ -9,10 +9,6 @@ data class ChatwootMessage(
     val message: String,
     val platform: String,
     val version: String,
-    @SerialName("ldkVersion")
-    val ldkVersion: String,
-    @SerialName("ldkNodeId")
-    val ldkNodeId: String,
     val logs: String,
     val logsFileName: String
 )
