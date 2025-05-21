@@ -289,36 +289,10 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun debugDb() {
-        viewModelScope.launch {
-            walletRepo.getDbConfig().collect {
-                Logger.debug("${it.count()} entities in DB: $it")
-            }
-        }
-    }
-
     fun debugFcmToken() {
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.getFcmToken().onSuccess { token ->
                 Logger.debug("FCM registration token: $token")
-            }
-        }
-    }
-
-    fun debugKeychain() {
-        viewModelScope.launch {
-            val key = "test"
-            val value = "testValue"
-            walletRepo.debugKeychain(key, value).onSuccess { existingValue ->
-                Logger.debug("Keychain entry: $key = $existingValue")
-            }
-        }
-    }
-
-    fun debugMnemonic() {
-        viewModelScope.launch {
-            walletRepo.getMnemonic().onSuccess { mnemonic ->
-                Logger.debug(mnemonic)
             }
         }
     }

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -167,39 +166,12 @@ class WalletViewModelTest : BaseUnitTest() {
         }
 
     @Test
-    fun `debugDb should call walletRepo getDbConfig`() = test {
-        whenever(walletRepo.getDbConfig()).thenReturn(flowOf(emptyList()))
-
-        sut.debugDb()
-
-        verify(walletRepo).getDbConfig()
-    }
-
-    @Test
     fun `debugFcmToken should call lightningRepo getFcmToken`() = test {
         whenever(lightningRepo.getFcmToken()).thenReturn(Result.success("test_token"))
 
         sut.debugFcmToken()
 
         verify(lightningRepo).getFcmToken()
-    }
-
-    @Test
-    fun `debugKeychain should call walletRepo debugKeychain`() = test {
-        whenever(walletRepo.debugKeychain(any(), any())).thenReturn(Result.success(null))
-
-        sut.debugKeychain()
-
-        verify(walletRepo).debugKeychain(any(), any())
-    }
-
-    @Test
-    fun `debugMnemonic should call walletRepo getMnemonic`() = test {
-        whenever(walletRepo.getMnemonic()).thenReturn(Result.success("test_mnemonic"))
-
-        sut.debugMnemonic()
-
-        verify(walletRepo).getMnemonic()
     }
 
     @Test

@@ -369,39 +369,6 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    // Debug methods
-    suspend fun debugKeychain(key: String, value: String): Result<String?> = withContext(bgDispatcher) {
-        try {
-            if (keychain.exists(key)) {
-                val existingValue = keychain.loadString(key)
-                keychain.delete(key)
-                keychain.saveString(key, value)
-                Result.success(existingValue)
-            } else {
-                keychain.saveString(key, value)
-                Result.success(null)
-            }
-        } catch (e: Throwable) {
-            Logger.error("Debug keychain error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getMnemonic(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-                ?: return@withContext Result.failure(Exception("Mnemonic not found"))
-            Result.success(mnemonic)
-        } catch (e: Throwable) {
-            Logger.error("Get mnemonic error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getDbConfig(): Flow<List<ConfigEntity>> {
-        return db.configDao().getAll()
-    }
-
     suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
         if (tags.isEmpty()) return@withContext
 
