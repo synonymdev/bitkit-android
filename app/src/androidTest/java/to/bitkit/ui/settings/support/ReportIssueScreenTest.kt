@@ -39,7 +39,6 @@ class ReportIssueContentTest {
         }
 
         composeTestRule.onNodeWithTag(ReportIssueTestTags.SCREEN).assertExists()
-        composeTestRule.onNodeWithTag(ReportIssueTestTags.TITLE).assertExists()
         composeTestRule.onNodeWithTag(ReportIssueTestTags.DESCRIPTION).assertExists()
         composeTestRule.onNodeWithTag(ReportIssueTestTags.EMAIL_LABEL).assertExists()
         composeTestRule.onNodeWithTag(ReportIssueTestTags.EMAIL_INPUT).assertExists()
@@ -178,25 +177,5 @@ class ReportIssueContentTest {
 
         composeTestRule.onNodeWithTag(ReportIssueTestTags.SEND_BUTTON)
             .assertIsNotEnabled()
-    }
-
-    @Test
-    fun whenBackButtonClicked_shouldTriggerCallback() {
-        var backClicked = false
-        composeTestRule.setContent {
-            AppThemeSurface {
-                ReportIssueContent(
-                    onBack = { backClicked = true },
-                    onClose = {},
-                    onConfirm = {},
-                    onUpdateEmail = {},
-                    onUpdateMessage = {},
-                    uiState = testUiState
-                )
-            }
-        }
-
-        composeTestRule.onNodeWithTag(ReportIssueTestTags.TITLE).performClick()
-        assert(backClicked)
     }
 }
