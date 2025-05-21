@@ -12,6 +12,7 @@ import to.bitkit.viewmodels.LogFile
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,8 +32,13 @@ class SupportRepo @Inject constructor(
                 Logger.warn("lastLog null", context = TAG)
                 emptyList()
             } else {
-                loadLogContent(lastLog).getOrElse { emptyList() }
-            }.joinToString()
+                loadLogContent(lastLog).getOrElse { e ->
+                    Logger.warn("error loading log content", e = e, context = TAG)
+                    emptyList()
+                }
+            }.joinToString("\n")
+
+            val base64Content = Base64.getEncoder().encodeToString(logsList.toByteArray())
 
             chatwootHttpClient.postQuestion(
                 message = ChatwootMessage(
@@ -40,7 +46,7 @@ class SupportRepo @Inject constructor(
                     message = message,
                     platform = "${Env.PLATFORM} ${Env.androidSDKVersion}",
                     version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
-                    logs = logsList,
+                    logs = base64Content,
                     logsFileName = lastLog?.fileName.orEmpty()
                 )
             )
@@ -88,6 +94,7 @@ class SupportRepo @Inject constructor(
     suspend fun loadLogContent(logFile: LogFile): Result<List<String>> = withContext(bgDispatcher) {
         try {
             if (!logFile.file.exists()) {
+                Logger.error("Logs file not found", context = TAG)
                 return@withContext Result.failure(Exception("Logs file not found"))
             }
 
