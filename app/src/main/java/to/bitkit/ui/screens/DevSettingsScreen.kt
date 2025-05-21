@@ -25,9 +25,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.currentActivity
+import to.bitkit.env.Env
+import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.navigateToChannelOrdersSettings
+import to.bitkit.ui.navigateToLightning
+import to.bitkit.ui.navigateToLogs
+import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.pushNotification
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -46,57 +56,75 @@ fun DevSettingsScreen(
     navController: NavController,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val activity = activityListViewModel ?: return
 
     ScreenColumn {
         AppTopBar(stringResource(R.string.settings__dev_title), onBackClick = { navController.popBackStack() })
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            NodeDetails(uiState)
-            InfoField(
-                value = uiState.onchainAddress,
-                label = stringResource(R.string.wallet__activity_address),
-                maxLength = 36,
-                trailingIcon = {
-                    Row {
-                        CopyToClipboardButton(uiState.onchainAddress)
-                        IconButton(onClick = viewModel::manualNewAddress) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
-                },
-            )
+            SettingsButtonRow("Lightning") { navController.navigateToLightning() }
+            SettingsButtonRow("Channel Orders") { navController.navigateToChannelOrdersSettings() }
+            SettingsButtonRow("Logs") { navController.navigateToLogs() }
 
-            Peers(uiState.peers, viewModel::disconnectPeer)
-            Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
-            Payments(viewModel)
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Debug",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(12.dp)
+            if (Env.network == Network.REGTEST) {
+                SectionHeader(title = "REGTEST ONLY")
+
+                SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
+                SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
+                SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
+                SettingsTextButtonRow(stringResource(R.string.security__wipe_app)) { viewModel.wipeStorage() }
+            }
+
+            SectionHeader(title = stringResource(R.string.settings__adv__section_other))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                NodeDetails(uiState)
+                InfoField(
+                    value = uiState.onchainAddress,
+                    label = stringResource(R.string.wallet__activity_address),
+                    maxLength = 36,
+                    trailingIcon = {
+                        Row {
+                            CopyToClipboardButton(uiState.onchainAddress)
+                            IconButton(onClick = viewModel::manualNewAddress) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    },
                 )
-                FullWidthTextButton(viewModel::debugDb) { Text("Database") }
-                FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
-                FullWidthTextButton(viewModel::debugFcmToken) { Text("Print FCM Token") }
-                FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
-                FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
-                FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
-                FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
-                HorizontalDivider()
-                FullWidthTextButton(::debugPushNotification) { Text("Test Local Notification") }
-                FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
-                FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
-                HorizontalDivider()
-                val currency = currencyViewModel
-                FullWidthTextButton({ currency?.triggerRefresh() }) { Text("Refresh Currency Rates") }
+
+                Peers(uiState.peers, viewModel::disconnectPeer)
+                Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
+                Payments(viewModel)
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Debug",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                    FullWidthTextButton(viewModel::debugDb) { Text("Database") }
+                    FullWidthTextButton(viewModel::debugKeychain) { Text("Keychain") }
+                    FullWidthTextButton(viewModel::debugFcmToken) { Text("Print FCM Token") }
+                    FullWidthTextButton(viewModel::debugMnemonic) { Text("⚠️ Print Mnemonic") }
+                    FullWidthTextButton(viewModel::wipeStorage) { Text("Wipe Wallet") }
+                    FullWidthTextButton(viewModel::debugBlocktankInfo) { Text("Blocktank Info API") }
+                    FullWidthTextButton(viewModel::debugTransactionSheet) { Text("Fake New BG Transaction") }
+                    HorizontalDivider()
+                    FullWidthTextButton(::debugPushNotification) { Text("Test Local Notification") }
+                    FullWidthTextButton(viewModel::manualRegisterForNotifications) { Text("1. Register Device for Notifications") }
+                    FullWidthTextButton(viewModel::debugLspNotifications) { Text("2. Test Remote Notification") }
+                    HorizontalDivider()
+                    val currency = currencyViewModel
+                    FullWidthTextButton({ currency?.triggerRefresh() }) { Text("Refresh Currency Rates") }
+                }
             }
         }
     }

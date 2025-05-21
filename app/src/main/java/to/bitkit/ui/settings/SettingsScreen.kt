@@ -15,33 +15,20 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.ui.Routes
-import to.bitkit.ui.activityListViewModel
-import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateToBackupSettings
-import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
-import to.bitkit.ui.navigateToLightning
-import to.bitkit.ui.navigateToLogs
-import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.navigateToSecuritySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun SettingsScreen(
-    viewModel: WalletViewModel,
     navController: NavController,
 ) {
-    val activity = activityListViewModel ?: return
-
     ScreenColumn {
         AppTopBar(stringResource(R.string.settings__settings), onBackClick = { navController.popBackStack() })
         Column(
@@ -87,21 +74,6 @@ fun SettingsScreen(
                 iconRes = R.drawable.ic_settings_dev,
                 onClick = { navController.navigateToDevSettings() },
             )
-
-            SectionHeader(title = stringResource(R.string.settings__adv__section_other))
-
-            SettingsButtonRow("Lightning") { navController.navigateToLightning() }
-            SettingsButtonRow("Channel Orders") { navController.navigateToChannelOrdersSettings() }
-            SettingsButtonRow("Logs") { navController.navigateToLogs() }
-
-            if (Env.network == Network.REGTEST) {
-                SectionHeader(title = "REGTEST ONLY")
-
-                SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
-                SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
-                SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
-                SettingsTextButtonRow(stringResource(R.string.security__wipe_app)) { viewModel.wipeStorage() }
-            }
 
             Spacer(Modifier.weight(1f))
             Image(
