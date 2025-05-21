@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -57,7 +58,6 @@ import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
-import to.bitkit.ui.screens.wallets.HomeRoutes
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
@@ -74,9 +74,10 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
+import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.SupportScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
@@ -85,6 +86,7 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
@@ -725,6 +727,46 @@ private fun NavGraphBuilder.suggestions(
         SupportScreen (
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
+            navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
+        )
+    }
+
+    composable<Routes.ReportIssue>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueScreen (
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+            navigateResultScreen = { isSuccess ->
+                if (isSuccess) {
+                    navController.navigate(Routes.ReportIssueSuccess)
+                } else {
+                    navController.navigate(Routes.ReportIssueFailure)
+                }
+            }
+        )
+    }
+
+    composable<Routes.ReportIssueSuccess>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueResultScreen (
+            isSuccess = true,
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
+    }
+
+    composable<Routes.ReportIssueFailure>(
+        enterTransition = { screenSlideIn },
+        exitTransition = { screenSlideOut },
+    ) {
+        ReportIssueResultScreen (
+            isSuccess = false,
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
         )
     }
 }
@@ -1043,4 +1085,13 @@ object Routes {
 
     @Serializable
     data object Support
+
+    @Serializable
+    data object ReportIssue
+
+    @Serializable
+    data object ReportIssueSuccess
+
+    @Serializable
+    data object ReportIssueFailure
 }

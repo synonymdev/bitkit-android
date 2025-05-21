@@ -15,9 +15,11 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
+    const val PLATFORM = "Android"
     val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
+    val androidSDKVersion = android.os.Build.VERSION.SDK_INT
 
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
