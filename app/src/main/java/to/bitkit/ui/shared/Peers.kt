@@ -27,7 +27,6 @@ import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.Green500
 
 @Composable
 internal fun Peers(
@@ -57,7 +56,7 @@ internal fun Peers(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(color = Green500)
+                        .background(color = Colors.Green)
                 )
                 Text(
                     text = "${it.nodeId.ellipsisMiddle(25)}@${it.address}",
