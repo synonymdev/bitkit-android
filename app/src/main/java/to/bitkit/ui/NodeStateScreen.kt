@@ -25,11 +25,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +48,6 @@ import to.bitkit.models.LnPeer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.CopyToClipboardButton
-import to.bitkit.ui.shared.FullWidthTextButton
 import to.bitkit.ui.shared.InfoField
 import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Colors
@@ -359,7 +360,7 @@ private fun Peers(
 }
 
 @Composable
-fun Channels(
+private fun Channels(
     channels: List<ChannelDetails>,
     hasPeers: Boolean,
     onChannelOpenTap: () -> Unit,
@@ -387,10 +388,13 @@ fun Channels(
             }
             HorizontalDivider()
         }
-        FullWidthTextButton(
-            onClick = { onChannelOpenTap() },
-            enabled = hasPeers
-        ) { Text("Open channel to trusted peer") }
+        TextButton(
+            onClick = onChannelOpenTap,
+            enabled = hasPeers,
+            shape = RectangleShape,
+        ) {
+            Text("Open channel to trusted peer", modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
