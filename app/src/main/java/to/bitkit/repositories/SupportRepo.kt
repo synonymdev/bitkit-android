@@ -27,18 +27,19 @@ class SupportRepo @Inject constructor(
         return@withContext try {
 
             val lastLog = getLogs().getOrNull()?.lastOrNull()
+            val logFile = lastLog?.file
 
-            val logsList = if (lastLog == null) {
-                Logger.warn("lastLog null", context = TAG)
-                emptyList()
+            var logsBase64 = ""
+            var logsFileName = ""
+
+            if (logFile != null && logFile.exists()) {
+                val fileContent = logFile.readBytes()
+                logsBase64 = Base64.getEncoder().encodeToString(fileContent)
+
+                logsFileName = logFile.name.substringBeforeLast(".")
             } else {
-                loadLogContent(lastLog).getOrElse { e ->
-                    Logger.warn("error loading log content", e = e, context = TAG)
-                    emptyList()
-                }
-            }.joinToString("\n")
-
-            val base64Content = Base64.getEncoder().encodeToString(logsList.toByteArray())
+                Logger.warn("No log file found", context = TAG)
+            }
 
             chatwootHttpClient.postQuestion(
                 message = ChatwootMessage(
@@ -46,8 +47,8 @@ class SupportRepo @Inject constructor(
                     message = message,
                     platform = "${Env.PLATFORM} ${Env.androidSDKVersion}",
                     version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
-                    logs = base64Content,
-                    logsFileName = lastLog?.fileName.orEmpty()
+                    logs = logsBase64,
+                    logsFileName = logsFileName
                 )
             )
             Result.success(Unit)
