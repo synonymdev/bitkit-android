@@ -59,16 +59,16 @@ private fun GeneralSettingsContent(
     onDefaultUnitClick: () -> Unit = {},
     onTransactionSpeedClick: () -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = Modifier.verticalScroll(rememberScrollState())
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__general_title),
             onBackClick = onBackClick,
             actions = { CloseNavIcon(onClick = onCloseClick) },
         )
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__currency_local),
