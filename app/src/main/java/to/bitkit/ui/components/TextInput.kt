@@ -21,6 +21,7 @@ fun TextInput(
     value: String,
     onValueChange: (String) -> Unit,
     singleLine: Boolean = false,
+    isError: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
@@ -34,6 +35,7 @@ fun TextInput(
                 )
             } else null
         },
+        isError = isError,
         textStyle = LocalTextStyle.current.copy(
             fontWeight = FontWeight.SemiBold,
             fontSize = 17.sp,

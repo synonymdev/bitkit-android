@@ -8,18 +8,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
@@ -29,6 +24,7 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import androidx.compose.runtime.getValue
 
 @Composable
 fun ReportIssueScreen(
@@ -48,13 +44,15 @@ fun ReportIssueScreen(
         }
     }
 
+    val uiState: ReportIssueUiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     ReportIssueContent(
         onBack = onBack,
         onClose = onClose,
-        onConfirm = { email, message ->
-            viewModel.sendMessage(email = email, message = message)
-        }
+        onConfirm = viewModel::sendMessage,
+        onUpdateEmail = viewModel::updateEmail,
+        onUpdateMessage = viewModel::updateMessage,
+        uiState = uiState
     )
 }
 
@@ -62,16 +60,11 @@ fun ReportIssueScreen(
 fun ReportIssueContent(
     onBack: () -> Unit,
     onClose: () -> Unit,
-    onConfirm: (String, String) -> Unit
+    onConfirm: () -> Unit,
+    onUpdateEmail: (String) -> Unit,
+    onUpdateMessage: (String) -> Unit,
+    uiState: ReportIssueUiState
 ) {
-
-    var emailInput: String by rememberSaveable { mutableStateOf("") }
-    var questionInput: String by rememberSaveable { mutableStateOf("") }
-    val isSendEnabled: Boolean by remember {
-        derivedStateOf {
-            emailInput.isNotBlank() && questionInput.isNotBlank() //TODO VALIDATE EMAIL
-        }
-    }
 
     ScreenColumn {
         AppTopBar(
@@ -95,8 +88,9 @@ fun ReportIssueContent(
 
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_address),
-                value = emailInput,
-                onValueChange = { newText -> emailInput = newText },
+                value = uiState.emailInput,
+                onValueChange = onUpdateEmail,
+                isError = uiState.errorEmail,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Next
@@ -112,8 +106,8 @@ fun ReportIssueContent(
 
             TextInput(
                 placeholder = stringResource(R.string.settings__support__placeholder_message),
-                value = questionInput,
-                onValueChange = { newText -> questionInput = newText },
+                value = uiState.messageInput,
+                onValueChange = onUpdateMessage,
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done
                 ),
@@ -126,10 +120,9 @@ fun ReportIssueContent(
 
             PrimaryButton(
                 stringResource(R.string.settings__support__text_button),
-                enabled = isSendEnabled,
-                onClick = {
-                    onConfirm(emailInput, questionInput)
-                }
+                enabled = uiState.isSendEnabled,
+                isLoading = uiState.isLoading,
+                onClick = onConfirm
             )
 
             Spacer(modifier = Modifier.height(16.dp))

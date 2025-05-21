@@ -115,6 +115,8 @@ fun String.withBold(
     }
 }
 
+fun String.isValidEmail() = this.isNotBlank() &&  android.util.Patterns.EMAIL_ADDRESS.matcher(this).matches()
+
 @Composable
 fun localizedRandom(@StringRes id: Int): String {
     val resources = LocalContext.current.resources
