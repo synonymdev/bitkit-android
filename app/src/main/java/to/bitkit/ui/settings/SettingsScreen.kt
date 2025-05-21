@@ -12,6 +12,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -66,8 +67,7 @@ fun SettingsScreen(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support_title),
                 iconRes = R.drawable.ic_settings_support,
-                enabled = false,
-                onClick = { /* TODO nav to support */ },
+                onClick = { navController.navigate(Routes.Support) },
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__about_title),
