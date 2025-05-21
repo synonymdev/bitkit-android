@@ -191,17 +191,6 @@ class WalletViewModelTest : BaseUnitTest() {
         }
 
     @Test
-    fun `manualNewAddress should call lightningRepo newAddress and walletRepo setOnchainAddress, and send failure toast`() =
-        test {
-            whenever(lightningRepo.newAddress()).thenReturn(Result.success("test_address"))
-
-            sut.manualNewAddress()
-
-            verify(lightningRepo).newAddress()
-            verify(walletRepo).setOnchainAddress("test_address")
-        }
-
-    @Test
     fun `debugDb should call walletRepo getDbConfig`() = test {
         whenever(walletRepo.getDbConfig()).thenReturn(flowOf(emptyList()))
 

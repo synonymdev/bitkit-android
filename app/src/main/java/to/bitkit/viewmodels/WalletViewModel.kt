@@ -315,14 +315,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun manualNewAddress() {
-        viewModelScope.launch {
-            lightningRepo.newAddress().onSuccess { address ->
-                walletRepo.setOnchainAddress(address)
-            }.onFailure { ToastEventBus.send(it) }
-        }
-    }
-
     fun debugDb() {
         viewModelScope.launch {
             walletRepo.getDbConfig().collect {

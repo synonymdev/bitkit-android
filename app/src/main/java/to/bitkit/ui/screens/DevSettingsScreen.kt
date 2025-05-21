@@ -82,25 +82,6 @@ fun DevSettingsScreen(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                NodeDetails(uiState)
-                InfoField(
-                    value = uiState.onchainAddress,
-                    label = stringResource(R.string.wallet__activity_address),
-                    maxLength = 36,
-                    trailingIcon = {
-                        Row {
-                            CopyToClipboardButton(uiState.onchainAddress)
-                            IconButton(onClick = viewModel::manualNewAddress) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    },
-                )
-
                 Peers(uiState.peers, viewModel::disconnectPeer)
                 Channels(uiState.channels, uiState.peers.isNotEmpty(), viewModel::openChannel, viewModel::closeChannel)
                 Payments(viewModel)
@@ -137,32 +118,4 @@ private fun debugPushNotification() {
         bigText = "Much longer text that cannot fit one line " + "because the lightning channel has been updated " + "via a push notification bro…",
         context = requireNotNull(currentActivity())
     )
-}
-
-@Composable
-fun NodeDetails(contentState: MainUiState) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            modifier = Modifier
-                .padding(16.dp)
-                .padding(bottom = 0.dp)
-        ) {
-            Text(
-                text = "Node",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = contentState.nodeLifecycleState.displayState,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        InfoField(
-            value = contentState.nodeId,
-            label = stringResource(R.string.lightning__node_id),
-            maxLength = 44,
-            trailingIcon = { CopyToClipboardButton(contentState.nodeId) },
-        )
-    }
 }
