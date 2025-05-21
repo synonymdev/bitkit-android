@@ -1,4 +1,4 @@
-package to.bitkit.ui.shared
+package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize

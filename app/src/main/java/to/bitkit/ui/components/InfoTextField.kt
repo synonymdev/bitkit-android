@@ -1,4 +1,4 @@
-package to.bitkit.ui.shared
+package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +14,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import to.bitkit.ui.theme.Colors
 
 @Composable
-fun InfoField(
+fun InfoTextField(
     value: String,
     label: String? = null,
     maxLength: Int? = null,

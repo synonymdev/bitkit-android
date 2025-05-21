@@ -58,7 +58,7 @@ import to.bitkit.ext.formatted
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.InfoField
+import to.bitkit.ui.components.InfoTextField
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
 import java.text.NumberFormat
@@ -158,7 +158,7 @@ fun NodeStateScreen(
                     }
                 }
             }
-            InfoField(
+            InfoTextField(
                 value = uiState.nodeId,
                 label = stringResource(R.string.lightning__node_id),
                 maxLength = 44,
