@@ -1,5 +1,6 @@
 package to.bitkit.ui
 
+import android.content.ClipData
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.HorizontalDivider
@@ -23,21 +25,30 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
@@ -47,11 +58,10 @@ import to.bitkit.ext.formatted
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.CopyToClipboardButton
 import to.bitkit.ui.shared.InfoField
-import to.bitkit.ui.shared.moneyString
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
+import java.text.NumberFormat
 import java.time.Instant
 
 @Composable
@@ -248,7 +258,7 @@ private fun Balances(
 }
 
 @Composable
-fun LightningBalanceRow(balance: LightningBalance) {
+private fun LightningBalanceRow(balance: LightningBalance) {
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
@@ -271,7 +281,7 @@ fun LightningBalanceRow(balance: LightningBalance) {
     }
 }
 
-fun LightningBalance.balanceTypeString(): String {
+private fun LightningBalance.balanceTypeString(): String {
     return when (this) {
         is LightningBalance.ClaimableOnChannelClose -> "Claimable on Channel Close"
         is LightningBalance.ClaimableAwaitingConfirmations -> "Claimable Awaiting Confirmations (Height: $confirmationHeight)"
@@ -282,7 +292,7 @@ fun LightningBalance.balanceTypeString(): String {
     }
 }
 
-fun LightningBalance.amountLong(): Long {
+private fun LightningBalance.amountLong(): Long {
     return when (this) {
         is LightningBalance.ClaimableOnChannelClose -> this.amountSatoshis.toLong()
         is LightningBalance.ClaimableAwaitingConfirmations -> this.amountSatoshis.toLong()
@@ -293,7 +303,7 @@ fun LightningBalance.amountLong(): Long {
     }
 }
 
-fun LightningBalance.channelIdString(): String {
+private fun LightningBalance.channelIdString(): String {
     return when (this) {
         is LightningBalance.ClaimableOnChannelClose -> this.channelId
         is LightningBalance.ClaimableAwaitingConfirmations -> this.channelId
@@ -484,6 +494,45 @@ private fun BoxButton(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             content()
+        }
+    }
+}
+
+@Composable
+private fun CopyToClipboardButton(text: String) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val label = stringResource(R.string.app_name)
+    IconButton(
+        onClick = {
+            scope.launch {
+                val clipData = ClipData.newPlainText(label, text)
+                clipboard.setClipEntry(ClipEntry(clipData))
+            }
+        }
+    ) {
+        Icon(
+            imageVector = Icons.Default.ContentCopy,
+            contentDescription = null,
+            modifier = Modifier.Companion.size(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun moneyString(
+    value: Long?,
+    currency: String? = "sat",
+): AnnotatedString {
+    if (value == null) return AnnotatedString("")
+    val locale = java.util.Locale.GERMANY
+    return buildAnnotatedString {
+        append(NumberFormat.getNumberInstance(locale).format(value))
+        currency?.let {
+            append(" ")
+            withStyle(SpanStyle(color = colorScheme.onBackground.copy(0.5f))) {
+                append(currency)
+            }
         }
     }
 }
