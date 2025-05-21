@@ -55,6 +55,8 @@
     <string name="lightning__close_button">Κλείσιμο</string>
     <string name="onboarding__skip">Παράλειψη</string>
     <string name="other__high_balance__continue">Κατανοητό</string>
+    <string name="other__gift__error__button">ΟΚ</string>
+    <string name="other__gift__used__button">ΟΚ</string>
     <string name="settings__about__share">Διαμοιρασμός</string>
     <string name="settings__support__text_success_button">ΟΚ</string>
     <string name="settings__support__text_unsuccess_button">Προσπαθείστε Ξανά</string>
@@ -67,5 +69,5 @@
     <string name="slashtags__profile_save">Καταχώρηση</string>
     <string name="slashtags__profile_link_suggestions">Προτάσεις</string>
     <string name="slashtags__profile_delete">Διαγραφή</string>
-    <string name="slashtags__widget_edit_custom">Προσαρμοσμένο</string>
+    <string name="widgets__widget__edit_custom">Προσαρμοσμένο</string>
 </resources>
