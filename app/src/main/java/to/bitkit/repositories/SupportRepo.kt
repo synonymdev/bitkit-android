@@ -23,7 +23,7 @@ class SupportRepo @Inject constructor(
             chatwootHttpClient.postQuestion(message = ChatwootMessage(
                 email = email,
                 message = message,
-                platform = "${Env.PLATFORM}", //GET SYSTEM VERSION
+                platform = "${Env.PLATFORM} ${Env.androidSDKVersion}",
                 version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
                 ldkVersion = "",
                 ldkNodeId = "",
