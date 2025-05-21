@@ -48,8 +48,8 @@ private const val DEV_MODE_TAP_THRESHOLD = 5
 fun SettingsScreen(
     navController: NavController,
 ) {
-    val appViewModel = appViewModel ?: return
-    val isDevModeEnabled by appViewModel.isDevModeEnabled.collectAsStateWithLifecycle()
+    val app = appViewModel ?: return
+    val isDevModeEnabled by app.isDevModeEnabled.collectAsStateWithLifecycle()
     var enableDevModeTapCount by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -60,8 +60,15 @@ fun SettingsScreen(
         onGeneralClick = { navController.navigateToGeneralSettings() },
         onSecurityClick = { navController.navigateToSecuritySettings() },
         onBackupClick = { navController.navigateToBackupSettings() },
-        onAdvancedClick = { /* TODO */ },
+        onAdvancedClick = {
+            // TODO implement advanced settings screen
+            app.toast(Exception("Coming soon: Advanced Settings"))
+      },
         onSupportClick = { navController.navigate(Routes.Support) },
+        onAboutClick = {
+            // TODO implement settings > about
+            app.toast(Exception("Coming soon: About"))
+        },
         onDevClick = { navController.navigateToDevSettings() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -69,9 +76,9 @@ fun SettingsScreen(
 
             if (enableDevModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
                 val newValue = !isDevModeEnabled
-                appViewModel.setIsDevModeEnabled(newValue)
+                app.setIsDevModeEnabled(newValue)
 
-                appViewModel.toast(
+                app.toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(
                         if (newValue) R.string.settings__dev_enabled_title else R.string.settings__dev_disabled_title
@@ -95,6 +102,7 @@ fun SettingsScreenContent(
     onBackupClick: () -> Unit,
     onAdvancedClick: () -> Unit,
     onSupportClick: () -> Unit,
+    onAboutClick: () -> Unit,
     onDevClick: () -> Unit,
     onCogTap: () -> Unit,
 ) {
@@ -128,7 +136,6 @@ fun SettingsScreenContent(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__advanced_title),
                 iconRes = R.drawable.ic_settings_advanced,
-                enabled = false,
                 onClick = onAdvancedClick,
             )
             SettingsButtonRow(
@@ -139,8 +146,7 @@ fun SettingsScreenContent(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__about_title),
                 iconRes = R.drawable.ic_settings_about,
-                enabled = false,
-                onClick = {},
+                onClick = onAboutClick,
             )
             if (isDevModeEnabled) {
                 SettingsButtonRow(
@@ -175,6 +181,7 @@ private fun Preview() {
             onBackupClick = {},
             onAdvancedClick = {},
             onSupportClick = {},
+            onAboutClick = {},
             onDevClick = {},
             onCogTap = {},
         )
