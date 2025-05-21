@@ -39,6 +39,8 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
+import androidx.compose.ui.tooling.preview.Preview
+import to.bitkit.ui.theme.AppThemeSurface
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
 
@@ -58,6 +60,7 @@ fun SettingsScreen(
         onGeneralClick = { navController.navigateToGeneralSettings() },
         onSecurityClick = { navController.navigateToSecuritySettings() },
         onBackupClick = { navController.navigateToBackupSettings() },
+        onAdvancedClick = { /* TODO */ },
         onSupportClick = { navController.navigate(Routes.Support) },
         onDevClick = { navController.navigateToDevSettings() },
         onCogTap = {
@@ -90,6 +93,7 @@ fun SettingsScreenContent(
     onGeneralClick: () -> Unit,
     onSecurityClick: () -> Unit,
     onBackupClick: () -> Unit,
+    onAdvancedClick: () -> Unit,
     onSupportClick: () -> Unit,
     onDevClick: () -> Unit,
     onCogTap: () -> Unit,
@@ -125,7 +129,7 @@ fun SettingsScreenContent(
                 title = stringResource(R.string.settings__advanced_title),
                 iconRes = R.drawable.ic_settings_advanced,
                 enabled = false,
-                onClick = {},
+                onClick = onAdvancedClick,
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__support_title),
@@ -156,5 +160,23 @@ fun SettingsScreenContent(
             )
             Spacer(Modifier.weight(1f))
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        SettingsScreenContent(
+            isDevModeEnabled = true,
+            onClose = {},
+            onGeneralClick = {},
+            onSecurityClick = {},
+            onBackupClick = {},
+            onAdvancedClick = {},
+            onSupportClick = {},
+            onDevClick = {},
+            onCogTap = {},
+        )
     }
 }
