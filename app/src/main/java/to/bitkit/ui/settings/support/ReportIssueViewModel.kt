@@ -24,7 +24,7 @@ class ReportIssueViewModel @Inject constructor(
                 .onSuccess {
                     setReportIssueEffect(ReportIssueEffects.NavigateSuccess)
                 }.onFailure {
-                    setReportIssueEffect(ReportIssueEffects.NavigateSuccess)
+                    setReportIssueEffect(ReportIssueEffects.NavigateError)
                 }
         }
     }

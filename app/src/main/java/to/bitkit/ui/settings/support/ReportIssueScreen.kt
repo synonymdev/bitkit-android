@@ -42,8 +42,8 @@ fun ReportIssueScreen(
     LaunchedEffect(Unit) {
         viewModel.reportIssueEffect.collect { event ->
             when(event) {
-                ReportIssueEffects.NavigateError -> navigateResultScreen(true)
-                ReportIssueEffects.NavigateSuccess -> navigateResultScreen(false)
+                ReportIssueEffects.NavigateError -> navigateResultScreen(false)
+                ReportIssueEffects.NavigateSuccess -> navigateResultScreen(true)
             }
         }
     }

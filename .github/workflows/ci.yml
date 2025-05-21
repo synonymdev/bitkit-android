@@ -42,7 +42,7 @@ jobs:
 
       - name: Build for debug with gradle
         env:
-          CHATWOOT_API: ${{ secrets.CHATWOOT_API_KEY }}
+          CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
         run: ./gradlew assembleDebug
 
       - name: Run tests
