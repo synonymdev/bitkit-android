@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -33,13 +34,11 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToBackupSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
-import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToSecuritySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
-import androidx.compose.ui.tooling.preview.Preview
 import to.bitkit.ui.theme.AppThemeSurface
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
@@ -56,14 +55,14 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         isDevModeEnabled = isDevModeEnabled || Env.network == Network.REGTEST,
-        onClose = { navController.navigateToHome() },
+        onClose = { navController.popBackStack() },
         onGeneralClick = { navController.navigateToGeneralSettings() },
         onSecurityClick = { navController.navigateToSecuritySettings() },
         onBackupClick = { navController.navigateToBackupSettings() },
         onAdvancedClick = {
             // TODO implement advanced settings screen
             app.toast(Exception("Coming soon: Advanced Settings"))
-      },
+        },
         onSupportClick = { navController.navigate(Routes.Support) },
         onAboutClick = {
             // TODO implement settings > about
