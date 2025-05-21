@@ -13,11 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.shared.util.LightModePreview
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.theme.Purple700
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun OutlinedColorButton(
@@ -25,7 +25,7 @@ fun OutlinedColorButton(
     color: Color,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit
+    content: @Composable RowScope.() -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
@@ -43,10 +43,10 @@ fun OutlinedColorButton(
     }
 }
 
-@LightModePreview
+@Preview
 @Composable
 private fun OutlinedColorButtonPreview() {
-    AppThemeSurface{
+    AppThemeSurface {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedColorButton(
                 onClick = { },
@@ -64,7 +64,7 @@ private fun OutlinedColorButtonPreview() {
 
             OutlinedColorButton(
                 onClick = { },
-                color = Purple700,
+                color = Colors.Purple,
                 enabled = false,
             ) {
                 Text("Disabled Purple")

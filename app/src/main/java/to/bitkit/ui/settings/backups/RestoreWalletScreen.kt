@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,7 +20,7 @@ fun RestoreWalletScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.title_restore_wallet), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.security__reset_title), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,

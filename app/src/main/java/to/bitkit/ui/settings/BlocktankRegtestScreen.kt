@@ -32,10 +32,10 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.LabelText
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.InfoField
+import to.bitkit.ui.components.InfoTextField
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
@@ -72,7 +72,7 @@ fun BlocktankRegtestScreen(
             var isDepositing by remember { mutableStateOf(false) }
             var isMining by remember { mutableStateOf(false) }
 
-            InfoField(
+            InfoTextField(
                 value = Env.blocktankBaseUrl,
                 label = stringResource(R.string.wallet__activity_address),
             )
@@ -292,12 +292,4 @@ fun BlocktankRegtestScreen(
             }
         }
     }
-}
-
-@Composable
-fun SectionHeader(title: String) {
-    LabelText(
-        text = title,
-        modifier = Modifier.padding(top = 16.dp)
-    )
 }

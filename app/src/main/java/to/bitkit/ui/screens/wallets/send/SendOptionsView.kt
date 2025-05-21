@@ -32,12 +32,12 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
-import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SendEffect
 import to.bitkit.viewmodels.SendEvent
@@ -151,13 +151,13 @@ private fun SendOptionsContent(
             .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(stringResource(R.string.title_send))
+        SheetTopBar(stringResource(R.string.wallet__send_bitcoin))
         Spacer(Modifier.height(32.dp))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(16.dp))
 
         RectangleButton(
-            label = stringResource(R.string.contact),
+            label = stringResource(R.string.wallet__recipient_contact),
             icon = {
                 Icon(
                     painter = painterResource(R.drawable.ic_users),
@@ -175,7 +175,7 @@ private fun SendOptionsContent(
 
         val clipboard = LocalClipboardManager.current
         RectangleButton(
-            label = stringResource(R.string.paste_invoice),
+            label = stringResource(R.string.wallet__recipient_invoice),
             icon = {
                 Icon(
                     painter = painterResource(R.drawable.ic_clipboard_text),
@@ -191,7 +191,7 @@ private fun SendOptionsContent(
         }
 
         RectangleButton(
-            label = stringResource(R.string.enter_manually),
+            label = stringResource(R.string.wallet__recipient_manual),
             icon = {
                 Icon(
                     painter = painterResource(R.drawable.ic_pencil_simple),

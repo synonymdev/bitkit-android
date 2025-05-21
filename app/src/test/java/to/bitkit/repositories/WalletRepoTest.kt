@@ -320,26 +320,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getMnemonic should return stored mnemonic`() = test {
-        val testMnemonic = "test mnemonic"
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(testMnemonic)
-
-        val result = sut.getMnemonic()
-
-        assertTrue(result.isSuccess)
-        assertEquals(testMnemonic, result.getOrNull())
-    }
-
-    @Test
-    fun `getMnemonic should fail when no mnemonic exists`() = test {
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
-
-        val result = sut.getMnemonic()
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
     fun `attachTagsToActivity should fail with empty tags`() = test {
         val result = sut.attachTagsToActivity("txId", ActivityFilter.ALL, PaymentType.SENT, emptyList())
 

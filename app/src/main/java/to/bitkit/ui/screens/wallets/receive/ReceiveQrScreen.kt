@@ -65,7 +65,7 @@ import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
-import to.bitkit.ui.shared.PagerWithIndicator
+import to.bitkit.ui.components.PagerWithIndicator
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppShapes

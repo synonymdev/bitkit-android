@@ -38,7 +38,6 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.display
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -47,7 +46,10 @@ fun DefaultUnitSettingsScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.default_unit), onBackClick = { navController.popBackStack() })
+        AppTopBar(
+            titleText = stringResource(R.string.settings__general__unit_title),
+            onBackClick = { navController.popBackStack() },
+        )
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -156,7 +158,12 @@ private fun BitcoinDenominationRow(unit: BitcoinDisplayUnit, isSelected: Boolean
                 .clickable(onClick = onClick)
                 .padding(vertical = 8.dp)
         ) {
-            Text(text = "${unit.display} (${if (unit == BitcoinDisplayUnit.MODERN) "₿ 10 000" else "₿ 0.00010000"})")
+            Text(
+                text = stringResource(
+                    if (unit == BitcoinDisplayUnit.MODERN) R.string.settings__general__denomination_modern
+                    else R.string.settings__general__denomination_classic
+                )
+            )
             Spacer(modifier = Modifier.weight(1f))
             if (isSelected) {
                 Icon(
