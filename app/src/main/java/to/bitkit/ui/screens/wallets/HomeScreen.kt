@@ -73,6 +73,7 @@ import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToQrScanner
 import to.bitkit.ui.navigateToTransferFunding
+import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.navigateToTransferSavingsAvailability
 import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
@@ -177,7 +178,7 @@ fun HomeScreen(
 
                                 Suggestion.SPEND -> {
                                     if (!hasSeenSpendingOnboardingIntro) {
-                                        rootNavController.navigate(Routes.TransferIntro)
+                                        rootNavController.navigateToTransferIntro()
                                     } else {
                                         rootNavController.navigateToTransferFunding()
                                     }

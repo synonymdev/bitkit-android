@@ -884,6 +884,10 @@ fun NavController.navigateToTransferSpendingAmount() = navigate(
     route = Routes.SpendingAmount,
 )
 
+fun NavController.navigateToTransferIntro() = navigate(
+    route = Routes.TransferIntro,
+)
+
 fun NavController.navigateToTransferFunding() = navigate(
     route = Routes.Funding,
 )
