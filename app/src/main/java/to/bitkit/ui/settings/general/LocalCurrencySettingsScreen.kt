@@ -1,18 +1,10 @@
 package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
@@ -32,7 +25,6 @@ import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -82,23 +74,10 @@ fun LocalCurrencySettingsScreen(
                 .padding(horizontal = 16.dp)
                 .imePadding()
         ) {
-            TextField(
+            SearchInput(
                 value = searchText,
                 onValueChange = { searchText = it },
-                placeholder = { Text(stringResource(R.string.common__search)) },
-                singleLine = true,
-                colors = AppTextFieldDefaults.noIndicatorColors,
-                shape = MaterialTheme.shapes.large,
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                modifier = Modifier.padding(vertical = 16.dp)
             )
 
             LazyColumn {
