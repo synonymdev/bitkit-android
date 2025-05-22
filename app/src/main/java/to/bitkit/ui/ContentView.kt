@@ -720,22 +720,16 @@ private fun NavGraphBuilder.suggestions(
             onBackClick = { navController.popBackStack() }
         )
     }
-    composable<Routes.Support>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        SupportScreen (
+    composableWithDefaultTransitions<Routes.Support> {
+        SupportScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
         )
     }
 
-    composable<Routes.ReportIssue>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueScreen (
+    composableWithDefaultTransitions<Routes.ReportIssue> {
+        ReportIssueScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             navigateResultScreen = { isSuccess ->
@@ -748,22 +742,16 @@ private fun NavGraphBuilder.suggestions(
         )
     }
 
-    composable<Routes.ReportIssueSuccess>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueResultScreen (
+    composableWithDefaultTransitions<Routes.ReportIssueSuccess> {
+        ReportIssueResultScreen(
             isSuccess = true,
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
         )
     }
 
-    composable<Routes.ReportIssueFailure>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueResultScreen (
+    composableWithDefaultTransitions<Routes.ReportIssueFailure> {
+        ReportIssueResultScreen(
             isSuccess = false,
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
