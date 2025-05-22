@@ -28,7 +28,7 @@ import to.bitkit.ui.utils.withAccent
 fun QuickPayIntroScreen(
     onBack: () -> Unit,
     onClose: () -> Unit,
-    onConfirm: () -> Unit,
+    onContinue: () -> Unit,
 ) {
     ScreenColumn {
 
@@ -58,7 +58,7 @@ fun QuickPayIntroScreen(
             Spacer(Modifier.height(32.dp))
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                onClick = onConfirm
+                onClick = onContinue
             )
             Spacer(Modifier.height(16.dp))
         }
@@ -72,7 +72,7 @@ private fun Preview() {
         QuickPayIntroScreen(
             onBack = {},
             onClose = {},
-            onConfirm = {}
+            onContinue = {}
         )
     }
 }

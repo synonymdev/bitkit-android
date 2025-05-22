@@ -84,6 +84,11 @@ class SettingsStore @Inject constructor(
         store.edit { it[HAS_SEEN_SAVINGS_INTRO] = value }
     }
 
+    val hasSeenQuickPayIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_QUICKPAY_INTRO] == true }
+    suspend fun setHasSeenQuickPayIntro(value: Boolean) {
+        store.edit { it[HAS_SEEN_QUICKPAY_INTRO] = value }
+    }
+
     val lightningSetupStep: Flow<Int> = store.data.map { it[LIGHTNING_SETUP_STEP] ?: 0 }
     suspend fun setLightningSetupStep(value: Int) {
         store.edit { it[LIGHTNING_SETUP_STEP] = value }
@@ -121,6 +126,7 @@ class SettingsStore @Inject constructor(
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
         private val HAS_SEEN_TRANSFER_INTRO = booleanPreferencesKey("has_seen_transfer_intro")
         private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")
+        private val HAS_SEEN_QUICKPAY_INTRO = booleanPreferencesKey("HAS_SEEN_QUICKPAY_INTRO")
         private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
         private val IS_PIN_ENABLED = booleanPreferencesKey("is_pin_enabled")
         private val IS_PIN_ON_LAUNCH_ENABLED = booleanPreferencesKey("is_pin_on_launch_enabled")

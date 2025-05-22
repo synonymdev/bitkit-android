@@ -82,6 +82,8 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
+import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -472,6 +474,22 @@ private fun NavGraphBuilder.settings(
 ) {
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.QuickPayIntro> {
+        QuickPayIntroScreen(
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                navController.navigate(Routes.QuickPaySettings)
+                //TODO setHasSeenIntro
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.QuickPaySettings> {
+        QuickPaySettingsScreen (
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
     }
 }
 
@@ -1090,4 +1108,10 @@ object Routes {
 
     @Serializable
     data object ReportIssueFailure
+
+    @Serializable
+    data object QuickPayIntro
+
+    @Serializable
+    data object QuickPaySettings
 }
