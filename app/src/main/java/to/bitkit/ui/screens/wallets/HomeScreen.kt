@@ -32,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -153,6 +154,8 @@ fun HomeScreen(
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
+                    val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
+
 
                     HomeContentView(
                         uiState = uiState,
@@ -172,8 +175,12 @@ fun HomeScreen(
                                     rootNavController.navigate(Routes.BuyIntro)
                                 }
 
-                                Suggestion.SPEND -> { //TODO DISPLAY TRANSFER INTRO TO THE FIRST TIME CLICKED
-                                    rootNavController.navigate(Routes.Funding)
+                                Suggestion.SPEND -> {
+                                    if (!hasSeenSpendingIntro) {
+                                        rootNavController.navigateToTransferSpendingIntro()
+                                    } else {
+                                        rootNavController.navigateToTransferSpendingAmount()
+                                    }
                                 }
 
                                 Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
