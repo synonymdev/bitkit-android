@@ -128,7 +128,7 @@ fun RestoreWalletView(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
+                            contentDescription = stringResource(R.string.common__back),
                             modifier = Modifier.size(24.dp)
                         )
                     }

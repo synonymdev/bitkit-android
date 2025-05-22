@@ -166,11 +166,20 @@ class AppViewModel @Inject constructor(
     }
 
     val defaultTransactionSpeed = settingsStore.defaultTransactionSpeed
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5000), TransactionSpeed.Medium)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionSpeed.Medium)
 
     fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
         viewModelScope.launch {
             settingsStore.setDefaultTransactionSpeed(speed)
+        }
+    }
+
+    val isDevModeEnabled: StateFlow<Boolean> = settingsStore.isDevModeEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setIsDevModeEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setIsDevModeEnabled(value)
         }
     }
 

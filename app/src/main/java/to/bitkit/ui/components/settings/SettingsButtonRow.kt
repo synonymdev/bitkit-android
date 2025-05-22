@@ -49,90 +49,97 @@ fun SettingsButtonRow(
     loading: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickableAlpha(onClick = if (enabled) onClick else null)
-                .padding(vertical = 16.dp)
+    Column {
+        Column(
+            modifier = modifier
+                .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
         ) {
-            if (iconRes != null) {
-                Icon(
-                    painter = painterResource(iconRes),
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(32.dp),
-                )
-                Spacer(modifier = Modifier.width(10.dp))
+            val rowHeight = when {
+                subtitle != null && iconRes != null -> 90.dp
+                subtitle != null -> 74.dp
+                else -> 52.dp
             }
-            Column(
-                verticalArrangement = Arrangement.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 16.dp)
+                    .fillMaxWidth()
+                    .height(rowHeight)
+                    .clickableAlpha(onClick = if (enabled) onClick else null)
             ) {
-                if (subtitle != null) {
-                    BodyMSB(text = title)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    BodySSB(text = subtitle, color = Colors.White64)
-                } else {
-                    BodyM(text = title)
+                if (iconRes != null) {
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
                 }
-            }
-
-            when (value) {
-                is SettingsButtonValue.BooleanValue -> {
-                    Crossfade(targetState = loading to value.checked) { (isLoading, isChecked) ->
-                        when {
-                            isLoading && isChecked -> CircularProgressIndicator(
-                                color = Colors.White,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(32.dp),
-                            )
-
-                            isChecked -> Icon(
-                                painter = painterResource(R.drawable.ic_checkmark),
-                                contentDescription = null,
-                                tint = Colors.Brand,
-                                modifier = Modifier.size(32.dp),
-                            )
-
-                            else -> Unit
-                        }
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 16.dp)
+                ) {
+                    if (subtitle != null) {
+                        BodyMSB(text = title)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        BodySSB(text = subtitle, color = Colors.White64)
+                    } else {
+                        BodyM(text = title)
                     }
                 }
 
-                is SettingsButtonValue.StringValue -> {
-                    BodyM(text = value.value)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chevron_right),
-                        contentDescription = null,
-                        tint = Colors.White64,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
+                when (value) {
+                    is SettingsButtonValue.BooleanValue -> {
+                        Crossfade(targetState = loading to value.checked) { (isLoading, isChecked) ->
+                            when {
+                                isLoading && isChecked -> CircularProgressIndicator(
+                                    color = Colors.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(32.dp),
+                                )
 
-                SettingsButtonValue.None -> {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chevron_right),
-                        contentDescription = null,
-                        tint = Colors.White64,
-                        modifier = Modifier.size(24.dp),
-                    )
+                                isChecked -> Icon(
+                                    painter = painterResource(R.drawable.ic_checkmark),
+                                    contentDescription = null,
+                                    tint = Colors.Brand,
+                                    modifier = Modifier.size(32.dp),
+                                )
+
+                                else -> Unit
+                            }
+                        }
+                    }
+
+                    is SettingsButtonValue.StringValue -> {
+                        BodyM(text = value.value)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chevron_right),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+
+                    SettingsButtonValue.None -> {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chevron_right),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
             }
-        }
-        if (description != null) {
-            BodyS(
-                text = description,
-                color = Colors.White64,
-                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-            )
+            if (description != null) {
+                BodyS(
+                    text = description,
+                    color = Colors.White64,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                )
+            }
         }
         HorizontalDivider()
     }

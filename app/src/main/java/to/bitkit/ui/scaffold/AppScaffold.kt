@@ -60,13 +60,13 @@ fun AppScaffold(
                     IconButton(onClick = navController::navigateToNodeState) {
                         Icon(
                             imageVector = Icons.Default.Bolt,
-                            contentDescription = stringResource(R.string.node_state),
+                            contentDescription = stringResource(R.string.settings__adv__lightning_node),
                         )
                     }
                     IconButton(navController::navigateToSettings) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
-                            contentDescription = stringResource(R.string.settings),
+                            contentDescription = stringResource(R.string.settings__settings),
                         )
                     }
                 }

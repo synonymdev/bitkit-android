@@ -233,7 +233,7 @@ fun ContentView(
         ) {
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
-                settings(walletViewModel, navController)
+                settings(navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 transactionSpeedSettings(navController)
@@ -463,11 +463,10 @@ private fun NavGraphBuilder.home(
 }
 
 private fun NavGraphBuilder.settings(
-    viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
     composableWithDefaultTransitions<Routes.Settings> {
-        SettingsScreen(viewModel, navController)
+        SettingsScreen(navController)
     }
 }
 

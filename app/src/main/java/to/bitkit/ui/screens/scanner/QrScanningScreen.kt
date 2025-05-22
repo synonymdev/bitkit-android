@@ -3,6 +3,8 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -67,8 +69,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
-import android.content.ClipboardManager
-import android.content.ClipData
 
 @Composable
 fun QrScanningScreen(
@@ -166,7 +166,7 @@ fun QrScanningScreen(
         },
         grantedContent = {
             ScreenColumn(modifier = Modifier.gradientBackground()) {
-                AppTopBar(stringResource(R.string.title_scan), onBackClick = { navController.popBackStack() })
+                AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = { navController.popBackStack() })
                 Content(
                     previewView = previewView,
                     onClickFlashlight = {

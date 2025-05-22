@@ -99,6 +99,9 @@ class SettingsStore @Inject constructor(
     val isPinForPaymentsEnabled: Flow<Boolean> = store.data.map { it[IS_PIN_FOR_PAYMENTS_ENABLED] == true }
     suspend fun setIsPinForPaymentsEnabled(value: Boolean) { store.edit { it[IS_PIN_FOR_PAYMENTS_ENABLED] = value } }
 
+    val isDevModeEnabled: Flow<Boolean> = store.data.map { it[IS_DEV_MODE_ENABLED] == true }
+    suspend fun setIsDevModeEnabled(value: Boolean) { store.edit { it[IS_DEV_MODE_ENABLED] = value } }
+
     suspend fun wipe() {
         store.edit { it.clear() }
         Logger.info("Deleted all user settings data.")
@@ -118,5 +121,6 @@ class SettingsStore @Inject constructor(
         private val IS_BIOMETRIC_ENABLED = booleanPreferencesKey("is_biometric_enabled")
         private val IS_PIN_ON_IDLE_ENABLED = booleanPreferencesKey("is_pin_on_idle_enabled")
         private val IS_PIN_FOR_PAYMENTS_ENABLED = booleanPreferencesKey("is_pin_for_payments_enabled")
+        private val IS_DEV_MODE_ENABLED = booleanPreferencesKey("is_dev_mode_enabled")
     }
 }

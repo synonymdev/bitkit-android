@@ -11,12 +11,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 val Gray100 = Color(0xFFF4F4F4)
-val gray900 = Color(0xFF212121)
-val Green500 = Color(0xFF4CAF50)
-val Purple700 = Color(0xFFB95CE8)
-
-val secondaryColor: Color
-    @Composable get() = Colors.White64
+val Gray900 = Color(0xFF212121)
 
 private object ColorPalette {
     @Stable
@@ -45,7 +40,7 @@ private object ColorPalette {
         surface = Colors.Black, // Color(0xFF101010),
         onBackground = Colors.White,
         onSurface = Colors.White, // Colors.Gray6,
-        surfaceVariant = gray900,
+        surfaceVariant = Gray900,
         surfaceContainer = Colors.White16,
         onPrimary = Colors.Black,
         onSecondary = Colors.White,

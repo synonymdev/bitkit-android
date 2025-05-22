@@ -35,7 +35,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.theme.secondaryColor
+import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 
 @Composable
@@ -43,7 +43,7 @@ fun BackupWalletScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.title_backup_wallet), onBackClick = { navController.popBackStack() })
+        AppTopBar(stringResource(R.string.security__mnemonic_your), onBackClick = { navController.popBackStack() })
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
@@ -86,7 +86,7 @@ fun BackupWalletScreen(
                                 Row(Modifier.padding(vertical = 4.dp)) {
                                     Text(
                                         text = "${index + 1}.",
-                                        color = secondaryColor,
+                                        color = Colors.White64,
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = word)
@@ -100,7 +100,7 @@ fun BackupWalletScreen(
                                 Row(Modifier.padding(vertical = 4.dp)) {
                                     Text(
                                         text = "${columnLength + index + 1}.",
-                                        color = secondaryColor,
+                                        color = Colors.White64,
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = word)
