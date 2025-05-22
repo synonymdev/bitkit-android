@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,28 +17,28 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
-fun WidgetsSettingsScreen(
+fun TagsSettingsScreen(
     navController: NavController,
 ) {
-    WidgetsSettingsContent(
+    TagsSettingsContent(
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
     )
 }
 
 @Composable
-private fun WidgetsSettingsContent(
+private fun TagsSettingsContent(
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.settings__widgets__nav_title),
+            titleText = stringResource(R.string.settings__general__tags),
             onBackClick = onBackClick,
             actions = { CloseNavIcon(onCloseClick) },
         )
         Box(modifier = Modifier.fillMaxSize()) {
-            Text("TODO: Widgets Settings Screen", modifier = Modifier.align(Alignment.Center))
+            Text("TODO: Tags Settings Screen", modifier = Modifier.align(Alignment.Center))
         }
     }
 }
@@ -47,6 +47,6 @@ private fun WidgetsSettingsContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        WidgetsSettingsContent()
+        TagsSettingsContent()
     }
 }

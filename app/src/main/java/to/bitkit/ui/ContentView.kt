@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -67,19 +66,19 @@ import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
-import to.bitkit.ui.settings.DefaultUnitSettingsScreen
-import to.bitkit.ui.settings.GeneralSettingsScreen
+import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
-import to.bitkit.ui.settings.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
-import to.bitkit.ui.settings.QuickPaySettingsScreen
+import to.bitkit.ui.settings.general.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.TagsSettingsScreen
-import to.bitkit.ui.settings.WidgetsSettingsScreen
+import to.bitkit.ui.settings.general.TagsSettingsScreen
+import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen

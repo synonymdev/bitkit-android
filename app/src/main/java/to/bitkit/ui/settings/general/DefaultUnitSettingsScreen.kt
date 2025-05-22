@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

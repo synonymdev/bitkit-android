@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
