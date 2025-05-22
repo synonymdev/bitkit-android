@@ -79,7 +79,6 @@ import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
-import to.bitkit.ui.settings.general.QuickPaySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -122,7 +121,8 @@ fun ContentView(
     val scope = rememberCoroutineScope()
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
-    DisposableEffect(lifecycle) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
+    DisposableEffect(lifecycle) {
+        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
@@ -190,7 +190,8 @@ fun ContentView(
         }
     }
 
-    if (walletIsInitializing) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
+    if (walletIsInitializing) {
+        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
                 scope.launch {
@@ -494,7 +495,7 @@ private fun NavGraphBuilder.settings(
         )
     }
     composableWithDefaultTransitions<Routes.QuickPaySettings> {
-        QuickPaySettingsScreen (
+        QuickPaySettingsScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
         )
@@ -520,10 +521,6 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
-    }
-
-    composableWithDefaultTransitions<Routes.QuickPaySettings> {
-        QuickPaySettingsScreen(navController)
     }
 
     composableWithDefaultTransitions<Routes.TagsSettings> {
@@ -1008,9 +1005,6 @@ object Routes {
 
     @Serializable
     data object WidgetsSettings
-
-    @Serializable
-    data object QuickPaySettings
 
     @Serializable
     data object TagsSettings
