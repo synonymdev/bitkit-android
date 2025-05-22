@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -74,11 +73,8 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
-import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.support.SupportScreen
-import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -87,7 +83,10 @@ import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
+import to.bitkit.ui.settings.support.ReportIssueScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
+import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
@@ -265,7 +264,13 @@ fun ContentView(
                     startDestination = Routes.TransferIntro,
                 ) {
                     composable<Routes.TransferIntro> {
-                        TransferIntroScreen()
+                        TransferIntroScreen(
+                            onContinueClick = {
+                                navController.navigateToTransferFunding()
+                                appViewModel.setHasSeenTransferIntro(true)
+                            },
+                            onCloseClick = { navController.navigateToHome() },
+                        )
                     }
                     composable<Routes.SavingsIntro> {
                         SavingsIntroScreen(
@@ -876,6 +881,10 @@ fun NavController.navigateToTransferSpendingIntro() = navigate(
 
 fun NavController.navigateToTransferSpendingAmount() = navigate(
     route = Routes.SpendingAmount,
+)
+
+fun NavController.navigateToTransferIntro() = navigate(
+    route = Routes.TransferIntro,
 )
 
 fun NavController.navigateToTransferFunding() = navigate(
