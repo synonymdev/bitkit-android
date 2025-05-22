@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -348,7 +349,10 @@ private fun HomeContentView(
 
                     AnimatedVisibility(suggestions.isNotEmpty()) {
                         val state = rememberLazyListState()
-                        val snapBehavior = rememberSnapFlingBehavior(state)
+                        val snapBehavior = rememberSnapFlingBehavior(
+                            lazyListState = state,
+                            snapPosition = SnapPosition.Start
+                        )
 
                         Column {
                             Spacer(modifier = Modifier.height(32.dp))
