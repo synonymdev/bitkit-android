@@ -61,6 +61,8 @@ import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.settings.AboutScreen
+import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
@@ -238,6 +240,8 @@ fun ContentView(
                 settings(navController)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
+                advancedSettings(navController)
+                aboutSettings(navController)
                 transactionSpeedSettings(navController)
                 securitySettings(navController)
                 disablePin(navController)
@@ -499,6 +503,18 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 
     composableWithDefaultTransitions<Routes.TagsSettings> {
         TagsSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.AdvancedSettings> {
+        AdvancedSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.AboutSettings> {
+        AboutScreen(navController)
     }
 }
 
@@ -947,6 +963,14 @@ fun NavController.navigateToQuickPaySettings() = navigate(
 fun NavController.navigateToTagsSettings() = navigate(
     route = Routes.TagsSettings,
 )
+
+fun NavController.navigateToAdvancedSettings() = navigate(
+    route = Routes.AdvancedSettings,
+)
+
+fun NavController.navigateToAboutSettings() = navigate(
+    route = Routes.AboutSettings,
+)
 // endregion
 
 object Routes {
@@ -973,6 +997,12 @@ object Routes {
 
     @Serializable
     data object TagsSettings
+
+    @Serializable
+    data object AdvancedSettings
+
+    @Serializable
+    data object AboutSettings
 
     @Serializable
     data object CustomFeeSettings
