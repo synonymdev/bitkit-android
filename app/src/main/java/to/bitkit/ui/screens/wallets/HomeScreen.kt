@@ -67,10 +67,12 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.SuggestionCard
+import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToQrScanner
+import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferSavingsAvailability
 import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
@@ -83,7 +85,6 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.settings.pin.PinNavigationSheet
-import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
@@ -154,8 +155,7 @@ fun HomeScreen(
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
-                    val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
-
+                    val hasSeenSpendingOnboardingIntro by appViewModel.hasSeenSpendingOnboardingIntro.collectAsState()
 
                     HomeContentView(
                         uiState = uiState,
@@ -176,10 +176,10 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SPEND -> {
-                                    if (!hasSeenSpendingIntro) {
-                                        rootNavController.navigateToTransferSpendingIntro()
+                                    if (!hasSeenSpendingOnboardingIntro) {
+                                        rootNavController.navigate(Routes.TransferIntro)
                                     } else {
-                                        rootNavController.navigateToTransferSpendingAmount()
+                                        rootNavController.navigateToTransferFunding()
                                     }
                                 }
 

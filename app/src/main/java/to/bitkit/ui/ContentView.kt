@@ -265,7 +265,13 @@ fun ContentView(
                     startDestination = Routes.TransferIntro,
                 ) {
                     composable<Routes.TransferIntro> {
-                        TransferIntroScreen()
+                        TransferIntroScreen(
+                            onContinueClick = {
+                                navController.navigateToTransferFunding()
+                                appViewModel.setHasSeenSpendingOnboardingIntro(true)
+                            },
+                            onCloseClick = { navController.navigateToHome() },
+                        )
                     }
                     composable<Routes.SavingsIntro> {
                         SavingsIntroScreen(
