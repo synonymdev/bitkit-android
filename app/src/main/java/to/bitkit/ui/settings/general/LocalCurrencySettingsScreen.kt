@@ -61,6 +61,7 @@ fun LocalCurrencySettingsScreen(
     val otherCurrencies by remember(filteredRates, mostUsedCurrenciesList) {
         derivedStateOf {
             filteredRates.filter { it.quote !in mostUsedCurrenciesList }
+                .sortedBy { it.quote }
         }
     }
 
