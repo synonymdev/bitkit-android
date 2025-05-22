@@ -82,6 +82,8 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
+import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -232,7 +234,7 @@ fun ContentView(
         ) {
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
-                settings(navController)
+                settings(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 transactionSpeedSettings(navController)
@@ -469,9 +471,26 @@ private fun NavGraphBuilder.home(
 
 private fun NavGraphBuilder.settings(
     navController: NavHostController,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.QuickPayIntro> {
+        QuickPayIntroScreen(
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                appViewModel.setQuickPayIntroSeen(true)
+                navController.navigate(Routes.QuickPaySettings)
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.QuickPaySettings> {
+        QuickPaySettingsScreen (
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
     }
 }
 
@@ -1090,4 +1109,10 @@ object Routes {
 
     @Serializable
     data object ReportIssueFailure
+
+    @Serializable
+    data object QuickPayIntro
+
+    @Serializable
+    data object QuickPaySettings
 }
