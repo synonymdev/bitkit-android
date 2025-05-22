@@ -8,6 +8,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 import to.bitkit.BuildConfig
+import to.bitkit.env.Env
 import to.bitkit.models.ChatwootMessage
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -20,7 +21,7 @@ class ChatwootHttpClient @Inject constructor(
 ) {
 
     suspend fun postQuestion(message: ChatwootMessage) {
-        return post(BuildConfig.CHATWOOT_API, message)
+        return post(Env.chatwootUrl, message)
     }
 
     // region utils
