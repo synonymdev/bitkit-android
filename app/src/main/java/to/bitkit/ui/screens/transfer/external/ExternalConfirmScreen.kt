@@ -14,11 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,6 +35,7 @@ import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -87,14 +85,7 @@ private fun ExternalConfirmContent(
         AppTopBar(
             titleText = stringResource(R.string.lightning__external__nav_title),
             onBackClick = onBackClick,
-            actions = {
-                IconButton(onClick = onCloseClick) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.common__close),
-                    )
-                }
-            },
+            actions = { CloseNavIcon(onCloseClick) },
         )
         Column(
             modifier = Modifier

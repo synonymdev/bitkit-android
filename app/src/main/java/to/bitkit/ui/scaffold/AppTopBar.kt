@@ -74,7 +74,6 @@ fun BackNavIcon(onClick: () -> Unit) {
     }
 }
 
-// TODO use everywhere
 @Composable
 fun CloseNavIcon(onClick: () -> Unit) {
     IconButton(onClick = onClick) {

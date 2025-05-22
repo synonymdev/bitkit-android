@@ -9,11 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +33,7 @@ import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -60,14 +58,7 @@ fun FundingScreen(
         AppTopBar(
             titleText = stringResource(R.string.lightning__funding__nav_title),
             onBackClick = onBackClick,
-            actions = {
-                IconButton(onClick = onCloseClick) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.common__close),
-                    )
-                }
-            },
+            actions = { CloseNavIcon(onCloseClick) },
         )
         Column(
             modifier = Modifier
