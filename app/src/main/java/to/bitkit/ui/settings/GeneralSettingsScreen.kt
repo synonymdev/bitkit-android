@@ -45,6 +45,9 @@ fun GeneralSettingsScreen(
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
         onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
         onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
+        onWidgetsClick = { /* TODO: Add nav to WidgetsSettings */ },
+        onQuickPayClick = { /* TODO: Add nav to QuickPaySettings */ },
+        onTagsClick = { /* TODO: Add nav to TagsSettings */ },
     )
 }
 
@@ -58,6 +61,9 @@ private fun GeneralSettingsContent(
     onLocalCurrencyClick: () -> Unit = {},
     onDefaultUnitClick: () -> Unit = {},
     onTransactionSpeedClick: () -> Unit = {},
+    onWidgetsClick: () -> Unit = {},
+    onQuickPayClick: () -> Unit = {},
+    onTagsClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -89,6 +95,18 @@ private fun GeneralSettingsContent(
                 title = stringResource(R.string.settings__general__speed),
                 value = SettingsButtonValue.StringValue(defaultTransactionSpeed.displayText),
                 onClick = onTransactionSpeedClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__widgets__nav_title),
+                onClick = onWidgetsClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__quickpay__nav_title),
+                onClick = onQuickPayClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__general__tags),
+                onClick = onTagsClick,
             )
         }
     }
