@@ -128,6 +128,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.quickpayIntroSeen
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setQuickPayIntroSeen(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setQuickPayIntroSeen(value)
+        }
+    }
+
     val isPinEnabled: StateFlow<Boolean> = settingsStore.isPinEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
