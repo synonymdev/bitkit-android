@@ -2,20 +2,19 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
-import org.lightningdevkit.ldknode.UserChannelId
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.LnPeer
@@ -63,7 +62,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(settingsStore.defaultTransactionSpeed).thenReturn(flowOf(TransactionSpeed.Medium))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(defaultTransactionSpeed = TransactionSpeed.Medium)))
         sut.start().let { assertTrue(it.isSuccess) }
     }
 

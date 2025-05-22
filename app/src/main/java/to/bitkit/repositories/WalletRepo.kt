@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
@@ -16,7 +15,6 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -207,7 +205,7 @@ class WalletRepo @Inject constructor(
         try { //TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
             keychain.wipe()
             appStorage.clear()
-            settingsStore.wipe()
+            settingsStore.reset()
             coreService.activity.removeAll()
             deleteAllInvoices()
             _walletState.update { WalletState() }
@@ -273,7 +271,7 @@ class WalletRepo @Inject constructor(
 
     // Settings
     suspend fun setShowEmptyState(show: Boolean) {
-        settingsStore.setShowEmptyState(show)
+        settingsStore.update { it.copy(showEmptyState = show) }
         _walletState.update { it.copy(showEmptyState = show) }
     }
 

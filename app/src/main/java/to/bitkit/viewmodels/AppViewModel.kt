@@ -93,110 +93,110 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
-    val showEmptyState: StateFlow<Boolean> = settingsStore.showEmptyState
+    val showEmptyState: StateFlow<Boolean> = settingsStore.data.map { it.showEmptyState }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setShowEmptyState(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setShowEmptyState(value)
+            settingsStore.update { it.copy(showEmptyState = value) }
         }
     }
 
-    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.hasSeenSpendingIntro
+    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSpendingIntro }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setHasSeenSpendingIntro(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setHasSeenSpendingIntro(value)
+            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
         }
     }
-    val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.hasSeenTransferIntro
+    val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenTransferIntro }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setHasSeenTransferIntro(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setHasSeenTransferIntro(value)
+            settingsStore.update { it.copy(hasSeenTransferIntro = value) }
         }
     }
 
-    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.hasSeenSavingsIntro
+    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSavingsIntro }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setHasSeenSavingsIntro(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setHasSeenSavingsIntro(value)
+            settingsStore.update { it.copy(hasSeenSavingsIntro = value) }
         }
     }
 
-    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.quickpayIntroSeen
+    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.data.map { it.quickPayIntroSeen }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setQuickPayIntroSeen(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setQuickPayIntroSeen(value)
+            settingsStore.update { it.copy(quickPayIntroSeen = value) }
         }
     }
 
-    val isPinEnabled: StateFlow<Boolean> = settingsStore.isPinEnabled
+    val isPinEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setIsPinEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsPinEnabled(value)
+            settingsStore.update { it.copy(isPinEnabled = value) }
         }
     }
 
-    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.isPinOnLaunchEnabled
+    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnLaunchEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setIsPinOnLaunchEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsPinOnLaunchEnabled(value)
+            settingsStore.update { it.copy(isPinOnLaunchEnabled = value) }
         }
     }
 
-    val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.isPinOnIdleEnabled
+    val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnIdleEnabled }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setIsPinOnIdleEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsPinOnIdleEnabled(value)
+            settingsStore.update { it.copy(isPinOnIdleEnabled = value) }
         }
     }
 
-    val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.isPinForPaymentsEnabled
+    val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinForPaymentsEnabled }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     fun setIsPinForPaymentsEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsPinForPaymentsEnabled(value)
+            settingsStore.update { it.copy(isPinForPaymentsEnabled = value) }
         }
     }
 
-    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
+    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isBiometricEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setIsBiometricEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsBiometricEnabled(value)
+            settingsStore.update { it.copy(isBiometricEnabled = value) }
         }
     }
 
-    val defaultTransactionSpeed = settingsStore.defaultTransactionSpeed
+    val defaultTransactionSpeed = settingsStore.data.map { it.defaultTransactionSpeed }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionSpeed.Medium)
 
     fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
         viewModelScope.launch {
-            settingsStore.setDefaultTransactionSpeed(speed)
+            settingsStore.update { it.copy(defaultTransactionSpeed = speed) }
         }
     }
 
-    val isDevModeEnabled: StateFlow<Boolean> = settingsStore.isDevModeEnabled
+    val isDevModeEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isDevModeEnabled }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun setIsDevModeEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setIsDevModeEnabled(value)
+            settingsStore.update { it.copy(isDevModeEnabled = value) }
         }
     }
 

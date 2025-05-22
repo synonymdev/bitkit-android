@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -46,7 +47,7 @@ class TransferViewModel @Inject constructor(
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
     val spendingUiState = _spendingUiState.asStateFlow()
 
-    val lightningSetupStep: StateFlow<Int> = settingsStore.lightningSetupStep
+    val lightningSetupStep: StateFlow<Int> = settingsStore.data.map { it.lightningSetupStep }
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _selectedChannelIdsState = MutableStateFlow<Set<String>>(emptySet())
@@ -71,7 +72,7 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.sendOnChain(address = order.payment.onchain.address, sats = order.feeSat, speed = speed)
                 .onSuccess {
-                    settingsStore.setLightningSetupStep(0)
+                    settingsStore.update { it.copy(lightningSetupStep = 0) }
                     watchOrder(order.id)
                 }
                 .onFailure { error ->
@@ -98,7 +99,7 @@ class TransferViewModel @Inject constructor(
                     }
 
                     val step = updateOrder(order)
-                    settingsStore.setLightningSetupStep(step)
+                    settingsStore.update { it.copy(lightningSetupStep = step) }
                     Logger.debug("LN setup step: $step")
 
                     if (order.state2 == BtOrderState2.EXPIRED) {

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -300,7 +301,7 @@ class LightningRepo @Inject constructor(
      */
     suspend fun sendOnChain(address: Address, sats: ULong, speed: TransactionSpeed? = null): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
-            val transactionSpeed = speed ?: settingsStore.defaultTransactionSpeed.first()
+            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
 
             var fees = coreService.blocktank.getFees().getOrThrow()
             var satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
