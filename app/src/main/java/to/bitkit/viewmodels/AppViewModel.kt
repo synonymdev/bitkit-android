@@ -110,12 +110,12 @@ class AppViewModel @Inject constructor(
             settingsStore.setHasSeenSpendingIntro(value)
         }
     }
-    val hasSeenSpendingOnboardingIntro: StateFlow<Boolean> = settingsStore.hasSeenSpendingOnboardingIntro
+    val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.hasSeenTransferIntro
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    fun setHasSeenSpendingOnboardingIntro(value: Boolean) {
+    fun setHasSeenTransferIntro(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setHasSeenSpendingOnboardingIntro(value)
+            settingsStore.setHasSeenTransferIntro(value)
         }
     }
 

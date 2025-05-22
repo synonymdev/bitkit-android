@@ -156,7 +156,7 @@ fun HomeScreen(
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
-                    val hasSeenSpendingOnboardingIntro by appViewModel.hasSeenSpendingOnboardingIntro.collectAsState()
+                    val hasSeenTransferIntro by appViewModel.hasSeenTransferIntro.collectAsState()
 
                     HomeContentView(
                         uiState = uiState,
@@ -177,7 +177,7 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SPEND -> {
-                                    if (!hasSeenSpendingOnboardingIntro) {
+                                    if (!hasSeenTransferIntro) {
                                         rootNavController.navigateToTransferIntro()
                                     } else {
                                         rootNavController.navigateToTransferFunding()
