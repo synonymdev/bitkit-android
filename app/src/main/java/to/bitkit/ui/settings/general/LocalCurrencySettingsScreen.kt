@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -25,6 +26,7 @@ import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -80,7 +82,9 @@ fun LocalCurrencySettingsScreen(
                 modifier = Modifier.padding(vertical = 16.dp)
             )
 
-            LazyColumn {
+            LazyColumn(
+                modifier = Modifier.weight(1f)
+            ) {
                 if (mostUsedRates.isNotEmpty()) {
                     item {
                         SectionHeader(title = stringResource(R.string.settings__general__currency_most_used))
@@ -106,6 +110,11 @@ fun LocalCurrencySettingsScreen(
                     )
                 }
             }
+            BodyS(
+                text = stringResource(R.string.settings__general__currency_footer),
+                color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
         }
     }
 }
