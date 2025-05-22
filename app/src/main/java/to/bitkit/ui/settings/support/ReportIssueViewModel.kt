@@ -10,13 +10,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.ext.removeSpaces
-import to.bitkit.repositories.SupportRepo
+import to.bitkit.repositories.LogsRepo
 import to.bitkit.ui.utils.isValidEmail
 import javax.inject.Inject
 
 @HiltViewModel
 class ReportIssueViewModel @Inject constructor(
-    private val supportRepo: SupportRepo
+    private val logsRepo: LogsRepo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReportIssueUiState())
@@ -30,7 +30,7 @@ class ReportIssueViewModel @Inject constructor(
     fun sendMessage() {
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            supportRepo.postQuestion(email = _uiState.value.emailInput, message = _uiState.value.messageInput)
+            logsRepo.postQuestion(email = _uiState.value.emailInput, message = _uiState.value.messageInput)
                 .onSuccess {
                     _uiState.update { it.copy(isLoading = false) }
                     setReportIssueEffect(ReportIssueEffects.NavigateSuccess)

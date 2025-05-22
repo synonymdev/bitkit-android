@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.env.Env
+import to.bitkit.repositories.LogsRepo
 import to.bitkit.utils.Logger
 import java.io.BufferedReader
 import java.io.File
@@ -22,6 +23,7 @@ import javax.inject.Inject
 @HiltViewModel
 class LogsViewModel @Inject constructor(
     private val application: Application,
+    private val logsRepo: LogsRepo
 ) : AndroidViewModel(application) {
     private val _logs = MutableStateFlow<List<LogFile>>(emptyList())
     val logs: StateFlow<List<LogFile>> = _logs.asStateFlow()
@@ -68,23 +70,15 @@ class LogsViewModel @Inject constructor(
 
     fun loadLogContent(logFile: LogFile) {
         viewModelScope.launch {
-            try {
-                if (!logFile.file.exists()) {
-                    _selectedLogContent.value = listOf("Log file not found")
-                    return@launch
-                }
+            logsRepo.loadLogContent(logFile)
+                .onSuccess { content ->
+                    _selectedLogContent.value = content
 
-                val lines = mutableListOf<String>()
-                BufferedReader(FileReader(logFile.file)).use { reader ->
-                    reader.forEachLine { line ->
-                        lines.add(line.trim())
-                    }
                 }
-                _selectedLogContent.value = lines
-            } catch (e: Exception) {
-                _selectedLogContent.value = listOf("Error loading log: ${e.message}")
-                Logger.error("Failed to load log content", e)
-            }
+                .onFailure { e ->
+                    _selectedLogContent.value = listOf("Log file not found")
+                    Logger.error("Failed to load log content", e)
+                }
         }
     }
 
