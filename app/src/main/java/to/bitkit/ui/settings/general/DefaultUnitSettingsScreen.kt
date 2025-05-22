@@ -103,7 +103,7 @@ fun DefaultUnitSettingsScreenContent(
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
