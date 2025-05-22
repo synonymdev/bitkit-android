@@ -234,7 +234,7 @@ fun ContentView(
         ) {
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
-                settings(navController)
+                settings(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 transactionSpeedSettings(navController)
@@ -471,6 +471,7 @@ private fun NavGraphBuilder.home(
 
 private fun NavGraphBuilder.settings(
     navController: NavHostController,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
@@ -480,8 +481,8 @@ private fun NavGraphBuilder.settings(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             onContinue = {
+                appViewModel.setHasSeenQuickPayIntro(true)
                 navController.navigate(Routes.QuickPaySettings)
-                //TODO setHasSeenIntro
             }
         )
     }
