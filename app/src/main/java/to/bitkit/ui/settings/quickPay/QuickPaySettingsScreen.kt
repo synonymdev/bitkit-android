@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
@@ -25,7 +26,7 @@ import to.bitkit.ui.utils.withAccent
 
 
 @Composable
-fun QuickPayIntroScreen(
+fun QuickPaySettingsScreen(
     onBack: () -> Unit,
     onClose: () -> Unit,
     onConfirm: () -> Unit,
@@ -41,25 +42,23 @@ fun QuickPayIntroScreen(
         Column(
             modifier = Modifier.padding(horizontal = 32.dp)
         ) {
+            //TODO IMPLEMENT THE FEATURE
+
             Image(
                 painter = painterResource(R.drawable.fast_forward),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 60.dp)
                     .weight(1f)
             )
 
             Display(
-                text = stringResource(R.string.settings__quickpay__intro__title).withAccent(accentColor = Colors.Green),
+                text = "Coming soon",
                 color = Colors.White
             )
             Spacer(Modifier.height(8.dp))
-            BodyM(text = stringResource(R.string.settings__quickpay__intro__description), color = Colors.White64)
-            Spacer(Modifier.height(32.dp))
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onConfirm
-            )
+            BodyS(text = stringResource(R.string.settings__quickpay__settings__note), color = Colors.White64)
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -69,7 +68,7 @@ fun QuickPayIntroScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        QuickPayIntroScreen(
+        QuickPaySettingsScreen(
             onBack = {},
             onClose = {},
             onConfirm = {}
