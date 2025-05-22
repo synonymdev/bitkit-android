@@ -91,7 +91,10 @@ import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
+import to.bitkit.ui.settings.support.ReportIssueScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
+import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
@@ -271,7 +274,13 @@ fun ContentView(
                     startDestination = Routes.TransferIntro,
                 ) {
                     composable<Routes.TransferIntro> {
-                        TransferIntroScreen()
+                        TransferIntroScreen(
+                            onContinueClick = {
+                                navController.navigateToTransferFunding()
+                                appViewModel.setHasSeenTransferIntro(true)
+                            },
+                            onCloseClick = { navController.navigateToHome() },
+                        )
                     }
                     composable<Routes.SavingsIntro> {
                         SavingsIntroScreen(
@@ -749,22 +758,16 @@ private fun NavGraphBuilder.suggestions(
             onBackClick = { navController.popBackStack() }
         )
     }
-    composable<Routes.Support>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        SupportScreen (
+    composableWithDefaultTransitions<Routes.Support> {
+        SupportScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
         )
     }
 
-    composable<Routes.ReportIssue>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueScreen (
+    composableWithDefaultTransitions<Routes.ReportIssue> {
+        ReportIssueScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             navigateResultScreen = { isSuccess ->
@@ -777,22 +780,16 @@ private fun NavGraphBuilder.suggestions(
         )
     }
 
-    composable<Routes.ReportIssueSuccess>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueResultScreen (
+    composableWithDefaultTransitions<Routes.ReportIssueSuccess> {
+        ReportIssueResultScreen(
             isSuccess = true,
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
         )
     }
 
-    composable<Routes.ReportIssueFailure>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        ReportIssueResultScreen (
+    composableWithDefaultTransitions<Routes.ReportIssueFailure> {
+        ReportIssueResultScreen(
             isSuccess = false,
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
@@ -918,6 +915,10 @@ fun NavController.navigateToTransferSpendingIntro() = navigate(
 
 fun NavController.navigateToTransferSpendingAmount() = navigate(
     route = Routes.SpendingAmount,
+)
+
+fun NavController.navigateToTransferIntro() = navigate(
+    route = Routes.TransferIntro,
 )
 
 fun NavController.navigateToTransferFunding() = navigate(

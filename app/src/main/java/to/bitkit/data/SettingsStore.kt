@@ -74,6 +74,11 @@ class SettingsStore @Inject constructor(
         store.edit { it[HAS_SEEN_SPENDING_INTRO] = value }
     }
 
+    val hasSeenTransferIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_TRANSFER_INTRO] == true }
+    suspend fun setHasSeenTransferIntro(value: Boolean) {
+        store.edit { it[HAS_SEEN_TRANSFER_INTRO] = value }
+    }
+
     val hasSeenSavingsIntro: Flow<Boolean> = store.data.map { it[HAS_SEEN_SAVINGS_INTRO] == true }
     suspend fun setHasSeenSavingsIntro(value: Boolean) {
         store.edit { it[HAS_SEEN_SAVINGS_INTRO] = value }
@@ -114,6 +119,7 @@ class SettingsStore @Inject constructor(
         private val DEFAULT_TX_SPEED = stringPreferencesKey("default_tx_speed")
         private val SHOW_EMPTY_STATE = booleanPreferencesKey("show_empty_state")
         private val HAS_SEEN_SPENDING_INTRO = booleanPreferencesKey("has_seen_spending_intro")
+        private val HAS_SEEN_TRANSFER_INTRO = booleanPreferencesKey("has_seen_transfer_intro")
         private val HAS_SEEN_SAVINGS_INTRO = booleanPreferencesKey("has_seen_savings_intro")
         private val LIGHTNING_SETUP_STEP = intPreferencesKey("lightning_setup_step")
         private val IS_PIN_ENABLED = booleanPreferencesKey("is_pin_enabled")

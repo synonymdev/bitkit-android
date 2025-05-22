@@ -17,7 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SupportRepo @Inject constructor(
+class LogsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val chatwootHttpClient: ChatwootHttpClient
 
