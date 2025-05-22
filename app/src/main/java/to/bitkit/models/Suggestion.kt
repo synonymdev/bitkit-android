@@ -62,7 +62,7 @@ enum class Suggestion(
     ),
     QUICK_PAY(
         title = R.string.cards__quickpay__title,
-        description = R.string.cards__shop__description,
+        description = R.string.cards__quickpay__description,
         color = Colors.Green,
         icon = R.drawable.fast_forward
     ),
