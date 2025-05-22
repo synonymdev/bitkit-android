@@ -128,12 +128,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    val hasSeenQuickPayIntro: StateFlow<Boolean> = settingsStore.hasSeenQuickPayIntro
+    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.quickpayIntroSeen
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    fun setHasSeenQuickPayIntro(value: Boolean) {
+    fun setQuickPayIntroSeen(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.setHasSeenQuickPayIntro(value)
+            settingsStore.setQuickPayIntroSeen(value)
         }
     }
 

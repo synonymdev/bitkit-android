@@ -481,7 +481,7 @@ private fun NavGraphBuilder.settings(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             onContinue = {
-                appViewModel.setHasSeenQuickPayIntro(true)
+                appViewModel.setQuickPayIntroSeen(true)
                 navController.navigate(Routes.QuickPaySettings)
             }
         )
