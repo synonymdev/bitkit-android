@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.env.Env
@@ -33,38 +34,13 @@ class LogsViewModel @Inject constructor(
 
     fun loadLogs() {
         viewModelScope.launch {
-            try {
-                val logDir = File(Env.logDir)
-                if (!logDir.exists()) {
-                    _logs.value = emptyList()
-                    return@launch
+            logsRepo.getLogs()
+                .onSuccess { logList ->
+                    _logs.update { logList }
+                }.onFailure { e ->
+                    Logger.error("Failed to load logs", e)
+                    _logs.update { emptyList() }
                 }
-
-                val logFiles = logDir
-                    .listFiles { file -> file.extension == "log" }
-                    ?.map { file ->
-                        val fileName = file.name
-                        val components = fileName.split("_")
-
-                        val serviceName = components.firstOrNull()
-                            ?.let { c -> c.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
-                            ?: "Unknown"
-                        val timestamp = if (components.size >= 3) components[components.size - 2] else ""
-                        val displayName = "$serviceName Log: $timestamp"
-
-                        LogFile(
-                            displayName = displayName,
-                            file = file,
-                        )
-                    }
-                    ?.sortedByDescending { it.file.lastModified() }
-                    ?: emptyList()
-
-                _logs.value = logFiles
-            } catch (e: Exception) {
-                _logs.value = emptyList()
-                Logger.error("Failed to load logs", e)
-            }
         }
     }
 
@@ -72,11 +48,10 @@ class LogsViewModel @Inject constructor(
         viewModelScope.launch {
             logsRepo.loadLogContent(logFile)
                 .onSuccess { content ->
-                    _selectedLogContent.value = content
-
+                    _selectedLogContent.update { content }
                 }
                 .onFailure { e ->
-                    _selectedLogContent.value = listOf("Log file not found")
+                    _selectedLogContent.update { listOf("Log file not found") }
                     Logger.error("Failed to load log content", e)
                 }
         }
