@@ -74,9 +74,12 @@ import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
+import to.bitkit.ui.settings.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.TagsSettingsScreen
+import to.bitkit.ui.settings.WidgetsSettingsScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
@@ -485,6 +488,18 @@ private fun NavGraphBuilder.nodeState(
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.WidgetsSettings> {
+        WidgetsSettingsScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.QuickPaySettings> {
+        QuickPaySettingsScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.TagsSettings> {
+        TagsSettingsScreen(navController)
     }
 }
 
@@ -921,6 +936,18 @@ fun NavController.navigateToTransactionSpeedSettings() = navigate(
 fun NavController.navigateToCustomFeeSettings() = navigate(
     route = Routes.CustomFeeSettings,
 )
+
+fun NavController.navigateToWidgetsSettings() = navigate(
+    route = Routes.WidgetsSettings,
+)
+
+fun NavController.navigateToQuickPaySettings() = navigate(
+    route = Routes.QuickPaySettings,
+)
+
+fun NavController.navigateToTagsSettings() = navigate(
+    route = Routes.TagsSettings,
+)
 // endregion
 
 object Routes {
@@ -938,6 +965,15 @@ object Routes {
 
     @Serializable
     data object TransactionSpeedSettings
+
+    @Serializable
+    data object WidgetsSettings
+
+    @Serializable
+    data object QuickPaySettings
+
+    @Serializable
+    data object TagsSettings
 
     @Serializable
     data object CustomFeeSettings

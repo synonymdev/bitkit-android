@@ -21,7 +21,10 @@ import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToQuickPaySettings
+import to.bitkit.ui.navigateToTagsSettings
 import to.bitkit.ui.navigateToTransactionSpeedSettings
+import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -45,9 +48,9 @@ fun GeneralSettingsScreen(
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
         onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
         onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
-        onWidgetsClick = { /* TODO: Add nav to WidgetsSettings */ },
-        onQuickPayClick = { /* TODO: Add nav to QuickPaySettings */ },
-        onTagsClick = { /* TODO: Add nav to TagsSettings */ },
+        onWidgetsClick = { navController.navigateToWidgetsSettings() },
+        onQuickPayClick = { navController.navigateToQuickPaySettings() },
+        onTagsClick = { navController.navigateToTagsSettings() },
     )
 }
 
