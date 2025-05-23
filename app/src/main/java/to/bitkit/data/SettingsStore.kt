@@ -46,6 +46,7 @@ data class SettingsData(
     val hasSeenSpendingIntro: Boolean = false,
     val hasSeenTransferIntro: Boolean = false,
     val hasSeenSavingsIntro: Boolean = false,
+    val hasSeenProfileIntro: Boolean = false,
     val quickPayIntroSeen: Boolean = false,
     val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,

@@ -53,6 +53,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val hasSeenProfileIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenProfileIntro }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenProfileIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hasSeenProfileIntro = value) }
+        }
+    }
+
     val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.data.map { it.quickPayIntroSeen }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
