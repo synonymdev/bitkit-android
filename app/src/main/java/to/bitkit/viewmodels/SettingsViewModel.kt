@@ -17,6 +17,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
+    fun reset() = viewModelScope.launch { settingsStore.reset() }
 
     val showEmptyState = settingsStore.data.map { it.showEmptyState }
         .asStateFlow(initialValue = false)
