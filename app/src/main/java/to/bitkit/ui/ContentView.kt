@@ -88,6 +88,8 @@ import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
+import to.bitkit.ui.screens.shop.ShopDiscoverScreen
+import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -244,6 +246,7 @@ fun ContentView(
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
                 settings(navController, appViewModel)
                 profile(navController, appViewModel)
+                shop(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 advancedSettings(navController)
@@ -521,6 +524,26 @@ private fun NavGraphBuilder.profile(
     composableWithDefaultTransitions<Routes.CreateProfile> {
         CreateProfileScreen(
             onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
+    }
+}
+
+private fun NavGraphBuilder.shop(
+    navController: NavHostController,
+    appViewModel: AppViewModel,
+) {
+    composableWithDefaultTransitions<Routes.ShopIntro> {
+        ShopIntroScreen(
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                appViewModel.setHasSeenShopIntro(true)
+                navController.navigate(Routes.ShopDiscover)
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.ShopDiscover> {
+        ShopDiscoverScreen(
             onClose = { navController.navigateToHome() },
         )
     }
@@ -1205,4 +1228,10 @@ object Routes {
 
     @Serializable
     data object CreateProfile
+
+    @Serializable
+    data object ShopIntro
+
+    @Serializable
+    data object ShopDiscover
 }
