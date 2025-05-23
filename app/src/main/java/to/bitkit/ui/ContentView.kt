@@ -243,6 +243,7 @@ fun ContentView(
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
                 settings(navController, appViewModel)
+                profile(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 advancedSettings(navController)
@@ -502,6 +503,12 @@ private fun NavGraphBuilder.settings(
             onClose = { navController.navigateToHome() },
         )
     }
+}
+
+private fun NavGraphBuilder.profile(
+    navController: NavHostController,
+    appViewModel: AppViewModel,
+) {
     composableWithDefaultTransitions<Routes.ProfileIntro> {
         ProfileIntroScreen(
             onClose = { navController.navigateToHome() },
