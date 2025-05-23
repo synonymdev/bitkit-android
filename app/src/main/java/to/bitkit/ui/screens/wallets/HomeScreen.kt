@@ -157,6 +157,7 @@ fun HomeScreen(
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
                     val hasSeenTransferIntro by appViewModel.hasSeenTransferIntro.collectAsState()
+                    val hasSeenShopIntro by appViewModel.hasSeenShopIntro.collectAsState()
                     val hasSeenProfileIntro by appViewModel.hasSeenProfileIntro.collectAsState()
                     val quickpayIntroSeen by appViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
 
@@ -216,9 +217,11 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SHOP -> {
-                                    //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
-                                    val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
-                                    context.startActivity(intent)
+                                    if (!hasSeenShopIntro) {
+                                        rootNavController.navigate(Routes.ShopIntro)
+                                    } else {
+                                        rootNavController.navigate(Routes.ShopDiscover)
+                                    }
                                 }
 
                                 Suggestion.QUICK_PAY -> {
