@@ -157,6 +157,7 @@ fun HomeScreen(
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
                     val hasSeenTransferIntro by appViewModel.hasSeenTransferIntro.collectAsState()
+                    val hasSeenProfileIntro by appViewModel.hasSeenProfileIntro.collectAsState()
                     val quickpayIntroSeen by appViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
 
                     HomeContentView(
@@ -207,8 +208,11 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.PROFILE -> {
-                                    //TODO IMPLEMENT
-                                    appViewModel.toast(Exception("Coming soon: PROFILE"))
+                                    if (!hasSeenProfileIntro) {
+                                        rootNavController.navigate(Routes.ProfileIntro)
+                                    } else {
+                                        rootNavController.navigate(Routes.CreateProfile)
+                                    }
                                 }
 
                                 Suggestion.SHOP -> {

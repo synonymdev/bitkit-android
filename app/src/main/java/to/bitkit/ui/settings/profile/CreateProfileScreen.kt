@@ -21,8 +21,7 @@ import to.bitkit.ui.theme.Colors
 fun CreateProfileScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
-    onContinue: () -> Unit,
-) {
+) { //TODO IMPLEMENT
     ScreenColumn {
 
         AppTopBar(
@@ -53,7 +52,6 @@ private fun Preview() {
         CreateProfileScreen(
             onClose = {},
             onBack = {},
-            onContinue = {}
         )
     }
 }
