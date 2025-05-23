@@ -128,6 +128,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    val hasSeenShopIntro: StateFlow<Boolean> = settingsStore.hasSeenShopIntro
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    fun setHasSeenShopIntro(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setHasSeenShopIntro(value)
+        }
+    }
+
     val hasSeenProfileIntro: StateFlow<Boolean> = settingsStore.hasSeenProfileIntro
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
