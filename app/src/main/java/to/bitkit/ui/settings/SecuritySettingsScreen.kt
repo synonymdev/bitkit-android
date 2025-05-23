@@ -31,6 +31,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settings.pin.PinNavigationSheet
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -40,13 +41,14 @@ fun SecuritySettingsScreen(
     navController: NavController,
 ) {
     val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
 
     var showPinSheet by remember { mutableStateOf(false) }
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
-    val isPinForPaymentsEnabled by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
+    val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     PinNavigationSheetHost(
         showSheet = showPinSheet,

@@ -50,6 +50,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -77,8 +78,9 @@ fun SendAndReviewScreen(
     var showBiometrics by remember { mutableStateOf(false) }
 
     val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
-    val pinForPayments by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
 

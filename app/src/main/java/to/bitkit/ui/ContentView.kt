@@ -103,6 +103,7 @@ import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -114,6 +115,7 @@ fun ContentView(
     currencyViewModel: CurrencyViewModel,
     activityListViewModel: ActivityListViewModel,
     transferViewModel: TransferViewModel,
+    settingsViewModel: SettingsViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -235,12 +237,13 @@ fun ContentView(
             LocalCurrencyViewModel provides currencyViewModel,
             LocalActivityListViewModel provides activityListViewModel,
             LocalTransferViewModel provides transferViewModel,
+            LocalSettingsViewModel provides settingsViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {
             NavHost(navController, startDestination = Routes.Home) {
-                home(walletViewModel, appViewModel, activityListViewModel, navController)
-                settings(navController, appViewModel)
+                home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
+                settings(navController, settingsViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 advancedSettings(navController)
@@ -277,7 +280,7 @@ fun ContentView(
                         TransferIntroScreen(
                             onContinueClick = {
                                 navController.navigateToTransferFunding()
-                                appViewModel.setHasSeenTransferIntro(true)
+                                settingsViewModel.setHasSeenTransferIntro(true)
                             },
                             onCloseClick = { navController.navigateToHome() },
                         )
@@ -286,7 +289,7 @@ fun ContentView(
                         SavingsIntroScreen(
                             onContinueClick = {
                                 navController.navigate(Routes.SavingsAvailability)
-                                appViewModel.setHasSeenSavingsIntro(true)
+                                settingsViewModel.setHasSeenSavingsIntro(true)
                             },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.navigateToHome() },
@@ -324,7 +327,7 @@ fun ContentView(
                         SpendingIntroScreen(
                             onContinueClick = {
                                 navController.navigate(Routes.SpendingAmount)
-                                appViewModel.setHasSeenSpendingIntro(true)
+                                settingsViewModel.setHasSeenSpendingIntro(true)
                             },
                             onBackClick = { navController.popBackStack() },
                             onCloseClick = { navController.navigateToHome() },
@@ -371,7 +374,7 @@ fun ContentView(
                         )
                     }
                     composable<Routes.Funding> {
-                        val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsState()
+                        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
                         FundingScreen(
                             onTransfer = {
                                 if (!hasSeenSpendingIntro) {
@@ -465,6 +468,7 @@ private fun NavGraphBuilder.home(
     viewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
+    settingsViewModel: SettingsViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
@@ -472,6 +476,7 @@ private fun NavGraphBuilder.home(
             walletViewModel = viewModel,
             appViewModel = appViewModel,
             activityListViewModel = activityListViewModel,
+            settingsViewModel = settingsViewModel,
             rootNavController = navController,
         )
     }
@@ -479,7 +484,7 @@ private fun NavGraphBuilder.home(
 
 private fun NavGraphBuilder.settings(
     navController: NavHostController,
-    appViewModel: AppViewModel,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.Settings> {
         SettingsScreen(navController)
@@ -489,7 +494,7 @@ private fun NavGraphBuilder.settings(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
             onContinue = {
-                appViewModel.setQuickPayIntroSeen(true)
+                settingsViewModel.setQuickPayIntroSeen(true)
                 navController.navigate(Routes.QuickPaySettings)
             }
         )

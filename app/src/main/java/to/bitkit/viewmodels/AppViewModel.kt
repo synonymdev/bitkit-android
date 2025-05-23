@@ -93,58 +93,8 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
 
-    val showEmptyState: StateFlow<Boolean> = settingsStore.data.map { it.showEmptyState }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setShowEmptyState(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(showEmptyState = value) }
-        }
-    }
-
-    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSpendingIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenSpendingIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
-        }
-    }
-    val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenTransferIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenTransferIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenTransferIntro = value) }
-        }
-    }
-
-    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSavingsIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenSavingsIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenSavingsIntro = value) }
-        }
-    }
-
-    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.data.map { it.quickPayIntroSeen }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setQuickPayIntroSeen(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(quickPayIntroSeen = value) }
-        }
-    }
-
     val isPinEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsPinEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isPinEnabled = value) }
-        }
-    }
 
     val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnLaunchEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -155,48 +105,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnIdleEnabled }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setIsPinOnIdleEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isPinOnIdleEnabled = value) }
-        }
-    }
-
-    val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinForPaymentsEnabled }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setIsPinForPaymentsEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isPinForPaymentsEnabled = value) }
-        }
-    }
-
     val isBiometricEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isBiometricEnabled }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setIsBiometricEnabled(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(isBiometricEnabled = value) }
-        }
-    }
-
-    val defaultTransactionSpeed = settingsStore.data.map { it.defaultTransactionSpeed }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionSpeed.Medium)
-
-    fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(defaultTransactionSpeed = speed) }
-        }
-    }
-
-    val isDevModeEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isDevModeEnabled }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    fun setIsDevModeEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isDevModeEnabled = value) }
         }
     }
 
@@ -819,6 +733,7 @@ class AppViewModel @Inject constructor(
     // region security
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {
+            // TODO replace with inline gets from settings store after moving isPinEnabled & isPinOnLaunchEnabled to settingsStore
             val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
             if (!needsAuth) {
                 _isAuthenticated.value = true
@@ -855,28 +770,32 @@ class AppViewModel @Inject constructor(
     }
 
     fun addPin(pin: String) {
-        setIsPinOnLaunchEnabled(true)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isPinOnLaunchEnabled = true) }
+        }
         appStorage.addSuggestionToRemovedList(Suggestion.SECURE)
         editPin(pin)
     }
 
     fun editPin(newPin: String) {
-        setIsPinEnabled(true)
-
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
+            settingsStore.update { it.copy(isPinEnabled = true) }
             keychain.upsertString(Keychain.Key.PIN.name, newPin)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }
 
     fun removePin() {
-        setIsPinEnabled(false)
-        setIsPinOnLaunchEnabled(true)
-        setIsPinOnIdleEnabled(false)
-        setIsPinForPaymentsEnabled(false)
-        setIsBiometricEnabled(false)
-
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
+            settingsStore.update {
+                it.copy(
+                    isPinEnabled = false,
+                    isPinOnLaunchEnabled = true,
+                    isPinOnIdleEnabled = false,
+                    isPinForPaymentsEnabled = false,
+                    isBiometricEnabled = false,
+                )
+            }
             keychain.delete(Keychain.Key.PIN.name)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }

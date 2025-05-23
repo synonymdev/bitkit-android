@@ -6,6 +6,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.settingsViewModel
 
 @Composable
 fun AuthCheckScreen(
@@ -13,11 +14,12 @@ fun AuthCheckScreen(
     route: Routes.AuthCheck,
 ) {
     val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
 
     val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
-    val isPinForPaymentsEnabled by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
+    val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     AuthCheckView(
         showLogoOnPin = route.showLogoOnPin,
@@ -35,11 +37,11 @@ fun AuthCheckScreen(
                 }
 
                 AuthCheckAction.TOGGLE_PIN_ON_IDLE -> {
-                    app.setIsPinOnIdleEnabled(!isPinOnIdleEnabled)
+                    settings.setIsPinOnIdleEnabled(!isPinOnIdleEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS -> {
-                    app.setIsPinForPaymentsEnabled(!isPinForPaymentsEnabled)
+                    settings.setIsPinForPaymentsEnabled(!isPinForPaymentsEnabled)
                 }
 
                 AuthCheckAction.DISABLE_PIN -> {

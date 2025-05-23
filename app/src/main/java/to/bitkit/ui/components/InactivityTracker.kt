@@ -20,12 +20,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SettingsViewModel
 
 private const val INACTIVITY_DELAY = 90_000L // 90 seconds
 
 @Composable
 fun InactivityTracker(
     app: AppViewModel,
+    settings: SettingsViewModel,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -33,7 +35,7 @@ fun InactivityTracker(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
-    val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
+    val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isAuthenticated by app.isAuthenticated.collectAsStateWithLifecycle()
 
     var inactivityJob by remember { mutableStateOf<Job?>(null) }

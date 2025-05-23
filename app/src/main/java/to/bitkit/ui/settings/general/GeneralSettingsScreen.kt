@@ -28,6 +28,7 @@ import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.displayText
 
@@ -35,9 +36,9 @@ import to.bitkit.ui.utils.displayText
 fun GeneralSettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
     val currencies = LocalCurrencies.current
-    val defaultTransactionSpeed = app.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val defaultTransactionSpeed = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
 
     GeneralSettingsContent(
         selectedCurrency = currencies.selectedCurrency,

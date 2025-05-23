@@ -23,7 +23,6 @@ import to.bitkit.env.Env
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.KEY_DELETE
@@ -34,6 +33,7 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -41,8 +41,8 @@ import to.bitkit.ui.theme.Colors
 fun CustomFeeSettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
-    val customFeeRate = app.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val settings = settingsViewModel ?: return
+    val customFeeRate = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
     var input by remember {
         mutableStateOf((customFeeRate.value as? TransactionSpeed.Custom)?.satsPerVByte?.toString() ?: "")
     }
@@ -80,7 +80,7 @@ fun CustomFeeSettingsScreen(
         },
         onContinue = {
             val feeRate = input.toUIntOrNull() ?: 0u
-            app.setDefaultTransactionSpeed(TransactionSpeed.Custom(feeRate))
+            settings.setDefaultTransactionSpeed(TransactionSpeed.Custom(feeRate))
             navController.popBackStack()
         },
         onBackClick = { navController.popBackStack() },

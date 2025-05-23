@@ -45,6 +45,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -56,6 +57,7 @@ class MainActivity : FragmentActivity() {
     private val currencyViewModel by viewModels<CurrencyViewModel>()
     private val activityListViewModel by viewModels<ActivityListViewModel>()
     private val transferViewModel by viewModels<TransferViewModel>()
+    private val settingsViewModel by viewModels<SettingsViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,7 +118,7 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = null)
-                                            appViewModel.setShowEmptyState(true)
+                                            settingsViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
@@ -155,7 +157,7 @@ class MainActivity : FragmentActivity() {
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.setRestoringWalletState(isRestoringWallet = true)
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
-                                            appViewModel.setShowEmptyState(false)
+                                            settingsViewModel.setShowEmptyState(false)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
@@ -177,7 +179,7 @@ class MainActivity : FragmentActivity() {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
                                             walletViewModel.createWallet(bip39Passphrase = passphrase)
-                                            appViewModel.setShowEmptyState(true)
+                                            settingsViewModel.setShowEmptyState(true)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
                                         }
@@ -187,7 +189,7 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
-                    InactivityTracker(appViewModel) {
+                    InactivityTracker(appViewModel, settingsViewModel) {
                         ContentView(
                             appViewModel = appViewModel,
                             walletViewModel = walletViewModel,
@@ -195,6 +197,7 @@ class MainActivity : FragmentActivity() {
                             currencyViewModel = currencyViewModel,
                             activityListViewModel = activityListViewModel,
                             transferViewModel = transferViewModel,
+                            settingsViewModel = settingsViewModel,
                         )
                     }
 
