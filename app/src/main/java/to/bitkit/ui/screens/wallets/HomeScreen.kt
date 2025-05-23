@@ -83,6 +83,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -143,6 +144,9 @@ fun HomeScreen(
                     onDismiss = { appViewModel.hideSheet() },
                 )
 
+                BottomSheetType.Backup -> BackupSheet(
+                    onDismiss = { appViewModel.hideSheet() },
+                )
                 null -> Unit
             }
         }
