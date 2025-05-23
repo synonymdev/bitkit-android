@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.wallets.suggestion.shop
+package to.bitkit.ui.screens.shop
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -30,7 +30,6 @@ fun ShopIntroScreen(
     onContinue: () -> Unit,
 ) {
     ScreenColumn {
-
         AppTopBar(
             titleText = "",
             onBackClick = null,
