@@ -1,4 +1,4 @@
-package to.bitkit.ui.profile
+package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
