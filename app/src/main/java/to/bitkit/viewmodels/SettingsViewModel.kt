@@ -97,4 +97,25 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(isDevModeEnabled = value) }
         }
     }
+
+    val isPinEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnLaunchEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setIsPinOnLaunchEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isPinOnLaunchEnabled = value) }
+        }
+    }
+
+    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isBiometricEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setIsBiometricEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isBiometricEnabled = value) }
+        }
+    }
 }

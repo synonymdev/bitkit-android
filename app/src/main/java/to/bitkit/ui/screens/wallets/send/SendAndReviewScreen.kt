@@ -79,9 +79,9 @@ fun SendAndReviewScreen(
 
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
-    val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
-    val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
 
     LaunchedEffect(savedStateHandle) {

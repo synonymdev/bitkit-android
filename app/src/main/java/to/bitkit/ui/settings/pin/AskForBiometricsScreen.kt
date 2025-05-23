@@ -31,12 +31,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
@@ -51,7 +51,7 @@ fun AskForBiometricsScreen(
     onSkip: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
     val isBiometrySupported = rememberBiometricAuthSupported()
     var showBiometricPrompt by remember { mutableStateOf(false) }
 
@@ -72,7 +72,7 @@ fun AskForBiometricsScreen(
     if (showBiometricPrompt) {
         BiometricPrompt(
             onSuccess = {
-                app.setIsBiometricEnabled(true)
+                settings.setIsBiometricEnabled(true)
                 onContinue(true)
             },
             onError = {

@@ -210,6 +210,7 @@ class MainActivity : FragmentActivity() {
                         AuthCheckView(
                             showLogoOnPin = true,
                             appViewModel = appViewModel,
+                            settingsViewModel = settingsViewModel,
                             onSuccess = { appViewModel.setIsAuthenticated(true) },
                         )
                     }

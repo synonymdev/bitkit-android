@@ -44,9 +44,9 @@ fun SecuritySettingsScreen(
     val settings = settingsViewModel ?: return
 
     var showPinSheet by remember { mutableStateOf(false) }
-    val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
-    val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
-    val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
+    val isPinOnLaunchEnabled by settings.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 

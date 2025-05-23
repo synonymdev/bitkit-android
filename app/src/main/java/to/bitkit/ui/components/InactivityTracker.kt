@@ -34,7 +34,7 @@ fun InactivityTracker(
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val isPinEnabled by app.isPinEnabled.collectAsStateWithLifecycle()
+    val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isAuthenticated by app.isAuthenticated.collectAsStateWithLifecycle()
 

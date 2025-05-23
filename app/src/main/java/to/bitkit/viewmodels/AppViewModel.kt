@@ -12,7 +12,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -38,7 +37,6 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
@@ -92,27 +90,6 @@ class AppViewModel @Inject constructor(
 
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
-
-    val isPinEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnLaunchEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsPinOnLaunchEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isPinOnLaunchEnabled = value) }
-        }
-    }
-
-    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isBiometricEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsBiometricEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isBiometricEnabled = value) }
-        }
-    }
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
@@ -733,8 +710,8 @@ class AppViewModel @Inject constructor(
     // region security
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {
-            // TODO replace with inline gets from settings store after moving isPinEnabled & isPinOnLaunchEnabled to settingsStore
-            val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
+            val settings = settingsStore.data.first()
+            val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
             if (!needsAuth) {
                 _isAuthenticated.value = true
             }

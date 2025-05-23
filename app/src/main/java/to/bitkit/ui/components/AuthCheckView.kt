@@ -36,18 +36,20 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SettingsViewModel
 
 @Composable
 fun AuthCheckView(
     showLogoOnPin: Boolean = false,
     appViewModel: AppViewModel,
+    settingsViewModel: SettingsViewModel,
     isBiometrySupported: Boolean = rememberBiometricAuthSupported(),
     requireBiometrics: Boolean = false,
     requirePin: Boolean = false,
     onSuccess: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
 ) {
-    val isBiometricsEnabled by appViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isBiometricsEnabled by settingsViewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val attemptsRemaining by appViewModel.pinAttemptsRemaining.collectAsStateWithLifecycle()
 
     AuthCheckViewContent(

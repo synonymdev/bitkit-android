@@ -16,24 +16,25 @@ fun AuthCheckScreen(
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
 
-    val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
-    val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinOnLaunchEnabled by settings.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     AuthCheckView(
         showLogoOnPin = route.showLogoOnPin,
         appViewModel = app,
+        settingsViewModel = settings,
         requireBiometrics = route.requireBiometrics,
         requirePin = route.requirePin,
         onSuccess = {
             when (route.onSuccessActionId) {
                 AuthCheckAction.TOGGLE_BIOMETRICS -> {
-                    app.setIsBiometricEnabled(!isBiometricEnabled)
+                    settings.setIsBiometricEnabled(!isBiometricEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_ON_LAUNCH -> {
-                    app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
+                    settings.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_ON_IDLE -> {
