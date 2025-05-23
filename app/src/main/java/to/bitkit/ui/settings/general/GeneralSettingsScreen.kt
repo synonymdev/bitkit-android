@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.general
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -21,7 +21,10 @@ import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToLocalCurrencySettings
+import to.bitkit.ui.navigateToQuickPaySettings
+import to.bitkit.ui.navigateToTagsSettings
 import to.bitkit.ui.navigateToTransactionSpeedSettings
+import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -45,6 +48,9 @@ fun GeneralSettingsScreen(
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
         onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
         onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
+        onWidgetsClick = { navController.navigateToWidgetsSettings() },
+        onQuickPayClick = { navController.navigateToQuickPaySettings() },
+        onTagsClick = { navController.navigateToTagsSettings() },
     )
 }
 
@@ -58,17 +64,20 @@ private fun GeneralSettingsContent(
     onLocalCurrencyClick: () -> Unit = {},
     onDefaultUnitClick: () -> Unit = {},
     onTransactionSpeedClick: () -> Unit = {},
+    onWidgetsClick: () -> Unit = {},
+    onQuickPayClick: () -> Unit = {},
+    onTagsClick: () -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = Modifier.verticalScroll(rememberScrollState())
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__general_title),
             onBackClick = onBackClick,
             actions = { CloseNavIcon(onClick = onCloseClick) },
         )
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__currency_local),
@@ -89,6 +98,18 @@ private fun GeneralSettingsContent(
                 title = stringResource(R.string.settings__general__speed),
                 value = SettingsButtonValue.StringValue(defaultTransactionSpeed.displayText),
                 onClick = onTransactionSpeedClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__widgets__nav_title),
+                onClick = onWidgetsClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__quickpay__nav_title),
+                onClick = onQuickPayClick,
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__general__tags),
+                onClick = onTagsClick,
             )
         }
     }

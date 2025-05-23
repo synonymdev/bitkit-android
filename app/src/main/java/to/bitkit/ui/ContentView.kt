@@ -61,15 +61,14 @@ import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.settings.AboutScreen
+import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
-import to.bitkit.ui.settings.DefaultUnitSettingsScreen
-import to.bitkit.ui.settings.GeneralSettingsScreen
 import to.bitkit.ui.settings.LightningSettingsScreen
-import to.bitkit.ui.settings.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
@@ -77,6 +76,11 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupWalletScreen
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.general.GeneralSettingsScreen
+import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
+import to.bitkit.ui.settings.general.TagsSettingsScreen
+import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
 import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
@@ -117,7 +121,8 @@ fun ContentView(
     val scope = rememberCoroutineScope()
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
-    DisposableEffect(lifecycle) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
+    DisposableEffect(lifecycle) {
+        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
@@ -185,7 +190,8 @@ fun ContentView(
         }
     }
 
-    if (walletIsInitializing) { //TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
+    if (walletIsInitializing) {
+        // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
             WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
                 scope.launch {
@@ -237,6 +243,8 @@ fun ContentView(
                 settings(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
+                advancedSettings(navController)
+                aboutSettings(navController)
                 transactionSpeedSettings(navController)
                 securitySettings(navController)
                 disablePin(navController)
@@ -487,7 +495,7 @@ private fun NavGraphBuilder.settings(
         )
     }
     composableWithDefaultTransitions<Routes.QuickPaySettings> {
-        QuickPaySettingsScreen (
+        QuickPaySettingsScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
         )
@@ -509,6 +517,26 @@ private fun NavGraphBuilder.nodeState(
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.WidgetsSettings> {
+        WidgetsSettingsScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.TagsSettings> {
+        TagsSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.AdvancedSettings> {
+        AdvancedSettingsScreen(navController)
+    }
+}
+
+private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.AboutSettings> {
+        AboutScreen(navController)
     }
 }
 
@@ -937,6 +965,26 @@ fun NavController.navigateToTransactionSpeedSettings() = navigate(
 fun NavController.navigateToCustomFeeSettings() = navigate(
     route = Routes.CustomFeeSettings,
 )
+
+fun NavController.navigateToWidgetsSettings() = navigate(
+    route = Routes.WidgetsSettings,
+)
+
+fun NavController.navigateToQuickPaySettings() = navigate(
+    route = Routes.QuickPaySettings,
+)
+
+fun NavController.navigateToTagsSettings() = navigate(
+    route = Routes.TagsSettings,
+)
+
+fun NavController.navigateToAdvancedSettings() = navigate(
+    route = Routes.AdvancedSettings,
+)
+
+fun NavController.navigateToAboutSettings() = navigate(
+    route = Routes.AboutSettings,
+)
 // endregion
 
 object Routes {
@@ -954,6 +1002,18 @@ object Routes {
 
     @Serializable
     data object TransactionSpeedSettings
+
+    @Serializable
+    data object WidgetsSettings
+
+    @Serializable
+    data object TagsSettings
+
+    @Serializable
+    data object AdvancedSettings
+
+    @Serializable
+    data object AboutSettings
 
     @Serializable
     data object CustomFeeSettings

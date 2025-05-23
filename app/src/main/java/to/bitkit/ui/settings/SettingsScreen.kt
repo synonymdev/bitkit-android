@@ -31,6 +31,8 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.navigateToAboutSettings
+import to.bitkit.ui.navigateToAdvancedSettings
 import to.bitkit.ui.navigateToBackupSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToGeneralSettings
@@ -59,15 +61,9 @@ fun SettingsScreen(
         onGeneralClick = { navController.navigateToGeneralSettings() },
         onSecurityClick = { navController.navigateToSecuritySettings() },
         onBackupClick = { navController.navigateToBackupSettings() },
-        onAdvancedClick = {
-            // TODO implement advanced settings screen
-            app.toast(Exception("Coming soon: Advanced Settings"))
-        },
+        onAdvancedClick = { navController.navigateToAdvancedSettings() },
         onSupportClick = { navController.navigate(Routes.Support) },
-        onAboutClick = {
-            // TODO implement settings > about
-            app.toast(Exception("Coming soon: About"))
-        },
+        onAboutClick = { navController.navigateToAboutSettings() },
         onDevClick = { navController.navigateToDevSettings() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
