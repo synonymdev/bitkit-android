@@ -86,6 +86,8 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.screens.profile.CreateProfileScreen
+import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -241,6 +243,7 @@ fun ContentView(
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, navController)
                 settings(navController, appViewModel)
+                profile(navController, appViewModel)
                 nodeState(walletViewModel, navController)
                 generalSettings(navController)
                 advancedSettings(navController)
@@ -496,6 +499,27 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.QuickPaySettings> {
         QuickPaySettingsScreen(
+            onBack = { navController.popBackStack() },
+            onClose = { navController.navigateToHome() },
+        )
+    }
+}
+
+private fun NavGraphBuilder.profile(
+    navController: NavHostController,
+    appViewModel: AppViewModel,
+) {
+    composableWithDefaultTransitions<Routes.ProfileIntro> {
+        ProfileIntroScreen(
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                appViewModel.setHasSeenProfileIntro(true)
+                navController.navigate(Routes.CreateProfile)
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.CreateProfile> {
+        CreateProfileScreen(
             onBack = { navController.popBackStack() },
             onClose = { navController.navigateToHome() },
         )
@@ -1175,4 +1199,10 @@ object Routes {
 
     @Serializable
     data object QuickPaySettings
+
+    @Serializable
+    data object ProfileIntro
+
+    @Serializable
+    data object CreateProfile
 }
