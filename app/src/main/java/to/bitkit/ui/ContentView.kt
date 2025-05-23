@@ -86,8 +86,8 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
-import to.bitkit.ui.profile.CreateProfileScreen
-import to.bitkit.ui.profile.ProfileIntroScreen
+import to.bitkit.ui.screens.profile.CreateProfileScreen
+import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
