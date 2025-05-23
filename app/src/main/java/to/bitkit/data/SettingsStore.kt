@@ -2,7 +2,8 @@ package to.bitkit.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
-import androidx.datastore.dataStore
+import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.dataStoreFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
@@ -13,6 +14,27 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+
+@Singleton
+class SettingsStore @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    private val store: DataStore<SettingsData> = DataStoreFactory.create(
+        serializer = SettingsSerializer,
+        produceFile = { context.dataStoreFile("settings.json") },
+    )
+
+    val data: Flow<SettingsData> = store.data
+
+    suspend fun update(transform: (SettingsData) -> SettingsData) {
+        store.updateData(transform)
+    }
+
+    suspend fun reset() {
+        store.updateData { SettingsData() }
+        Logger.info("Deleted all user settings data.")
+    }
+}
 
 @Serializable
 data class SettingsData(
@@ -33,26 +55,3 @@ data class SettingsData(
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = false,
 )
-
-private val Context.settingsDataStore: DataStore<SettingsData> by dataStore(
-    fileName = "settings.json",
-    serializer = SettingsSerializer,
-)
-
-@Singleton
-class SettingsStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
-    private val store = context.settingsDataStore
-
-    val data: Flow<SettingsData> = store.data
-
-    suspend fun update(transform: (SettingsData) -> SettingsData) {
-        store.updateData(transform)
-    }
-
-    suspend fun reset() {
-        store.updateData { SettingsData() }
-        Logger.info("Deleted all user settings data.")
-    }
-}
