@@ -1175,4 +1175,7 @@ object Routes {
 
     @Serializable
     data object QuickPaySettings
+
+    @Serializable
+    data object ProfileIntro
 }
