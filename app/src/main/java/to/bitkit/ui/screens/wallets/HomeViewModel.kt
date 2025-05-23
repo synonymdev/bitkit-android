@@ -50,6 +50,7 @@ class HomeViewModel @Inject constructor(
                         Suggestion.PROFILE,
                     )
                 }
+
                 balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
                     listOfNotNull(
                         Suggestion.BACK_UP,
@@ -62,6 +63,7 @@ class HomeViewModel @Inject constructor(
                         Suggestion.PROFILE,
                     )
                 }
+
                 else -> { // Empty wallet
                     listOfNotNull(
                         Suggestion.BUY,
@@ -74,7 +76,7 @@ class HomeViewModel @Inject constructor(
                     )
                 }
             }
-
+            //TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
             return@combine baseSuggestions.filterNot { it in removedList }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
