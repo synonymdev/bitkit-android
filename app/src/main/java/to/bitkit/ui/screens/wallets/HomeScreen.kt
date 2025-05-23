@@ -45,7 +45,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -159,6 +158,7 @@ fun HomeScreen(
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
+                    val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickpayIntroSeen by settingsViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
 
@@ -218,9 +218,11 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.SHOP -> {
-                                    //TODO CREATE SCREEN https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=31760-206181&t=RBb2MCjd1HaFYX59-4
-                                    val intent = Intent(Intent.ACTION_VIEW, Env.BIT_REFILL_URL.toUri())
-                                    context.startActivity(intent)
+                                    if (!hasSeenShopIntro) {
+                                        rootNavController.navigate(Routes.ShopIntro)
+                                    } else {
+                                        rootNavController.navigate(Routes.ShopDiscover)
+                                    }
                                 }
 
                                 Suggestion.QUICK_PAY -> {
