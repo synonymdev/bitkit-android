@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -18,7 +19,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val showEmptyState: StateFlow<Boolean> = settingsStore.data.map { it.showEmptyState }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setShowEmptyState(value: Boolean) {
         viewModelScope.launch {
@@ -27,7 +28,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSpendingIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setHasSeenSpendingIntro(value: Boolean) {
         viewModelScope.launch {
@@ -36,7 +37,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenTransferIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setHasSeenTransferIntro(value: Boolean) {
         viewModelScope.launch {
@@ -45,7 +46,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenSavingsIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setHasSeenSavingsIntro(value: Boolean) {
         viewModelScope.launch {
@@ -54,7 +55,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenShopIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenShopIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setHasSeenShopIntro(value: Boolean) {
         viewModelScope.launch {
@@ -63,7 +64,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val hasSeenProfileIntro: StateFlow<Boolean> = settingsStore.data.map { it.hasSeenProfileIntro }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setHasSeenProfileIntro(value: Boolean) {
         viewModelScope.launch {
@@ -72,7 +73,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.data.map { it.quickPayIntroSeen }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setQuickPayIntroSeen(value: Boolean) {
         viewModelScope.launch {
@@ -81,7 +82,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnIdleEnabled }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setIsPinOnIdleEnabled(value: Boolean) {
         viewModelScope.launch {
@@ -90,7 +91,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinForPaymentsEnabled }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .asStateFlow(initialValue = false)
 
     fun setIsPinForPaymentsEnabled(value: Boolean) {
         viewModelScope.launch {
@@ -99,7 +100,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val defaultTransactionSpeed = settingsStore.data.map { it.defaultTransactionSpeed }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionSpeed.Medium)
+        .asStateFlow(initialValue = TransactionSpeed.Medium)
 
     fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
         viewModelScope.launch {
@@ -108,7 +109,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isDevModeEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isDevModeEnabled }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+        .asStateFlow(initialValue = false)
 
     fun setIsDevModeEnabled(value: Boolean) {
         viewModelScope.launch {
@@ -117,10 +118,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isPinEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .asStateFlow(SharingStarted.Eagerly, false)
 
     val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isPinOnLaunchEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .asStateFlow(SharingStarted.Eagerly, false)
 
     fun setIsPinOnLaunchEnabled(value: Boolean) {
         viewModelScope.launch {
@@ -129,11 +130,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     val isBiometricEnabled: StateFlow<Boolean> = settingsStore.data.map { it.isBiometricEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .asStateFlow(SharingStarted.Eagerly, false)
 
     fun setIsBiometricEnabled(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(isBiometricEnabled = value) }
         }
     }
+
+    private fun <T> Flow<T>.asStateFlow(
+        started: SharingStarted = SharingStarted.WhileSubscribed(5000),
+        initialValue: T,
+    ): StateFlow<T> = stateIn(viewModelScope, started, initialValue)
 }
