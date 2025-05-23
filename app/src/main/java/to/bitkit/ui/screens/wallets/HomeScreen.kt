@@ -32,7 +32,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +45,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -86,6 +84,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.settings.pin.PinNavigationSheet
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
@@ -96,6 +95,7 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 
@@ -104,6 +104,7 @@ fun HomeScreen(
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
+    settingsViewModel: SettingsViewModel,
     rootNavController: NavController,
 ) {
     val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
@@ -156,10 +157,10 @@ fun HomeScreen(
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
                     val context = LocalContext.current
-                    val hasSeenTransferIntro by appViewModel.hasSeenTransferIntro.collectAsState()
-                    val hasSeenShopIntro by appViewModel.hasSeenShopIntro.collectAsState()
-                    val hasSeenProfileIntro by appViewModel.hasSeenProfileIntro.collectAsState()
-                    val quickpayIntroSeen by appViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
+                    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
+                    val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+                    val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+                    val quickpayIntroSeen by settingsViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
@@ -239,7 +240,7 @@ fun HomeScreen(
                     enterTransition = { screenSlideIn },
                     exitTransition = { screenSlideOut },
                 ) {
-                    val hasSeenSpendingIntro by appViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
+                    val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                     SavingsWalletScreen(
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
@@ -258,7 +259,7 @@ fun HomeScreen(
                     enterTransition = { screenSlideIn },
                     exitTransition = { screenSlideOut },
                 ) {
-                    val hasSeenSavingsIntro by appViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+                    val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
                     SpendingWalletScreen(
                         uiState = uiState,
                         onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
@@ -319,7 +320,8 @@ private fun HomeContentView(
         RequestNotificationPermissions()
         val balances = LocalBalances.current
         val app = appViewModel ?: return@AppScaffold
-        val showEmptyStateSetting by app.showEmptyState.collectAsStateWithLifecycle()
+        val settings = settingsViewModel ?: return@AppScaffold
+        val showEmptyStateSetting by settings.showEmptyState.collectAsStateWithLifecycle()
         val showEmptyState by remember(balances.totalSats, showEmptyStateSetting) {
             derivedStateOf {
                 showEmptyStateSetting && balances.totalSats == 0uL
@@ -416,7 +418,7 @@ private fun HomeContentView(
             if (showEmptyState) {
                 EmptyStateView(
                     text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
-                    onClose = { app.setShowEmptyState(false) },
+                    onClose = { settings.setShowEmptyState(false) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                 )

@@ -113,20 +113,14 @@ class CurrencyViewModel @Inject constructor(
 
     private fun collectSettingsData() {
         viewModelScope.launch {
-            settingsStore.selectedCurrency.collect { currency ->
-                _uiState.update { it.copy(selectedCurrency = currency) }
-            }
-        }
-
-        viewModelScope.launch {
-            settingsStore.displayUnit.collect { unit ->
-                _uiState.update { it.copy(displayUnit = unit) }
-            }
-        }
-
-        viewModelScope.launch {
-            settingsStore.primaryDisplay.collect { display ->
-                _uiState.update { it.copy(primaryDisplay = display) }
+            settingsStore.data.collect { settings ->
+                _uiState.update {
+                    it.copy(
+                        selectedCurrency = settings.selectedCurrency,
+                        displayUnit = settings.displayUnit,
+                        primaryDisplay = settings.primaryDisplay,
+                    )
+                }
             }
         }
     }
@@ -135,26 +129,26 @@ class CurrencyViewModel @Inject constructor(
         viewModelScope.launch {
             uiState.value.primaryDisplay.let {
                 val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
-                settingsStore.setPrimaryDisplayUnit(newDisplay)
+                settingsStore.update { it.copy(primaryDisplay = newDisplay) }
             }
         }
     }
 
     fun setPrimaryDisplayUnit(unit: PrimaryDisplay) {
         viewModelScope.launch {
-            settingsStore.setPrimaryDisplayUnit(unit)
+            settingsStore.update { it.copy(primaryDisplay = unit) }
         }
     }
 
     fun setBtcDisplayUnit(unit: BitcoinDisplayUnit) {
         viewModelScope.launch {
-            settingsStore.setBtcDisplayUnit(unit)
+            settingsStore.update { it.copy(displayUnit = unit) }
         }
     }
 
     fun setSelectedCurrency(currency: String) {
         viewModelScope.launch {
-            settingsStore.setSelectedCurrency(currency)
+            settingsStore.update { it.copy(selectedCurrency = currency) }
             refresh()
         }
     }

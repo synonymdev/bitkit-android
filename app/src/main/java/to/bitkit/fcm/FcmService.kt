@@ -10,7 +10,6 @@ import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.json
@@ -25,7 +24,7 @@ import java.util.Date
 import javax.inject.Inject
 
 @AndroidEntryPoint
-internal class FcmService : FirebaseMessagingService() {
+class FcmService : FirebaseMessagingService() {
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 

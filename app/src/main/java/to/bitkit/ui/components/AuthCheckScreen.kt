@@ -6,6 +6,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.settingsViewModel
 
 @Composable
 fun AuthCheckScreen(
@@ -13,33 +14,35 @@ fun AuthCheckScreen(
     route: Routes.AuthCheck,
 ) {
     val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
 
-    val isPinOnLaunchEnabled by app.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
-    val isBiometricEnabled by app.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isPinOnIdleEnabled by app.isPinOnIdleEnabled.collectAsStateWithLifecycle()
-    val isPinForPaymentsEnabled by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val isPinOnLaunchEnabled by settings.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
+    val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
+    val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     AuthCheckView(
         showLogoOnPin = route.showLogoOnPin,
         appViewModel = app,
+        settingsViewModel = settings,
         requireBiometrics = route.requireBiometrics,
         requirePin = route.requirePin,
         onSuccess = {
             when (route.onSuccessActionId) {
                 AuthCheckAction.TOGGLE_BIOMETRICS -> {
-                    app.setIsBiometricEnabled(!isBiometricEnabled)
+                    settings.setIsBiometricEnabled(!isBiometricEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_ON_LAUNCH -> {
-                    app.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
+                    settings.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_ON_IDLE -> {
-                    app.setIsPinOnIdleEnabled(!isPinOnIdleEnabled)
+                    settings.setIsPinOnIdleEnabled(!isPinOnIdleEnabled)
                 }
 
                 AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS -> {
-                    app.setIsPinForPaymentsEnabled(!isPinForPaymentsEnabled)
+                    settings.setIsPinForPaymentsEnabled(!isPinForPaymentsEnabled)
                 }
 
                 AuthCheckAction.DISABLE_PIN -> {

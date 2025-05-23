@@ -12,7 +12,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -38,7 +37,6 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
@@ -92,131 +90,6 @@ class AppViewModel @Inject constructor(
 
     private val sendEvents = MutableSharedFlow<SendEvent>()
     fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
-
-    val showEmptyState: StateFlow<Boolean> = settingsStore.showEmptyState
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setShowEmptyState(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setShowEmptyState(value)
-        }
-    }
-
-    val hasSeenSpendingIntro: StateFlow<Boolean> = settingsStore.hasSeenSpendingIntro
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenSpendingIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setHasSeenSpendingIntro(value)
-        }
-    }
-    val hasSeenTransferIntro: StateFlow<Boolean> = settingsStore.hasSeenTransferIntro
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenTransferIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setHasSeenTransferIntro(value)
-        }
-    }
-
-    val hasSeenSavingsIntro: StateFlow<Boolean> = settingsStore.hasSeenSavingsIntro
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenSavingsIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setHasSeenSavingsIntro(value)
-        }
-    }
-
-    val hasSeenShopIntro: StateFlow<Boolean> = settingsStore.hasSeenShopIntro
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenShopIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setHasSeenShopIntro(value)
-        }
-    }
-
-    val hasSeenProfileIntro: StateFlow<Boolean> = settingsStore.hasSeenProfileIntro
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setHasSeenProfileIntro(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setHasSeenProfileIntro(value)
-        }
-    }
-
-    val quickpayIntroSeen: StateFlow<Boolean> = settingsStore.quickpayIntroSeen
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setQuickPayIntroSeen(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setQuickPayIntroSeen(value)
-        }
-    }
-
-    val isPinEnabled: StateFlow<Boolean> = settingsStore.isPinEnabled
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsPinEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsPinEnabled(value)
-        }
-    }
-
-    val isPinOnLaunchEnabled: StateFlow<Boolean> = settingsStore.isPinOnLaunchEnabled
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsPinOnLaunchEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsPinOnLaunchEnabled(value)
-        }
-    }
-
-    val isPinOnIdleEnabled: StateFlow<Boolean> = settingsStore.isPinOnIdleEnabled
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setIsPinOnIdleEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsPinOnIdleEnabled(value)
-        }
-    }
-
-    val isPinForPaymentsEnabled: StateFlow<Boolean> = settingsStore.isPinForPaymentsEnabled
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
-
-    fun setIsPinForPaymentsEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsPinForPaymentsEnabled(value)
-        }
-    }
-
-    val isBiometricEnabled: StateFlow<Boolean> = settingsStore.isBiometricEnabled
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    fun setIsBiometricEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsBiometricEnabled(value)
-        }
-    }
-
-    val defaultTransactionSpeed = settingsStore.defaultTransactionSpeed
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionSpeed.Medium)
-
-    fun setDefaultTransactionSpeed(speed: TransactionSpeed) {
-        viewModelScope.launch {
-            settingsStore.setDefaultTransactionSpeed(speed)
-        }
-    }
-
-    val isDevModeEnabled: StateFlow<Boolean> = settingsStore.isDevModeEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    fun setIsDevModeEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setIsDevModeEnabled(value)
-        }
-    }
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
@@ -837,7 +710,8 @@ class AppViewModel @Inject constructor(
     // region security
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {
-            val needsAuth = isPinEnabled.first() && isPinOnLaunchEnabled.first()
+            val settings = settingsStore.data.first()
+            val needsAuth = settings.isPinEnabled && settings.isPinOnLaunchEnabled
             if (!needsAuth) {
                 _isAuthenticated.value = true
             }
@@ -873,28 +747,32 @@ class AppViewModel @Inject constructor(
     }
 
     fun addPin(pin: String) {
-        setIsPinOnLaunchEnabled(true)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isPinOnLaunchEnabled = true) }
+        }
         appStorage.addSuggestionToRemovedList(Suggestion.SECURE)
         editPin(pin)
     }
 
     fun editPin(newPin: String) {
-        setIsPinEnabled(true)
-
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
+            settingsStore.update { it.copy(isPinEnabled = true) }
             keychain.upsertString(Keychain.Key.PIN.name, newPin)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }
     }
 
     fun removePin() {
-        setIsPinEnabled(false)
-        setIsPinOnLaunchEnabled(true)
-        setIsPinOnIdleEnabled(false)
-        setIsPinForPaymentsEnabled(false)
-        setIsBiometricEnabled(false)
-
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
+            settingsStore.update {
+                it.copy(
+                    isPinEnabled = false,
+                    isPinOnLaunchEnabled = true,
+                    isPinOnIdleEnabled = false,
+                    isPinForPaymentsEnabled = false,
+                    isBiometricEnabled = false,
+                )
+            }
             keychain.delete(Keychain.Key.PIN.name)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
         }

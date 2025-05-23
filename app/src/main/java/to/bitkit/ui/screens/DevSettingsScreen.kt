@@ -25,6 +25,7 @@ import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
@@ -34,6 +35,7 @@ fun DevSettingsScreen(
 ) {
     val activity = activityListViewModel ?: return
     val currency = currencyViewModel ?: return
+    val settings = settingsViewModel ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -56,6 +58,7 @@ fun DevSettingsScreen(
                 SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
                 SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
                 SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
+                SettingsTextButtonRow("Reset Settings Store") { settings.reset() }
                 SettingsTextButtonRow(stringResource(R.string.security__wipe_app)) { viewModel.wipeStorage() }
             }
 

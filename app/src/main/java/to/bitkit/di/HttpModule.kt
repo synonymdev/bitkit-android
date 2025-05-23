@@ -18,21 +18,9 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import javax.inject.Singleton
 
-val json = Json {
-    prettyPrint = true
-    isLenient = true
-    ignoreUnknownKeys = true
-}
-
 @Module
 @InstallIn(SingletonComponent::class)
 object HttpModule {
-    @Provides
-    @Singleton
-    fun provideJson(): Json {
-        return json
-    }
-
     @Provides
     @Singleton
     fun provideHttpClient(json: Json): HttpClient {

@@ -35,7 +35,7 @@ class HomeViewModel @Inject constructor(
         return combine(
             walletRepo.balanceState,
             removedSuggestions,
-            settingsStore.isPinEnabled,
+            settingsStore.data.map { it.isPinEnabled },
         ) { balanceState, removedList, isPinEnabled ->
             val baseSuggestions = when {
                 balanceState.totalLightningSats > 0uL -> { // With Lightning

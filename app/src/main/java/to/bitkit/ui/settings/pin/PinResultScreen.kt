@@ -23,11 +23,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
@@ -40,15 +40,15 @@ fun PinResultScreen(
     onDismiss: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val app = appViewModel ?: return
-    val pinForPayments by app.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val settings = settingsViewModel ?: return
+    val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     BackHandler { onBack() }
 
     PinResultContent(
         bio = isBioOn,
         pinForPayments = pinForPayments,
-        onTogglePinForPayments = { app.setIsPinForPaymentsEnabled(!pinForPayments) },
+        onTogglePinForPayments = { settings.setIsPinForPaymentsEnabled(!pinForPayments) },
         onContinueClick = onDismiss,
     )
 }

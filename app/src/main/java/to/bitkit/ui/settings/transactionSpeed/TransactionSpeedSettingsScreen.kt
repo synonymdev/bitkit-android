@@ -15,7 +15,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
@@ -24,6 +23,7 @@ import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -31,12 +31,12 @@ import to.bitkit.ui.theme.Colors
 fun TransactionSpeedSettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
-    val defaultTransactionSpeed = app.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val settings = settingsViewModel ?: return
+    val defaultTransactionSpeed = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
 
     TransactionSpeedSettingsContent(
         selectedSpeed = defaultTransactionSpeed.value,
-        onSpeedSelected = { app.setDefaultTransactionSpeed(it) },
+        onSpeedSelected = { settings.setDefaultTransactionSpeed(it) },
         onCustomFeeClick = { navController.navigateToCustomFeeSettings() },
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },

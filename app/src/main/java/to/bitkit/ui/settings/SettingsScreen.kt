@@ -40,6 +40,7 @@ import to.bitkit.ui.navigateToSecuritySettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 
@@ -50,7 +51,8 @@ fun SettingsScreen(
     navController: NavController,
 ) {
     val app = appViewModel ?: return
-    val isDevModeEnabled by app.isDevModeEnabled.collectAsStateWithLifecycle()
+    val settings = settingsViewModel ?: return
+    val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
     var enableDevModeTapCount by remember { mutableIntStateOf(0) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -71,7 +73,7 @@ fun SettingsScreen(
 
             if (enableDevModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
                 val newValue = !isDevModeEnabled
-                app.setIsDevModeEnabled(newValue)
+                settings.setIsDevModeEnabled(newValue)
 
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
