@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -21,8 +22,6 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -45,7 +44,8 @@ fun BackupIntroScreen(
         SheetTopBar(stringResource(R.string.security__backup_wallet))
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
                 painter = painterResource(R.drawable.safe),
