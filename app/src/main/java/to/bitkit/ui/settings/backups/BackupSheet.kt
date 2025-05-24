@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 
 @Composable
 fun BackupSheet(
@@ -25,8 +25,20 @@ fun BackupSheet(
             navController = navController,
             startDestination = BackupRoute.Intro,
         ) {
-            composable<BackupRoute.Intro> {
-
+            composableWithDefaultTransitions<BackupRoute.Intro> {
+                BackupIntroScreen(
+                    hasFunds = true,
+                    onClose = onDismiss,
+                    onConfirm = {
+                        navController.navigate(BackupRoute.Backup)
+                        //TODO update hasSeen
+                    }
+                )
+            }
+            composableWithDefaultTransitions<BackupRoute.Backup> {
+                BackupWalletScreen(
+                    navController = navController
+                )
             }
         }
     }
@@ -35,4 +47,7 @@ fun BackupSheet(
 object BackupRoute {
     @Serializable
     data object Intro
+
+    @Serializable
+    data object Backup
 }

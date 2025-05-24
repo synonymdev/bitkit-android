@@ -192,8 +192,8 @@ fun HomeScreen(
                                     }
                                 }
 
-                                Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
-                                    rootNavController.navigate(Routes.BackupWalletSettings)
+                                Suggestion.BACK_UP -> {
+                                    appViewModel.showSheet(BottomSheetType.Backup)
                                 }
 
                                 Suggestion.SECURE -> {
