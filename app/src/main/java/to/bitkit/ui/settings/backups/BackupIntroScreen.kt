@@ -1,11 +1,14 @@
 package to.bitkit.ui.settings.backups
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -20,6 +23,8 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -31,14 +36,16 @@ fun BackupIntroScreen(
     onClose: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    ScreenColumn {
-        AppTopBar(
-            titleText = stringResource(R.string.security__backup_wallet),
-            onBackClick = null,
-        )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .gradientBackground()
+            .navigationBarsPadding()
+    ) {
+        SheetTopBar(stringResource(R.string.security__backup_wallet))
 
         Column(
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             Image(
                 painter = painterResource(R.drawable.safe),
@@ -62,7 +69,7 @@ fun BackupIntroScreen(
                 color = Colors.White64
             )
             Spacer(Modifier.height(32.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SecondaryButton(
                     text = stringResource(R.string.common__later),
                     fullWidth = false,
