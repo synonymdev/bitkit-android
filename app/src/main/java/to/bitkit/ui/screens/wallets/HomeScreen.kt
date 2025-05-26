@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
-import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -83,6 +82,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -143,6 +143,10 @@ fun HomeScreen(
                     onDismiss = { appViewModel.hideSheet() },
                 )
 
+                BottomSheetType.Backup -> BackupSheet(
+                    onDismiss = { appViewModel.hideSheet() },
+                    walletViewModel = walletViewModel
+                )
                 null -> Unit
             }
         }
@@ -188,8 +192,8 @@ fun HomeScreen(
                                     }
                                 }
 
-                                Suggestion.BACK_UP -> { //TODO IMPLEMENT BOTTOM SHEET
-                                    rootNavController.navigate(Routes.BackupWalletSettings)
+                                Suggestion.BACK_UP -> {
+                                    appViewModel.showSheet(BottomSheetType.Backup)
                                 }
 
                                 Suggestion.SECURE -> {
