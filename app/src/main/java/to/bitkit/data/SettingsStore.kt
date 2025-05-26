@@ -56,4 +56,6 @@ data class SettingsData(
     val isPinOnIdleEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = false,
+    val showWidgets: Boolean = false,
+    val showWidgetTitles: Boolean = false,
 )

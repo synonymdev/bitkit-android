@@ -15,7 +15,6 @@ import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToDefaultUnitSettings
