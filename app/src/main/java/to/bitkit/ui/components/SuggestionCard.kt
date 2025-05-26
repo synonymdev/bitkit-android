@@ -56,7 +56,7 @@ fun SuggestionCard(
         modifier = modifier
             .size(152.dp)
             .clip(ShapeDefaults.Large)
-            .gradientBackground(gradientColor.copy(alpha = 0.30f))
+            .gradientBackground(gradientColor)
             .clickableAlpha { onClick() }
     ) {
         Column(
