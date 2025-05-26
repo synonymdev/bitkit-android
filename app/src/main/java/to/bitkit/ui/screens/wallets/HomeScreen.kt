@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
-import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -146,6 +145,7 @@ fun HomeScreen(
 
                 BottomSheetType.Backup -> BackupSheet(
                     onDismiss = { appViewModel.hideSheet() },
+                    walletViewModel = walletViewModel
                 )
                 null -> Unit
             }

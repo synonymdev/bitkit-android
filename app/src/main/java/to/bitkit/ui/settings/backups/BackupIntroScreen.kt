@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -40,6 +41,7 @@ fun BackupIntroScreen(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_intro_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__backup_wallet))
 
@@ -53,11 +55,14 @@ fun BackupIntroScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .testTag("backup_image")
             )
 
             Display(
                 text = stringResource(R.string.security__backup_title).withAccent(accentColor = Colors.Blue),
-                color = Colors.White
+                color = Colors.White,
+                modifier = Modifier
+                    .testTag("backup_title")
             )
             Spacer(Modifier.height(8.dp))
             BodyM(
@@ -66,22 +71,33 @@ fun BackupIntroScreen(
                 } else {
                     stringResource(R.string.security__backup_funds_no)
                 },
-                color = Colors.White64
+                color = Colors.White64,
+                modifier = Modifier
+                    .testTag("backup_description")
             )
             Spacer(Modifier.height(32.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("buttons_row"),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__later),
                     fullWidth = false,
                     onClick = onClose,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("later_button"),
                 )
 
                 PrimaryButton(
                     text = stringResource(R.string.security__backup_button),
                     fullWidth = false,
                     onClick = onConfirm,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("backup_button"),
                 )
             }
             Spacer(Modifier.height(16.dp))
