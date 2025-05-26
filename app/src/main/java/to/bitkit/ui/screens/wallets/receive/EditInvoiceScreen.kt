@@ -327,7 +327,6 @@ fun EditInvoiceContent(
                             tags.map { tagText ->
                                 TagButton(
                                     text = tagText,
-                                    isSelected = false,
                                     displayIconClose = true,
                                     onClick = { onClickTag(tagText) },
                                 )

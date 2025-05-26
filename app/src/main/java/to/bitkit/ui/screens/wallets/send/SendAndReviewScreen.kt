@@ -178,7 +178,6 @@ private fun SendAndReviewContent(
                     uiState.selectedTags.map { tagText ->
                         TagButton(
                             text = tagText,
-                            isSelected = false,
                             displayIconClose = true,
                             onClick = { onClickTag(tagText) },
                         )

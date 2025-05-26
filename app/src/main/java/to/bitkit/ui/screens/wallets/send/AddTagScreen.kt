@@ -99,7 +99,6 @@ fun AddTagContent(
                     uiState.tagsSuggestions.map { tagText ->
                         TagButton(
                             tagText,
-                            isSelected = false,
                             onClick = { onTagSelected(tagText) },
                         )
                     }
