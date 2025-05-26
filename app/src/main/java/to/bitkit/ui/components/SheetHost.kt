@@ -29,6 +29,7 @@ sealed class BottomSheetType {
     data class Send(val route: SendRoute = SendRoute.Options) : BottomSheetType()
     data object Receive : BottomSheetType()
     data object PinSetup : BottomSheetType()
+    data object Backup : BottomSheetType()
     data object ActivityDateRangeSelector : BottomSheetType()
     data object ActivityTagSelector : BottomSheetType()
 }
