@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Devices.TV_1080p
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -43,6 +45,13 @@ fun SuggestionCard(
     onClose: () -> Unit,
     onClick: () -> Unit,
 ) {
+    LaunchedEffect (Unit) {
+        duration?.let {
+            delay(it)
+            onClose()
+        }
+    }
+
     Box(
         modifier = modifier
             .size(152.dp)
