@@ -8,11 +8,16 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
+import to.bitkit.models.BalanceState
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.viewmodels.WalletViewModel
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun BackupSheet(
     onDismiss: () -> Unit,
+    walletViewModel: WalletViewModel,
 ) {
     val navController = rememberNavController()
 
@@ -26,12 +31,12 @@ fun BackupSheet(
             startDestination = BackupRoute.Intro,
         ) {
             composableWithDefaultTransitions<BackupRoute.Intro> {
+                val balance : BalanceState by walletViewModel.balanceState.collectAsStateWithLifecycle()
                 BackupIntroScreen(
-                    hasFunds = true,
+                    hasFunds = balance.totalSats > 0u,
                     onClose = onDismiss,
                     onConfirm = {
                         navController.navigate(BackupRoute.Backup)
-                        //TODO update hasSeen
                     }
                 )
             }
