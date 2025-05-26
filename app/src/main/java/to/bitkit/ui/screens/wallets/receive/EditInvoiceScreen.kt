@@ -93,7 +93,6 @@ fun EditInvoiceScreen(
                     val receiveSats = satsString.toULongOrNull()
                     updateInvoice(receiveSats)
 
-
                     if (receiveSats == null) {
                         onBack()
                         return@collect

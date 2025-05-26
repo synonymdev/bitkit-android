@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
@@ -21,6 +22,7 @@ class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val addressChecker: AddressChecker,
     private val coreService: CoreService,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TxDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -66,6 +68,7 @@ class ActivityDetailViewModel @Inject constructor(
             try {
                 val result = coreService.activity.appendTags(toActivityId = id, tags = listOf(tag))
                 if (result.isSuccess) {
+                    settingsStore.addLastUsedTag(tag)
                     loadTags()
                 }
             } catch (e: Exception) {

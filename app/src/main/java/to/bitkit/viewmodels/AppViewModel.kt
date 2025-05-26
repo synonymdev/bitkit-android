@@ -115,6 +115,9 @@ class AppViewModel @Inject constructor(
                 selectedTags = (it.selectedTags + newTag).distinct()
             )
         }
+        viewModelScope.launch {
+            settingsStore.addLastUsedTag(newTag)
+        }
     }
 
     fun removeTag(tag: String) {

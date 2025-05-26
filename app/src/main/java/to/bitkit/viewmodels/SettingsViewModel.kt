@@ -157,6 +157,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val lastUsedTags = settingsStore.data.map { it.lastUsedTags }
+        .asStateFlow(initialValue = emptyList())
+
+    fun deleteLastUsedTag(tag: String) {
+        viewModelScope.launch {
+            settingsStore.deleteLastUsedTag(tag)
+        }
+    }
+
     // utils
     private fun <T> Flow<T>.asStateFlow(
         started: SharingStarted = SharingStarted.WhileSubscribed(5000),
