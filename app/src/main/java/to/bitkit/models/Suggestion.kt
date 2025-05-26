@@ -67,7 +67,7 @@ enum class Suggestion(
         icon = R.drawable.fast_forward
     ),
     TRANSFER_PENDING(
-        title = R.string.cards__quickpay__title,
+        title = R.string.cards__lightningSettingUp__title,
         description = R.string.cards__transferPending__description,
         color = Colors.Purple,
         icon = R.drawable.transfer
