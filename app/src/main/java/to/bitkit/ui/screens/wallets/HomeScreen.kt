@@ -236,6 +236,9 @@ fun HomeScreen(
                                         rootNavController.navigate(Routes.QuickPaySettings)
                                     }
                                 }
+
+                                Suggestion.TRANSFER_PENDING -> Unit
+                                Suggestion.TRANSFER_CLOSING_CHANNEL -> Unit
                             }
                         },
                     )

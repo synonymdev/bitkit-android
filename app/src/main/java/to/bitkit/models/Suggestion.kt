@@ -66,6 +66,18 @@ enum class Suggestion(
         color = Colors.Green,
         icon = R.drawable.fast_forward
     ),
+    TRANSFER_PENDING(
+        title = R.string.cards__quickpay__title,
+        description = R.string.cards__transferPending__description,
+        color = Colors.Purple,
+        icon = R.drawable.transfer
+    ),
+    TRANSFER_CLOSING_CHANNEL(
+        title = R.string.cards__transferClosingChannel__title,
+        description = R.string.cards__transferClosingChannel__description,
+        color = Colors.Red,
+        icon = R.drawable.transfer
+    ),
 }
 
 fun String.toSuggestionOrNull() = Suggestion.entries.firstOrNull { it.name == this }
