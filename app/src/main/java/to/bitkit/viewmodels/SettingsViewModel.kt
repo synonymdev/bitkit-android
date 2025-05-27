@@ -166,6 +166,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val enableQuickpay = settingsStore.data.map { it.enableQuickpay }
+        .asStateFlow(initialValue = false)
+
+    fun setEnableQuickpay(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(enableQuickpay = value) }
+        }
+    }
+
+    val quickpayAmount = settingsStore.data.map { it.quickpayAmount }
+        .asStateFlow(initialValue = 5)
+
+    fun setQuickpayAmount(value: Int) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(quickpayAmount = value) }
+        }
+    }
+
     // utils
     private fun <T> Flow<T>.asStateFlow(
         started: SharingStarted = SharingStarted.WhileSubscribed(5000),

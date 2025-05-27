@@ -7,28 +7,60 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.StepSlider
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.SettingsViewModel
 
 
 @Composable
 fun QuickPaySettingsScreen(
     onBack: () -> Unit,
     onClose: () -> Unit,
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    ScreenColumn {
+    val enableQuickpay by settingsViewModel.enableQuickpay.collectAsStateWithLifecycle()
+    val quickpayAmount by settingsViewModel.quickpayAmount.collectAsStateWithLifecycle()
 
+    QuickPaySettingsScreenContent(
+        enableQuickpay = enableQuickpay,
+        quickpayAmount = quickpayAmount,
+        onToggleQuickpay = settingsViewModel::setEnableQuickpay,
+        onQuickpayAmountChange = settingsViewModel::setQuickpayAmount,
+        onBack = onBack,
+        onClose = onClose,
+    )
+}
+
+@Composable
+private fun QuickPaySettingsScreenContent(
+    enableQuickpay: Boolean,
+    quickpayAmount: Int,
+    onToggleQuickpay: (Boolean) -> Unit,
+    onQuickpayAmountChange: (Int) -> Unit,
+    onBack: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val sliderSteps = remember { listOf(1, 5, 10, 20, 50) }
+
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__quickpay__nav_title),
             onBackClick = onBack,
@@ -36,26 +68,55 @@ fun QuickPaySettingsScreen(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            //TODO IMPLEMENT THE FEATURE
+            Spacer(modifier = Modifier.height(16.dp))
 
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__quickpay__settings__toggle),
+                isChecked = enableQuickpay,
+                onClick = { onToggleQuickpay(!enableQuickpay) },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            BodyM(
+                text = stringResource(R.string.settings__quickpay__settings__text)
+                    .replace("{amount}", quickpayAmount.toString()),
+                color = Colors.White64
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Caption13Up(
+                text = stringResource(R.string.settings__quickpay__settings__label),
+                color = Colors.White64
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            StepSlider(
+                value = quickpayAmount,
+                steps = sliderSteps,
+                onValueChange = onQuickpayAmountChange,
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
             Image(
                 painter = painterResource(R.drawable.fast_forward),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 60.dp)
-                    .weight(1f)
+                    .height(256.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+
+            BodyS(
+                text = stringResource(R.string.settings__quickpay__settings__note),
+                color = Colors.White64
             )
 
-            Display(
-                text = "Coming soon",
-                color = Colors.White
-            )
-            Spacer(Modifier.height(8.dp))
-            BodyS(text = stringResource(R.string.settings__quickpay__settings__note), color = Colors.White64)
-            Spacer(Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -64,7 +125,11 @@ fun QuickPaySettingsScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        QuickPaySettingsScreen(
+        QuickPaySettingsScreenContent(
+            enableQuickpay = true,
+            quickpayAmount = 5,
+            onToggleQuickpay = {},
+            onQuickpayAmountChange = {},
             onBack = {},
             onClose = {},
         )

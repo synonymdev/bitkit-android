@@ -42,6 +42,7 @@ import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
+import to.bitkit.services.CurrencyService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
@@ -58,6 +59,7 @@ import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -70,6 +72,7 @@ class AppViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val resourceProvider: ResourceProvider,
     private val appStorage: AppStorage,
+    private val currencyService: CurrencyService,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -387,7 +390,17 @@ class AppViewModel @Inject constructor(
                 }
                 val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } != null
                 if (isLnInvoiceWithAmount) {
-                    Logger.info("Found amount in invoice, proceeding with payment")
+                    Logger.info("Found amount in unified invoice, checking QuickPay conditions")
+
+                    // Check for QuickPay conditions for unified invoices (prioritize lightning)
+                    val quickPayHandled = handleQuickPayIfApplicable(
+                        invoice = lnInvoice.bolt11,
+                        amountSats = lnInvoice.amountSatoshis,
+                    )
+
+                    if (quickPayHandled) {
+                        return
+                    }
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -424,6 +437,14 @@ class AppViewModel @Inject constructor(
                     )
                     return
                 }
+
+                // Check for QuickPay conditions
+                val quickPayHandled = handleQuickPayIfApplicable(
+                    invoice = uri,
+                    amountSats = invoice.amountSatoshis,
+                )
+
+                if (quickPayHandled) return
 
                 _sendUiState.update {
                     it.copy(
@@ -471,6 +492,34 @@ class AppViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun handleQuickPayIfApplicable(
+        invoice: String,
+        amountSats: ULong,
+    ): Boolean {
+        val settings = settingsStore.data.first()
+        if (!settings.enableQuickpay || amountSats == 0uL) {
+            return false
+        }
+
+        val quickpayThresholdSats = currencyService.convertFiatToSats(
+            settings.quickpayAmount.toDouble(),
+            settings.selectedCurrency
+        ) ?: return false
+
+        if (amountSats <= quickpayThresholdSats.toULong()) {
+            Logger.info("Using QuickPay: $amountSats sats <= $quickpayThresholdSats sats threshold")
+            if (isMainScanner) {
+                showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
+            } else {
+                setSendEffect(SendEffect.NavigateToQuickPay(invoice, amountSats.toLong()))
+            }
+            return true
+        }
+
+
+        return false
     }
 
     private fun resetAmountInput() {
@@ -806,6 +855,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
+    data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 

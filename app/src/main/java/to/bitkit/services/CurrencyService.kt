@@ -12,6 +12,7 @@ import java.math.RoundingMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
+import kotlin.math.roundToLong
 
 @Singleton
 class CurrencyService @Inject constructor(
@@ -76,8 +77,19 @@ class CurrencyService @Inject constructor(
         return roundedNumber.toLong().toULong()
     }
 
-    fun getAvailableCurrencies(rates: List<FxRate>): List<String> {
-        return rates.map { it.quote }
+    fun convertFiatToSats(fiatAmount: Double, currency: String, rates: List<FxRate>): Long? {
+        val rate = getCurrentRate(currency, rates) ?: return null
+
+        // Convert the fiat amount to BTC, then to sats
+        val btc = fiatAmount / rate.rate
+        val sats = (btc * 100_000_000).roundToLong()
+
+        return sats
+    }
+
+    suspend fun convertFiatToSats(fiatAmount: Double, currency: String): Long? {
+        val rates = cachedRates ?: fetchLatestRates()
+        return convertFiatToSats(fiatAmount, currency, rates)
     }
 
     fun getCurrentRate(currency: String, rates: List<FxRate>): FxRate? {

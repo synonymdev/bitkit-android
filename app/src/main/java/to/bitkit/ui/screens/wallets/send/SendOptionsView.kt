@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
@@ -65,6 +66,9 @@ fun SendOptionsView(
                     is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
                     is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
                     is SendEffect.PaymentSuccess -> onComplete(it.sheet)
+                    is SendEffect.NavigateToQuickPay -> {
+                        navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
+                    }
                 }
             }
         }
@@ -133,6 +137,20 @@ fun SendOptionsView(
                         navController.popBackStack()
                         appViewModel.setSendEvent(SendEvent.SwipeToPay)
                     },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.QuickPay> { backStackEntry ->
+                val route = backStackEntry.toRoute<SendRoute.QuickPay>()
+                QuickPaySendScreen(
+                    invoice = route.invoice,
+                    amount = route.amount,
+                    onPaymentComplete = { success ->
+                        if (success) {
+                            onComplete(null) // Close send sheet on successful payment
+                        } else {
+                            navController.popBackStack() // Go back to send options on failure
+                        }
+                    }
                 )
             }
         }
@@ -260,4 +278,7 @@ interface SendRoute {
 
     @Serializable
     data object PinCheck : SendRoute
+
+    @Serializable
+    data class QuickPay(val invoice: String, val amount: Long) : SendRoute
 }
