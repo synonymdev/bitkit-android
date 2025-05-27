@@ -1,11 +1,13 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -62,6 +64,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val scannerService: ScannerService,
@@ -260,6 +263,7 @@ class AppViewModel @Inject constructor(
 
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onPay()
+                    SendEvent.Reset -> resetSendState()
                 }
             }
         }
@@ -391,13 +395,13 @@ class AppViewModel @Inject constructor(
                 if (isLnInvoiceWithAmount) {
                     Logger.info("Found amount in unified invoice, checking QuickPay conditions")
 
-                    // Check for QuickPay conditions for unified invoices (prioritize lightning)
                     val quickPayHandled = handleQuickPayIfApplicable(
                         invoice = lnInvoice.bolt11,
                         amountSats = lnInvoice.amountSatoshis,
                     )
 
                     if (quickPayHandled) {
+                        resetSendState()
                         return
                     }
 
@@ -423,8 +427,8 @@ class AppViewModel @Inject constructor(
                 if (invoice.isExpired) {
                     toast(
                         type = Toast.ToastType.ERROR,
-                        title = "Invoice Expired",
-                        description = "This invoice has expired."
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__expired),
                     )
                     return
                 }
@@ -879,5 +883,6 @@ sealed class SendEvent {
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
     data object PaymentMethodSwitch : SendEvent()
+    data object Reset : SendEvent()
 }
 // endregion

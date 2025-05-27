@@ -27,6 +27,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.QuickPayResult
 import to.bitkit.viewmodels.QuickPayViewModel
 
 @Composable
@@ -34,6 +35,7 @@ fun QuickPaySendScreen(
     invoice: String,
     amount: Long,
     onPaymentComplete: (Boolean) -> Unit,
+    onShowError: (String) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -45,11 +47,11 @@ fun QuickPaySendScreen(
         }
     }
 
-    LaunchedEffect(uiState.isSuccess, uiState.error) {
-        if (uiState.isSuccess) {
-            onPaymentComplete(true)
-        } else if (uiState.error != null) {
-            onPaymentComplete(false)
+    LaunchedEffect(uiState.result) {
+        when (val result = uiState.result) {
+            is QuickPayResult.Success -> onPaymentComplete(true)
+            is QuickPayResult.Error -> onShowError(result.message)
+            is QuickPayResult.Loading -> Unit // Continue showing loading state
         }
     }
 

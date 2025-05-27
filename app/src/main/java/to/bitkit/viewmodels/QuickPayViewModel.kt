@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
@@ -30,30 +31,26 @@ class QuickPayViewModel @Inject constructor(
 
     fun payInvoice(bolt11: String, amount: ULong? = null) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.update { it.copy(result = QuickPayResult.Loading) }
 
             try {
                 val result = sendLightning(bolt11, amount)
                 if (result.isSuccess) {
                     Logger.info("QuickPay lightning payment successful")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        isSuccess = true
-                    )
+                    _uiState.update { it.copy(result = QuickPayResult.Success) }
                 } else {
                     val error = result.exceptionOrNull()
                     Logger.error("QuickPay lightning payment failed", error)
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = error?.message ?: "Payment failed"
-                    )
+
+                    _uiState.update {
+                        it.copy(result = QuickPayResult.Error(error?.message ?: "Payment failed"))
+                    }
                 }
             } catch (e: Exception) {
                 Logger.error("QuickPay payment error", e)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "Unknown error"
-                )
+                _uiState.update {
+                    it.copy(result = QuickPayResult.Error(e.message ?: "Unknown error"))
+                }
             }
         }
     }
@@ -101,8 +98,14 @@ class QuickPayViewModel @Inject constructor(
     }
 }
 
+sealed class QuickPayResult {
+    data object Loading : QuickPayResult()
+    data object Success : QuickPayResult()
+    data class Error(val message: String) : QuickPayResult()
+}
+
 data class QuickPayUiState(
-    val isLoading: Boolean = false,
-    val isSuccess: Boolean = false,
-    val error: String? = null,
-)
+    val result: QuickPayResult = QuickPayResult.Loading,
+) {
+    val isLoading: Boolean get() = result is QuickPayResult.Loading
+}

@@ -150,6 +150,29 @@ fun SendOptionsView(
                         } else {
                             navController.popBackStack() // Go back to send options on failure
                         }
+                    },
+                    onShowError = { errorMessage ->
+                        navController.navigate(SendRoute.Error(errorMessage))
+                    }
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.Error> { backStackEntry ->
+                val route = backStackEntry.toRoute<SendRoute.Error>()
+                SendErrorScreen(
+                    errorMessage = route.errorMessage,
+                    onRetry = {
+                        appViewModel.setSendEvent(SendEvent.Reset)
+
+                        if (startDestination == SendRoute.Options) {
+                            navController.navigate(SendRoute.Options) {
+                                popUpTo<SendRoute.Options> { inclusive = true }
+                            }
+                        } else {
+                            onComplete(null)
+                        }
+                    },
+                    onClose = {
+                        onComplete(null)
                     }
                 )
             }
@@ -169,7 +192,7 @@ private fun SendOptionsContent(
             .gradientBackground()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(stringResource(R.string.wallet__send_bitcoin))
+        SheetTopBar(titleText = stringResource(R.string.wallet__send_bitcoin))
         Spacer(Modifier.height(32.dp))
         Caption13Up(text = stringResource(R.string.wallet__send_to))
         Spacer(modifier = Modifier.height(16.dp))
@@ -281,4 +304,7 @@ interface SendRoute {
 
     @Serializable
     data class QuickPay(val invoice: String, val amount: Long) : SendRoute
+
+    @Serializable
+    data class Error(val errorMessage: String) : SendRoute
 }
