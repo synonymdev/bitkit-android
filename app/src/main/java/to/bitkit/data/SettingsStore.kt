@@ -30,6 +30,20 @@ class SettingsStore @Inject constructor(
         store.updateData(transform)
     }
 
+    suspend fun addLastUsedTag(newTag: String) {
+        store.updateData { currentSettings ->
+            val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
+            val limitedTags = combinedTags.take(10)
+            currentSettings.copy(lastUsedTags = limitedTags)
+        }
+    }
+
+    suspend fun deleteLastUsedTag(tag: String) {
+        store.updateData {
+            it.copy(lastUsedTags = it.lastUsedTags.filter { it != tag })
+        }
+    }
+
     suspend fun reset() {
         store.updateData { SettingsData() }
         Logger.info("Deleted all user settings data.")
@@ -56,4 +70,7 @@ data class SettingsData(
     val isPinOnIdleEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
     val isDevModeEnabled: Boolean = false,
+    val showWidgets: Boolean = false,
+    val showWidgetTitles: Boolean = false,
+    val lastUsedTags: List<String> = emptyList(),
 )

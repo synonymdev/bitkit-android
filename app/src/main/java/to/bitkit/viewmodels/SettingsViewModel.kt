@@ -139,6 +139,34 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val showWidgets = settingsStore.data.map { it.showWidgets }
+        .asStateFlow(initialValue = false)
+
+    fun setShowWidgets(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(showWidgets = value) }
+        }
+    }
+
+    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
+        .asStateFlow(initialValue = false)
+
+    fun setShowWidgetTitles(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(showWidgetTitles = value) }
+        }
+    }
+
+    val lastUsedTags = settingsStore.data.map { it.lastUsedTags }
+        .asStateFlow(initialValue = emptyList())
+
+    fun deleteLastUsedTag(tag: String) {
+        viewModelScope.launch {
+            settingsStore.deleteLastUsedTag(tag)
+        }
+    }
+
+    // utils
     private fun <T> Flow<T>.asStateFlow(
         started: SharingStarted = SharingStarted.WhileSubscribed(5000),
         initialValue: T,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -15,7 +16,6 @@ import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToDefaultUnitSettings
@@ -38,12 +38,14 @@ fun GeneralSettingsScreen(
 ) {
     val settings = settingsViewModel ?: return
     val currencies = LocalCurrencies.current
-    val defaultTransactionSpeed = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val defaultTransactionSpeed by settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val lastUsedTags by settings.lastUsedTags.collectAsStateWithLifecycle()
 
     GeneralSettingsContent(
         selectedCurrency = currencies.selectedCurrency,
         primaryDisplay = currencies.primaryDisplay,
-        defaultTransactionSpeed = defaultTransactionSpeed.value,
+        defaultTransactionSpeed = defaultTransactionSpeed,
+        showTagsButton = lastUsedTags.isNotEmpty(),
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
         onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
@@ -60,6 +62,7 @@ private fun GeneralSettingsContent(
     selectedCurrency: String,
     primaryDisplay: PrimaryDisplay,
     defaultTransactionSpeed: TransactionSpeed,
+    showTagsButton: Boolean = false,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
     onLocalCurrencyClick: () -> Unit = {},
@@ -108,10 +111,12 @@ private fun GeneralSettingsContent(
                 title = stringResource(R.string.settings__quickpay__nav_title),
                 onClick = onQuickPayClick,
             )
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__general__tags),
-                onClick = onTagsClick,
-            )
+            if (showTagsButton) {
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__general__tags),
+                    onClick = onTagsClick,
+                )
+            }
         }
     }
 }
@@ -124,6 +129,7 @@ private fun Preview() {
             selectedCurrency = "USD",
             primaryDisplay = PrimaryDisplay.BITCOIN,
             defaultTransactionSpeed = TransactionSpeed.Medium,
+            showTagsButton = true,
         )
     }
 }

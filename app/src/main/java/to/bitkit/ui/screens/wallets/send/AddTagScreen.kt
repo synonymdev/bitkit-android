@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -24,6 +23,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
@@ -43,7 +43,7 @@ fun AddTagScreen(
     onBack: () -> Unit,
     onTagSelected: (String) -> Unit,
 ) {
-    val uiState: AddTagUiState by viewModel.uiState.collectAsState()
+    val uiState: AddTagUiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.loadTagSuggestions()
@@ -99,7 +99,6 @@ fun AddTagContent(
                     uiState.tagsSuggestions.map { tagText ->
                         TagButton(
                             tagText,
-                            isSelected = false,
                             onClick = { onTagSelected(tagText) },
                         )
                     }

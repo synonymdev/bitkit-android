@@ -9,11 +9,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.ui.components.ModalBottomSheetHandle
 import to.bitkit.ui.screens.wallets.send.AddTagContent
 import to.bitkit.ui.shared.util.gradientBackground
@@ -32,7 +32,7 @@ fun ActivityAddTagSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val uiState by tagsViewModel.uiState.collectAsState()
+    val uiState by tagsViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         tagsViewModel.loadTagSuggestions()

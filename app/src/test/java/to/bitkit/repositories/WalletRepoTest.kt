@@ -408,12 +408,13 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `addTagToSelected should add tag`() = test {
+    fun `addTagToSelected should add tag and update lastUsedTags`() = test {
         val testTag = "testTag"
 
         sut.addTagToSelected(testTag)
 
         assertEquals(listOf(testTag), sut.walletState.value.selectedTags)
+        verify(settingsStore).addLastUsedTag(testTag)
     }
 
     @Test

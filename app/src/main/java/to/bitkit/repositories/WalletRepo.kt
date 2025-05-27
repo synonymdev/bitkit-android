@@ -298,12 +298,13 @@ class WalletRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    fun addTagToSelected(newTag: String) {
+    suspend fun addTagToSelected(newTag: String) {
         _walletState.update {
             it.copy(
                 selectedTags = (it.selectedTags + newTag).distinct()
             )
         }
+        settingsStore.addLastUsedTag(newTag)
     }
 
     fun removeTag(tag: String) {
