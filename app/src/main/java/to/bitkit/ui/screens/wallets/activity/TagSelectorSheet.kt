@@ -85,8 +85,8 @@ private fun TagSelectorSheetContent(
             availableTags.forEach { tag ->
                 TagButton(
                     text = tag,
-                    isSelected = selectedTags.contains(tag),
-                    onClick = { onTagClick(tag) }
+                    onClick = { onTagClick(tag) },
+                    isSelected = selectedTags.contains(tag)
                 )
             }
         }
