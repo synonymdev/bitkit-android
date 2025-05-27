@@ -54,7 +54,7 @@ class HomeViewModel @Inject constructor(
                 balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
                     listOfNotNull(
                         Suggestion.BACK_UP,
-                        Suggestion.SPEND,
+                        Suggestion.SPEND, //Replace with LIGHTNING_SETTING_UP when the spending balance is confirming
                         Suggestion.SECURE.takeIf { !isPinEnabled },
                         Suggestion.BUY,
                         Suggestion.SUPPORT,

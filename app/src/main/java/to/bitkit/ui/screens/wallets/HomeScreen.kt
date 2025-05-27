@@ -97,6 +97,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.seconds
 
 
 @Composable
@@ -239,6 +240,8 @@ fun HomeScreen(
 
                                 Suggestion.TRANSFER_PENDING -> Unit
                                 Suggestion.TRANSFER_CLOSING_CHANNEL -> Unit
+                                Suggestion.LIGHTNING_SETTING_UP -> TODO()
+                                Suggestion.LIGHTNING_READY -> TODO()
                             }
                         },
                     )
@@ -398,6 +401,7 @@ private fun HomeContentView(
                                         title = stringResource(item.title),
                                         description = stringResource(item.description),
                                         icon = item.icon,
+                                        duration = 60.seconds.takeIf { item == Suggestion.TRANSFER_PENDING || item == Suggestion.TRANSFER_CLOSING_CHANNEL },
                                         onClose = { onRemoveSuggestion(item) },
                                         onClick = { onClickSuggestion(item) },
                                         modifier = Modifier.testTag("SUGGESTION_${item.name}")
