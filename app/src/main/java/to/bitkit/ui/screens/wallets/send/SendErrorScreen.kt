@@ -34,7 +34,7 @@ import to.bitkit.ui.theme.Colors
 fun SendErrorScreen(
     errorMessage: String,
     onRetry: () -> Unit,
-    onClose: (() -> Unit)? = null,
+    onClose: () -> Unit,
 ) {
     SendErrorScreenContent(
         errorMessage = errorMessage,
@@ -47,7 +47,7 @@ fun SendErrorScreen(
 private fun SendErrorScreenContent(
     errorMessage: String,
     onRetry: () -> Unit = {},
-    onClose: (() -> Unit)? = null,
+    onClose: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
