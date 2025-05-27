@@ -170,8 +170,6 @@ class CurrencyViewModel @Inject constructor(
         val sourceCurrency = currency ?: uiState.value.selectedCurrency
         return currencyService.convertFiatToSats(fiatAmount, sourceCurrency, uiState.value.rates)
     }
-
-
 }
 
 data class CurrencyUiState(

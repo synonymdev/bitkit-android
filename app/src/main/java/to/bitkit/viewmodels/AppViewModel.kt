@@ -375,8 +375,7 @@ class AppViewModel @Inject constructor(
                 val invoice: OnChainInvoice = scan.invoice
                 val lnInvoice: LightningInvoice? = invoice.lightningParam()?.let { bolt11 ->
                     val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
-                    val lightningInvoice = (decoded as? Scanner.Lightning)?.invoice
-                    lightningInvoice?.takeIf { lightningService.canSend(it.amountSatoshis) }
+                    (decoded as? Scanner.Lightning)?.invoice
                 }
                 _sendUiState.update {
                     it.copy(
@@ -429,6 +428,14 @@ class AppViewModel @Inject constructor(
                     )
                     return
                 }
+                // Check for QuickPay conditions
+                val quickPayHandled = handleQuickPayIfApplicable(
+                    invoice = uri,
+                    amountSats = invoice.amountSatoshis,
+                )
+
+                if (quickPayHandled) return
+
                 if (!lightningService.canSend(invoice.amountSatoshis)) {
                     toast(
                         type = Toast.ToastType.ERROR,
@@ -437,14 +444,6 @@ class AppViewModel @Inject constructor(
                     )
                     return
                 }
-
-                // Check for QuickPay conditions
-                val quickPayHandled = handleQuickPayIfApplicable(
-                    invoice = uri,
-                    amountSats = invoice.amountSatoshis,
-                )
-
-                if (quickPayHandled) return
 
                 _sendUiState.update {
                     it.copy(

@@ -26,6 +26,8 @@ class QuickPayViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(QuickPayUiState())
     val uiState = _uiState.asStateFlow()
 
+    val lightningState = lightningRepo.lightningState
+
     fun payInvoice(bolt11: String, amount: ULong? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)

@@ -17,8 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.shared.util.gradientBackground
@@ -35,9 +37,12 @@ fun QuickPaySendScreen(
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(invoice) {
-        viewModel.payInvoice(invoice, amount.toULong())
+    LaunchedEffect(invoice, lightningState.nodeLifecycleState) {
+        if (lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
+            viewModel.payInvoice(invoice, amount.toULong())
+        }
     }
 
     LaunchedEffect(uiState.isSuccess, uiState.error) {
@@ -51,6 +56,7 @@ fun QuickPaySendScreen(
     QuickPaySendScreenContent(
         amount = amount,
         isLoading = uiState.isLoading,
+        nodeLifecycleState = lightningState.nodeLifecycleState,
     )
 }
 
@@ -58,6 +64,7 @@ fun QuickPaySendScreen(
 private fun QuickPaySendScreenContent(
     amount: Long,
     isLoading: Boolean = true,
+    nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
 ) {
     Column(
         modifier = Modifier
@@ -66,32 +73,40 @@ private fun QuickPaySendScreenContent(
             .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__send_quickpay__nav_title))
-        Spacer(modifier = Modifier.height(16.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
+        when (nodeLifecycleState) {
+            is NodeLifecycleState.Running -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
 
-            Spacer(modifier = Modifier.weight(1f))
-            if (isLoading) {
-                TransferAnimationView(
-                    largeCircleRes = R.drawable.ln_sync_large,
-                    smallCircleRes = R.drawable.ln_sync_small,
-                    contentRes = R.drawable.coin_stack_4,
-                    rotateContent = true,
-                )
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (isLoading) {
+                        TransferAnimationView(
+                            largeCircleRes = R.drawable.ln_sync_large,
+                            smallCircleRes = R.drawable.ln_sync_small,
+                            contentRes = R.drawable.coin_stack_4,
+                            rotateContent = true,
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Display(
+                        text = stringResource(R.string.wallet__send_quickpay__title)
+                            .withAccent(accentColor = Colors.Purple)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
-            Spacer(modifier = Modifier.weight(1f))
 
-            Display(
-                text = stringResource(R.string.wallet__send_quickpay__title)
-                    .withAccent(accentColor = Colors.Purple)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
+            else -> {
+                SyncNodeView(modifier = Modifier.fillMaxSize())
+            }
         }
     }
 }
@@ -102,6 +117,18 @@ private fun Preview() {
     AppThemeSurface {
         QuickPaySendScreenContent(
             amount = 50000L,
+            nodeLifecycleState = NodeLifecycleState.Running,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        QuickPaySendScreenContent(
+            amount = 50000L,
+            nodeLifecycleState = NodeLifecycleState.Initializing,
         )
     }
 }
