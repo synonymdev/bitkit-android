@@ -53,10 +53,10 @@ fun QuickPaySettingsScreen(
 private fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
-    onToggleQuickPay: (Boolean) -> Unit,
-    onQuickPayAmountChange: (Int) -> Unit,
-    onBack: () -> Unit,
-    onClose: () -> Unit,
+    onToggleQuickPay: (Boolean) -> Unit = {},
+    onQuickPayAmountChange: (Int) -> Unit = {},
+    onBack: () -> Unit = {},
+    onClose: () -> Unit = {},
 ) {
     val sliderSteps = remember { listOf(1, 5, 10, 20, 50) }
 
@@ -128,10 +128,6 @@ private fun Preview() {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = true,
             quickPayAmount = 5,
-            onToggleQuickPay = {},
-            onQuickPayAmountChange = {},
-            onBack = {},
-            onClose = {},
         )
     }
 }
