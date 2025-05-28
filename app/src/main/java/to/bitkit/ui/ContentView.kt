@@ -29,6 +29,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.currentActivity
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.AuthCheckScreen
@@ -279,7 +280,7 @@ fun ContentView(
                 authCheck(navController)
                 logs(navController)
                 suggestions(navController)
-                widgets(navController, settingsViewModel)
+                widgets(navController, settingsViewModel, currencyViewModel)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -868,6 +869,7 @@ private fun NavGraphBuilder.suggestions(
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
+    currencyViewModel: CurrencyViewModel,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
         WidgetsIntroScreen(
@@ -884,7 +886,7 @@ private fun NavGraphBuilder.widgets(
             onWidgetSelected = { widgetType ->
 
             },
-            fiatSymbol = "$" // todo get symbol
+            fiatSymbol = currencyViewModel.getCurrencySymbol()
         )
     }
 }
