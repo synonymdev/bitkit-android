@@ -241,7 +241,7 @@ fun HomeScreen(
                                 }
                             }
                         },
-                        onClickAddWIdget = {
+                        onClickAddWidget = {
                             if (!hasSeenWidgetsIntro) {
                                 rootNavController.navigate(Routes.WidgetsIntro)
                             } else {
@@ -323,7 +323,7 @@ private fun HomeContentView(
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
-    onClickAddWIdget: () -> Unit,
+    onClickAddWidget: () -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -427,7 +427,7 @@ private fun HomeContentView(
                                 tint = Colors.White80
                             )
                         },
-                        onClick = onClickAddWIdget
+                        onClick = onClickAddWidget
                     )
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
@@ -509,7 +509,7 @@ private fun HomeContentViewPreview() {
             onRefresh = {},
             onClickSuggestion = {},
             onRemoveSuggestion = {},
-            onClickAddWIdget = {},
+            onClickAddWidget = {},
         )
     }
 }
