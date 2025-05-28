@@ -41,9 +41,9 @@ fun QuickPaySettingsScreen(
 
     QuickPaySettingsScreenContent(
         isQuickPayEnabled = isQuickPayEnabled,
-        quickpayAmount = quickPayAmount,
-        onToggleQuickpay = settingsViewModel::setIsQuickPayEnabled,
-        onQuickpayAmountChange = settingsViewModel::setQuickPayAmount,
+        quickPayAmount = quickPayAmount,
+        onToggleQuickPay = settingsViewModel::setIsQuickPayEnabled,
+        onQuickPayAmountChange = settingsViewModel::setQuickPayAmount,
         onBack = onBack,
         onClose = onClose,
     )
@@ -52,9 +52,9 @@ fun QuickPaySettingsScreen(
 @Composable
 private fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
-    quickpayAmount: Int,
-    onToggleQuickpay: (Boolean) -> Unit,
-    onQuickpayAmountChange: (Int) -> Unit,
+    quickPayAmount: Int,
+    onToggleQuickPay: (Boolean) -> Unit,
+    onQuickPayAmountChange: (Int) -> Unit,
     onBack: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -75,14 +75,14 @@ private fun QuickPaySettingsScreenContent(
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__quickpay__settings__toggle),
                 isChecked = isQuickPayEnabled,
-                onClick = { onToggleQuickpay(!isQuickPayEnabled) },
+                onClick = { onToggleQuickPay(!isQuickPayEnabled) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__text)
-                    .replace("{amount}", quickpayAmount.toString()),
+                    .replace("{amount}", quickPayAmount.toString()),
                 color = Colors.White64
             )
 
@@ -96,9 +96,9 @@ private fun QuickPaySettingsScreenContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             StepSlider(
-                value = quickpayAmount,
+                value = quickPayAmount,
                 steps = sliderSteps,
-                onValueChange = onQuickpayAmountChange,
+                onValueChange = onQuickPayAmountChange,
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -127,9 +127,9 @@ private fun Preview() {
     AppThemeSurface {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = true,
-            quickpayAmount = 5,
-            onToggleQuickpay = {},
-            onQuickpayAmountChange = {},
+            quickPayAmount = 5,
+            onToggleQuickPay = {},
+            onQuickPayAmountChange = {},
             onBack = {},
             onClose = {},
         )
