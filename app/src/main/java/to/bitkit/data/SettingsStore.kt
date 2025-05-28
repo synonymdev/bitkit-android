@@ -59,6 +59,7 @@ data class SettingsData(
     val defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
     val showEmptyState: Boolean = false,
     val hasSeenSpendingIntro: Boolean = false,
+    val hasSeenWidgetsIntro: Boolean = false,
     val hasSeenTransferIntro: Boolean = false,
     val hasSeenSavingsIntro: Boolean = false,
     val hasSeenShopIntro: Boolean = false,

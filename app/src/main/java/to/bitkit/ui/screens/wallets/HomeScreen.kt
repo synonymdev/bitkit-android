@@ -150,6 +150,7 @@ fun HomeScreen(
                     onDismiss = { appViewModel.hideSheet() },
                     walletViewModel = walletViewModel
                 )
+
                 null -> Unit
             }
         }
@@ -168,6 +169,7 @@ fun HomeScreen(
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickpayIntroSeen by settingsViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
+                    val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
@@ -420,7 +422,11 @@ private fun HomeContentView(
                             )
                         },
                         onClick = {
-                            rootNavController.navigate(Routes.WidgetsIntro) //TODO HAS SENN LOGIC
+                            if (!hasSeenWidgets) {
+                                rootNavController.navigate(Routes.WidgetsIntro)
+                            } else {
+                                rootNavController.navigate(Routes.AddWidget)
+                            }
                         }
                     )
                     Spacer(modifier = Modifier.height(32.dp))

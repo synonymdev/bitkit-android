@@ -279,7 +279,7 @@ fun ContentView(
                 authCheck(navController)
                 logs(navController)
                 suggestions(navController)
-                widgets(navController)
+                widgets(navController, settingsViewModel)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -867,12 +867,13 @@ private fun NavGraphBuilder.suggestions(
 
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
         WidgetsIntroScreen(
             onClose = { navController.navigateToHome() },
             onContinue = {
-                //TODO HAS SEEN LOGIC
+                settingsViewModel.setHasSeenWidgetsIntro(true)
                 navController.navigate(Routes.AddWidget)
             }
         )
