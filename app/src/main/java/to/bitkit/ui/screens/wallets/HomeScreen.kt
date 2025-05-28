@@ -63,7 +63,6 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
-import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
@@ -243,6 +242,13 @@ fun HomeScreen(
                                 }
                             }
                         },
+                        onClickAddWIdget = {
+                            if (!hasSeenWidgetsIntro) {
+                                rootNavController.navigate(Routes.WidgetsIntro)
+                            } else {
+                                rootNavController.navigate(Routes.AddWidget)
+                            }
+                        }
                     )
                 }
                 composable<HomeRoutes.Savings>(
@@ -318,6 +324,7 @@ private fun HomeContentView(
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
+    onClickAddWIdget: () -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -421,13 +428,7 @@ private fun HomeContentView(
                                 tint = Colors.White80
                             )
                         },
-                        onClick = {
-                            if (!hasSeenWidgets) {
-                                rootNavController.navigate(Routes.WidgetsIntro)
-                            } else {
-                                rootNavController.navigate(Routes.AddWidget)
-                            }
-                        }
+                        onClick = onClickAddWIdget
                     )
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
@@ -509,6 +510,7 @@ private fun HomeContentViewPreview() {
             onRefresh = {},
             onClickSuggestion = {},
             onRemoveSuggestion = {},
+            onClickAddWIdget = {},
         )
     }
 }
