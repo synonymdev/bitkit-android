@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.Icon
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -62,9 +63,11 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
@@ -403,6 +406,23 @@ private fun HomeContentView(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64)
+                    //TODO IMPLEMENT LIST IN OTHER PR
+                    Spacer(modifier = Modifier.height(32.dp))
+                    TertiaryButton(
+                        text = stringResource(R.string.widgets__add),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_plus),
+                                contentDescription = null,
+                                tint = Colors.White80
+                            )
+                        },
+                        onClick = {
+
+                        }
+                    )
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
