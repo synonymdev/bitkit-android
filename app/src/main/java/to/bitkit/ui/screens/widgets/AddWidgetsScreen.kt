@@ -30,7 +30,7 @@ fun AddWidgetsScreen(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__price__name),
@@ -80,7 +80,10 @@ fun AddWidgetsScreen(
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__calculator__name),
-                subtitle = stringResource(R.string.widgets__calculator__description).replace("{fiatSymbol}", fiatSymbol),
+                subtitle = stringResource(R.string.widgets__calculator__description).replace(
+                    "{fiatSymbol}",
+                    fiatSymbol
+                ),
                 iconRes = R.drawable.widget_math_operation,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
