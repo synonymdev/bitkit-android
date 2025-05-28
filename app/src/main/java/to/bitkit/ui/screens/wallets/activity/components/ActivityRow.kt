@@ -1,5 +1,12 @@
 package to.bitkit.ui.screens.wallets.activity.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +36,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -206,6 +214,7 @@ private fun AmountViewContent(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // Title row with static prefix and symbol
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(1.dp),
@@ -215,8 +224,16 @@ private fun AmountViewContent(
                 BodyMSB(text = titleSymbol, color = Colors.White64)
             }
             Spacer(modifier = Modifier.width(2.dp))
-            BodyMSB(text = if (hideBalance) "• • • • •" else title)
+            AnimatedContent(
+                targetState = hideBalance,
+                transitionSpec = { BalanceAnimations.activityAmountTransition },
+                label = "titleAnimation"
+            ) { isHidden ->
+                BodyMSB(text = if (isHidden) "• • • • •" else title)
+            }
         }
+
+        // Subtitle row with static symbol
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -224,10 +241,16 @@ private fun AmountViewContent(
             if (subtitleSymbol != null) {
                 CaptionB(text = subtitleSymbol, color = Colors.White64)
             }
-            CaptionB(
-                text = if (hideBalance) "• • • • •" else subtitle,
-                color = Colors.White64,
-            )
+            AnimatedContent(
+                targetState = hideBalance,
+                transitionSpec = { BalanceAnimations.activitySubtitleTransition },
+                label = "subtitleAnimation"
+            ) { isHidden ->
+                CaptionB(
+                    text = if (isHidden) "• • • • •" else subtitle,
+                    color = Colors.White64,
+                )
+            }
         }
     }
 }

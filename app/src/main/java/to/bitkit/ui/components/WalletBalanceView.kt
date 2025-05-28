@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -50,37 +52,42 @@ fun RowScope.WalletBalanceView(
         Spacer(modifier = Modifier.height(8.dp))
 
         converted?.let { converted ->
-            if (primaryDisplay == PrimaryDisplay.BITCOIN) {
-                val btcComponents = converted.bitcoinDisplay(displayUnit)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        painter = icon,
-                        contentDescription = title,
-                        tint = Color.Unspecified,
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(24.dp)
-                    )
-                    BodyMSB(text = if (hideBalance) "• • • • •" else btcComponents.value)
-                }
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        painter = icon,
-                        contentDescription = title,
-                        tint = Color.Unspecified,
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(24.dp)
-                    )
-                    BodyMSB(text = converted.symbol)
-                    BodyMSB(text = if (hideBalance) "• • • • •" else converted.formatted)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    painter = icon,
+                    contentDescription = title,
+                    tint = Color.Unspecified,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(24.dp)
+                )
+
+                if (primaryDisplay == PrimaryDisplay.BITCOIN) {
+                    val btcComponents = converted.bitcoinDisplay(displayUnit)
+                    AnimatedContent(
+                        targetState = hideBalance,
+                        transitionSpec = { BalanceAnimations.walletBalanceTransition },
+                        label = "bitcoinBalanceAnimation"
+                    ) { isHidden ->
+                        BodyMSB(text = if (isHidden) "• • • • •" else btcComponents.value)
+                    }
+                } else {
+                    AnimatedContent(
+                        targetState = hideBalance,
+                        transitionSpec = { BalanceAnimations.walletBalanceTransition },
+                        label = "fiatBalanceAnimation"
+                    ) { isHidden ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            BodyMSB(text = converted.symbol)
+                            BodyMSB(text = if (isHidden) "• • • • •" else converted.formatted)
+                        }
+                    }
                 }
             }
         }

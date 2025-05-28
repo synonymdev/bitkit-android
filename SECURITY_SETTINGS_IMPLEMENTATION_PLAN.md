@@ -64,10 +64,11 @@ Added the missing switch rows in the correct order matching React Native app.
 
 #### 3.1 Balance Hiding Functionality ✅
 **Files created/modified**:
-- ✅ `SwipeToHideDetector.kt` - Generic swipe detection component
-- ✅ `BalanceHeaderView.kt` - Updated to support swipe gestures and balance hiding
+- ✅ `SwipeToHideModifier.kt` - Custom modifier for swipe gesture detection (refactored from component)
+- ✅ `BalanceHeaderView.kt` - Updated to use swipeToHide modifier and support balance hiding
 - ✅ `ic_eye.xml` - Created eye icon drawable for show balance button
 - ✅ `ContentView.kt` - Added startup logic for `hideBalanceOnOpen`
+- ✅ `AmountViewContent.kt` - Centralized balance hiding logic for activity rows
 
 **Features implemented**:
 - ✅ Swipe left/right on balance to toggle visibility
@@ -76,6 +77,15 @@ Added the missing switch rows in the correct order matching React Native app.
 - ✅ App startup automatically hides balance if `hideBalanceOnOpen=true`
 - ✅ Proper dependency handling (hideBalanceOnOpen only visible when swipe enabled)
 - ✅ **Symbol Display Fix**: Symbols (₿, $) now correctly show even when balance is hidden (matches React Native)
+- ✅ **Activity Row Support**: Activity list properly hides balances while preserving symbols and prefixes
+- ✅ **Activity Detail Override**: Balance never hidden on activity detail screens (`forceShowBalance=true`)
+- ✅ **Code Architecture**: Refactored from component to custom modifier for better Compose practices
+
+**Technical Implementation**:
+- ✅ **Custom Modifier Pattern**: Replaced `SwipeToHideDetector` component with `Modifier.swipeToHide()` extension
+- ✅ **Gesture Detection**: Horizontal swipe detection with configurable sensitivity
+- ✅ **State Management**: Proper handling of gesture state to prevent multiple triggers
+- ✅ **Reusable Design**: Modifier can be applied to any composable needing swipe-to-hide behavior
 
 #### 3.2 Clipboard Auto-Reading ⏳ TODO
 **Files to create/modify**:
@@ -130,10 +140,9 @@ Added the missing switch rows in the correct order matching React Native app.
 - ✅ Balance hiding with dots display working
 - ✅ Eye icon for manual reveal working
 
-### ✅ Hide Balance on Open - COMPLETED
+### ✅ Hide Balance on Open - COMPLETED ✅ 
 - ✅ Only visible when `enableSwipeToHideBalance` is true
-- ✅ Controls whether balance is hidden when app starts
-- ✅ Startup logic implemented in ContentView
+- ✅ Controls whether balance is hidden when app starts/restarts (not foreground/background)
 
 ### ⏳ Auto Read Clipboard - TODO
 - Requires clipboard permission
@@ -164,12 +173,16 @@ All required strings are already available in `strings.xml`:
 - ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/settings/SecuritySettingsScreen.kt`
 
 ### ✅ New Files Created - COMPLETED
-- ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/components/SwipeToHideDetector.kt`
+- ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/components/SwipeToHideModifier.kt`
 - ✅ `bitkit-android/app/src/main/res/drawable/ic_eye.xml`
 
 ### ✅ Files Updated - COMPLETED
 - ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/components/BalanceHeaderView.kt`
 - ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/ContentView.kt`
+- ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/components/AmountViewContent.kt`
+
+### 🗑️ Files Removed - COMPLETED
+- ✅ `bitkit-android/app/src/main/java/to/bitkit/ui/components/SwipeToHideDetector.kt` (refactored to modifier)
 
 ### ⏳ Files to Create/Update - TODO
 - `bitkit-android/app/src/main/java/to/bitkit/services/ClipboardMonitorService.kt`

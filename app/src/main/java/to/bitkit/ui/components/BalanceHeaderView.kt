@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.modifiers.swipeToHide
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
@@ -132,7 +134,8 @@ fun BalanceHeader(
     ) {
         SmallRow(
             symbol = smallRowSymbol,
-            text = if (hideBalance) "• • • • •" else smallRowText
+            text = smallRowText,
+            hideBalance = hideBalance
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -141,33 +144,49 @@ fun BalanceHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LargeRow(
-                prefix = if (hideBalance) null else largeRowPrefix,
-                text = if (hideBalance) "• • • • • • • • •" else largeRowText,
+                prefix = largeRowPrefix,
+                text = largeRowText,
                 symbol = largeRowSymbol,
-                showSymbol = showSymbol
+                showSymbol = showSymbol,
+                hideBalance = hideBalance
             )
 
-            if (hideBalance && showEyeIcon) {
+            if (showEyeIcon) {
                 Spacer(modifier = Modifier.weight(1f))
-                Icon(
-                    painter = painterResource(R.drawable.ic_eye),
-                    contentDescription = null,
-                    tint = Colors.White64,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickableAlpha { onToggleHideBalance() }
-                )
+                AnimatedContent(
+                    targetState = hideBalance,
+                    transitionSpec = { BalanceAnimations.eyeIconTransition },
+                    label = "eyeIconAnimation",
+                    modifier = Modifier.size(24.dp)
+                ) { isHidden ->
+                    if (isHidden) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_eye),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickableAlpha { onToggleHideBalance() }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean) {
+fun LargeRow(
+    prefix: String?,
+    text: String,
+    symbol: String,
+    showSymbol: Boolean,
+    hideBalance: Boolean = false
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (prefix != null) {
+        if (!hideBalance && prefix != null) {
             Display(
                 text = prefix,
                 color = Colors.White64,
@@ -181,12 +200,18 @@ fun LargeRow(prefix: String?, text: String, symbol: String, showSymbol: Boolean)
                 modifier = Modifier.padding(end = 8.dp)
             )
         }
-        Display(text = text)
+        AnimatedContent(
+            targetState = hideBalance,
+            transitionSpec = { BalanceAnimations.mainBalanceTransition },
+            label = "largeRowTextAnimation"
+        ) { isHidden ->
+            Display(text = if (isHidden) "• • • • • • • • •" else text)
+        }
     }
 }
 
 @Composable
-private fun SmallRow(symbol: String?, text: String) {
+private fun SmallRow(symbol: String?, text: String, hideBalance: Boolean = false) {
     Row(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -197,10 +222,16 @@ private fun SmallRow(symbol: String?, text: String) {
                 color = Colors.White64,
             )
         }
-        Caption13Up(
-            text = text,
-            color = Colors.White64,
-        )
+        AnimatedContent(
+            targetState = hideBalance,
+            transitionSpec = { BalanceAnimations.secondaryBalanceTransition },
+            label = "smallRowTextAnimation"
+        ) { isHidden ->
+            Caption13Up(
+                text = if (isHidden) "• • • • •" else text,
+                color = Colors.White64,
+            )
+        }
     }
 }
 
