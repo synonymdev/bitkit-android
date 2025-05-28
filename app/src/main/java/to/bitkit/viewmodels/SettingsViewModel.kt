@@ -73,7 +73,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val quickpayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }
+    val quickPayIntroSeen = settingsStore.data.map { it.quickPayIntroSeen }
         .asStateFlow(initialValue = false)
 
     fun setQuickPayIntroSeen(value: Boolean) {
@@ -166,21 +166,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val enableQuickpay = settingsStore.data.map { it.enableQuickpay }
+    val isQuickpayEnabled = settingsStore.data.map { it.isQuickPayEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setEnableQuickpay(value: Boolean) {
+    fun setIsQuickPayEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(enableQuickpay = value) }
+            settingsStore.update { it.copy(isQuickPayEnabled = value) }
         }
     }
 
-    val quickpayAmount = settingsStore.data.map { it.quickpayAmount }
+    val quickPayAmount = settingsStore.data.map { it.quickPayAmount }
         .asStateFlow(initialValue = 5)
 
-    fun setQuickpayAmount(value: Int) {
+    fun setQuickPayAmount(value: Int) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(quickpayAmount = value) }
+            settingsStore.update { it.copy(quickPayAmount = value) }
         }
     }
 

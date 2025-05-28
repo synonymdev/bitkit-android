@@ -502,17 +502,17 @@ class AppViewModel @Inject constructor(
         amountSats: ULong,
     ): Boolean {
         val settings = settingsStore.data.first()
-        if (!settings.enableQuickpay || amountSats == 0uL) {
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) {
             return false
         }
 
-        val quickpayThresholdSats = currencyService.convertFiatToSats(
-            settings.quickpayAmount.toDouble(),
+        val quickPayThresholdSats = currencyService.convertFiatToSats(
+            settings.quickPayAmount.toDouble(),
             settings.selectedCurrency
         ) ?: return false
 
-        if (amountSats <= quickpayThresholdSats.toULong()) {
-            Logger.info("Using QuickPay: $amountSats sats <= $quickpayThresholdSats sats threshold")
+        if (amountSats <= quickPayThresholdSats.toULong()) {
+            Logger.info("Using QuickPay: $amountSats sats <= $quickPayThresholdSats sats threshold")
             if (isMainScanner) {
                 showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
             } else {

@@ -36,14 +36,14 @@ fun QuickPaySettingsScreen(
     onClose: () -> Unit,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val enableQuickpay by settingsViewModel.enableQuickpay.collectAsStateWithLifecycle()
-    val quickpayAmount by settingsViewModel.quickpayAmount.collectAsStateWithLifecycle()
+    val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled.collectAsStateWithLifecycle()
+    val quickPayAmount by settingsViewModel.quickPayAmount.collectAsStateWithLifecycle()
 
     QuickPaySettingsScreenContent(
-        enableQuickpay = enableQuickpay,
-        quickpayAmount = quickpayAmount,
-        onToggleQuickpay = settingsViewModel::setEnableQuickpay,
-        onQuickpayAmountChange = settingsViewModel::setQuickpayAmount,
+        isQuickPayEnabled = isQuickPayEnabled,
+        quickpayAmount = quickPayAmount,
+        onToggleQuickpay = settingsViewModel::setIsQuickPayEnabled,
+        onQuickpayAmountChange = settingsViewModel::setQuickPayAmount,
         onBack = onBack,
         onClose = onClose,
     )
@@ -51,7 +51,7 @@ fun QuickPaySettingsScreen(
 
 @Composable
 private fun QuickPaySettingsScreenContent(
-    enableQuickpay: Boolean,
+    isQuickPayEnabled: Boolean,
     quickpayAmount: Int,
     onToggleQuickpay: (Boolean) -> Unit,
     onQuickpayAmountChange: (Int) -> Unit,
@@ -74,8 +74,8 @@ private fun QuickPaySettingsScreenContent(
 
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__quickpay__settings__toggle),
-                isChecked = enableQuickpay,
-                onClick = { onToggleQuickpay(!enableQuickpay) },
+                isChecked = isQuickPayEnabled,
+                onClick = { onToggleQuickpay(!isQuickPayEnabled) },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -126,7 +126,7 @@ private fun QuickPaySettingsScreenContent(
 private fun Preview() {
     AppThemeSurface {
         QuickPaySettingsScreenContent(
-            enableQuickpay = true,
+            isQuickPayEnabled = true,
             quickpayAmount = 5,
             onToggleQuickpay = {},
             onQuickpayAmountChange = {},

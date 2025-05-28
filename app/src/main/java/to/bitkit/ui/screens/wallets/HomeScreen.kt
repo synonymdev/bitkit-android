@@ -164,7 +164,7 @@ fun HomeScreen(
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-                    val quickpayIntroSeen by settingsViewModel.quickpayIntroSeen.collectAsStateWithLifecycle()
+                    val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
@@ -230,7 +230,7 @@ fun HomeScreen(
                                 }
 
                                 Suggestion.QUICK_PAY -> {
-                                    if (!quickpayIntroSeen) {
+                                    if (!quickPayIntroSeen) {
                                         rootNavController.navigate(Routes.QuickPayIntro)
                                     } else {
                                         rootNavController.navigate(Routes.QuickPaySettings)
