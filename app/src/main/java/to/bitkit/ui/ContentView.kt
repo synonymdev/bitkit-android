@@ -65,6 +65,8 @@ import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.screens.widgets.AddWidgetsScreen
+import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -277,6 +279,7 @@ fun ContentView(
                 authCheck(navController)
                 logs(navController)
                 suggestions(navController)
+                widgets(navController)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -862,6 +865,29 @@ private fun NavGraphBuilder.suggestions(
     }
 }
 
+private fun NavGraphBuilder.widgets(
+    navController: NavHostController,
+) {
+    composableWithDefaultTransitions<Routes.WidgetsIntro> {
+        WidgetsIntroScreen(
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                //TODO HAS SEEN LOGIC
+                navController.navigate(Routes.AddWidget)
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.AddWidget> {
+        AddWidgetsScreen(
+            onClose = { navController.navigateToHome() },
+            onWidgetSelected = { widgetType ->
+
+            },
+            fiatSymbol = "$" // todo get symbol
+        )
+    }
+}
+
 // endregion
 
 // region events
@@ -1244,5 +1270,5 @@ object Routes {
     data object WidgetsIntro
 
     @Serializable
-    data object AddWidgetIntro
+    data object AddWidget
 }

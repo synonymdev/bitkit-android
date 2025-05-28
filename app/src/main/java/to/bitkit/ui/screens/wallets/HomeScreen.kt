@@ -420,7 +420,7 @@ private fun HomeContentView(
                             )
                         },
                         onClick = {
-
+                            rootNavController.navigate(Routes.WidgetsIntro) //TODO HAS SENN LOGIC
                         }
                     )
                     Spacer(modifier = Modifier.height(32.dp))
