@@ -42,7 +42,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setHasSeenWidgetsIntro(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(hasSeenSpendingIntro = value) }
+            settingsStore.update { it.copy(hasSeenWidgetsIntro = value) }
         }
     }
 
