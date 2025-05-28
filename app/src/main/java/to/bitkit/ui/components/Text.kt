@@ -396,6 +396,7 @@ fun Caption13Up(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text.uppercase(),
@@ -406,7 +407,7 @@ fun Caption13Up(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
         modifier = modifier,
     )

@@ -1,5 +1,7 @@
 package to.bitkit.utils
 
+import to.bitkit.models.SATS_IN_BTC
+
 object Bip21Utils {
 
     fun buildBip21Url(
@@ -37,8 +39,8 @@ object Bip21Utils {
     }
 
     private fun formatBtcAmount(sats: ULong): String {
-        val fullBtc = sats / 100_000_000uL
-        val remainderSats = sats % 100_000_000uL
+        val fullBtc = sats / SATS_IN_BTC.toULong()
+        val remainderSats = sats % SATS_IN_BTC.toULong()
 
         return if (remainderSats == 0uL) {
             fullBtc.toString()

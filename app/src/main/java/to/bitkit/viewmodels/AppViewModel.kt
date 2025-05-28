@@ -1,11 +1,13 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,6 +44,7 @@ import to.bitkit.models.toTxType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
+import to.bitkit.services.CurrencyService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
@@ -58,8 +61,10 @@ import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val scannerService: ScannerService,
@@ -70,6 +75,7 @@ class AppViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val resourceProvider: ResourceProvider,
     private val appStorage: AppStorage,
+    private val currencyService: CurrencyService,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -257,6 +263,7 @@ class AppViewModel @Inject constructor(
 
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onPay()
+                    SendEvent.Reset -> resetSendState()
                 }
             }
         }
@@ -372,8 +379,7 @@ class AppViewModel @Inject constructor(
                 val invoice: OnChainInvoice = scan.invoice
                 val lnInvoice: LightningInvoice? = invoice.lightningParam()?.let { bolt11 ->
                     val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
-                    val lightningInvoice = (decoded as? Scanner.Lightning)?.invoice
-                    lightningInvoice?.takeIf { lightningService.canSend(it.amountSatoshis) }
+                    (decoded as? Scanner.Lightning)?.invoice
                 }
                 _sendUiState.update {
                     it.copy(
@@ -387,7 +393,17 @@ class AppViewModel @Inject constructor(
                 }
                 val isLnInvoiceWithAmount = lnInvoice?.amountSatoshis?.takeIf { it > 0uL } != null
                 if (isLnInvoiceWithAmount) {
-                    Logger.info("Found amount in invoice, proceeding with payment")
+                    Logger.info("Found amount in unified invoice, checking QuickPay conditions")
+
+                    val quickPayHandled = handleQuickPayIfApplicable(
+                        invoice = lnInvoice.bolt11,
+                        amountSats = lnInvoice.amountSatoshis,
+                    )
+
+                    if (quickPayHandled) {
+                        resetSendState()
+                        return
+                    }
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -411,11 +427,19 @@ class AppViewModel @Inject constructor(
                 if (invoice.isExpired) {
                     toast(
                         type = Toast.ToastType.ERROR,
-                        title = "Invoice Expired",
-                        description = "This invoice has expired."
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__expired),
                     )
                     return
                 }
+                // Check for QuickPay conditions
+                val quickPayHandled = handleQuickPayIfApplicable(
+                    invoice = uri,
+                    amountSats = invoice.amountSatoshis,
+                )
+
+                if (quickPayHandled) return
+
                 if (!lightningService.canSend(invoice.amountSatoshis)) {
                     toast(
                         type = Toast.ToastType.ERROR,
@@ -471,6 +495,30 @@ class AppViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun handleQuickPayIfApplicable(
+        invoice: String,
+        amountSats: ULong,
+    ): Boolean {
+        val settings = settingsStore.data.first()
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) {
+            return false
+        }
+
+        val quickPayAmountSats = currencyService.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD")
+
+        if (amountSats <= quickPayAmountSats.toULong()) {
+            Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
+            if (isMainScanner) {
+                showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
+            } else {
+                setSendEffect(SendEffect.NavigateToQuickPay(invoice, amountSats.toLong()))
+            }
+            return true
+        }
+
+        return false
     }
 
     private fun resetAmountInput() {
@@ -576,41 +624,32 @@ class AppViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        return try {
-            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() //TODO HANDLE FAILURE IN OTHER PR
+        val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
 
-            // Wait until matching payment event is received
-            val result = ldkNodeEventBus.events.watchUntil { event ->
-                when (event) {
-                    is Event.PaymentSuccessful -> {
-                        if (event.paymentHash == hash) {
-                            WatchResult.Complete(Result.success(hash))
-                        } else {
-                            WatchResult.Continue()
-                        }
+        // Wait until matching payment event is received
+        val result = ldkNodeEventBus.events.watchUntil { event ->
+            when (event) {
+                is Event.PaymentSuccessful -> {
+                    if (event.paymentHash == hash) {
+                        WatchResult.Complete(Result.success(hash))
+                    } else {
+                        WatchResult.Continue()
                     }
-
-                    is Event.PaymentFailed -> {
-                        if (event.paymentHash == hash) {
-                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
-                            WatchResult.Complete(Result.failure(error))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
-
-                    else -> WatchResult.Continue()
                 }
+
+                is Event.PaymentFailed -> {
+                    if (event.paymentHash == hash) {
+                        val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                        WatchResult.Complete(Result.failure(error))
+                    } else {
+                        WatchResult.Continue()
+                    }
+                }
+
+                else -> WatchResult.Continue()
             }
-            result
-        } catch (e: Exception) {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = "Error Sending",
-                description = e.message ?: "Unknown error"
-            )
-            Result.failure(e)
         }
+        return result
     }
 
     private fun getMinOnchainTx(): ULong {
@@ -806,6 +845,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
+    data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
@@ -830,5 +870,6 @@ sealed class SendEvent {
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
     data object PaymentMethodSwitch : SendEvent()
+    data object Reset : SendEvent()
 }
 // endregion

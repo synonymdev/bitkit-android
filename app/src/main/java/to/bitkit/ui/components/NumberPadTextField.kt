@@ -24,6 +24,7 @@ import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -56,8 +57,7 @@ fun NumberPadTextField(
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
-        currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0)
-            .toString()
+        currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0).toString()
     } else {
         input.removeSpaces()
     }
@@ -152,7 +152,7 @@ fun AmountInputHandler(
         lastDisplay = primaryDisplay
         val newInput = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> { //Convert fiat to sats
-                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0
+                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0)
                 if (amountLong > 0.0) amountLong.toString() else ""
             }
 
@@ -169,11 +169,11 @@ fun AmountInputHandler(
     LaunchedEffect(input) {
         val sats = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
-                if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
+                if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * SATS_IN_BTC).toString()
             }
 
             PrimaryDisplay.FIAT -> {
-                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0L
+                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0)
                 convertedAmount.toString()
             }
         }
