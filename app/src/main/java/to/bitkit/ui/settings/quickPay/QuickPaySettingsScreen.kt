@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -50,7 +51,7 @@ fun QuickPaySettingsScreen(
 }
 
 @Composable
-private fun QuickPaySettingsScreenContent(
+fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
     onToggleQuickPay: (Boolean) -> Unit = {},
@@ -76,6 +77,7 @@ private fun QuickPaySettingsScreenContent(
                 title = stringResource(R.string.settings__quickpay__settings__toggle),
                 isChecked = isQuickPayEnabled,
                 onClick = { onToggleQuickPay(!isQuickPayEnabled) },
+                modifier = Modifier.testTag("quickpay_toggle_switch")
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -83,14 +85,14 @@ private fun QuickPaySettingsScreenContent(
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__text)
                     .replace("{amount}", quickPayAmount.toString()),
-                color = Colors.White64
+                color = Colors.White64,
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Caption13Up(
                 text = stringResource(R.string.settings__quickpay__settings__label),
-                color = Colors.White64
+                color = Colors.White64,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -99,6 +101,7 @@ private fun QuickPaySettingsScreenContent(
                 value = quickPayAmount,
                 steps = sliderSteps,
                 onValueChange = onQuickPayAmountChange,
+                modifier = Modifier.testTag("quickpay_amount_slider")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -113,7 +116,7 @@ private fun QuickPaySettingsScreenContent(
 
             BodyS(
                 text = stringResource(R.string.settings__quickpay__settings__note),
-                color = Colors.White64
+                color = Colors.White64,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
