@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -181,6 +182,57 @@ class SettingsViewModel @Inject constructor(
     fun setQuickPayAmount(value: Int) {
         viewModelScope.launch {
             settingsStore.update { it.copy(quickPayAmount = value) }
+        }
+    }
+
+    val enableSwipeToHideBalance = settingsStore.data.map { it.enableSwipeToHideBalance }
+        .asStateFlow(initialValue = true)
+
+    fun setEnableSwipeToHideBalance(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it.copy(
+                    enableSwipeToHideBalance = value,
+                    hideBalance = if (!value) false else it.hideBalance,
+                    hideBalanceOnOpen = if (!value) false else it.hideBalanceOnOpen,
+                )
+            }
+        }
+    }
+
+    val hideBalance = settingsStore.data.map { it.hideBalance }
+        .asStateFlow(initialValue = false)
+
+    fun setHideBalance(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hideBalance = value) }
+        }
+    }
+
+    val hideBalanceOnOpen = settingsStore.data.map { it.hideBalanceOnOpen }
+        .asStateFlow(initialValue = false)
+
+    fun setHideBalanceOnOpen(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(hideBalanceOnOpen = value) }
+        }
+    }
+
+    val enableAutoReadClipboard = settingsStore.data.map { it.enableAutoReadClipboard }
+        .asStateFlow(initialValue = false)
+
+    fun setEnableAutoReadClipboard(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(enableAutoReadClipboard = value) }
+        }
+    }
+
+    val enableSendAmountWarning = settingsStore.data.map { it.enableSendAmountWarning }
+        .asStateFlow(initialValue = false)
+
+    fun setEnableSendAmountWarning(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(enableSendAmountWarning = value) }
         }
     }
 

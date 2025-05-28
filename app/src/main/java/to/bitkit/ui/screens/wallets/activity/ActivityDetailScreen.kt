@@ -170,6 +170,7 @@ private fun ActivityDetailContent(
                 sats = item.totalValue().toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
+                forceShowBalance = true,
                 modifier = Modifier.weight(1f)
             )
             ActivityIcon(activity = item, size = 48.dp)

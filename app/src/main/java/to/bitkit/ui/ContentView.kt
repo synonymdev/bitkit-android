@@ -160,6 +160,11 @@ fun ContentView(
 
     LaunchedEffect(Unit) {
         walletViewModel.observeLdkWallet()
+
+        // Handle hideBalanceOnOpen setting
+        if (settingsViewModel.hideBalanceOnOpen.value) {
+            settingsViewModel.setHideBalance(true)
+        }
     }
 
     LaunchedEffect(appViewModel) {

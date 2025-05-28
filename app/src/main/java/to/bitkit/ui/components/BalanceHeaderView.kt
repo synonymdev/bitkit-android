@@ -7,17 +7,25 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.modifiers.swipeToHide
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -28,9 +36,13 @@ fun BalanceHeaderView(
     modifier: Modifier = Modifier,
     prefix: String? = null,
     showBitcoinSymbol: Boolean = true,
+    forceShowBalance: Boolean = false,
+    showEyeIcon: Boolean = false,
 ) {
     val isPreview = LocalInspectionMode.current
-    if (isPreview) {
+    val settings = settingsViewModel
+
+    if (isPreview || settings == null) {
         BalanceHeader(
             modifier = modifier,
             smallRowSymbol = "$",
@@ -39,14 +51,22 @@ fun BalanceHeaderView(
             largeRowText = "$sats",
             largeRowSymbol = BITCOIN_SYMBOL,
             showSymbol = showBitcoinSymbol,
+            hideBalance = false,
+            isSwipeToHideEnabled = false,
+            showEyeIcon = showEyeIcon,
             onClick = {},
+            onToggleHideBalance = {},
         )
         return
     }
 
     val currency = currencyViewModel ?: return
-    val (rates, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
-    val converted: ConvertedAmount? = if (rates.isNotEmpty()) currency.convert(sats = sats) else null
+    val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+    val converted: ConvertedAmount? = currency.convert(sats = sats)
+
+    val isSwipeToHideEnabled by settings.enableSwipeToHideBalance.collectAsStateWithLifecycle()
+    val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
+    val shouldHideBalance = hideBalance && !forceShowBalance
 
     converted?.let { converted ->
         val btcComponents = converted.bitcoinDisplay(displayUnit)
@@ -60,7 +80,11 @@ fun BalanceHeaderView(
                 largeRowText = btcComponents.value,
                 largeRowSymbol = btcComponents.symbol,
                 showSymbol = showBitcoinSymbol,
-                onClick = { currency.togglePrimaryDisplay() }
+                hideBalance = shouldHideBalance,
+                isSwipeToHideEnabled = isSwipeToHideEnabled,
+                showEyeIcon = showEyeIcon,
+                onClick = { currency.togglePrimaryDisplay() },
+                onToggleHideBalance = { settings.setHideBalance(!hideBalance) },
             )
         } else {
             BalanceHeader(
@@ -71,7 +95,11 @@ fun BalanceHeaderView(
                 largeRowText = converted.formatted,
                 largeRowSymbol = converted.symbol,
                 showSymbol = true,
-                onClick = { currency.togglePrimaryDisplay() }
+                hideBalance = shouldHideBalance,
+                isSwipeToHideEnabled = isSwipeToHideEnabled,
+                showEyeIcon = showEyeIcon,
+                onClick = { currency.togglePrimaryDisplay() },
+                onToggleHideBalance = { settings.setHideBalance(!hideBalance) },
             )
         }
     }
@@ -86,26 +114,51 @@ fun BalanceHeader(
     largeRowText: String,
     largeRowSymbol: String,
     showSymbol: Boolean,
-    onClick: () -> Unit
+    hideBalance: Boolean = false,
+    isSwipeToHideEnabled: Boolean = false,
+    showEyeIcon: Boolean = false,
+    onClick: () -> Unit,
+    onToggleHideBalance: () -> Unit = {},
 ) {
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.Start,
-        modifier = modifier.clickableAlpha { onClick() }
+        modifier = modifier
+            .swipeToHide(
+                enabled = isSwipeToHideEnabled,
+                onSwipe = onToggleHideBalance,
+            )
+            .clickableAlpha { onClick() }
     ) {
         SmallRow(
             symbol = smallRowSymbol,
-            text = smallRowText
+            text = if (hideBalance) "• • • • •" else smallRowText
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LargeRow(
-            prefix = largeRowPrefix,
-            text = largeRowText,
-            symbol = largeRowSymbol,
-            showSymbol = showSymbol
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LargeRow(
+                prefix = if (hideBalance) null else largeRowPrefix,
+                text = if (hideBalance) "• • • • • • • • •" else largeRowText,
+                symbol = largeRowSymbol,
+                showSymbol = showSymbol
+            )
+
+            if (hideBalance && showEyeIcon) {
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    painter = painterResource(R.drawable.ic_eye),
+                    contentDescription = null,
+                    tint = Colors.White64,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickableAlpha { onToggleHideBalance() }
+                )
+            }
+        }
     }
 }
 
@@ -164,6 +217,26 @@ private fun Preview() {
             showSymbol = true,
             modifier = Modifier.fillMaxWidth(),
             onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewHidden() {
+    AppThemeSurface {
+        BalanceHeader(
+            smallRowSymbol = "$",
+            smallRowText = "27.36",
+            largeRowPrefix = "+",
+            largeRowText = "136 825",
+            largeRowSymbol = "₿",
+            showSymbol = true,
+            hideBalance = true,
+            isSwipeToHideEnabled = true,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {},
+            onToggleHideBalance = {}
         )
     }
 }

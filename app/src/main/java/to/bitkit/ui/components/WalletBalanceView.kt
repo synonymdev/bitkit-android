@@ -10,15 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -28,9 +31,12 @@ fun RowScope.WalletBalanceView(
     icon: Painter,
     modifier: Modifier,
 ) {
+    val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
     val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val converted: ConvertedAmount? = currency.convert(sats = sats)
+
+    val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -58,7 +64,7 @@ fun RowScope.WalletBalanceView(
                             .padding(end = 4.dp)
                             .size(24.dp)
                     )
-                    BodyMSB(text = btcComponents.value)
+                    BodyMSB(text = if (hideBalance) "• • • • •" else btcComponents.value)
                 }
             } else {
                 Row(
@@ -74,7 +80,7 @@ fun RowScope.WalletBalanceView(
                             .size(24.dp)
                     )
                     BodyMSB(text = converted.symbol)
-                    BodyMSB(text = converted.formatted)
+                    BodyMSB(text = if (hideBalance) "• • • • •" else converted.formatted)
                 }
             }
         }

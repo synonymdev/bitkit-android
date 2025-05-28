@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.SheetHost
@@ -40,7 +39,6 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 fun SecuritySettingsScreen(
     navController: NavController,
 ) {
-    val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
 
     var showPinSheet by remember { mutableStateOf(false) }
@@ -49,6 +47,10 @@ fun SecuritySettingsScreen(
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
+    val enableSwipeToHideBalance by settings.enableSwipeToHideBalance.collectAsStateWithLifecycle()
+    val hideBalanceOnOpen by settings.hideBalanceOnOpen.collectAsStateWithLifecycle()
+    val enableAutoReadClipboard by settings.enableAutoReadClipboard.collectAsStateWithLifecycle()
+    val enableSendAmountWarning by settings.enableSendAmountWarning.collectAsStateWithLifecycle()
 
     PinNavigationSheetHost(
         showSheet = showPinSheet,
@@ -60,6 +62,10 @@ fun SecuritySettingsScreen(
             isBiometricEnabled = isBiometricEnabled,
             isPinOnIdleEnabled = isPinOnIdleEnabled,
             isPinForPaymentsEnabled = isPinForPaymentsEnabled,
+            enableSwipeToHideBalance = enableSwipeToHideBalance,
+            hideBalanceOnOpen = hideBalanceOnOpen,
+            enableAutoReadClipboard = enableAutoReadClipboard,
+            enableSendAmountWarning = enableSendAmountWarning,
             isBiometrySupported = rememberBiometricAuthSupported(),
             onPinClick = {
                 if (!isPinEnabled) {
@@ -92,6 +98,18 @@ fun SecuritySettingsScreen(
                     onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
                 )
             },
+            onSwipeToHideBalanceClick = {
+                settings.setEnableSwipeToHideBalance(!enableSwipeToHideBalance)
+            },
+            onHideBalanceOnOpenClick = {
+                settings.setHideBalanceOnOpen(!hideBalanceOnOpen)
+            },
+            onAutoReadClipboardClick = {
+                settings.setEnableAutoReadClipboard(!enableAutoReadClipboard)
+            },
+            onSendAmountWarningClick = {
+                settings.setEnableSendAmountWarning(!enableSendAmountWarning)
+            },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
@@ -105,6 +123,10 @@ private fun SecuritySettingsContent(
     isBiometricEnabled: Boolean,
     isPinOnIdleEnabled: Boolean,
     isPinForPaymentsEnabled: Boolean,
+    enableSwipeToHideBalance: Boolean,
+    hideBalanceOnOpen: Boolean,
+    enableAutoReadClipboard: Boolean,
+    enableSendAmountWarning: Boolean,
     isBiometrySupported: Boolean,
     onPinClick: () -> Unit = {},
     onChangePinClick: () -> Unit = {},
@@ -112,6 +134,10 @@ private fun SecuritySettingsContent(
     onPinOnIdleClick: () -> Unit = {},
     onPinForPaymentsClick: () -> Unit = {},
     onUseBiometricsClick: () -> Unit = {},
+    onSwipeToHideBalanceClick: () -> Unit = {},
+    onHideBalanceOnOpenClick: () -> Unit = {},
+    onAutoReadClipboardClick: () -> Unit = {},
+    onSendAmountWarningClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -126,6 +152,32 @@ private fun SecuritySettingsContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__security__swipe_balance_to_hide),
+                isChecked = enableSwipeToHideBalance,
+                onClick = onSwipeToHideBalanceClick,
+            )
+
+            if (enableSwipeToHideBalance) {
+                SettingsSwitchRow(
+                    title = stringResource(R.string.settings__security__hide_balance_on_open),
+                    isChecked = hideBalanceOnOpen,
+                    onClick = onHideBalanceOnOpenClick,
+                )
+            }
+
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__security__clipboard),
+                isChecked = enableAutoReadClipboard,
+                onClick = onAutoReadClipboardClick,
+            )
+
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__security__warn_100),
+                isChecked = enableSendAmountWarning,
+                onClick = onSendAmountWarningClick,
+            )
+
             SettingsButtonRow(
                 title = stringResource(R.string.settings__security__pin),
                 value = SettingsButtonValue.StringValue(
@@ -208,6 +260,10 @@ private fun Preview() {
             isBiometricEnabled = false,
             isPinOnIdleEnabled = false,
             isPinForPaymentsEnabled = false,
+            enableSwipeToHideBalance = true,
+            hideBalanceOnOpen = false,
+            enableAutoReadClipboard = true,
+            enableSendAmountWarning = true,
             isBiometrySupported = true,
         )
     }
