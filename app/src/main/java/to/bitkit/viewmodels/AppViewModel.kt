@@ -506,11 +506,10 @@ class AppViewModel @Inject constructor(
             return false
         }
 
-        val quickPayThresholdSats = currencyService.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD")
-            ?: return false
+        val quickPayAmountSats = currencyService.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD")
 
-        if (amountSats <= quickPayThresholdSats.toULong()) {
-            Logger.info("Using QuickPay: $amountSats sats <= $quickPayThresholdSats sats threshold")
+        if (amountSats <= quickPayAmountSats.toULong()) {
+            Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
             if (isMainScanner) {
                 showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
             } else {
@@ -518,7 +517,6 @@ class AppViewModel @Inject constructor(
             }
             return true
         }
-
 
         return false
     }

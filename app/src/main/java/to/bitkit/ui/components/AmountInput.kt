@@ -168,7 +168,7 @@ fun AmountInput(
                     fiatAmount = TextFieldValue(newFiatAmount, TextRange(newFiatAmount.length))
 
                     newFiatAmount.toDoubleOrNull()?.let { fiatDouble ->
-                        currency.convertFiatToSats(fiatAmount = fiatDouble)?.let { convertedSats ->
+                        currency.convertFiatToSats(fiatAmount = fiatDouble).let { convertedSats ->
                             val satsString = convertedSats.toString()
                             satsAmount = TextFieldValue(satsString, TextRange(satsString.length))
                             onSatsChange(convertedSats)

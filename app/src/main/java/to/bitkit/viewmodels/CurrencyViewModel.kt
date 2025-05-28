@@ -166,7 +166,7 @@ class CurrencyViewModel @Inject constructor(
         return rate?.let { currencyService.convert(sats = sats, rate = it) }
     }
 
-    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long? {
+    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long {
         val sourceCurrency = currency ?: uiState.value.selectedCurrency
         return currencyService.convertFiatToSats(fiatAmount, sourceCurrency, uiState.value.rates)
     }

@@ -77,8 +77,8 @@ class CurrencyService @Inject constructor(
         return roundedNumber.toLong().toULong()
     }
 
-    fun convertFiatToSats(fiatAmount: Double, currency: String, rates: List<FxRate>): Long? {
-        val rate = getCurrentRate(currency, rates) ?: return null
+    fun convertFiatToSats(fiatAmount: Double, currency: String, rates: List<FxRate>): Long {
+        val rate = getCurrentRate(currency, rates) ?: return 0
 
         // Convert the fiat amount to BTC, then to sats
         val btc = fiatAmount / rate.rate
@@ -87,7 +87,7 @@ class CurrencyService @Inject constructor(
         return sats
     }
 
-    suspend fun convertFiatToSats(fiatAmount: Double, currency: String): Long? {
+    suspend fun convertFiatToSats(fiatAmount: Double, currency: String): Long {
         val rates = cachedRates ?: fetchLatestRates()
         return convertFiatToSats(fiatAmount, currency, rates)
     }

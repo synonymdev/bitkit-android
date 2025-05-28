@@ -56,8 +56,7 @@ fun NumberPadTextField(
     val currency = currencyViewModel ?: return
 
     val satoshis = if (primaryDisplay == PrimaryDisplay.FIAT) {
-        currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0)
-            ?.toString() ?: "0"
+        currency.convertFiatToSats(fiatAmount = input.replace(",", "").toDoubleOrNull() ?: 0.0).toString()
     } else {
         input.removeSpaces()
     }
@@ -152,7 +151,7 @@ fun AmountInputHandler(
         lastDisplay = primaryDisplay
         val newInput = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> { //Convert fiat to sats
-                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0
+                val amountLong = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0)
                 if (amountLong > 0.0) amountLong.toString() else ""
             }
 
@@ -173,7 +172,7 @@ fun AmountInputHandler(
             }
 
             PrimaryDisplay.FIAT -> {
-                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0) ?: 0L
+                val convertedAmount = currencyVM.convertFiatToSats(input.replace(",", "").toDoubleOrNull() ?: 0.0)
                 convertedAmount.toString()
             }
         }
