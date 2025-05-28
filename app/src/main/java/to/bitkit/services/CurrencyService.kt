@@ -5,6 +5,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.BlocktankHttpClient
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
+import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.utils.AppError
 import java.math.BigDecimal
@@ -53,7 +54,7 @@ class CurrencyService @Inject constructor(
     }
 
     fun convert(sats: Long, rate: FxRate): ConvertedAmount? {
-        val btcAmount = BigDecimal(sats).divide(BigDecimal(100_000_000))
+        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
         val value: BigDecimal = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
 
         val formatted = value.formatCurrency() ?: return null
@@ -70,7 +71,7 @@ class CurrencyService @Inject constructor(
 
     fun convertFiatToSats(fiatValue: BigDecimal, rate: FxRate): ULong {
         val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
-        val satsDecimal = btcAmount.multiply(BigDecimal(100_000_000))
+        val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
 
         val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
 
@@ -82,7 +83,7 @@ class CurrencyService @Inject constructor(
 
         // Convert the fiat amount to BTC, then to sats
         val btc = fiatAmount / rate.rate
-        val sats = (btc * 100_000_000).roundToLong()
+        val sats = (btc * SATS_IN_BTC).roundToLong()
 
         return sats
     }

@@ -8,6 +8,7 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 const val BITCOIN_SYMBOL = "₿"
+const val SATS_IN_BTC = 100_000_000
 
 @Serializable
 data class FxRateResponse(
@@ -51,7 +52,7 @@ data class ConvertedAmount(
     val flag: String,
     val sats: Long,
 ) {
-    val btcValue: BigDecimal = BigDecimal(sats).divide(BigDecimal(100_000_000))
+    val btcValue: BigDecimal = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
 
     data class BitcoinDisplayComponents(
         val symbol: String,

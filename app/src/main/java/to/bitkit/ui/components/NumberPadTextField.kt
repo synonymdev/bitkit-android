@@ -24,6 +24,7 @@ import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -168,7 +169,7 @@ fun AmountInputHandler(
     LaunchedEffect(input) {
         val sats = when (primaryDisplay) {
             PrimaryDisplay.BITCOIN -> {
-                if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * 100_000_000).toString()
+                if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * SATS_IN_BTC).toString()
             }
 
             PrimaryDisplay.FIAT -> {
