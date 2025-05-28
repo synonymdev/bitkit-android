@@ -64,41 +64,25 @@ private fun SendErrorScreenContent(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            BodyM(
-                text = errorMessage,
-                color = Colors.White64,
-            )
+            BodyM(text = errorMessage, color = Colors.White64)
 
             Spacer(modifier = Modifier.weight(1f))
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .widthIn(max = 256.dp)
-                    .aspectRatio(1f)
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.cross),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
+            Image(
+                painter = painterResource(R.drawable.cross),
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth().height(256.dp)
+            )
             Spacer(modifier = Modifier.weight(1f))
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (onClose != null) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__cancel),
-                        onClick = onClose,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                SecondaryButton(
+                    text = stringResource(R.string.common__cancel),
+                    onClick = onClose,
+                    modifier = Modifier.weight(1f)
+                )
                 PrimaryButton(
                     text = stringResource(R.string.common__try_again),
                     onClick = onRetry,
