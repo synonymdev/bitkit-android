@@ -144,12 +144,8 @@ fun SendOptionsView(
                 QuickPaySendScreen(
                     invoice = route.invoice,
                     amount = route.amount,
-                    onPaymentComplete = { success ->
-                        if (success) {
-                            onComplete(null) // Close send sheet on successful payment
-                        } else {
-                            navController.popBackStack() // Go back to send options on failure
-                        }
+                    onPaymentComplete = {
+                        onComplete(null)
                     },
                     onShowError = { errorMessage ->
                         navController.navigate(SendRoute.Error(errorMessage))

@@ -31,8 +31,6 @@ class QuickPayViewModel @Inject constructor(
 
     fun payInvoice(bolt11: String, amount: ULong? = null) {
         viewModelScope.launch {
-            _uiState.update { it.copy(result = QuickPayResult.Loading) }
-
             val result = sendLightning(bolt11, amount)
             if (result.isSuccess) {
                 Logger.info("QuickPay lightning payment successful")
@@ -92,13 +90,10 @@ class QuickPayViewModel @Inject constructor(
 }
 
 sealed class QuickPayResult {
-    data object Loading : QuickPayResult()
     data object Success : QuickPayResult()
     data class Error(val message: String) : QuickPayResult()
 }
 
 data class QuickPayUiState(
-    val result: QuickPayResult = QuickPayResult.Loading,
-) {
-    val isLoading: Boolean get() = result is QuickPayResult.Loading
-}
+    val result: QuickPayResult? = null,
+)

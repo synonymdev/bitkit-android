@@ -34,7 +34,7 @@ import to.bitkit.viewmodels.QuickPayViewModel
 fun QuickPaySendScreen(
     invoice: String,
     amount: Long,
-    onPaymentComplete: (Boolean) -> Unit,
+    onPaymentComplete: () -> Unit,
     onShowError: (String) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
@@ -49,15 +49,14 @@ fun QuickPaySendScreen(
 
     LaunchedEffect(uiState.result) {
         when (val result = uiState.result) {
-            is QuickPayResult.Success -> onPaymentComplete(true)
+            is QuickPayResult.Success -> onPaymentComplete()
             is QuickPayResult.Error -> onShowError(result.message)
-            is QuickPayResult.Loading -> Unit // Continue showing loading state
+            null -> Unit // continue showing loading state
         }
     }
 
     QuickPaySendScreenContent(
         amount = amount,
-        isLoading = uiState.isLoading,
         nodeLifecycleState = lightningState.nodeLifecycleState,
     )
 }
@@ -65,7 +64,6 @@ fun QuickPaySendScreen(
 @Composable
 private fun QuickPaySendScreenContent(
     amount: Long,
-    isLoading: Boolean = true,
     nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
 ) {
     Column(
@@ -87,14 +85,11 @@ private fun QuickPaySendScreenContent(
                     BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
 
                     Spacer(modifier = Modifier.weight(1f))
-                    if (isLoading) {
-                        TransferAnimationView(
-                            largeCircleRes = R.drawable.ln_sync_large,
-                            smallCircleRes = R.drawable.ln_sync_small,
-                            contentRes = R.drawable.coin_stack_4,
-                            rotateContent = true,
-                        )
-                    }
+                    TransferAnimationView(
+                        largeCircleRes = R.drawable.ln_sync_large,
+                        smallCircleRes = R.drawable.ln_sync_small,
+                        contentRes = R.drawable.coin_stack_4,
+                    )
                     Spacer(modifier = Modifier.weight(1f))
 
                     Display(
