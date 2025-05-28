@@ -29,6 +29,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.currentActivity
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.AuthCheckScreen
@@ -65,6 +66,8 @@ import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
+import to.bitkit.ui.screens.widgets.AddWidgetsScreen
+import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -277,6 +280,7 @@ fun ContentView(
                 authCheck(navController)
                 logs(navController)
                 suggestions(navController)
+                widgets(navController, settingsViewModel, currencyViewModel)
 
                 // TODO extract transferNavigation
                 navigation<Routes.TransferRoot>(
@@ -862,6 +866,31 @@ private fun NavGraphBuilder.suggestions(
     }
 }
 
+private fun NavGraphBuilder.widgets(
+    navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+    currencyViewModel: CurrencyViewModel,
+) {
+    composableWithDefaultTransitions<Routes.WidgetsIntro> {
+        WidgetsIntroScreen(
+            onClose = { navController.navigateToHome() },
+            onContinue = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                navController.navigate(Routes.AddWidget)
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.AddWidget> {
+        AddWidgetsScreen(
+            onClose = { navController.navigateToHome() },
+            onWidgetSelected = { widgetType ->
+
+            },
+            fiatSymbol = currencyViewModel.getCurrencySymbol()
+        )
+    }
+}
+
 // endregion
 
 // region events
@@ -1239,4 +1268,10 @@ object Routes {
 
     @Serializable
     data object ShopDiscover
+
+    @Serializable
+    data object WidgetsIntro
+
+    @Serializable
+    data object AddWidget
 }

@@ -28,6 +28,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +66,7 @@ import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.navigateToActivityItem
@@ -165,6 +167,7 @@ fun HomeScreen(
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
+                    val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
@@ -238,6 +241,13 @@ fun HomeScreen(
                                 }
                             }
                         },
+                        onClickAddWIdget = {
+                            if (!hasSeenWidgetsIntro) {
+                                rootNavController.navigate(Routes.WidgetsIntro)
+                            } else {
+                                rootNavController.navigate(Routes.AddWidget)
+                            }
+                        }
                     )
                 }
                 composable<HomeRoutes.Savings>(
@@ -313,6 +323,7 @@ private fun HomeContentView(
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
+    onClickAddWIdget: () -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -404,6 +415,21 @@ private fun HomeContentView(
                         }
                     }
                     Spacer(modifier = Modifier.height(32.dp))
+                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64)
+                    //TODO IMPLEMENT LIST IN OTHER PR
+                    Spacer(modifier = Modifier.height(32.dp))
+                    TertiaryButton(
+                        text = stringResource(R.string.widgets__add),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_plus),
+                                contentDescription = null,
+                                tint = Colors.White80
+                            )
+                        },
+                        onClick = onClickAddWIdget
+                    )
+                    Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
                     val activity = activityListViewModel ?: return@Column
@@ -483,6 +509,7 @@ private fun HomeContentViewPreview() {
             onRefresh = {},
             onClickSuggestion = {},
             onRemoveSuggestion = {},
+            onClickAddWIdget = {},
         )
     }
 }
