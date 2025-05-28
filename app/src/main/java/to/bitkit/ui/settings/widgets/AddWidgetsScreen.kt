@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -37,7 +38,8 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_chart_line,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.PRICE) }
+                onClick = { onWidgetSelected(WidgetType.PRICE) },
+                modifier = Modifier.testTag("Button_${WidgetType.PRICE}")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__news__name),
@@ -45,7 +47,9 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_newspaper,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.NEWS) }
+                onClick = { onWidgetSelected(WidgetType.NEWS) },
+                modifier = Modifier.testTag("Button_${WidgetType.NEWS}")
+
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__blocks__name),
@@ -53,7 +57,8 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_cube,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.BLOCK) }
+                onClick = { onWidgetSelected(WidgetType.BLOCK) },
+                modifier = Modifier.testTag("Button_${WidgetType.BLOCK}")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__facts__name),
@@ -61,7 +66,8 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_lightbulb,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.FACTS) }
+                onClick = { onWidgetSelected(WidgetType.FACTS) },
+                modifier = Modifier.testTag("Button_${WidgetType.FACTS}")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__weather__name),
@@ -69,7 +75,8 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_cloud,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.WEATHER) }
+                onClick = { onWidgetSelected(WidgetType.WEATHER) },
+                modifier = Modifier.testTag("Button_${WidgetType.WEATHER}")
             )
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__calculator__name),
@@ -77,7 +84,8 @@ fun AddWidgetsScreen(
                 iconRes = R.drawable.widget_math_operation,
                 iconSize = 48.dp,
                 maxLinesSubtitle = 1,
-                onClick = { onWidgetSelected(WidgetType.CALCULATOR) }
+                onClick = { onWidgetSelected(WidgetType.CALCULATOR) },
+                modifier = Modifier.testTag("Button_${WidgetType.CALCULATOR}")
             )
         }
     }
