@@ -33,23 +33,16 @@ class QuickPayViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(result = QuickPayResult.Loading) }
 
-            try {
-                val result = sendLightning(bolt11, amount)
-                if (result.isSuccess) {
-                    Logger.info("QuickPay lightning payment successful")
-                    _uiState.update { it.copy(result = QuickPayResult.Success) }
-                } else {
-                    val error = result.exceptionOrNull()
-                    Logger.error("QuickPay lightning payment failed", error)
+            val result = sendLightning(bolt11, amount)
+            if (result.isSuccess) {
+                Logger.info("QuickPay lightning payment successful")
+                _uiState.update { it.copy(result = QuickPayResult.Success) }
+            } else {
+                val error = result.exceptionOrNull()
+                Logger.error("QuickPay lightning payment failed", error)
 
-                    _uiState.update {
-                        it.copy(result = QuickPayResult.Error(error?.message ?: "Payment failed"))
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.error("QuickPay payment error", e)
                 _uiState.update {
-                    it.copy(result = QuickPayResult.Error(e.message ?: "Unknown error"))
+                    it.copy(result = QuickPayResult.Error(error?.message ?: "Payment failed"))
                 }
             }
         }
