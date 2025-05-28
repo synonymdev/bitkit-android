@@ -1239,4 +1239,10 @@ object Routes {
 
     @Serializable
     data object ShopDiscover
+
+    @Serializable
+    data object WidgetsIntro
+
+    @Serializable
+    data object AddWidgetIntro
 }
