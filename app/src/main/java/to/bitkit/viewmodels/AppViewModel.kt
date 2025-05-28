@@ -624,41 +624,32 @@ class AppViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        return try {
-            val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() //TODO HANDLE FAILURE IN OTHER PR
+        val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
 
-            // Wait until matching payment event is received
-            val result = ldkNodeEventBus.events.watchUntil { event ->
-                when (event) {
-                    is Event.PaymentSuccessful -> {
-                        if (event.paymentHash == hash) {
-                            WatchResult.Complete(Result.success(hash))
-                        } else {
-                            WatchResult.Continue()
-                        }
+        // Wait until matching payment event is received
+        val result = ldkNodeEventBus.events.watchUntil { event ->
+            when (event) {
+                is Event.PaymentSuccessful -> {
+                    if (event.paymentHash == hash) {
+                        WatchResult.Complete(Result.success(hash))
+                    } else {
+                        WatchResult.Continue()
                     }
-
-                    is Event.PaymentFailed -> {
-                        if (event.paymentHash == hash) {
-                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
-                            WatchResult.Complete(Result.failure(error))
-                        } else {
-                            WatchResult.Continue()
-                        }
-                    }
-
-                    else -> WatchResult.Continue()
                 }
+
+                is Event.PaymentFailed -> {
+                    if (event.paymentHash == hash) {
+                        val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                        WatchResult.Complete(Result.failure(error))
+                    } else {
+                        WatchResult.Continue()
+                    }
+                }
+
+                else -> WatchResult.Continue()
             }
-            result
-        } catch (e: Exception) {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = "Error Sending",
-                description = e.message ?: "Unknown error"
-            )
-            Result.failure(e)
         }
+        return result
     }
 
     private fun getMinOnchainTx(): ULong {
