@@ -506,10 +506,8 @@ class AppViewModel @Inject constructor(
             return false
         }
 
-        val quickPayThresholdSats = currencyService.convertFiatToSats(
-            settings.quickPayAmount.toDouble(),
-            settings.selectedCurrency
-        ) ?: return false
+        val quickPayThresholdSats = currencyService.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD")
+            ?: return false
 
         if (amountSats <= quickPayThresholdSats.toULong()) {
             Logger.info("Using QuickPay: $amountSats sats <= $quickPayThresholdSats sats threshold")
