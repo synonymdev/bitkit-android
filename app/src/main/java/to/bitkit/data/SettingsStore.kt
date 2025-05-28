@@ -63,6 +63,8 @@ data class SettingsData(
     val hasSeenShopIntro: Boolean = false,
     val hasSeenProfileIntro: Boolean = false,
     val quickPayIntroSeen: Boolean = false,
+    val isQuickPayEnabled: Boolean = false,
+    val quickPayAmount: Int = 5,
     val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,
     val isPinOnLaunchEnabled: Boolean = false,

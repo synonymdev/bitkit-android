@@ -40,7 +40,6 @@ import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
@@ -77,7 +76,6 @@ fun SendAndReviewScreen(
     var isLoading by rememberSaveable { mutableStateOf(false) }
     var showBiometrics by remember { mutableStateOf(false) }
 
-    val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val pinForPayments by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
