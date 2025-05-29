@@ -11,6 +11,7 @@ import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.WidgetWithPosition
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,6 +59,7 @@ data class SettingsData(
     val defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
     val showEmptyState: Boolean = false,
     val hasSeenSpendingIntro: Boolean = false,
+    val hasSeenWidgetsIntro: Boolean = false,
     val hasSeenTransferIntro: Boolean = false,
     val hasSeenSavingsIntro: Boolean = false,
     val hasSeenShopIntro: Boolean = false,
@@ -75,6 +77,7 @@ data class SettingsData(
     val showWidgets: Boolean = false,
     val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),
+    val widgets: List<WidgetWithPosition> = emptyList(),
     val enableSwipeToHideBalance: Boolean = true,
     val hideBalance: Boolean = false,
     val hideBalanceOnOpen: Boolean = false,

@@ -19,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -45,6 +47,8 @@ fun SettingsButtonRow(
     description: String? = null,
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
+    iconSize: Dp = 32.dp,
+    maxLinesSubtitle: Int = Int.MAX_VALUE,
     enabled: Boolean = true,
     loading: Boolean = false,
     onClick: () -> Unit,
@@ -71,7 +75,7 @@ fun SettingsButtonRow(
                         painter = painterResource(iconRes),
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(iconSize),
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                 }
@@ -84,7 +88,12 @@ fun SettingsButtonRow(
                     if (subtitle != null) {
                         BodyMSB(text = title)
                         Spacer(modifier = Modifier.height(4.dp))
-                        BodySSB(text = subtitle, color = Colors.White64)
+                        BodySSB(
+                            text = subtitle,
+                            maxLines = maxLinesSubtitle,
+                            color = Colors.White64,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     } else {
                         BodyM(text = title)
                     }
