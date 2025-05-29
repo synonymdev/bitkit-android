@@ -162,12 +162,7 @@ fun ContentView(
         walletViewModel.observeLdkWallet()
     }
 
-    val hideBalanceOnOpen by settingsViewModel.hideBalanceOnOpen.collectAsStateWithLifecycle()
-    LaunchedEffect(hideBalanceOnOpen) {
-        if (hideBalanceOnOpen) {
-            settingsViewModel.setHideBalance(true)
-        }
-    }
+    LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
 
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
