@@ -56,6 +56,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
+import to.bitkit.models.widget.NewsModel
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -84,6 +85,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settingsViewModel
@@ -168,9 +170,11 @@ fun HomeScreen(
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
                     val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
+                    val article by homeViewModel.currentArticle.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
+                        article = article,
                         suggestions = suggestions,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
@@ -320,6 +324,7 @@ fun HomeScreen(
 @Composable
 private fun HomeContentView(
     uiState: MainUiState,
+    article: NewsModel?,
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
@@ -415,7 +420,19 @@ private fun HomeContentView(
                         }
                     }
                     Spacer(modifier = Modifier.height(32.dp))
-                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64)
+                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64) //TODO check widgets visibility from settings
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        article?.let {
+                            HeadlineCard( //TODO CHECK PREFERENCES
+                                modifier = Modifier.fillMaxWidth(),
+                                headline = article.title,
+                                time = article.timeAgo,
+                                source = article.publisher
+                            )
+                        }
+                    }
+
                     //TODO IMPLEMENT LIST IN OTHER PR
                     Spacer(modifier = Modifier.height(32.dp))
                     TertiaryButton(
@@ -510,6 +527,7 @@ private fun HomeContentViewPreview() {
             onClickSuggestion = {},
             onRemoveSuggestion = {},
             onClickAddWidget = {},
+            article = null
         )
     }
 }
