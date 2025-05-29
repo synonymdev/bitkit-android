@@ -24,6 +24,7 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -72,7 +73,7 @@ fun RowScope.WalletBalanceView(
                         transitionSpec = { BalanceAnimations.walletBalanceTransition },
                         label = "bitcoinBalanceAnimation"
                     ) { isHidden ->
-                        BodyMSB(text = if (isHidden) "• • • • •" else btcComponents.value)
+                        BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else btcComponents.value)
                     }
                 } else {
                     AnimatedContent(
@@ -85,7 +86,7 @@ fun RowScope.WalletBalanceView(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             BodyMSB(text = converted.symbol)
-                            BodyMSB(text = if (isHidden) "• • • • •" else converted.formatted)
+                            BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else converted.formatted)
                         }
                     }
                 }

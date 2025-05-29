@@ -1,12 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
@@ -36,7 +31,9 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -46,8 +43,6 @@ import uniffi.bitkitcore.PaymentType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import to.bitkit.ui.settingsViewModel
 
 @Composable
 fun ActivityRow(
@@ -229,7 +224,7 @@ private fun AmountViewContent(
                 transitionSpec = { BalanceAnimations.activityAmountTransition },
                 label = "titleAnimation"
             ) { isHidden ->
-                BodyMSB(text = if (isHidden) "• • • • •" else title)
+                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title)
             }
         }
 
@@ -247,7 +242,7 @@ private fun AmountViewContent(
                 label = "subtitleAnimation"
             ) { isHidden ->
                 CaptionB(
-                    text = if (isHidden) "• • • • •" else subtitle,
+                    text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else subtitle,
                     color = Colors.White64,
                 )
             }

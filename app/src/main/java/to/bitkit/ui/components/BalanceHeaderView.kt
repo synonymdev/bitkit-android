@@ -28,6 +28,7 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.modifiers.swipeToHide
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -205,7 +206,7 @@ fun LargeRow(
             transitionSpec = { BalanceAnimations.mainBalanceTransition },
             label = "largeRowTextAnimation"
         ) { isHidden ->
-            Display(text = if (isHidden) "• • • • • • • • •" else text)
+            Display(text = if (isHidden) UiConstants.HIDE_BALANCE_LONG else text)
         }
     }
 }
@@ -228,7 +229,7 @@ private fun SmallRow(symbol: String?, text: String, hideBalance: Boolean = false
             label = "smallRowTextAnimation"
         ) { isHidden ->
             Caption13Up(
-                text = if (isHidden) "• • • • •" else text,
+                text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else text,
                 color = Colors.White64,
             )
         }
