@@ -8,21 +8,33 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.toSuggestionOrNull
+import to.bitkit.models.widget.NewsModel
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val appStorage: AppStorage,
     private val walletRepo: WalletRepo,
+    private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     val suggestions: StateFlow<List<Suggestion>> = createSuggestionsFlow()
+    val articles: StateFlow<List<NewsModel>> = widgetsRepo.articlesFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    init {
+        viewModelScope.launch { widgetsRepo.updateNewsInLoop() }
+    }
 
     fun removeSuggestion(suggestion: Suggestion) {
         appStorage.addSuggestionToRemovedList(suggestion)

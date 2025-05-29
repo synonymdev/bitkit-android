@@ -21,7 +21,7 @@ class WidgetsRepo @Inject constructor(
 ) {
     private val refreshInterval = 2.minutes
 
-    private val articlesFlow = widgetsStore.data.map { it.articles.map { article -> article.toNewsModel() } }
+    val articlesFlow = widgetsStore.data.map { it.articles.map { article -> article.toNewsModel() } }
 
     suspend fun updateNewsInLoop() {
         updateNews()
@@ -31,7 +31,7 @@ class WidgetsRepo @Inject constructor(
 
     suspend fun updateNews(): Result<Unit> = withContext(bgDispatcher) {
         return@withContext try {
-            val news = newsService.fetchLatestNews()
+            val news = newsService.fetchLatestNews().take(5)
             widgetsStore.updateArticles(news)
 
             Result.success(Unit)
