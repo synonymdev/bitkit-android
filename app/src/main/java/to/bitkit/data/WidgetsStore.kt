@@ -19,7 +19,7 @@ class WidgetsStore @Inject constructor(
 ) {
     private val store: DataStore<WidgetsData> = DataStoreFactory.create(
         serializer = WidgetsSerializer,
-        produceFile = { context.dataStoreFile("settings.json") },
+        produceFile = { context.dataStoreFile("widgets.json") },
     )
 
     val data: Flow<WidgetsData> = store.data
@@ -36,7 +36,7 @@ class WidgetsStore @Inject constructor(
 
     suspend fun reset() {
         store.updateData { WidgetsData() }
-        Logger.info("Deleted all user settings data.")
+        Logger.info("Deleted all widgets data.")
     }
 }
 
