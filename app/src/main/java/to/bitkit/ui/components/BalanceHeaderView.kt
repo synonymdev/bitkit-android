@@ -42,9 +42,8 @@ fun BalanceHeaderView(
     showEyeIcon: Boolean = false,
 ) {
     val isPreview = LocalInspectionMode.current
-    val settings = settingsViewModel
 
-    if (isPreview || settings == null) {
+    if (isPreview) {
         BalanceHeader(
             modifier = modifier,
             smallRowSymbol = "$",
@@ -62,6 +61,7 @@ fun BalanceHeaderView(
         return
     }
 
+    val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
     val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
     val converted: ConvertedAmount? = currency.convert(sats = sats)

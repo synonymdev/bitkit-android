@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,20 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+
+object SecuritySettingsTestTags {
+    const val SCREEN_CONTENT = "security_settings_content"
+    const val SWIPE_TO_HIDE_BALANCE = "security_settings_swipe_to_hide_balance"
+    const val HIDE_BALANCE_ON_OPEN = "security_settings_hide_balance_on_open"
+    const val AUTO_READ_CLIPBOARD = "security_settings_auto_read_clipboard"
+    const val SEND_AMOUNT_WARNING = "security_settings_send_amount_warning"
+    const val PIN_SETUP = "security_settings_pin_setup"
+    const val PIN_CHANGE = "security_settings_pin_change"
+    const val PIN_ON_LAUNCH = "security_settings_pin_on_launch"
+    const val PIN_ON_IDLE = "security_settings_pin_on_idle"
+    const val PIN_FOR_PAYMENTS = "security_settings_pin_for_payments"
+    const val USE_BIOMETRICS = "security_settings_use_biometrics"
+}
 
 @Composable
 fun SecuritySettingsScreen(
@@ -142,7 +157,9 @@ private fun SecuritySettingsContent(
     onCloseClick: () -> Unit = {},
 ) {
     ScreenColumn(
-        modifier = Modifier.verticalScroll(rememberScrollState())
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .testTag(SecuritySettingsTestTags.SCREEN_CONTENT)
     ) {
         AppTopBar(
             titleText = stringResource(R.string.settings__security_title),
@@ -156,6 +173,7 @@ private fun SecuritySettingsContent(
                 title = stringResource(R.string.settings__security__swipe_balance_to_hide),
                 isChecked = enableSwipeToHideBalance,
                 onClick = onSwipeToHideBalanceClick,
+                modifier = Modifier.testTag(SecuritySettingsTestTags.SWIPE_TO_HIDE_BALANCE),
             )
 
             if (enableSwipeToHideBalance) {
@@ -163,6 +181,7 @@ private fun SecuritySettingsContent(
                     title = stringResource(R.string.settings__security__hide_balance_on_open),
                     isChecked = hideBalanceOnOpen,
                     onClick = onHideBalanceOnOpenClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.HIDE_BALANCE_ON_OPEN),
                 )
             }
 
@@ -170,12 +189,14 @@ private fun SecuritySettingsContent(
                 title = stringResource(R.string.settings__security__clipboard),
                 isChecked = enableAutoReadClipboard,
                 onClick = onAutoReadClipboardClick,
+                modifier = Modifier.testTag(SecuritySettingsTestTags.AUTO_READ_CLIPBOARD),
             )
 
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__security__warn_100),
                 isChecked = enableSendAmountWarning,
                 onClick = onSendAmountWarningClick,
+                modifier = Modifier.testTag(SecuritySettingsTestTags.SEND_AMOUNT_WARNING),
             )
 
             SettingsButtonRow(
@@ -186,26 +207,31 @@ private fun SecuritySettingsContent(
                     )
                 ),
                 onClick = onPinClick,
+                modifier = Modifier.testTag(SecuritySettingsTestTags.PIN_SETUP),
             )
             if (isPinEnabled) {
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__security__pin_change),
                     onClick = onChangePinClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.PIN_CHANGE),
                 )
                 SettingsSwitchRow(
                     title = stringResource(R.string.settings__security__pin_launch),
                     isChecked = isPinOnLaunchEnabled,
                     onClick = onPinOnLaunchClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.PIN_ON_LAUNCH),
                 )
                 SettingsSwitchRow(
                     title = stringResource(R.string.settings__security__pin_idle),
                     isChecked = isPinOnIdleEnabled,
                     onClick = onPinOnIdleClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.PIN_ON_IDLE),
                 )
                 SettingsSwitchRow(
                     title = stringResource(R.string.settings__security__pin_payments),
                     isChecked = isPinForPaymentsEnabled,
                     onClick = onPinForPaymentsClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.PIN_FOR_PAYMENTS),
                 )
             }
             if (isPinEnabled && isBiometrySupported) {
@@ -216,6 +242,7 @@ private fun SecuritySettingsContent(
                     },
                     isChecked = isBiometricEnabled,
                     onClick = onUseBiometricsClick,
+                    modifier = Modifier.testTag(SecuritySettingsTestTags.USE_BIOMETRICS),
                 )
             }
             if (isPinEnabled && isBiometrySupported) {
