@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptions
@@ -29,7 +30,6 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import to.bitkit.currentActivity
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.components.AuthCheckScreen
@@ -100,6 +100,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
@@ -171,6 +172,15 @@ fun ContentView(
         appViewModel.mainScreenEffect.collect {
             when (it) {
                 is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityDetail(it.activityId))
+                is MainScreenEffect.ProcessClipboardAutoRead -> {
+                    val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
+                    if (!isOnHome) {
+                        navController.navigateToHome()
+                        delay(100) // Small delay to ensure navigation completes
+                    }
+                    appViewModel.onScanSuccess(it.data)
+                }
+
                 else -> Unit
             }
         }
@@ -250,6 +260,8 @@ fun ContentView(
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {
+            AutoReadClipboardHandler()
+
             NavHost(navController, startDestination = Routes.Home) {
                 home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
                 settings(navController, settingsViewModel)
@@ -896,10 +908,12 @@ private fun NavGraphBuilder.widgets(
 // endregion
 
 // region events
-fun NavController.navigateToHome() = navigate(
-    route = Routes.Home,
-    navOptions = navOptions { popUpTo(Routes.Home) }
-)
+fun NavController.navigateToHome() {
+    navigate(
+        route = Routes.Home,
+        navOptions = navOptions { popUpTo(Routes.Home) }
+    )
+}
 
 fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,

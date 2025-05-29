@@ -820,6 +820,12 @@ class AppViewModel @Inject constructor(
         }
     }
     // endregion
+
+    fun onClipboardAutoRead(data: String) {
+        viewModelScope.launch {
+            mainScreenEffect(MainScreenEffect.ProcessClipboardAutoRead(data))
+        }
+    }
 }
 
 // region send contract
@@ -852,6 +858,7 @@ sealed class SendEffect {
 sealed class MainScreenEffect {
     data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
     data object WipeStorage : MainScreenEffect()
+    data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
 
 sealed class SendEvent {

@@ -4,6 +4,7 @@ package to.bitkit.ext
 
 import android.app.Activity
 import android.app.NotificationManager
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
 import android.content.ContextWrapper
@@ -24,12 +25,13 @@ val Context.notificationManager: NotificationManager
 val Context.notificationManagerCompat: NotificationManagerCompat
     get() = NotificationManagerCompat.from(this)
 
+val Context.clipboardManager: ClipboardManager
+    get() = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
 // Permissions
 
 fun Context.requiresPermission(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) != PERMISSION_GRANTED
-
-// In-App Notifications
 
 // File System
 fun Context.readAsset(path: String) = assets.open(path).use(InputStream::readBytes)
