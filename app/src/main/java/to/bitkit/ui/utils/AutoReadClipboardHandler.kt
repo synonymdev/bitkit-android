@@ -1,6 +1,8 @@
 package to.bitkit.ui.utils
 
 import android.content.Context
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -10,17 +12,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.ClipboardDataDialog
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.theme.AppThemeSurface
 import uniffi.bitkitcore.decode
 
 @Composable
@@ -92,4 +99,20 @@ private suspend fun Context.hasScanDataInClipboard(): Boolean {
 
     val scanResult = runCatching { decode(clipText) }
     return scanResult.isSuccess
+}
+
+@Composable
+private fun ClipboardDataDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = stringResource(R.string.other__clipboard_redirect_title),
+        text = stringResource(R.string.other__clipboard_redirect_msg),
+        confirmButtonText = stringResource(R.string.common__ok),
+        dismissButtonText = stringResource(R.string.common__dialog_cancel),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
 }
