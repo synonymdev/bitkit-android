@@ -68,7 +68,7 @@ fun HeadlineCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            if (showTime) {
+            if (showTime && time.isNotEmpty()) {
                 BodyM(text = time)
                 Spacer(modifier = Modifier.height(16.dp))
             }

@@ -3,8 +3,10 @@ package to.bitkit.models.widget
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.utils.Logger
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Serializable
@@ -29,21 +31,42 @@ fun ArticleDTO.toNewsModel() = NewsModel(
  */
 private fun timeAgo(dateString: String): String {
     return try {
-        val formatter = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.getDefault())
-        val date = formatter.parse(dateString) ?: return ""
+        val formatters = listOf(
+            DateTimeFormatter.RFC_1123_DATE_TIME, // Handles "EEE, dd MMM yyyy HH:mm:ss zzz" (like GMT)
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH) // Handles "+0000"
+        )
 
-        val now = Date()
-        val diffInMillis = now.time - date.time
+        var parsedDateTime: OffsetDateTime? = null
+        for (formatter in formatters) {
+            try {
+                parsedDateTime = OffsetDateTime.parse(dateString, formatter)
+                break // Successfully parsed, stop trying other formatters
+            } catch (e: DateTimeParseException) {
+                // Continue to the next formatter if this one fails
+            }
+        }
 
-        when {
-            diffInMillis < 60_000L -> "just now"
-            diffInMillis < 3600_000L -> "${diffInMillis / 60_000L} minutes ago"
-            diffInMillis < 86400_000L -> "${diffInMillis / 3600_000L} hours ago"
-            diffInMillis < 2592000_000L -> "${diffInMillis / 86400_000L} days ago"
-            else -> "${diffInMillis / 2592000_000L} months ago"
+        if (parsedDateTime == null) {
+            Logger.debug("Failed to parse date: Unparseable date: \"$dateString\" [NewsModel.kt:46]")
+            return ""
+        }
+
+        val now = OffsetDateTime.now()
+
+        val diffMinutes = ChronoUnit.MINUTES.between(parsedDateTime, now)
+        val diffHours = ChronoUnit.HOURS.between(parsedDateTime, now)
+        val diffDays = ChronoUnit.DAYS.between(parsedDateTime, now)
+        val diffMonths = ChronoUnit.MONTHS.between(parsedDateTime, now)
+
+        return when {
+            diffMinutes < 1 -> "just now"
+            diffMinutes < 60 -> "$diffMinutes minutes ago"
+            diffHours < 24 -> "$diffHours hours ago"
+            diffDays < 30 -> "$diffDays days ago" // Approximate for months
+            else -> "$diffMonths months ago"
         }
     } catch (e: Exception) {
-        Logger.debug("Failed to parse date: ${e.message}")
+        Logger.debug("An unexpected error occurred while parsing date: ${e.message}")
         ""
     }
 }
