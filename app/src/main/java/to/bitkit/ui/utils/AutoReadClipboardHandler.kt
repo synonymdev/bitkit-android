@@ -17,7 +17,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import to.bitkit.ext.clipboardManager
+import to.bitkit.ext.getClipboardText
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ClipboardDataDialog
 import to.bitkit.ui.settingsViewModel
@@ -92,9 +92,4 @@ private suspend fun Context.hasScanDataInClipboard(): Boolean {
 
     val scanResult = runCatching { decode(clipText) }
     return scanResult.isSuccess
-}
-
-private fun Context.getClipboardText(): String? {
-    val clipboardManager = this.clipboardManager
-    return clipboardManager.primaryClip?.getItemAt(0)?.text?.toString()
 }

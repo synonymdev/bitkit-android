@@ -4,6 +4,7 @@ package to.bitkit.ext
 
 import android.app.Activity
 import android.app.NotificationManager
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
@@ -60,3 +61,14 @@ fun Context.findActivity(): Activity? =
         is ContextWrapper -> baseContext.findActivity()
         else -> null
     }
+
+// Clipboard
+fun Context.setClipboardText(label: String = "", text: String) {
+    this.clipboardManager.setPrimaryClip(
+        ClipData.newPlainText(label, text)
+    )
+}
+
+fun Context.getClipboardText(): String? {
+    return this.clipboardManager.primaryClip?.getItemAt(0)?.text?.toString()
+}
