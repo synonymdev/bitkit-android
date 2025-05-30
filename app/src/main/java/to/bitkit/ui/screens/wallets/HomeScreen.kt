@@ -426,7 +426,9 @@ private fun HomeContentView(
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64) //TODO check widgets visibility from settings
 
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         article?.let {
                             HeadlineCard( //TODO CHECK PREFERENCES
                                 modifier = Modifier.fillMaxWidth(),
@@ -436,8 +438,6 @@ private fun HomeContentView(
                             )
                         }
                     }
-
-                    //TODO IMPLEMENT LIST IN OTHER PR
                     Spacer(modifier = Modifier.height(32.dp))
                     TertiaryButton(
                         text = stringResource(R.string.widgets__add),

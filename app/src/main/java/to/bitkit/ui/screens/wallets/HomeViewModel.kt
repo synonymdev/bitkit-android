@@ -40,7 +40,6 @@ class HomeViewModel @Inject constructor(
     val currentArticle: StateFlow<NewsModel?> = _currentArticle.asStateFlow()
 
     init {
-        viewModelScope.launch { widgetsRepo.updateNewsInLoop() } //TODO CHECK IF ARTICLES IS VISIBLE
         viewModelScope.launch {
             articles.first { it.isNotEmpty() }
             getRandomArticle()
