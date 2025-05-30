@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -18,10 +17,9 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
-import to.bitkit.models.WidgetType
 import to.bitkit.models.toSuggestionOrNull
-import to.bitkit.models.widget.NewsModel
-import to.bitkit.models.widget.toNewsModel
+import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.toArticleModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
@@ -36,9 +34,9 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     val suggestions: StateFlow<List<Suggestion>> = createSuggestionsFlow()
-    private val articles: StateFlow<List<NewsModel>> = createArticlesFlow()
+    private val articles: StateFlow<List<ArticleModel>> = createArticlesFlow()
     private val _currentArticle = MutableStateFlow(articles.value.firstOrNull())
-    val currentArticle: StateFlow<NewsModel?> = _currentArticle.asStateFlow()
+    val currentArticle: StateFlow<ArticleModel?> = _currentArticle.asStateFlow()
 
     init {
         setupArticles()
@@ -101,8 +99,8 @@ class HomeViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
-    private fun createArticlesFlow(): StateFlow<List<NewsModel>> {
-        val articles = widgetsRepo.articlesFlow.map { it.articles.map { article -> article.toNewsModel() } }
+    private fun createArticlesFlow(): StateFlow<List<ArticleModel>> {
+        val articles = widgetsRepo.articlesFlow.map { it.articles.map { article -> article.toArticleModel() } }
         return articles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
@@ -110,6 +108,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val settings = settingsStore.data.first()
             if (!settings.showWidgets) return@launch //TODO also filter !settings.widgets.map { it.type }.contains(WidgetType.NEWS) when implement drag and drop
+            widgetsRepo.updateArticles()
             articles.first { it.isNotEmpty() }
             getRandomArticle()
         }

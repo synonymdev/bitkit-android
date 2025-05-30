@@ -10,14 +10,14 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Serializable
-data class NewsModel(
+data class ArticleModel(
     val title: String,
     val timeAgo: String,
     val link: String,
     val publisher: String
 )
 
-fun ArticleDTO.toNewsModel() = NewsModel(
+fun ArticleDTO.toArticleModel() = ArticleModel(
     title = this.title,
     timeAgo = timeAgo(this.publishedDate),
     link = this.link,
@@ -47,7 +47,7 @@ private fun timeAgo(dateString: String): String {
         }
 
         if (parsedDateTime == null) {
-            Logger.debug("Failed to parse date: Unparseable date: \"$dateString\" [NewsModel.kt:46]")
+            Logger.debug("Failed to parse date: Unparseable date: $dateString")
             return ""
         }
 
@@ -66,7 +66,7 @@ private fun timeAgo(dateString: String): String {
             else -> "$diffMonths months ago"
         }
     } catch (e: Exception) {
-        Logger.debug("An unexpected error occurred while parsing date: ${e.message}")
+        Logger.warn("An unexpected error occurred while parsing date: ${e.message}")
         ""
     }
 }

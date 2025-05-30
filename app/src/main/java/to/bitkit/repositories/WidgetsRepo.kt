@@ -2,12 +2,10 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.di.BgDispatcher
-import to.bitkit.models.widget.toNewsModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,13 +21,13 @@ class WidgetsRepo @Inject constructor(
 
     val articlesFlow = widgetsStore.data
 
-    suspend fun updateNewsInLoop() {
-        updateNews()
+    suspend fun updateArticlesInLoop() {
+        updateArticles()
         delay(refreshInterval)
-        updateNewsInLoop()
+        updateArticlesInLoop()
     }
 
-    suspend fun updateNews(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun updateArticles(): Result<Unit> = withContext(bgDispatcher) {
         return@withContext try {
             val news = newsService.fetchLatestNews().take(10)
             widgetsStore.updateArticles(news)

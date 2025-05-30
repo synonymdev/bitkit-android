@@ -56,7 +56,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
-import to.bitkit.models.widget.NewsModel
+import to.bitkit.models.widget.ArticleModel
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -324,7 +324,7 @@ fun HomeScreen(
 @Composable
 private fun HomeContentView(
     uiState: MainUiState,
-    article: NewsModel?,
+    article: ArticleModel?,
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
