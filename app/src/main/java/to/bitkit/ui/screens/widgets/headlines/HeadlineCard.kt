@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.widgets.headlines
 
+import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,17 +21,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.theme.AppThemeSurface
+import androidx.core.net.toUri
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -40,12 +44,19 @@ fun HeadlineCard(
     showSource: Boolean = true,
     time: String,
     headline: String,
-    source: String
+    source: String,
+    link: String
 ) {
+    val context = LocalContext.current
+
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
             .background(Colors.White10)
+            .clickable {
+                val intent = Intent(Intent.ACTION_VIEW, link.toUri())
+                context.startActivity(intent)
+            }
     ) {
         Column(
             modifier = Modifier
@@ -103,25 +114,29 @@ private fun Preview() {
             HeadlineCard(
                 time = "21 minutes ago",
                 headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
-                source = "bitcoinmagazine.com"
+                source = "bitcoinmagazine.com",
+                link = ""
             )
             HeadlineCard(
                 showWidgetTitle = false,
                 time = "21 minutes ago",
                 headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
-                source = "bitcoinmagazine.com"
+                source = "bitcoinmagazine.com",
+                link = ""
             )
             HeadlineCard(
                 showTime = false,
                 time = "21 minutes ago",
                 headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
-                source = "bitcoinmagazine.com"
+                source = "bitcoinmagazine.com",
+                link = ""
             )
             HeadlineCard(
                 showSource = false,
                 time = "21 minutes ago",
                 headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
-                source = "bitcoinmagazine.com"
+                source = "bitcoinmagazine.com",
+                link = ""
             )
             HeadlineCard(
                 showWidgetTitle = false,
@@ -129,7 +144,8 @@ private fun Preview() {
                 showSource = false,
                 time = "21 minutes ago",
                 headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow",
-                source = "bitcoinmagazine.com"
+                source = "bitcoinmagazine.com",
+                link = ""
             )
         }
     }

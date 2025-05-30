@@ -434,7 +434,8 @@ private fun HomeContentView(
                                 modifier = Modifier.fillMaxWidth(),
                                 headline = article.title,
                                 time = article.timeAgo,
-                                source = article.publisher
+                                source = article.publisher,
+                                link = article.link
                             )
                         }
                     }
