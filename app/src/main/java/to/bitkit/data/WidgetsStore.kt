@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.serializers.WidgetsSerializer
+import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +33,12 @@ class WidgetsStore @Inject constructor(
         }
     }
 
+    suspend  fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
+        store.updateData {
+            it.copy(headlinePreferences = preferences)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { WidgetsData() }
         Logger.info("Deleted all widgets data.")
@@ -41,4 +48,5 @@ class WidgetsStore @Inject constructor(
 @Serializable
 data class WidgetsData(
     val articles: List<ArticleDTO> = emptyList(),
+    val headlinePreferences: HeadlinePreferences = HeadlinePreferences()
 )
