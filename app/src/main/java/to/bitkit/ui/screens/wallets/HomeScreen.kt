@@ -56,6 +56,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
+import to.bitkit.models.widget.ArticleModel
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -84,6 +85,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settingsViewModel
@@ -162,15 +164,19 @@ fun HomeScreen(
                 composable<HomeRoutes.Home> {
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
+                    val showWidgets by homeViewModel.showWidgets.collectAsStateWithLifecycle(initialValue = true)
                     val context = LocalContext.current
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
                     val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
+                    val article by homeViewModel.currentArticle.collectAsStateWithLifecycle()
 
                     HomeContentView(
                         uiState = uiState,
+                        showWidgets = showWidgets,
+                        article = article,
                         suggestions = suggestions,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
@@ -241,7 +247,7 @@ fun HomeScreen(
                                 }
                             }
                         },
-                        onClickAddWIdget = {
+                        onClickAddWidget = {
                             if (!hasSeenWidgetsIntro) {
                                 rootNavController.navigate(Routes.WidgetsIntro)
                             } else {
@@ -320,10 +326,12 @@ fun HomeScreen(
 @Composable
 private fun HomeContentView(
     uiState: MainUiState,
+    article: ArticleModel?,
+    showWidgets: Boolean,
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
-    onClickAddWIdget: () -> Unit,
+    onClickAddWidget: () -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -418,21 +426,40 @@ private fun HomeContentView(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64)
-                    //TODO IMPLEMENT LIST IN OTHER PR
-                    Spacer(modifier = Modifier.height(32.dp))
-                    TertiaryButton(
-                        text = stringResource(R.string.widgets__add),
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_plus),
-                                contentDescription = null,
-                                tint = Colors.White80
-                            )
-                        },
-                        onClick = onClickAddWIdget
-                    )
+
+                    if (showWidgets) {
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Text13Up(
+                            stringResource(R.string.widgets__widgets),
+                            color = Colors.White64
+                        )
+
+                        Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            article?.let {
+                                HeadlineCard( //TODO CHECK PREFERENCES
+                                    modifier = Modifier.fillMaxWidth(),
+                                    headline = article.title,
+                                    time = article.timeAgo,
+                                    source = article.publisher,
+                                    link = article.link
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(32.dp))
+                        TertiaryButton(
+                            text = stringResource(R.string.widgets__add),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_plus),
+                                    contentDescription = null,
+                                    tint = Colors.White80
+                                )
+                            },
+                            onClick = onClickAddWidget
+                        )
+                    }
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
@@ -513,7 +540,9 @@ private fun HomeContentViewPreview() {
             onRefresh = {},
             onClickSuggestion = {},
             onRemoveSuggestion = {},
-            onClickAddWIdget = {},
+            onClickAddWidget = {},
+            article = null,
+            showWidgets = true,
         )
     }
 }

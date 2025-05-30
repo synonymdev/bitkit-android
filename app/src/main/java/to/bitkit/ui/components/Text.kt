@@ -204,6 +204,8 @@ fun BodyMB(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -216,6 +218,8 @@ fun BodyMB(
             color = color,
             textAlign = TextAlign.Start,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
@@ -265,7 +269,7 @@ fun BodySSB(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
 
-) {
+    ) {
     BodySSB(
         text = AnnotatedString(text),
         color = color,
