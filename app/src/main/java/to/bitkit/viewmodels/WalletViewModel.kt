@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.BalanceDetails
@@ -27,6 +29,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.data.SettingsStore
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -38,6 +41,7 @@ class WalletViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -360,6 +364,13 @@ class WalletViewModel @Inject constructor(
 
     fun updateBalanceInput(newText: String) {
         walletRepo.updateBalanceInput(newText = newText)
+    }
+
+    suspend fun handleHideBalanceOnOpen() {
+        val hideBalanceOnOpen = settingsStore.data.map { it.hideBalanceOnOpen }.first()
+        if (hideBalanceOnOpen) {
+            settingsStore.update { it.copy(hideBalance = true) }
+        }
     }
 }
 

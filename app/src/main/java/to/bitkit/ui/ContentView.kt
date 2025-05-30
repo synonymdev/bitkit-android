@@ -165,6 +165,8 @@ fun ContentView(
         walletViewModel.observeLdkWallet()
     }
 
+    LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
+
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {

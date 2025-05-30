@@ -355,7 +355,11 @@ private fun HomeContentView(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                BalanceHeaderView(sats = balances.totalSats.toLong(), modifier = Modifier.fillMaxWidth())
+                BalanceHeaderView(
+                    sats = balances.totalSats.toLong(),
+                    showEyeIcon = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (!showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))
                     Row(

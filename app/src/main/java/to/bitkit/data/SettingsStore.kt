@@ -77,5 +77,10 @@ data class SettingsData(
     val showWidgets: Boolean = false,
     val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),
-    val widgets: List<WidgetWithPosition> = emptyList()
+    val widgets: List<WidgetWithPosition> = emptyList(),
+    val enableSwipeToHideBalance: Boolean = true,
+    val hideBalance: Boolean = false,
+    val hideBalanceOnOpen: Boolean = false,
+    val enableAutoReadClipboard: Boolean = false,
+    val enableSendAmountWarning: Boolean = false,
 )
