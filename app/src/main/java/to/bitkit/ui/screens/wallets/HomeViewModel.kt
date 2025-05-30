@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
+import to.bitkit.models.WidgetType
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.NewsModel
 import to.bitkit.models.widget.toNewsModel
@@ -40,10 +41,7 @@ class HomeViewModel @Inject constructor(
     val currentArticle: StateFlow<NewsModel?> = _currentArticle.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            articles.first { it.isNotEmpty() }
-            getRandomArticle()
-        }
+        setupArticles()
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -106,6 +104,15 @@ class HomeViewModel @Inject constructor(
     private fun createArticlesFlow(): StateFlow<List<NewsModel>> {
         val articles = widgetsRepo.articlesFlow.map { it.articles.map { article -> article.toNewsModel() } }
         return articles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    private fun setupArticles() {
+        viewModelScope.launch {
+            val settings = settingsStore.data.first()
+            if (!settings.showWidgets) return@launch //TODO also filter !settings.widgets.map { it.type }.contains(WidgetType.NEWS) when implement drag and drop
+            articles.first { it.isNotEmpty() }
+            getRandomArticle()
+        }
     }
 
     private fun getRandomArticle() {
