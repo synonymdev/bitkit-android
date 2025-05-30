@@ -189,6 +189,8 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 } else {
+                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+
                     InactivityTracker(appViewModel, settingsViewModel) {
                         ContentView(
                             appViewModel = appViewModel,
@@ -201,7 +203,6 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
                     AnimatedVisibility(
                         visible = !isAuthenticated,
                         enter = fadeIn(),

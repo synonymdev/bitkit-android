@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -29,6 +30,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
@@ -51,6 +53,7 @@ fun SendOptionsView(
     startDestination: SendRoute = SendRoute.Options,
     onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -65,7 +68,10 @@ fun SendOptionsView(
                     is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
                     is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
                     is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
-                    is SendEffect.PaymentSuccess -> onComplete(it.sheet)
+                    is SendEffect.PaymentSuccess -> {
+                        onComplete(it.sheet)
+                        context.setClipboardText(text = "")
+                    }
                     is SendEffect.NavigateToQuickPay -> {
                         navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
                     }

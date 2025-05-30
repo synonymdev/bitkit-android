@@ -61,6 +61,7 @@ import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.ext.clipboardManager
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
@@ -181,7 +182,7 @@ fun QrScanningScreen(
                         }
                     },
                     onPasteFromClipboard = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clipboard = context.clipboardManager
                         if (clipboard.hasPrimaryClip()) {
                             val clipData: ClipData = clipboard.primaryClip ?: return@Content
                             if (clipData.itemCount > 0) {
