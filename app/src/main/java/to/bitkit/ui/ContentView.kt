@@ -908,12 +908,10 @@ private fun NavGraphBuilder.widgets(
 // endregion
 
 // region events
-fun NavController.navigateToHome() {
-    navigate(
-        route = Routes.Home,
-        navOptions = navOptions { popUpTo(Routes.Home) }
-    )
-}
+fun NavController.navigateToHome() = navigate(
+    route = Routes.Home,
+    navOptions = navOptions { popUpTo(Routes.Home) }
+)
 
 fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
