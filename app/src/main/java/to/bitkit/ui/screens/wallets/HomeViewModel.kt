@@ -41,7 +41,7 @@ class HomeViewModel @Inject constructor(
     val suggestions: StateFlow<List<Suggestion>> = createSuggestionsFlow()
 
     // Widget-related flows
-    private val showWidgets = settingsStore.data.map { it.showWidgets }
+    val showWidgets = settingsStore.data.map { it.showWidgets }
 
     private val articles: StateFlow<List<ArticleModel>> = widgetsRepo.articlesFlow
         .map { articles -> articles.map { it.toArticleModel() } }

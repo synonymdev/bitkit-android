@@ -164,6 +164,7 @@ fun HomeScreen(
                 composable<HomeRoutes.Home> {
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
+                    val showWidgets by homeViewModel.showWidgets.collectAsStateWithLifecycle(initialValue = true)
                     val context = LocalContext.current
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
@@ -174,6 +175,7 @@ fun HomeScreen(
 
                     HomeContentView(
                         uiState = uiState,
+                        showWidgets = showWidgets,
                         article = article,
                         suggestions = suggestions,
                         rootNavController = rootNavController,
@@ -325,6 +327,7 @@ fun HomeScreen(
 private fun HomeContentView(
     uiState: MainUiState,
     article: ArticleModel?,
+    showWidgets: Boolean,
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
@@ -423,34 +426,40 @@ private fun HomeContentView(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text13Up(stringResource(R.string.widgets__widgets), color = Colors.White64) //TODO check widgets visibility from settings
 
-                    Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
-                        Spacer(modifier = Modifier.height(16.dp))
+                    if (showWidgets) {
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Text13Up(
+                            stringResource(R.string.widgets__widgets),
+                            color = Colors.White64
+                        )
 
-                        article?.let {
-                            HeadlineCard( //TODO CHECK PREFERENCES
-                                modifier = Modifier.fillMaxWidth(),
-                                headline = article.title,
-                                time = article.timeAgo,
-                                source = article.publisher,
-                                link = article.link
-                            )
+                        Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            article?.let {
+                                HeadlineCard( //TODO CHECK PREFERENCES
+                                    modifier = Modifier.fillMaxWidth(),
+                                    headline = article.title,
+                                    time = article.timeAgo,
+                                    source = article.publisher,
+                                    link = article.link
+                                )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(32.dp))
+                        TertiaryButton(
+                            text = stringResource(R.string.widgets__add),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_plus),
+                                    contentDescription = null,
+                                    tint = Colors.White80
+                                )
+                            },
+                            onClick = onClickAddWidget
+                        )
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    TertiaryButton(
-                        text = stringResource(R.string.widgets__add),
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_plus),
-                                contentDescription = null,
-                                tint = Colors.White80
-                            )
-                        },
-                        onClick = onClickAddWidget
-                    )
                     Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
@@ -532,7 +541,8 @@ private fun HomeContentViewPreview() {
             onClickSuggestion = {},
             onRemoveSuggestion = {},
             onClickAddWidget = {},
-            article = null
+            article = null,
+            showWidgets = true,
         )
     }
 }
