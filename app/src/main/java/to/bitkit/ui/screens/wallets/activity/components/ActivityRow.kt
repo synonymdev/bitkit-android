@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -16,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
@@ -28,6 +31,9 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
+import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -153,27 +159,36 @@ private fun AmountView(
         AmountViewContent(
             title = amount.toLong().formatToModernDisplay(),
             titlePrefix = prefix,
-            subtitle = "$ 123.45",
+            subtitle = "123.45",
+            subtitleSymbol = "$",
+            hideBalance = false,
         )
         return
     }
 
+    val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
     val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
 
+    val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
+
     currency.convert(sats = amount.toLong())?.let { converted ->
-        val btcComponents = converted.bitcoinDisplay(displayUnit)
+        val btcValue = converted.bitcoinDisplay(displayUnit).value
         if (primaryDisplay == PrimaryDisplay.BITCOIN) {
             AmountViewContent(
-                title = btcComponents.value,
+                title = btcValue,
                 titlePrefix = prefix,
-                subtitle = "${converted.symbol} ${converted.formatted}",
+                subtitle = converted.formatted,
+                subtitleSymbol = converted.symbol,
+                hideBalance = hideBalance,
             )
         } else {
             AmountViewContent(
-                title = "${converted.symbol} ${converted.formatted}",
+                title = converted.formatted,
+                titleSymbol = converted.symbol,
                 titlePrefix = prefix,
-                subtitle = btcComponents.value,
+                subtitle = btcValue,
+                hideBalance = hideBalance,
             )
         }
     }
@@ -185,23 +200,53 @@ private fun AmountViewContent(
     titlePrefix: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    titleSymbol: String? = null,
+    subtitleSymbol: String? = null,
+    hideBalance: Boolean = false,
 ) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // Title row with static prefix and symbol
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             BodyMSB(text = titlePrefix, color = Colors.White64)
-            BodyMSB(text = title)
+            if (titleSymbol != null) {
+                BodyMSB(text = titleSymbol, color = Colors.White64)
+            }
+            Spacer(modifier = Modifier.width(2.dp))
+            AnimatedContent(
+                targetState = hideBalance,
+                transitionSpec = { BalanceAnimations.activityAmountTransition },
+                label = "titleAnimation"
+            ) { isHidden ->
+                BodyMSB(text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else title)
+            }
         }
-        CaptionB(
-            text = subtitle,
-            color = Colors.White64,
-        )
+
+        // Subtitle row with static symbol
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            if (subtitleSymbol != null) {
+                CaptionB(text = subtitleSymbol, color = Colors.White64)
+            }
+            AnimatedContent(
+                targetState = hideBalance,
+                transitionSpec = { BalanceAnimations.activitySubtitleTransition },
+                label = "subtitleAnimation"
+            ) { isHidden ->
+                CaptionB(
+                    text = if (isHidden) UiConstants.HIDE_BALANCE_SHORT else subtitle,
+                    color = Colors.White64,
+                )
+            }
+        }
     }
 }
 

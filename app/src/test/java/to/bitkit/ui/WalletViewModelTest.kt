@@ -14,6 +14,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.annotation.Config
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.LnPeer
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -31,6 +32,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     private val walletRepo: WalletRepo = mock()
     private val lightningRepo: LightningRepo = mock()
+    private val settingsStore: SettingsStore = mock()
     private val context: Context = mock()
     private val mockLightningState = MutableStateFlow(LightningState())
     private val mockWalletState = MutableStateFlow(WalletState())
@@ -45,7 +47,8 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = Dispatchers.Unconfined,
             appContext = context,
             walletRepo = walletRepo,
-            lightningRepo = lightningRepo
+            lightningRepo = lightningRepo,
+            settingsStore = settingsStore,
         )
     }
 
