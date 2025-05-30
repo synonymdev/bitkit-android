@@ -37,9 +37,10 @@ class HomeViewModel @Inject constructor(
     private val articles: StateFlow<List<ArticleModel>> = createArticlesFlow()
     private val _currentArticle = MutableStateFlow(articles.value.firstOrNull())
     val currentArticle: StateFlow<ArticleModel?> = _currentArticle.asStateFlow()
+    private val showWidgets = settingsStore.data.map { it.showWidgets }
 
     init {
-        setupArticles()
+        setupWidgets()
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -104,13 +105,17 @@ class HomeViewModel @Inject constructor(
         return articles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
-    private fun setupArticles() {
+    private fun setupWidgets() {
         viewModelScope.launch {
-            val settings = settingsStore.data.first()
-            if (!settings.showWidgets) return@launch //TODO also filter !settings.widgets.map { it.type }.contains(WidgetType.NEWS) when implement drag and drop
-            widgetsRepo.updateArticles()
-            articles.first { it.isNotEmpty() }
-            getRandomArticle()
+            showWidgets.collect { show ->
+                if (show) {
+                    widgetsRepo.updateArticles()
+                    articles.first { it.isNotEmpty() }
+                    getRandomArticle()
+                } else {
+                    _currentArticle.update { null }
+                }
+            }
         }
     }
 
@@ -118,7 +123,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _currentArticle.update { articles.value.randomOrNull() }
             delay(30.seconds)
-            getRandomArticle()
+            if (showWidgets.first()) getRandomArticle()
         }
     }
 }
