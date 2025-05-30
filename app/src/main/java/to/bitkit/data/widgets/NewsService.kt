@@ -7,25 +7,29 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.env.Env
+import to.bitkit.models.WidgetType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.minutes
 
 @Singleton
 class NewsService @Inject constructor(
     private val client: HttpClient,
-) {
+) : WidgetService<List<ArticleDTO>> {
 
-    /**
-     * Fetches articles from the news API
-     * @return List of articles
-     * @throws NewsError on network or parsing errors
-     */
-    suspend fun fetchLatestNews(): List<ArticleDTO> {
-        return get<List<ArticleDTO>>(Env.newsBaseUrl + "/articles")
+
+    override val widgetType = WidgetType.NEWS
+    override val refreshInterval = 10.minutes
+
+    override suspend fun fetchData(): Result<List<ArticleDTO>> = runCatching {
+        get<List<ArticleDTO>>(Env.newsBaseUrl + "/articles").take(10)
+    }.onFailure {
+        Logger.warn(e = it, msg = "Failed to fetch news", context = TAG)
     }
 
+    // Future services can be added here
     private suspend inline fun <reified T> get(url: String): T {
         val response: HttpResponse = client.get(url)
         Logger.debug("Http call: $response")
@@ -36,9 +40,12 @@ class NewsService @Inject constructor(
                 }
                 responseBody
             }
-
             else -> throw NewsError.InvalidResponse(response.status.description)
         }
+    }
+
+    companion object {
+        private const val TAG = "NewsService"
     }
 }
 

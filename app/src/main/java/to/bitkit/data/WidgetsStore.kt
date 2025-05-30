@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.dataStoreFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.serializers.WidgetsSerializer
@@ -23,10 +24,7 @@ class WidgetsStore @Inject constructor(
     )
 
     val data: Flow<WidgetsData> = store.data
-
-    suspend fun update(transform: (WidgetsData) -> WidgetsData) {
-        store.updateData(transform)
-    }
+    val articlesFlow: Flow<List<ArticleDTO>> = data.map { it.articles }
 
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
