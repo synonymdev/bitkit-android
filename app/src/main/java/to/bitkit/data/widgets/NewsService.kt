@@ -23,7 +23,7 @@ class NewsService @Inject constructor(
      * @throws NewsError on network or parsing errors
      */
     suspend fun fetchLatestNews(): List<ArticleDTO> {
-        return get<List<ArticleDTO>>(Env.newsBaseUrl)
+        return get<List<ArticleDTO>>(Env.newsBaseUrl + "/articles")
     }
 
     private suspend inline fun <reified T> get(url: String): T {

@@ -21,7 +21,7 @@ class WidgetsRepo @Inject constructor(
 ) {
     private val refreshInterval = 2.minutes
 
-    val articlesFlow = widgetsStore.data.map { it.articles.map { article -> article.toNewsModel() } }
+    val articlesFlow = widgetsStore.data
 
     suspend fun updateNewsInLoop() {
         updateNews()

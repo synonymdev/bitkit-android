@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -18,6 +20,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.NewsModel
+import to.bitkit.models.widget.toNewsModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
@@ -32,16 +35,16 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     val suggestions: StateFlow<List<Suggestion>> = createSuggestionsFlow()
-    private val articles: StateFlow<List<NewsModel>> = widgetsRepo.articlesFlow.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000), emptyList()
-    )
+    private val articles: StateFlow<List<NewsModel>> = createArticlesFlow()
     private val _currentArticle = MutableStateFlow(articles.value.firstOrNull())
     val currentArticle: StateFlow<NewsModel?> = _currentArticle.asStateFlow()
 
     init {
         viewModelScope.launch { widgetsRepo.updateNewsInLoop() } //TODO CHECK IF ARTICLES IS VISIBLE
-        getRandomArticle()
+        viewModelScope.launch {
+            articles.first { it.isNotEmpty() }
+            getRandomArticle()
+        }
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -101,10 +104,15 @@ class HomeViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
+    private fun createArticlesFlow(): StateFlow<List<NewsModel>> {
+        val articles = widgetsRepo.articlesFlow.map { it.articles.map { article -> article.toNewsModel() } }
+        return articles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
     private fun getRandomArticle() {
         viewModelScope.launch {
             _currentArticle.update { articles.value.randomOrNull() }
-            delay(10.seconds)
+            delay(30.seconds)
             getRandomArticle()
         }
     }
