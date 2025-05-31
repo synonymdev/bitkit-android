@@ -17,6 +17,7 @@ import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
+import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,6 +41,10 @@ class WidgetsRepo @Inject constructor(
 
     init {
         startPeriodicUpdates()
+    }
+
+    suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) = withContext(bgDispatcher) {
+        widgetsStore.updateHeadlinePreferences(preferences)
     }
 
     /**
@@ -107,22 +112,27 @@ class WidgetsRepo @Inject constructor(
             WidgetType.NEWS -> updateWidget(newsService) { articles ->
                 widgetsStore.updateArticles(articles)
             }
-            WidgetType.WEATHER ->  {
+
+            WidgetType.WEATHER -> {
                 // TODO: Implement when PriceService is ready
                 throw NotImplementedError("Weather widget not implemented yet")
             }
+
             WidgetType.PRICE -> {
                 // TODO: Implement when PriceService is ready
                 throw NotImplementedError("Price widget not implemented yet")
             }
+
             WidgetType.BLOCK -> {
                 // TODO: Implement when BlockService is ready
                 throw NotImplementedError("Block widget not implemented yet")
             }
+
             WidgetType.CALCULATOR -> {
                 // TODO: Implement when CalculatorService is ready
                 throw NotImplementedError("Calculator widget not implemented yet")
             }
+
             WidgetType.FACTS -> {
                 // TODO: Implement when FactsService is ready
                 throw NotImplementedError("Facts widget not implemented yet")

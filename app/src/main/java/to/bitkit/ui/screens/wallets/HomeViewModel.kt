@@ -83,8 +83,6 @@ class HomeViewModel @Inject constructor(
         _currentArticle.value = null
     }
 
-
-
     fun removeSuggestion(suggestion: Suggestion) {
         appStorage.addSuggestionToRemovedList(suggestion)
     }
