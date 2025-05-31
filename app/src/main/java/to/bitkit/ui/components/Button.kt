@@ -141,6 +141,7 @@ fun TertiaryButton(
     icon: (@Composable () -> Unit)? = null,
     isLoading: Boolean = false,
     size: ButtonSize = ButtonSize.Large,
+    fullWidth: Boolean = true,
     enabled: Boolean = true,
 ) {
     TextButton(
@@ -149,7 +150,7 @@ fun TertiaryButton(
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         modifier = Modifier
-            .fillMaxWidth()
+            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(size.height)
             .then(modifier)
     ) {
