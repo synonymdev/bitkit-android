@@ -63,7 +63,7 @@ fun HeadlinesSPreviewScreen(
         article = article,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            //TODO IMPLEMENT
+            headlinesViewModel.deleteWidget()
         },
         onClickSave = {
             headlinesViewModel.updateHeadlinesPreferences(customHeadlinePreferences)

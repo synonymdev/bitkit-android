@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -18,10 +19,12 @@ import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
+import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.collections.map
 import kotlin.time.Duration.Companion.minutes
 
 @Singleton
@@ -37,7 +40,7 @@ class WidgetsRepo @Inject constructor(
     val articlesFlow = widgetsStore.articlesFlow
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
     val showWidgets = settingsStore.data.map { it.showWidgets }
-    val displayedWidgets = widgetsStore.data.map { it.widgets }
+    val widgetsWithPosition = widgetsStore.data.map { it.widgets }
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
@@ -46,6 +49,14 @@ class WidgetsRepo @Inject constructor(
 
     init {
         startPeriodicUpdates()
+    }
+
+    suspend fun addWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.addWidget(type) }
+
+    suspend fun deleteWidget(type: WidgetType) = withContext(bgDispatcher) { widgetsStore.deleteWidget(type) }
+
+    suspend fun updateWidgets(widgets: List<WidgetWithPosition>) = withContext(bgDispatcher) {
+        widgetsStore.updateWidgets(widgets)
     }
 
     suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) = withContext(bgDispatcher) {

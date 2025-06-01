@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.toArticleModel
@@ -30,7 +31,8 @@ class HeadlinesViewModel @Inject constructor(
         .map { articles -> articles.map { it.toArticleModel() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val showWidgetTitles = widgetsRepo.showWidgetTitles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val showWidgetTitles = widgetsRepo.showWidgetTitles
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     private val _currentArticle = MutableStateFlow(
         ArticleModel(
@@ -42,13 +44,17 @@ class HeadlinesViewModel @Inject constructor(
     )
     val currentArticle: StateFlow<ArticleModel> = _currentArticle.asStateFlow()
 
-    fun updateHeadlinesPreferences(preferences: HeadlinePreferences) {
-        viewModelScope.launch { widgetsRepo.updateHeadlinePreferences(preferences) }
-        //TODO ADD HEADLINES TO LIST IF NOT YET
-    }
-
     init {
         getArticle()
+    }
+
+    fun updateHeadlinesPreferences(preferences: HeadlinePreferences) = viewModelScope.launch {
+        widgetsRepo.updateHeadlinePreferences(preferences)
+        widgetsRepo.addWidget(WidgetType.NEWS)
+    }
+
+    fun deleteWidget() = viewModelScope.launch {
+        widgetsRepo.deleteWidget(WidgetType.NEWS)
     }
 
     private fun getArticle() {
