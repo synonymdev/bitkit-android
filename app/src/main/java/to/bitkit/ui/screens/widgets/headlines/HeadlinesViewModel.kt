@@ -32,8 +32,8 @@ class HeadlinesViewModel @Inject constructor(
 
     private val _currentArticle = MutableStateFlow(
         ArticleModel(
-            title = "21 minutes ago",
-            timeAgo = "How Bitcoin changed El Salvador in more ways",
+            timeAgo = "21 minutes ago",
+            title = "How Bitcoin changed El Salvador in more ways",
             publisher = "bitcoinmagazine.com",
             link = "bitcoinmagazine.com",
         )

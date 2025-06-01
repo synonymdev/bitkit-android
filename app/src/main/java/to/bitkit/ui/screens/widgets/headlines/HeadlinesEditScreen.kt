@@ -10,8 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -42,12 +46,21 @@ fun HeadlinesSettingsScreen(
     onBack: () -> Unit,
 ) {
     val headlinePreferences by headlinesViewModel.headlinePreferences.collectAsStateWithLifecycle()
+    var customHeadlinePreferences by remember { mutableStateOf(headlinePreferences) }
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
+
     HeadlinesSettingsContent(
         onClose = onClose,
         onBack = onBack,
-        headlinePreferences = headlinePreferences,
-        article = article
+        headlinePreferences = customHeadlinePreferences,
+        article = article,
+        onClickTime = {
+            customHeadlinePreferences = customHeadlinePreferences.copy(showTime = !customHeadlinePreferences.showTime)
+        },
+        onClickShowSource = {
+            customHeadlinePreferences =
+                customHeadlinePreferences.copy(showSource = !customHeadlinePreferences.showSource)
+        },
     )
 }
 
@@ -55,6 +68,8 @@ fun HeadlinesSettingsScreen(
 fun HeadlinesSettingsContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
+    onClickTime: () -> Unit,
+    onClickShowSource: () -> Unit,
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel
 ) {
@@ -88,11 +103,13 @@ fun HeadlinesSettingsContent(
             ) {
                 BodyM(text = article.timeAgo)
 
-                if (headlinePreferences.showTime) {
+                IconButton(
+                    onClick = onClickTime
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = Colors.Brand,
+                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White80,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -109,12 +126,14 @@ fun HeadlinesSettingsContent(
             ) {
                 BodyMB(text = article.title, modifier = Modifier.weight(1f))
 
-                Icon(
-                    painter = painterResource(R.drawable.ic_checkmark),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(32.dp),
-                )
+                IconButton(onClick = {}, enabled = false) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_checkmark),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
             }
 
             HorizontalDivider()
@@ -134,11 +153,13 @@ fun HeadlinesSettingsContent(
 
                 CaptionB(text = article.publisher, color = Colors.White64)
 
-                if (headlinePreferences.showSource) {
+                IconButton(
+                    onClick = onClickShowSource
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = Colors.Brand,
+                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White80,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -157,7 +178,7 @@ fun HeadlinesSettingsContent(
                 TertiaryButton(
                     text = stringResource(R.string.common__reset),
                     modifier = Modifier.weight(1f),
-                    enabled = false, //TODO UPDATE
+                    enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
                     onClick = {}
                 )
@@ -181,7 +202,29 @@ private fun Preview() {
         HeadlinesSettingsContent(
             onClose = {},
             onBack = {},
+            onClickShowSource = {},
+            onClickTime = {},
             headlinePreferences = HeadlinePreferences(),
+            article = ArticleModel(
+                timeAgo = "21 minutes ago",
+                title = "How Bitcoin changed El Salvador in more ways",
+                publisher = "bitcoinmagazine.com",
+                link = "bitcoinmagazine.com",
+            )
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        HeadlinesSettingsContent(
+            onClose = {},
+            onBack = {},
+            onClickShowSource = {},
+            onClickTime = {},
+            headlinePreferences = HeadlinePreferences(showTime = false, showSource = false),
             article = ArticleModel(
                 timeAgo = "21 minutes ago",
                 title = "How Bitcoin changed El Salvador in more ways",
