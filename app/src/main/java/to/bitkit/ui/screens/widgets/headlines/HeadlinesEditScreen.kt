@@ -44,6 +44,7 @@ fun HeadlinesSettingsScreen(
     headlinesViewModel: HeadlinesViewModel = hiltViewModel(),
     onClose: () -> Unit,
     onBack: () -> Unit,
+    navigatePreview: (HeadlinePreferences) -> Unit
 ) {
     val headlinePreferences by headlinesViewModel.headlinePreferences.collectAsStateWithLifecycle()
     var customHeadlinePreferences by remember { mutableStateOf(headlinePreferences) }
@@ -61,6 +62,12 @@ fun HeadlinesSettingsScreen(
             customHeadlinePreferences =
                 customHeadlinePreferences.copy(showSource = !customHeadlinePreferences.showSource)
         },
+        onClickReset = {
+            customHeadlinePreferences = HeadlinePreferences()
+        },
+        onClickPreview = {
+            navigatePreview(customHeadlinePreferences)
+        },
     )
 }
 
@@ -69,6 +76,8 @@ fun HeadlinesSettingsContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onClickTime: () -> Unit,
+    onClickReset: () -> Unit,
+    onClickPreview: () -> Unit,
     onClickShowSource: () -> Unit,
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel
@@ -109,7 +118,7 @@ fun HeadlinesSettingsContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White80,
+                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -159,7 +168,7 @@ fun HeadlinesSettingsContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White80,
+                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -180,14 +189,14 @@ fun HeadlinesSettingsContent(
                     modifier = Modifier.weight(1f),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
-                    onClick = {}
+                    onClick = onClickReset
                 )
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
                     modifier = Modifier.weight(1f),
                     fullWidth = false,
-                    onClick = {}
+                    onClick = onClickPreview
                 )
             }
         }
@@ -204,6 +213,8 @@ private fun Preview() {
             onBack = {},
             onClickShowSource = {},
             onClickTime = {},
+            onClickReset = {},
+            onClickPreview = {},
             headlinePreferences = HeadlinePreferences(),
             article = ArticleModel(
                 timeAgo = "21 minutes ago",
@@ -224,6 +235,8 @@ private fun Preview2() {
             onBack = {},
             onClickShowSource = {},
             onClickTime = {},
+            onClickReset = {},
+            onClickPreview = {},
             headlinePreferences = HeadlinePreferences(showTime = false, showSource = false),
             article = ArticleModel(
                 timeAgo = "21 minutes ago",
