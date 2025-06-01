@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.WidgetService
@@ -27,12 +28,15 @@ import kotlin.time.Duration.Companion.minutes
 class WidgetsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val newsService: NewsService,
-    private val widgetsStore: WidgetsStore
+    private val widgetsStore: WidgetsStore,
+    private val settingsStore: SettingsStore,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     val widgetsDataFlow = widgetsStore.data
     val articlesFlow = widgetsStore.articlesFlow
+    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
+    val showWidgets = settingsStore.data.map { it.showWidgets }
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }

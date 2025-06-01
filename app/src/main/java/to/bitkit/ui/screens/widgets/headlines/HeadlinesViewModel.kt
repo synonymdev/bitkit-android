@@ -30,6 +30,8 @@ class HeadlinesViewModel @Inject constructor(
         .map { articles -> articles.map { it.toArticleModel() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val showWidgetTitles = widgetsRepo.showWidgets.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     private val _currentArticle = MutableStateFlow(
         ArticleModel(
             timeAgo = "21 minutes ago",
@@ -42,6 +44,7 @@ class HeadlinesViewModel @Inject constructor(
 
     fun updateHeadlinesPreferences(preferences: HeadlinePreferences) {
         viewModelScope.launch { widgetsRepo.updateHeadlinePreferences(preferences) }
+        //TODO ADD HEADLINES TO LIST IF NOT YET
     }
 
     init {
