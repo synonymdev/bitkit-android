@@ -43,7 +43,7 @@ import to.bitkit.ui.theme.Colors
 
 
 @Composable
-fun HeadlinesSPreviewScreen(
+fun HeadlinesPreviewScreen(
     headlinesViewModel: HeadlinesViewModel = hiltViewModel(),
     onClose: () -> Unit,
     onBack: () -> Unit,

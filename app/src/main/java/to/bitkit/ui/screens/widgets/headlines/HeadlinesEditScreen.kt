@@ -40,7 +40,7 @@ import to.bitkit.ui.theme.Colors
 
 
 @Composable
-fun HeadlinesSettingsScreen(
+fun HeadlinesEditScreen(
     headlinesViewModel: HeadlinesViewModel = hiltViewModel(),
     onClose: () -> Unit,
     onBack: () -> Unit,

@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.WidgetType
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.onboarding.InitializingWalletView
@@ -68,6 +69,8 @@ import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
+import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
+import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
 import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -898,9 +901,35 @@ private fun NavGraphBuilder.widgets(
         AddWidgetsScreen(
             onClose = { navController.navigateToHome() },
             onWidgetSelected = { widgetType ->
-
+                when (widgetType) {
+                    WidgetType.BLOCK -> {}
+                    WidgetType.CALCULATOR -> {}
+                    WidgetType.FACTS -> {}
+                    WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
+                    WidgetType.PRICE -> {}
+                    WidgetType.WEATHER -> {}
+                }
             },
             fiatSymbol = currencyViewModel.getCurrencySymbol()
+        )
+    }
+    composableWithDefaultTransitions<Routes.HeadlinesPreview> {
+        HeadlinesPreviewScreen(
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            navigateEditWidget = { navController.navigate(Routes.HeadlinesEdit) },
+            customPreferences = null // TODO GET DATA
+        )
+    }
+    composableWithDefaultTransitions<Routes.HeadlinesEdit> {
+        HeadlinesEditScreen(
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            navigatePreview = { preferencesData ->
+                //TODO SEND PREFERENCES DATA
+                //TODO POP BACK STACK
+                navController.navigate(Routes.HeadlinesPreview)
+            }
         )
     }
 }
@@ -1288,4 +1317,10 @@ object Routes {
 
     @Serializable
     data object AddWidget
+
+    @Serializable
+    data object HeadlinesPreview
+
+    @Serializable
+    data object HeadlinesEdit
 }
