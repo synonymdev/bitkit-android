@@ -5,5 +5,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WidgetWithPosition(
     val type: WidgetType,
-    val position: Int,
+    val position: Int = 0,
 )

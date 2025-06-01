@@ -37,6 +37,7 @@ class WidgetsRepo @Inject constructor(
     val articlesFlow = widgetsStore.articlesFlow
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
     val showWidgets = settingsStore.data.map { it.showWidgets }
+    val displayedWidgets = widgetsStore.data.map { it.widgets }
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
