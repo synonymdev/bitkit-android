@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,7 +46,7 @@ fun HeadlinesEditScreen(
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
 
-    HeadlinesSettingsContent(
+    HeadlinesEditContent(
         onClose = onClose,
         onBack = onBack,
         headlinePreferences = customHeadlinePreferences,
@@ -66,7 +67,7 @@ fun HeadlinesEditScreen(
 }
 
 @Composable
-fun HeadlinesSettingsContent(
+fun HeadlinesEditContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onClickTime: () -> Unit,
@@ -76,7 +77,9 @@ fun HeadlinesSettingsContent(
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel
 ) {
-    ScreenColumn {
+    ScreenColumn(
+        modifier = Modifier.testTag("headlines_edit_screen")
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__edit),
             onBackClick = onBack,
@@ -84,7 +87,9 @@ fun HeadlinesSettingsContent(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("main_content")
         ) {
             Spacer(modifier = Modifier.height(26.dp))
 
@@ -92,7 +97,9 @@ fun HeadlinesSettingsContent(
                 text = stringResource(R.string.widgets__widget__edit_description).replace(
                     "{name}",
                     stringResource(R.string.widgets__news__name)
-                ), color = Colors.White64
+                ),
+                color = Colors.White64,
+                modifier = Modifier.testTag("edit_description")
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -103,22 +110,31 @@ fun HeadlinesSettingsContent(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
+                    .testTag("time_setting_row")
             ) {
-                BodyM(text = article.timeAgo)
+                BodyM(
+                    text = article.timeAgo,
+                    modifier = Modifier.testTag("time_text")
+                )
 
                 IconButton(
-                    onClick = onClickTime
+                    onClick = onClickTime,
+                    modifier = Modifier.testTag("time_toggle_button")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
                         tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("time_toggle_icon"),
                     )
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(
+                modifier = Modifier.testTag("time_divider")
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -126,20 +142,34 @@ fun HeadlinesSettingsContent(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
+                    .testTag("title_setting_row")
             ) {
-                BodyMB(text = article.title, modifier = Modifier.weight(1f))
+                BodyMB(
+                    text = article.title,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("title_text")
+                )
 
-                IconButton(onClick = {}, enabled = false) {
+                IconButton(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.testTag("title_toggle_button")
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
                         tint = Colors.Brand,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("title_toggle_icon"),
                     )
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(
+                modifier = Modifier.testTag("title_divider")
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -147,40 +177,55 @@ fun HeadlinesSettingsContent(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
                     .fillMaxWidth()
+                    .testTag("source_setting_row")
             ) {
                 CaptionB(
                     text = stringResource(R.string.widgets__widget__source),
                     color = Colors.White64,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("source_label")
                 )
 
-                CaptionB(text = article.publisher, color = Colors.White64)
+                CaptionB(
+                    text = article.publisher,
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("source_text")
+                )
 
                 IconButton(
-                    onClick = onClickShowSource
+                    onClick = onClickShowSource,
+                    modifier = Modifier.testTag("source_toggle_button")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
                         tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("source_toggle_icon"),
                     )
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(
+                modifier = Modifier.testTag("source_divider")
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 
             Row(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .testTag("buttons_row"),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__reset),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("reset_button"),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
                     fullWidth = false,
                     onClick = onClickReset
@@ -188,7 +233,9 @@ fun HeadlinesSettingsContent(
 
                 PrimaryButton(
                     text = stringResource(R.string.common__preview),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("preview_button"),
                     fullWidth = false,
                     onClick = onClickPreview
                 )
@@ -202,7 +249,7 @@ fun HeadlinesSettingsContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HeadlinesSettingsContent(
+        HeadlinesEditContent(
             onClose = {},
             onBack = {},
             onClickShowSource = {},
@@ -224,7 +271,7 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        HeadlinesSettingsContent(
+        HeadlinesEditContent(
             onClose = {},
             onBack = {},
             onClickShowSource = {},
