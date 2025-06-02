@@ -23,6 +23,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -42,6 +43,16 @@ class HomeViewModel @Inject constructor(
 
     // Widget-related flows
     val showWidgets = settingsStore.data.map { it.showWidgets }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val widgetsWithPosition = widgetsRepo.widgetsWithPosition
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val headlinePreferences = widgetsRepo.widgetsDataFlow.map { it.headlinePreferences }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeadlinePreferences())
 
     private val articles: StateFlow<List<ArticleModel>> = widgetsRepo.articlesFlow
         .map { articles -> articles.map { it.toArticleModel() } }
@@ -82,8 +93,6 @@ class HomeViewModel @Inject constructor(
         }
         _currentArticle.value = null
     }
-
-
 
     fun removeSuggestion(suggestion: Suggestion) {
         appStorage.addSuggestionToRemovedList(suggestion)

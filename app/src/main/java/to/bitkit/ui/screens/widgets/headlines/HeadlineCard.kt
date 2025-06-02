@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,36 +66,60 @@ fun HeadlineCard(
         ) {
             if (showWidgetTitle) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.testTag("widget_title_row")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.widget_newspaper),
                         contentDescription = null,
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("widget_title_icon"),
                         tint = Color.Unspecified
                     )
                     Spacer(modifier = Modifier.width(16.dp))
-                    BodyMSB(stringResource(R.string.widgets__news__name))
+                    BodyMSB(
+                        text = stringResource(R.string.widgets__news__name),
+                        modifier = Modifier.testTag("widget_title_text")
+                    )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
             if (showTime && time.isNotEmpty()) {
-                BodyM(text = time)
+                BodyM(
+                    text = time,
+                    modifier = Modifier.testTag("time_text")
+                )
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            BodyMB(text = headline, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            BodyMB(
+                text = headline,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("headline_text")
+            )
 
             if (showSource) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("source_row"),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    BodyS(text = stringResource(R.string.widgets__widget__source), color = Colors.White64)
-                    BodyS(text = source, color = Colors.White64)
+                    BodyS(
+                        text = stringResource(R.string.widgets__widget__source),
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("source_label")
+                    )
+                    BodyS(
+                        text = source,
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("source_text")
+                    )
                 }
             }
         }
