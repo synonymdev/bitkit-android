@@ -37,12 +37,13 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    // Current article for rotation tracking (internal)
     private val _currentArticle = MutableStateFlow<ArticleModel?>(null)
+    private val _currentFact = MutableStateFlow<String?>(null)
 
     init {
         setupStateObservation()
         setupArticleRotation()
+        setupFactRotation()
     }
 
     private fun setupStateObservation() {
@@ -51,15 +52,17 @@ class HomeViewModel @Inject constructor(
                 createSuggestionsFlow(),
                 settingsStore.data,
                 widgetsRepo.widgetsDataFlow,
-                _currentArticle
-            ) { suggestions, settings, widgetsData, currentArticle ->
+                _currentArticle,
+                _currentFact
+            ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
                 HomeUiState(
                     suggestions = suggestions,
                     showWidgets = settings.showWidgets,
                     showWidgetTitles = settings.showWidgetTitles,
                     widgetsWithPosition = widgetsData.widgets,
                     headlinePreferences = widgetsData.headlinePreferences,
-                    currentArticle = currentArticle
+                    currentArticle = currentArticle,
+                    currentFact = currentFact
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -84,12 +87,37 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun setupFactRotation() {
+        viewModelScope.launch {
+            combine(
+                widgetsRepo.factsFlow,
+                settingsStore.data.map { it.showWidgets }
+            ) { factList, showWidgets ->
+                Pair(factList, showWidgets)
+            }.collect { (factList, showWidgets) ->
+                if (showWidgets && factList.isNotEmpty()) {
+                    startFactsRotation(factList = factList)
+                } else {
+                    _currentArticle.value = null
+                }
+            }
+        }
+    }
+
     private suspend fun startArticleRotation(articlesList: List<ArticleModel>) {
         while (_uiState.value.showWidgets && articlesList.isNotEmpty()) {
             _currentArticle.value = articlesList.randomOrNull()
             delay(30.seconds)
         }
         _currentArticle.value = null
+    }
+
+    private suspend fun startFactsRotation(factList: List<String>) {
+        while (_uiState.value.showWidgets && factList.isNotEmpty()) {
+            _currentFact.value = factList.randomOrNull()
+            delay(20.seconds)
+        }
+        _currentFact.value = null
     }
 
     fun removeSuggestion(suggestion: Suggestion) {

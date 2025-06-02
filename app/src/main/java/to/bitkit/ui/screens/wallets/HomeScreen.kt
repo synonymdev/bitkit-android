@@ -85,6 +85,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.pin.PinNavigationSheet
@@ -153,6 +154,7 @@ fun HomeScreen(
                     onDismiss = { appViewModel.hideSheet() },
                     walletViewModel = walletViewModel
                 )
+
                 null -> Unit
             }
         }
@@ -429,22 +431,30 @@ private fun HomeContentView(
                             stringResource(R.string.widgets__widgets),
                             color = Colors.White64
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
-                            Spacer(modifier = Modifier.height(16.dp))
-
+                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
                             homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
-                                when(widgetsWithPosition.type) {
+                                when (widgetsWithPosition.type) {
                                     WidgetType.BLOCK -> Unit //TODO IMPLEMENT
                                     WidgetType.CALCULATOR -> Unit //TODO IMPLEMENT
-                                    WidgetType.FACTS -> Unit //TODO IMPLEMENT
+                                    WidgetType.FACTS -> {
+                                        homeUiState.currentFact?.run {
+                                            FactsCard(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                showWidgetTitle = homeUiState.showWidgetTitles,
+                                                showSource = false, // TODO IMPLEMENT
+                                                headline = homeUiState.currentFact,
+                                            )
+                                        }
+                                    }
                                     WidgetType.NEWS -> {
                                         homeUiState.currentArticle?.run {
                                             HeadlineCard(
+                                                modifier = Modifier.fillMaxWidth(),
                                                 showWidgetTitle = homeUiState.showWidgetTitles,
                                                 showTime = homeUiState.headlinePreferences.showTime,
                                                 showSource = homeUiState.headlinePreferences.showSource,
-                                                modifier = Modifier.fillMaxWidth(),
                                                 headline = title,
                                                 time = timeAgo,
                                                 source = publisher,
@@ -452,6 +462,7 @@ private fun HomeContentView(
                                             )
                                         }
                                     }
+
                                     WidgetType.PRICE -> Unit //TODO IMPLEMENT
                                     WidgetType.WEATHER -> Unit //TODO IMPLEMENT
                                 }

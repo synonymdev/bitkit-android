@@ -14,4 +14,6 @@ data class HomeUiState(
     val widgetsWithPosition: List<WidgetWithPosition> = emptyList(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val currentArticle: ArticleModel? = null,
+    val currentFact: String? = null,
+    val facts: List<String> = listOf(),
 )

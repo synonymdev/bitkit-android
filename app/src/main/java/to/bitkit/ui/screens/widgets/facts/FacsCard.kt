@@ -38,7 +38,6 @@ fun FactsCard(
     showWidgetTitle: Boolean = true,
     showSource: Boolean = true,
     headline: String,
-    source: String,
 ) {
 
     Box(
@@ -95,7 +94,7 @@ fun FactsCard(
                         modifier = Modifier.testTag("source_label")
                     )
                     BodyS(
-                        text = source,
+                        text = "synonym.to",
                         color = Colors.White64,
                         modifier = Modifier.testTag("source_text")
                     )
@@ -119,19 +118,16 @@ private fun Preview() {
                 showWidgetTitle = true,
                 showSource = true,
                 headline = "Priced in Bitcoin, products can become cheaper over time.",
-                source = "synonym.to",
             )
             FactsCard(
                 showWidgetTitle = true,
                 showSource = false,
                 headline = "Priced in Bitcoin, products can become cheaper over time.",
-                source = "synonym.to",
             )
             FactsCard(
                 showWidgetTitle = false,
                 showSource = false,
                 headline = "Priced in Bitcoin, products can become cheaper over time.",
-                source = "synonym.to",
             )
         }
     }
