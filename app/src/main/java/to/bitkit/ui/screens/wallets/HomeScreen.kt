@@ -57,9 +57,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
-import to.bitkit.models.WidgetWithPosition
-import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -167,28 +164,18 @@ fun HomeScreen(
                 startDestination = HomeRoutes.Home,
             ) {
                 composable<HomeRoutes.Home> {
-                    val homeViewModel: HomeViewModel = hiltViewModel()
-                    val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
-                    val widgetWithPosition by homeViewModel.widgetsWithPosition.collectAsStateWithLifecycle()
-                    val showWidgetTitles by homeViewModel.showWidgetTitles.collectAsStateWithLifecycle()
-                    val headlinePreferences by homeViewModel.headlinePreferences.collectAsStateWithLifecycle()
-                    val showWidgets by homeViewModel.showWidgets.collectAsStateWithLifecycle()
                     val context = LocalContext.current
+                    val homeViewModel: HomeViewModel = hiltViewModel()
+                    val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
                     val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
-                    val article by homeViewModel.currentArticle.collectAsStateWithLifecycle()
 
                     HomeContentView(
-                        uiState = uiState,
-                        showWidgets = showWidgets,
-                        article = article,
-                        showWidgetTitles = showWidgetTitles,
-                        widgetsWithPosition = widgetWithPosition,
-                        headlinePreferences = headlinePreferences,
-                        suggestions = suggestions,
+                        mainUiState = uiState,
+                        homeUiState = homeUiState,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
                         onRefresh = {
@@ -336,13 +323,8 @@ fun HomeScreen(
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeContentView(
-    uiState: MainUiState,
-    article: ArticleModel?,
-    widgetsWithPosition: List<WidgetWithPosition>,
-    showWidgetTitles: Boolean,
-    headlinePreferences: HeadlinePreferences,
-    showWidgets: Boolean,
-    suggestions: List<Suggestion>,
+    mainUiState: MainUiState,
+    homeUiState: HomeUiState,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
     onClickAddWidget: () -> Unit,
@@ -364,7 +346,7 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-        val pullRefreshState = rememberPullRefreshState(refreshing = uiState.isRefreshing, onRefresh = onRefresh)
+        val pullRefreshState = rememberPullRefreshState(refreshing = mainUiState.isRefreshing, onRefresh = onRefresh)
 
         Box(
             modifier = Modifier
@@ -409,7 +391,7 @@ private fun HomeContentView(
                         )
                     }
 
-                    AnimatedVisibility(suggestions.isNotEmpty()) {
+                    AnimatedVisibility(homeUiState.suggestions.isNotEmpty()) {
                         val state = rememberLazyListState()
                         val snapBehavior = rememberSnapFlingBehavior(
                             lazyListState = state,
@@ -426,7 +408,7 @@ private fun HomeContentView(
                                 state = state,
                                 flingBehavior = snapBehavior
                             ) {
-                                items(suggestions, key = { it.name }) { item ->
+                                items(homeUiState.suggestions, key = { it.name }) { item ->
                                     SuggestionCard(
                                         gradientColor = item.color,
                                         title = stringResource(item.title),
@@ -441,7 +423,7 @@ private fun HomeContentView(
                         }
                     }
 
-                    if (showWidgets) {
+                    if (homeUiState.showWidgets) {
                         Spacer(modifier = Modifier.height(32.dp))
                         Text13Up(
                             stringResource(R.string.widgets__widgets),
@@ -451,22 +433,22 @@ private fun HomeContentView(
                         Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            widgetsWithPosition.map { widgetsWithPosition ->
+                            homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
                                 when(widgetsWithPosition.type) {
                                     WidgetType.BLOCK -> Unit //TODO IMPLEMENT
                                     WidgetType.CALCULATOR -> Unit //TODO IMPLEMENT
                                     WidgetType.FACTS -> Unit //TODO IMPLEMENT
                                     WidgetType.NEWS -> {
-                                        article?.let {
+                                        homeUiState.currentArticle?.run {
                                             HeadlineCard(
-                                                showWidgetTitle = showWidgetTitles,
-                                                showTime = headlinePreferences.showTime,
-                                                showSource = headlinePreferences.showSource,
+                                                showWidgetTitle = homeUiState.showWidgetTitles,
+                                                showTime = homeUiState.headlinePreferences.showTime,
+                                                showSource = homeUiState.headlinePreferences.showSource,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                headline = article.title,
-                                                time = article.timeAgo,
-                                                source = article.publisher,
-                                                link = article.link
+                                                headline = title,
+                                                time = timeAgo,
+                                                source = publisher,
+                                                link = link
                                             )
                                         }
                                     }
@@ -514,7 +496,7 @@ private fun HomeContentView(
             }
 
             PullRefreshIndicator(
-                refreshing = uiState.isRefreshing,
+                refreshing = mainUiState.isRefreshing,
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
@@ -561,19 +543,14 @@ object HomeRoutes {
 private fun HomeContentViewPreview() {
     AppThemeSurface {
         HomeContentView(
-            uiState = MainUiState(),
-            suggestions = Suggestion.entries.toList(),
+            mainUiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
             onClickSuggestion = {},
             onRemoveSuggestion = {},
             onClickAddWidget = {},
-            article = null,
-            showWidgets = true,
-            widgetsWithPosition = listOf(),
-            showWidgetTitles = true,
-            headlinePreferences = HeadlinePreferences()
+            homeUiState = HomeUiState()
         )
     }
 }
