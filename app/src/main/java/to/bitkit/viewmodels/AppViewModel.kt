@@ -62,6 +62,8 @@ import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
 
 
+private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -262,8 +264,11 @@ class AppViewModel @Inject constructor(
                     SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
 
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
-                    SendEvent.SwipeToPay -> onPay()
+                    SendEvent.SwipeToPay -> onSwipeToPay()
                     SendEvent.Reset -> resetSendState()
+                    SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning()
+                    SendEvent.DismissAmountWarning -> onDismissAmountWarning()
+                    SendEvent.PayConfirmed -> onConfirmPay()
                 }
             }
         }
@@ -530,65 +535,95 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onPay() {
+    private fun onSwipeToPay() {
+        Logger.debug("Swipe to pay event, checking send confirmation conditions")
         viewModelScope.launch {
             val amount = _sendUiState.value.amount
-            when (_sendUiState.value.payMethod) {
-                SendMethod.ONCHAIN -> {
-                    val address = _sendUiState.value.address
-                    val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
-                        .getOrNull()
-                        ?: return@launch // TODO show error
-                    val result = sendOnchain(validatedAddress.address, amount)
-                    if (result.isSuccess) {
-                        val txId = result.getOrNull()
-                        val tags = _sendUiState.value.selectedTags
-                        walletRepo.attachTagsToActivity(
-                            paymentHashOrTxId = txId,
-                            type = ActivityFilter.ONCHAIN,
-                            txType = PaymentType.SENT,
-                            tags = tags
-                        )
-                        Logger.info("Onchain send result txid: $txId")
-                        setSendEffect(
-                            SendEffect.PaymentSuccess(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.ONCHAIN,
-                                    direction = NewTransactionSheetDirection.SENT,
-                                    sats = amount.toLong(),
-                                )
+
+            val sendAmountWarningHandled = handleSendAmountWarningIfApplicable(amount)
+            if (sendAmountWarningHandled) return@launch // await for dialog UI interaction
+
+            _sendUiState.update { it.copy(shouldConfirmPay = true) }
+        }
+    }
+
+    private suspend fun handleSendAmountWarningIfApplicable(amountSats: ULong): Boolean {
+        val settings = settingsStore.data.first()
+        if (!settings.enableSendAmountWarning || _sendUiState.value.showAmountWarningDialog) return false
+
+        val amountInUsd = currencyService.convertSatsToFiat(amountSats.toLong(), "USD")
+        if (amountInUsd <= SEND_AMOUNT_WARNING_THRESHOLD) return false
+
+        Logger.debug("Showing send amount warning for $amountSats sats = $$amountInUsd USD")
+
+        _sendUiState.update {
+            it.copy(showAmountWarningDialog = true)
+        }
+
+        return true
+    }
+
+    private suspend fun proceedWithPayment() {
+        delay(300) // wait for screen transitions when applicable
+
+        val amount = _sendUiState.value.amount
+        when (_sendUiState.value.payMethod) {
+            SendMethod.ONCHAIN -> {
+                val address = _sendUiState.value.address
+                val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
+                    .getOrElse { e ->
+                        Logger.error("Invalid bitcoin send address: '$address'", e)
+                        toast(Exception("Invalid bitcoin send address"))
+                        return // TODO handle error
+                    }
+
+                val result = sendOnchain(validatedAddress.address, amount)
+                if (result.isSuccess) {
+                    val txId = result.getOrNull()
+                    val tags = _sendUiState.value.selectedTags
+                    walletRepo.attachTagsToActivity(
+                        paymentHashOrTxId = txId,
+                        type = ActivityFilter.ONCHAIN,
+                        txType = PaymentType.SENT,
+                        tags = tags
+                    )
+                    Logger.info("Onchain send result txid: $txId")
+                    setSendEffect(
+                        SendEffect.PaymentSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.ONCHAIN,
+                                direction = NewTransactionSheetDirection.SENT,
+                                sats = amount.toLong(),
                             )
                         )
-                        resetSendState()
-                    } else {
-                        // TODO error UI
-                        Logger.error("Error sending onchain payment", result.exceptionOrNull())
-                    }
+                    )
+                } else {
+                    // TODO error UI
+                    Logger.error("Error sending onchain payment", result.exceptionOrNull())
                 }
+            }
 
-                SendMethod.LIGHTNING -> {
-                    val bolt11 = _sendUiState.value.bolt11 ?: return@launch // TODO show error
-                    // Determine if we should override amount
-                    val decodedInvoice = _sendUiState.value.decodedInvoice
-                    val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
-                    val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
-                    val result = sendLightning(bolt11, paymentAmount)
-                    if (result.isSuccess) {
-                        val paymentHash = result.getOrNull()
-                        Logger.info("Lightning send result payment hash: $paymentHash")
-                        val tags = _sendUiState.value.selectedTags
-                        walletRepo.attachTagsToActivity(
-                            paymentHashOrTxId = paymentHash,
-                            type = ActivityFilter.LIGHTNING,
-                            txType = PaymentType.SENT,
-                            tags = tags
-                        )
-                        setSendEffect(SendEffect.PaymentSuccess())
-                        resetSendState()
-                    } else {
-                        // TODO error UI
-                        Logger.error("Error sending lightning payment", result.exceptionOrNull())
-                    }
+            SendMethod.LIGHTNING -> {
+                val bolt11 = _sendUiState.value.bolt11 ?: return // TODO show error
+                // Determine if we should override amount
+                val decodedInvoice = _sendUiState.value.decodedInvoice
+                val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
+                val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
+                val result = sendLightning(bolt11, paymentAmount)
+                if (result.isSuccess) {
+                    val paymentHash = result.getOrNull()
+                    Logger.info("Lightning send result payment hash: $paymentHash")
+                    val tags = _sendUiState.value.selectedTags
+                    walletRepo.attachTagsToActivity(
+                        paymentHashOrTxId = paymentHash,
+                        type = ActivityFilter.LIGHTNING,
+                        txType = PaymentType.SENT,
+                        tags = tags
+                    )
+                    setSendEffect(SendEffect.PaymentSuccess())
+                } else {
+                    // TODO error UI
+                    Logger.error("Error sending lightning payment", result.exceptionOrNull())
                 }
             }
         }
@@ -826,6 +861,31 @@ class AppViewModel @Inject constructor(
             mainScreenEffect(MainScreenEffect.ProcessClipboardAutoRead(data))
         }
     }
+
+    private fun onConfirmAmountWarning() {
+        viewModelScope.launch {
+            _sendUiState.update {
+                it.copy(
+                    showAmountWarningDialog = false,
+                    shouldConfirmPay = true,
+                )
+            }
+        }
+    }
+
+    private fun onDismissAmountWarning() {
+        _sendUiState.update {
+            it.copy(showAmountWarningDialog = false)
+        }
+    }
+
+    private fun onConfirmPay() {
+        Logger.debug("Payment checks confirmed, proceeding…")
+        viewModelScope.launch {
+            _sendUiState.update { it.copy(shouldConfirmPay = false) }
+            proceedWithPayment()
+        }
+    }
 }
 
 // region send contract
@@ -842,6 +902,8 @@ data class SendUiState(
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: List<String> = listOf(),
     val decodedInvoice: LightningInvoice? = null,
+    val showAmountWarningDialog: Boolean = false,
+    val shouldConfirmPay: Boolean = false,
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
@@ -878,5 +940,8 @@ sealed class SendEvent {
     data object SpeedAndFee : SendEvent()
     data object PaymentMethodSwitch : SendEvent()
     data object Reset : SendEvent()
+    data object ConfirmAmountWarning : SendEvent()
+    data object DismissAmountWarning : SendEvent()
+    data object PayConfirmed : SendEvent()
 }
 // endregion

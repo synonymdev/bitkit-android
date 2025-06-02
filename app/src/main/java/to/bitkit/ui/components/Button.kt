@@ -143,6 +143,7 @@ fun TertiaryButton(
     size: ButtonSize = ButtonSize.Large,
     fullWidth: Boolean = true,
     enabled: Boolean = true,
+    fullWidth: Boolean = true,
 ) {
     TextButton(
         onClick = onClick,

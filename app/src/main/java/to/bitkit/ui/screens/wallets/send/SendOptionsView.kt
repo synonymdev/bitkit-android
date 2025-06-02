@@ -54,6 +54,14 @@ fun SendOptionsView(
     onComplete: (NewTransactionSheetDetails?) -> Unit,
 ) {
     val context = LocalContext.current
+
+    // Reset on new user-initiated send
+    LaunchedEffect(startDestination) {
+        if (startDestination == SendRoute.Options) {
+            appViewModel.setSendEvent(SendEvent.Reset)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -141,7 +149,7 @@ fun SendOptionsView(
                             ?.savedStateHandle
                             ?.set(PIN_CHECK_RESULT_KEY, true)
                         navController.popBackStack()
-                        appViewModel.setSendEvent(SendEvent.SwipeToPay)
+                        appViewModel.setSendEvent(SendEvent.PayConfirmed)
                     },
                 )
             }
@@ -163,8 +171,6 @@ fun SendOptionsView(
                 SendErrorScreen(
                     errorMessage = route.errorMessage,
                     onRetry = {
-                        appViewModel.setSendEvent(SendEvent.Reset)
-
                         if (startDestination == SendRoute.Options) {
                             navController.navigate(SendRoute.Options) {
                                 popUpTo<SendRoute.Options> { inclusive = true }
