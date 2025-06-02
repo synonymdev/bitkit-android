@@ -141,7 +141,6 @@ fun TertiaryButton(
     icon: (@Composable () -> Unit)? = null,
     isLoading: Boolean = false,
     size: ButtonSize = ButtonSize.Large,
-    fullWidth: Boolean = true,
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
