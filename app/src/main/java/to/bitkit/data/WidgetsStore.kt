@@ -29,6 +29,7 @@ class WidgetsStore @Inject constructor(
 
     val data: Flow<WidgetsData> = store.data
     val articlesFlow: Flow<List<ArticleDTO>> = data.map { it.articles }
+    val factsFlow: Flow<List<String>> = data.map { it.facts }
 
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
@@ -39,6 +40,12 @@ class WidgetsStore @Inject constructor(
     suspend  fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
         store.updateData {
             it.copy(headlinePreferences = preferences)
+        }
+    }
+
+    suspend fun updateFacts(facts: List<String>) {
+        store.updateData {
+            it.copy(facts = facts)
         }
     }
 
@@ -74,5 +81,6 @@ class WidgetsStore @Inject constructor(
 data class WidgetsData(
     val widgets: List<WidgetWithPosition> = emptyList(),
     val articles: List<ArticleDTO> = emptyList(),
-    val headlinePreferences: HeadlinePreferences = HeadlinePreferences()
+    val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
+    val facts: List<String> = emptyList()
 )
