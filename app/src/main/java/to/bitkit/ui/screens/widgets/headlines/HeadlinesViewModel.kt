@@ -27,6 +27,10 @@ class HeadlinesViewModel @Inject constructor(
         .map { it.headlinePreferences }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeadlinePreferences())
 
+    val isHeadlinesImplemented: StateFlow<Boolean> = widgetsRepo.widgetsDataFlow
+        .map { it.widgets.map { widgets -> widgets.type }.contains(WidgetType.NEWS) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     private val articles: StateFlow<List<ArticleModel>> = widgetsRepo.articlesFlow
         .map { articles -> articles.map { it.toArticleModel() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

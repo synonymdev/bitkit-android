@@ -31,7 +31,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -184,7 +184,7 @@ fun HeadlinesSettingsContent(
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                TertiaryButton(
+                SecondaryButton(
                     text = stringResource(R.string.common__reset),
                     modifier = Modifier.weight(1f),
                     enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,

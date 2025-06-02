@@ -54,16 +54,19 @@ fun HeadlinesPreviewScreen(
     val showWidgetTitles by headlinesViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customHeadlinePreferences by remember { mutableStateOf(customPreferences ?: headlinePreferences) }
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
+    val isHeadlinesImplemented by headlinesViewModel.isHeadlinesImplemented.collectAsStateWithLifecycle()
 
     HeadlinesPreviewContent(
         onClose = onClose,
         onBack = onBack,
+        isHeadlinesImplemented = isHeadlinesImplemented,
         headlinePreferences = customHeadlinePreferences,
         showWidgetTitles = showWidgetTitles,
         article = article,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
             headlinesViewModel.deleteWidget()
+            onClose()
         },
         onClickSave = {
             headlinesViewModel.updateHeadlinesPreferences(customHeadlinePreferences)
@@ -79,7 +82,8 @@ fun HeadlinesPreviewContent( //TODO HANDLE NULL CUSTOM PREFERENCES
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean = true,
+    showWidgetTitles: Boolean,
+    isHeadlinesImplemented: Boolean,
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel
 ) {
@@ -157,13 +161,14 @@ fun HeadlinesPreviewContent( //TODO HANDLE NULL CUSTOM PREFERENCES
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__delete),
-                    modifier = Modifier.weight(1f),
-                    enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
-                    fullWidth = false,
-                    onClick = onClickDelete
-                )
+                if (isHeadlinesImplemented) {
+                    SecondaryButton(
+                        text = stringResource(R.string.common__delete),
+                        modifier = Modifier.weight(1f),
+                        fullWidth = false,
+                        onClick = onClickDelete
+                    )
+                }
 
                 PrimaryButton(
                     text = stringResource(R.string.common__save),
@@ -194,7 +199,8 @@ private fun Preview() {
                 title = "How Bitcoin changed El Salvador in more ways",
                 publisher = "bitcoinmagazine.com",
                 link = "bitcoinmagazine.com",
-            )
+            ),
+            isHeadlinesImplemented = false
         )
     }
 }
@@ -216,7 +222,8 @@ private fun Preview2() {
                 title = "How Bitcoin changed El Salvador in more ways",
                 publisher = "bitcoinmagazine.com",
                 link = "bitcoinmagazine.com",
-            )
+            ),
+            isHeadlinesImplemented = true
         )
     }
 }
