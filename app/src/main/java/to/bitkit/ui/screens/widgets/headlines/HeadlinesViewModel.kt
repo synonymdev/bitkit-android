@@ -116,7 +116,7 @@ class HeadlinesViewModel @Inject constructor(
             timeAgo = "21 minutes ago",
             title = "How Bitcoin changed El Salvador in more ways",
             publisher = "bitcoinmagazine.com",
-            link = "bitcoinmagazine.com"
+            link = "https://bitcoinmagazine.com"
         )
     }
 }

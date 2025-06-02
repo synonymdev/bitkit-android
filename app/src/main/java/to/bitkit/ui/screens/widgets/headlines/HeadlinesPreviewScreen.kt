@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -82,7 +83,9 @@ fun HeadlinesPreviewContent(
     headlinePreferences: HeadlinePreferences,
     article: ArticleModel
 ) {
-    ScreenColumn {
+    ScreenColumn(
+        modifier = Modifier.testTag("headlines_preview_screen")
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__nav_title),
             onBackClick = onBack,
@@ -90,34 +93,46 @@ fun HeadlinesPreviewContent(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("main_content")
         ) {
             Spacer(modifier = Modifier.height(26.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("header_row"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
                     text = AnnotatedString(stringResource(R.string.widgets__news__name)),
-                    modifier = Modifier.width(263.dp)
+                    modifier = Modifier
+                        .width(263.dp)
+                        .testTag("widget_title")
                 )
                 Icon(
                     painter = painterResource(R.drawable.widget_newspaper),
                     contentDescription = null,
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier
+                        .size(64.dp)
+                        .testTag("widget_icon")
                 )
             }
 
             BodyM(
                 text = stringResource(R.string.widgets__news__description),
                 color = Colors.White64,
-                modifier = Modifier.padding(vertical = 16.dp)
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .testTag("widget_description")
             )
 
-            HorizontalDivider()
+            HorizontalDivider(
+                modifier = Modifier.testTag("divider")
+            )
 
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__widget__edit),
@@ -128,7 +143,8 @@ fun HeadlinesPreviewContent(
                         stringResource(R.string.widgets__widget__edit_custom)
                     }
                 ),
-                onClick = onClickEdit
+                onClick = onClickEdit,
+                modifier = Modifier.testTag("edit_settings_button")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -136,11 +152,15 @@ fun HeadlinesPreviewContent(
             Text13Up(
                 stringResource(R.string.common__preview),
                 color = Colors.White64,
-                modifier = Modifier.padding(vertical = 16.dp)
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .testTag("preview_label")
             )
 
             HeadlineCard(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("headline_card"),
                 showWidgetTitle = showWidgetTitles,
                 showTime = headlinePreferences.showTime,
                 showSource = headlinePreferences.showSource,
@@ -153,13 +173,16 @@ fun HeadlinesPreviewContent(
             Row(
                 modifier = Modifier
                     .padding(vertical = 21.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .testTag("buttons_row"),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (isHeadlinesImplemented) {
                     SecondaryButton(
                         text = stringResource(R.string.common__delete),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("delete_button"),
                         fullWidth = false,
                         onClick = onClickDelete
                     )
@@ -167,7 +190,9 @@ fun HeadlinesPreviewContent(
 
                 PrimaryButton(
                     text = stringResource(R.string.common__save),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("save_button"),
                     fullWidth = false,
                     onClick = onClickSave
                 )
