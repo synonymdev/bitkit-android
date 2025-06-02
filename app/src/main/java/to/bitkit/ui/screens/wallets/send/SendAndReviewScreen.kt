@@ -48,6 +48,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -82,6 +83,7 @@ fun SendAndReviewScreen(
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
     val isBiometrySupported = rememberBiometricAuthSupported()
 
+    // Handle result from PinCheckScreen
     LaunchedEffect(savedStateHandle) {
         savedStateHandle.getStateFlow<Boolean?>(PIN_CHECK_RESULT_KEY, null)
             .filterNotNull()
@@ -89,6 +91,21 @@ fun SendAndReviewScreen(
                 isLoading = it
                 savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
             }
+    }
+
+    // Handle pay confirm with auth check if needed
+    LaunchedEffect(uiState.shouldConfirmPay) {
+        if (uiState.shouldConfirmPay) {
+            if (isPinEnabled && pinForPayments) {
+                if (isBiometricEnabled && isBiometrySupported) {
+                    showBiometrics = true
+                } else {
+                    onNavigateToPin()
+                }
+            } else {
+                onEvent(SendEvent.PayConfirmed)
+            }
+        }
     }
 
     SendAndReviewContent(
@@ -103,21 +120,13 @@ fun SendAndReviewScreen(
             scope.launch {
                 isLoading = true
                 delay(300)
-                if (isPinEnabled && pinForPayments) {
-                    if (isBiometricEnabled && isBiometrySupported) {
-                        showBiometrics = true
-                    } else {
-                        onNavigateToPin()
-                    }
-                } else {
-                    onEvent(SendEvent.SwipeToPay)
-                }
+                onEvent(SendEvent.SwipeToPay)
             }
         },
         onBiometricsSuccess = {
             isLoading = true
             showBiometrics = false
-            onEvent(SendEvent.SwipeToPay)
+            onEvent(SendEvent.PayConfirmed)
         },
         onBiometricsFailure = {
             isLoading = false
@@ -213,6 +222,24 @@ private fun SendAndReviewContent(
                 onFailure = onBiometricsFailure,
             )
         }
+
+        if (uiState.showAmountWarningDialog) {
+            AppAlertDialog(
+                onDismissRequest = {
+                    onEvent(SendEvent.DismissAmountWarning)
+                    onBack()
+                },
+                title = stringResource(R.string.common__are_you_sure),
+                text = stringResource(R.string.wallet__send_dialog1),
+                confirmButtonText = stringResource(R.string.wallet__send_yes),
+                dismissButtonText = stringResource(R.string.common__cancel),
+                onConfirm = { onEvent(SendEvent.ConfirmAmountWarning) },
+                onDismiss = {
+                    onEvent(SendEvent.DismissAmountWarning)
+                    onBack()
+                },
+            )
+        }
     }
 }
 
@@ -254,7 +281,7 @@ private fun OnChainDescription(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "Normal (₿ 210)") //TODO GET FROM STATE
+                    BodySSB(text = "Normal (₿ 210)") // TODO GET FROM STATE
                     Icon(
                         painterResource(R.drawable.ic_pencil_simple),
                         contentDescription = null,
@@ -284,7 +311,7 @@ private fun OnChainDescription(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "± 20-60 minutes") //TODO GET FROM STATE
+                    BodySSB(text = "± 20-60 minutes") // TODO GET FROM STATE
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
@@ -330,7 +357,7 @@ private fun LightningDescription(
                         tint = Colors.Purple,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(text = "Instant (±$0.01)") //TODO GET FROM STATE
+                    BodySSB(text = "Instant (±$0.01)") // TODO GET FROM STATE
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -427,17 +454,7 @@ private fun PreviewOnChain() {
                 bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
-                decodedInvoice = LightningInvoice(
-                    bolt11 = "bcrt123",
-                    paymentHash = ByteArray(0),
-                    amountSatoshis = 10000uL,
-                    timestampSeconds = 0uL,
-                    expirySeconds = 3600uL,
-                    isExpired = false,
-                    networkType = NetworkType.REGTEST,
-                    payeeNodeId = null,
-                    description = "Some invoice description",
-                ),
+                decodedInvoice = null,
             ),
             isLoading = false,
             showBiometrics = false,
@@ -464,17 +481,35 @@ private fun PreviewBio() {
                 bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
-                decodedInvoice = LightningInvoice(
-                    bolt11 = "bcrt123",
-                    paymentHash = ByteArray(0),
-                    amountSatoshis = 10000uL,
-                    timestampSeconds = 0uL,
-                    expirySeconds = 3600uL,
-                    isExpired = false,
-                    networkType = NetworkType.REGTEST,
-                    payeeNodeId = null,
-                    description = "Some invoice description",
-                ),
+                decodedInvoice = null,
+            ),
+            isLoading = false,
+            showBiometrics = true,
+            onBack = {},
+            onEvent = {},
+            onClickAddTag = {},
+            onClickTag = {},
+            onSwipeToConfirm = {},
+            onBiometricsSuccess = {},
+            onBiometricsFailure = {},
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview
+@Composable
+private fun PreviewDialog() {
+    AppThemeSurface {
+        SendAndReviewContent(
+            uiState = SendUiState(
+                amount = 1234uL,
+                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
+                bolt11 = "lnbcrt1…",
+                payMethod = SendMethod.ONCHAIN,
+                selectedTags = listOf("car", "house", "uber"),
+                decodedInvoice = null,
+                showAmountWarningDialog = true,
             ),
             isLoading = false,
             showBiometrics = true,

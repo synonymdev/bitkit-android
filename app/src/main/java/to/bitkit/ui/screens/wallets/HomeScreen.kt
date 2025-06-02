@@ -99,6 +99,7 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -125,6 +126,7 @@ fun HomeScreen(
                         walletViewModel = walletViewModel,
                         startDestination = sheet.route,
                         onComplete = { txSheet ->
+                            appViewModel.setSendEvent(SendEvent.Reset)
                             appViewModel.hideSheet()
                             txSheet?.let { appViewModel.showNewTransactionSheet(it) }
                         }

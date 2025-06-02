@@ -142,6 +142,7 @@ fun TertiaryButton(
     isLoading: Boolean = false,
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
+    fullWidth: Boolean = true,
 ) {
     TextButton(
         onClick = onClick,
@@ -149,7 +150,7 @@ fun TertiaryButton(
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = PaddingValues(horizontal = size.horizontalPadding),
         modifier = Modifier
-            .fillMaxWidth()
+            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .height(size.height)
             .then(modifier)
     ) {

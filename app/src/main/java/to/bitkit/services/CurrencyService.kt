@@ -69,6 +69,13 @@ class CurrencyService @Inject constructor(
         )
     }
 
+    suspend fun convertSatsToFiat(satsAmount: Long, currency: String): Double {
+        val rates = cachedRates ?: fetchLatestRates()
+        val rate = getCurrentRate(currency, rates) ?: return 0.0
+
+        return convert(satsAmount.toLong(), rate)?.value?.toDouble() ?: 0.0
+    }
+
     fun convertFiatToSats(fiatValue: BigDecimal, rate: FxRate): ULong {
         val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
         val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
