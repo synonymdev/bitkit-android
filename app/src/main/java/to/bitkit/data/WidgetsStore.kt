@@ -51,7 +51,7 @@ class WidgetsStore @Inject constructor(
         if(store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData {
-            it.copy(widgets = it.widgets + WidgetWithPosition(type = type))
+            it.copy(widgets = (it.widgets + WidgetWithPosition(type = type)).sortedBy { it.position })
         }
     }
 

@@ -56,7 +56,10 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
+import to.bitkit.models.WidgetType
+import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -164,7 +167,10 @@ fun HomeScreen(
                 composable<HomeRoutes.Home> {
                     val homeViewModel: HomeViewModel = hiltViewModel()
                     val suggestions by homeViewModel.suggestions.collectAsStateWithLifecycle()
-                    val showWidgets by homeViewModel.showWidgets.collectAsStateWithLifecycle(initialValue = true)
+                    val widgetWithPosition by homeViewModel.widgetsWithPosition.collectAsStateWithLifecycle()
+                    val showWidgetTitles by homeViewModel.showWidgetTitles.collectAsStateWithLifecycle()
+                    val headlinePreferences by homeViewModel.headlinePreferences.collectAsStateWithLifecycle()
+                    val showWidgets by homeViewModel.showWidgets.collectAsStateWithLifecycle()
                     val context = LocalContext.current
                     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
@@ -177,6 +183,9 @@ fun HomeScreen(
                         uiState = uiState,
                         showWidgets = showWidgets,
                         article = article,
+                        showWidgetTitles = showWidgetTitles,
+                        widgetsWithPosition = widgetWithPosition,
+                        headlinePreferences = headlinePreferences,
                         suggestions = suggestions,
                         rootNavController = rootNavController,
                         walletNavController = walletNavController,
@@ -327,6 +336,9 @@ fun HomeScreen(
 private fun HomeContentView(
     uiState: MainUiState,
     article: ArticleModel?,
+    widgetsWithPosition: List<WidgetWithPosition>,
+    showWidgetTitles: Boolean,
+    headlinePreferences: HeadlinePreferences,
     showWidgets: Boolean,
     suggestions: List<Suggestion>,
     onRemoveSuggestion: (Suggestion) -> Unit,
@@ -437,14 +449,28 @@ private fun HomeContentView(
                         Column(modifier = Modifier.fillMaxWidth()) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            article?.let {
-                                HeadlineCard( //TODO CHECK PREFERENCES
-                                    modifier = Modifier.fillMaxWidth(),
-                                    headline = article.title,
-                                    time = article.timeAgo,
-                                    source = article.publisher,
-                                    link = article.link
-                                )
+                            widgetsWithPosition.map { widgetsWithPosition ->
+                                when(widgetsWithPosition.type) {
+                                    WidgetType.BLOCK -> Unit //TODO IMPLEMENT
+                                    WidgetType.CALCULATOR -> Unit //TODO IMPLEMENT
+                                    WidgetType.FACTS -> Unit //TODO IMPLEMENT
+                                    WidgetType.NEWS -> {
+                                        article?.let {
+                                            HeadlineCard(
+                                                showWidgetTitle = showWidgetTitles,
+                                                showTime = headlinePreferences.showTime,
+                                                showSource = headlinePreferences.showSource,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                headline = article.title,
+                                                time = article.timeAgo,
+                                                source = article.publisher,
+                                                link = article.link
+                                            )
+                                        }
+                                    }
+                                    WidgetType.PRICE -> Unit //TODO IMPLEMENT
+                                    WidgetType.WEATHER -> Unit //TODO IMPLEMENT
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(32.dp))
@@ -543,6 +569,9 @@ private fun HomeContentViewPreview() {
             onClickAddWidget = {},
             article = null,
             showWidgets = true,
+            widgetsWithPosition = listOf(),
+            showWidgetTitles = true,
+            headlinePreferences = HeadlinePreferences()
         )
     }
 }
