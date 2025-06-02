@@ -49,7 +49,7 @@ fun HeadlinesPreviewScreen(
     val showWidgetTitles by headlinesViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
-    val isHeadlinesImplemented by headlinesViewModel.isHeadlinesImplemented.collectAsStateWithLifecycle()
+    val isHeadlinesImplemented by headlinesViewModel.isNewsWidgetEnabled.collectAsStateWithLifecycle()
 
     HeadlinesPreviewContent(
         onClose = onClose,
@@ -60,7 +60,7 @@ fun HeadlinesPreviewScreen(
         article = article,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            headlinesViewModel.deleteWidget()
+            headlinesViewModel.removeWidget()
             onClose()
         },
         onClickSave = {

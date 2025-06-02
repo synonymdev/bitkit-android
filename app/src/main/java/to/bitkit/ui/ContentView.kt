@@ -937,8 +937,6 @@ private fun NavGraphBuilder.widgets(
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
                 navigatePreview = { preferencesData ->
-                    //TODO SEND PREFERENCES DATA
-                    //TODO POP BACK STACK
                     navController.navigate(Routes.HeadlinesPreview)
                 }
             )

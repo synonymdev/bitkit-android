@@ -23,71 +23,100 @@ class HeadlinesViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo
 ) : ViewModel() {
 
-    private val headlinePreferences: StateFlow<HeadlinePreferences> = widgetsRepo.widgetsDataFlow
+    // MARK: - Public StateFlows
+
+    val headlinePreferences: StateFlow<HeadlinePreferences> = widgetsRepo.widgetsDataFlow
         .map { it.headlinePreferences }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeadlinePreferences())
-
-    val isHeadlinesImplemented: StateFlow<Boolean> = widgetsRepo.widgetsDataFlow
-        .map { it.widgets.map { widgets -> widgets.type }.contains(WidgetType.NEWS) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    private val articles: StateFlow<List<ArticleModel>> = widgetsRepo.articlesFlow
-        .map { articles -> articles.map { it.toArticleModel() } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val showWidgetTitles = widgetsRepo.showWidgetTitles
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    private val _currentArticle = MutableStateFlow(
-        ArticleModel(
-            timeAgo = "21 minutes ago",
-            title = "How Bitcoin changed El Salvador in more ways",
-            publisher = "bitcoinmagazine.com",
-            link = "bitcoinmagazine.com",
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = HeadlinePreferences()
         )
-    )
-    val currentArticle: StateFlow<ArticleModel> = _currentArticle.asStateFlow()
 
-    private val _customPreferences = MutableStateFlow(headlinePreferences.value)
-    val customPreferences = _customPreferences.asStateFlow()
+    val isNewsWidgetEnabled: StateFlow<Boolean> = widgetsRepo.widgetsDataFlow
+        .map { widgetsData ->
+            widgetsData.widgets.any { it.type == WidgetType.NEWS }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = false
+        )
+
+    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = true
+        )
+
+    val currentArticle: StateFlow<ArticleModel> = widgetsRepo.articlesFlow.map { articles ->
+        articles.map { it.toArticleModel() }.randomOrNull() ?: DEFAULT_ARTICLE
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+        initialValue = DEFAULT_ARTICLE
+    )
+
+    // MARK: - Custom Preferences (for settings UI)
+
+    private val _customPreferences = MutableStateFlow(HeadlinePreferences())
+    val customPreferences: StateFlow<HeadlinePreferences> = _customPreferences.asStateFlow()
+
 
     init {
-        getArticle()
+        initializeCustomPreferences()
     }
 
+    // MARK: - Public Methods
+
     fun toggleShowTime() {
-        _customPreferences.update { it.copy(showTime = !it.showTime) }
+        _customPreferences.update { preferences ->
+            preferences.copy(showTime = !preferences.showTime)
+        }
     }
 
     fun toggleShowSource() {
-        _customPreferences.update { it.copy(showSource = !it.showSource) }
+        _customPreferences.update { preferences ->
+            preferences.copy(showSource = !preferences.showSource)
+        }
     }
 
-    fun resetCustomPreferences (){
-        _customPreferences.update { HeadlinePreferences() }
+    fun resetCustomPreferences() {
+        _customPreferences.value = HeadlinePreferences()
     }
 
     fun savePreferences() {
-        updateHeadlinesPreferences(_customPreferences.value)
-    }
-
-    private fun updateHeadlinesPreferences(preferences: HeadlinePreferences) = viewModelScope.launch {
-        widgetsRepo.updateHeadlinePreferences(preferences)
-        widgetsRepo.addWidget(WidgetType.NEWS)
-    }
-
-    fun deleteWidget() = viewModelScope.launch {
-        widgetsRepo.deleteWidget(WidgetType.NEWS)
-    }
-
-    private fun getArticle() {
         viewModelScope.launch {
-            articles.collect { articles ->
-                if (articles.isNotEmpty()) {
-                    _currentArticle.update { articles.random() }
-                }
-            }
-
+            widgetsRepo.updateHeadlinePreferences(_customPreferences.value)
+            widgetsRepo.addWidget(WidgetType.NEWS)
         }
+    }
+
+    fun removeWidget() {
+        viewModelScope.launch {
+            widgetsRepo.deleteWidget(WidgetType.NEWS)
+        }
+    }
+
+    // MARK: - Private Methods
+
+    private fun initializeCustomPreferences() {
+        viewModelScope.launch {
+            headlinePreferences.collect { preferences ->
+                _customPreferences.value = preferences
+            }
+        }
+    }
+
+    companion object {
+        private const val SUBSCRIPTION_TIMEOUT = 5000L
+
+        private val DEFAULT_ARTICLE = ArticleModel(
+            timeAgo = "21 minutes ago",
+            title = "How Bitcoin changed El Salvador in more ways",
+            publisher = "bitcoinmagazine.com",
+            link = "bitcoinmagazine.com"
+        )
     }
 }
