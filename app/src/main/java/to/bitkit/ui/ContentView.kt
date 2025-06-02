@@ -71,6 +71,7 @@ import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
+import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
 import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -913,24 +914,35 @@ private fun NavGraphBuilder.widgets(
             fiatSymbol = currencyViewModel.getCurrencySymbol()
         )
     }
-    composableWithDefaultTransitions<Routes.HeadlinesPreview> {
-        HeadlinesPreviewScreen(
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-            navigateEditWidget = { navController.navigate(Routes.HeadlinesEdit) },
-            customPreferences = null // TODO GET DATA
-        )
-    }
-    composableWithDefaultTransitions<Routes.HeadlinesEdit> {
-        HeadlinesEditScreen(
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-            navigatePreview = { preferencesData ->
-                //TODO SEND PREFERENCES DATA
-                //TODO POP BACK STACK
-                navController.navigate(Routes.HeadlinesPreview)
-            }
-        )
+    navigation<Routes.Headlines>(
+        startDestination = Routes.HeadlinesPreview
+    ) {
+        composableWithDefaultTransitions<Routes.HeadlinesPreview> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
+            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
+
+            HeadlinesPreviewScreen(
+                headlinesViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigateEditWidget = { navController.navigate(Routes.HeadlinesEdit) },
+            )
+        }
+        composableWithDefaultTransitions<Routes.HeadlinesEdit> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
+            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
+
+            HeadlinesEditScreen(
+                headlinesViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigatePreview = { preferencesData ->
+                    //TODO SEND PREFERENCES DATA
+                    //TODO POP BACK STACK
+                    navController.navigate(Routes.HeadlinesPreview)
+                }
+            )
+        }
     }
 }
 
@@ -1317,6 +1329,9 @@ object Routes {
 
     @Serializable
     data object AddWidget
+
+    @Serializable
+    data object Headlines
 
     @Serializable
     data object HeadlinesPreview

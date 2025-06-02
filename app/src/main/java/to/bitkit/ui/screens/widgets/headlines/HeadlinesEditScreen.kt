@@ -13,16 +13,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.ArticleModel
@@ -41,13 +37,12 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun HeadlinesEditScreen(
-    headlinesViewModel: HeadlinesViewModel = hiltViewModel(),
+    headlinesViewModel: HeadlinesViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigatePreview: (HeadlinePreferences) -> Unit
 ) {
-    val headlinePreferences by headlinesViewModel.headlinePreferences.collectAsStateWithLifecycle()
-    var customHeadlinePreferences by remember { mutableStateOf(headlinePreferences) }
+    val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
 
     HeadlinesSettingsContent(
@@ -56,14 +51,13 @@ fun HeadlinesEditScreen(
         headlinePreferences = customHeadlinePreferences,
         article = article,
         onClickTime = {
-            customHeadlinePreferences = customHeadlinePreferences.copy(showTime = !customHeadlinePreferences.showTime)
+            headlinesViewModel.toggleShowTime()
         },
         onClickShowSource = {
-            customHeadlinePreferences =
-                customHeadlinePreferences.copy(showSource = !customHeadlinePreferences.showSource)
+            headlinesViewModel.toggleShowSource()
         },
         onClickReset = {
-            customHeadlinePreferences = HeadlinePreferences()
+            headlinesViewModel.resetCustomPreferences()
         },
         onClickPreview = {
             navigatePreview(customHeadlinePreferences)

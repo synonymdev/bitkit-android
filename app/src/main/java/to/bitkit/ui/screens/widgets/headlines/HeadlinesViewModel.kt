@@ -23,7 +23,7 @@ class HeadlinesViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo
 ) : ViewModel() {
 
-    val headlinePreferences: StateFlow<HeadlinePreferences> = widgetsRepo.widgetsDataFlow
+    private val headlinePreferences: StateFlow<HeadlinePreferences> = widgetsRepo.widgetsDataFlow
         .map { it.headlinePreferences }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeadlinePreferences())
 
@@ -48,11 +48,30 @@ class HeadlinesViewModel @Inject constructor(
     )
     val currentArticle: StateFlow<ArticleModel> = _currentArticle.asStateFlow()
 
+    private val _customPreferences = MutableStateFlow(headlinePreferences.value)
+    val customPreferences = _customPreferences.asStateFlow()
+
     init {
         getArticle()
     }
 
-    fun updateHeadlinesPreferences(preferences: HeadlinePreferences) = viewModelScope.launch {
+    fun toggleShowTime() {
+        _customPreferences.update { it.copy(showTime = !it.showTime) }
+    }
+
+    fun toggleShowSource() {
+        _customPreferences.update { it.copy(showSource = !it.showSource) }
+    }
+
+    fun resetCustomPreferences (){
+        _customPreferences.update { HeadlinePreferences() }
+    }
+
+    fun savePreferences() {
+        updateHeadlinesPreferences(_customPreferences.value)
+    }
+
+    private fun updateHeadlinesPreferences(preferences: HeadlinePreferences) = viewModelScope.launch {
         widgetsRepo.updateHeadlinePreferences(preferences)
         widgetsRepo.addWidget(WidgetType.NEWS)
     }

@@ -13,8 +13,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,7 +21,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.widget.ArticleModel
@@ -44,15 +41,13 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun HeadlinesPreviewScreen(
-    headlinesViewModel: HeadlinesViewModel = hiltViewModel(),
+    headlinesViewModel: HeadlinesViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
-    customPreferences: HeadlinePreferences?
 ) {
-    val headlinePreferences by headlinesViewModel.headlinePreferences.collectAsStateWithLifecycle()
     val showWidgetTitles by headlinesViewModel.showWidgetTitles.collectAsStateWithLifecycle()
-    val customHeadlinePreferences by remember { mutableStateOf(customPreferences ?: headlinePreferences) }
+    val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
     val isHeadlinesImplemented by headlinesViewModel.isHeadlinesImplemented.collectAsStateWithLifecycle()
 
@@ -69,14 +64,14 @@ fun HeadlinesPreviewScreen(
             onClose()
         },
         onClickSave = {
-            headlinesViewModel.updateHeadlinesPreferences(customHeadlinePreferences)
+            headlinesViewModel.savePreferences()
             onClose()
         },
     )
 }
 
 @Composable
-fun HeadlinesPreviewContent( //TODO HANDLE NULL CUSTOM PREFERENCES
+fun HeadlinesPreviewContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
