@@ -1,140 +1,306 @@
 package to.bitkit.ui.settings.backups
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.EaseOutQuart
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.Logger
+import to.bitkit.utils.bip39Words
 
 @Composable
 fun BackupWalletScreen(
     navController: NavController,
 ) {
+    val app = appViewModel ?: return
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+
+    var mnemonic by remember { mutableStateOf("") }
+    var showMnemonic by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mnemonic = "" // Clear mnemonic from memory when leaving screen
+        }
+    }
+
+    BackupWalletContent(
+        mnemonic = mnemonic,
+        showMnemonic = showMnemonic,
+        isLoading = isLoading,
+        onBackClick = { navController.popBackStack() },
+        onRevealClick = {
+            scope.launch {
+                try {
+                    isLoading = true
+                    delay(200)
+                    val loadedMnemonic = app.loadMnemonic()!!
+                    mnemonic = loadedMnemonic
+                    showMnemonic = true
+                } catch (e: Throwable) {
+                    Logger.error("Failed to load mnemonic", e)
+                    app.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.security__mnemonic_error),
+                        description = context.getString(R.string.security__mnemonic_error_description),
+                    )
+                }
+            }
+        },
+        onCopyClick = {
+            clipboard.setText(AnnotatedString(mnemonic))
+        },
+    )
+}
+
+@Composable
+private fun BackupWalletContent(
+    mnemonic: String,
+    showMnemonic: Boolean,
+    isLoading: Boolean,
+    onBackClick: () -> Unit,
+    onRevealClick: () -> Unit,
+    onCopyClick: () -> Unit,
+) {
+    val blurRadius by animateFloatAsState(
+        targetValue = if (showMnemonic) 0f else 10f,
+        animationSpec = tween(durationMillis = 800, easing = EaseOutQuart),
+        label = "blurRadius"
+    )
+
+    val buttonAlpha by animateFloatAsState(
+        targetValue = if (showMnemonic) 0f else 1f,
+        animationSpec = tween(durationMillis = 400),
+        label = "buttonAlpha"
+    )
+
+    val mnemonicWords = if (mnemonic.isNotEmpty()) mnemonic.split(" ") else emptyList()
+
     ScreenColumn {
-        AppTopBar(stringResource(R.string.security__mnemonic_your), onBackClick = { navController.popBackStack() })
+        AppTopBar(
+            titleText = stringResource(R.string.security__mnemonic_your),
+            onBackClick = onBackClick,
+        )
+
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
-                .padding(horizontal = 16.dp)
+                .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            val app = appViewModel ?: return@Column
+            Spacer(modifier = Modifier.height(16.dp))
 
-            var mnemonic by remember { mutableStateOf("") }
-            var showMnemonic by remember { mutableStateOf(false) }
-            val clipboard = LocalClipboardManager.current
-            val scope = rememberCoroutineScope()
+            AnimatedContent(
+                targetState = showMnemonic,
+                transitionSpec = { fadeIn(tween(300)).togetherWith(fadeOut(tween(300))) },
+                label = "topText"
+            ) { isRevealed ->
+                BodyM(
+                    text = if (isRevealed) {
+                        stringResource(R.string.security__mnemonic_write).replace("{length}", "${mnemonicWords.size}")
+                    } else {
+                        stringResource(R.string.security__mnemonic_use)
+                    },
+                    color = Colors.White64,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
-            val mnemonicWords = mnemonic.split(" ")
-            val columnLength = mnemonicWords.size / 2
+            Spacer(modifier = Modifier.height(32.dp))
 
-            Column {
-                if (showMnemonic) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Write down these ${mnemonicWords.size} words in the right order and store them in a safe place.",
-                        textAlign = TextAlign.Center,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(color = Colors.White10)
+                        .clickable(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
+                        .padding(horizontal = 32.dp, vertical = 32.dp)
+                ) {
+                    MnemonicWordsGrid(
+                        actualWords = mnemonicWords,
+                        showMnemonic = showMnemonic,
+                        blurRadius = blurRadius,
                     )
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Row(
+                }
+
+                if (buttonAlpha > 0f) {
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                clipboard.setText(AnnotatedString(mnemonic))
-                            }
-                            .background(
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
-                                shape = MaterialTheme.shapes.medium,
-                            )
-                            .padding(16.dp)
+                            .matchParentSize()
                     ) {
-                        // First Column
-                        Column(Modifier.weight(1f)) {
-                            mnemonicWords.take(columnLength).forEachIndexed { index, word ->
-                                Row(Modifier.padding(vertical = 4.dp)) {
-                                    Text(
-                                        text = "${index + 1}.",
-                                        color = Colors.White64,
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(text = word)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.weight(0.6f))
-                        // Second Column
-                        Column(Modifier.weight(1f)) {
-                            mnemonicWords.drop(columnLength).forEachIndexed { index, word ->
-                                Row(Modifier.padding(vertical = 4.dp)) {
-                                    Text(
-                                        text = "${columnLength + index + 1}.",
-                                        color = Colors.White64,
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(text = word)
-                                }
-                            }
-                        }
+                        PrimaryButton(
+                            text = stringResource(R.string.security__mnemonic_reveal),
+                            fullWidth = false,
+                            isLoading = isLoading,
+                            onClick = onRevealClick,
+                            color = Colors.Black50,
+                            modifier = Modifier.alpha(buttonAlpha)
+                        )
                     }
-                } else {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                try {
-                                    mnemonic = app.loadMnemonic()!!
-                                    showMnemonic = true
-                                } catch (e: Exception) {
-                                    Logger.error("Failed to load mnemonic", e)
-                                    app.toast(
-                                        type = Toast.ToastType.ERROR,
-                                        title = "Error",
-                                        description = "Could not retrieve backup phrase",
-                                    )
-                                }
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = "Tap To Reveal")
+                }
+            }
+
+            BodyS(
+                text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
+                color = Colors.White64,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MnemonicWordsGrid(
+    actualWords: List<String>,
+    showMnemonic: Boolean,
+    blurRadius: Float,
+) {
+    val placeholderWords = remember { List(24) { "secret" } }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .blur(radius = blurRadius.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+    ) {
+        Crossfade(
+            targetState = showMnemonic,
+            animationSpec = tween(durationMillis = 600),
+            label = "mnemonicCrossfade"
+        ) { isRevealed ->
+            val wordsToShow = if (isRevealed && actualWords.isNotEmpty()) actualWords else placeholderWords
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    wordsToShow.take(wordsToShow.size / 2).forEachIndexed { index, word ->
+                        WordItem(
+                            number = index + 1,
+                            word = word
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    wordsToShow.drop(wordsToShow.size / 2).forEachIndexed { index, word ->
+                        WordItem(
+                            number = wordsToShow.size / 2 + index + 1,
+                            word = word
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WordItem(
+    number: Int,
+    word: String,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BodyMSB(text = "$number.", color = Colors.White64)
+        Spacer(modifier = Modifier.width(8.dp))
+        BodyMSB(text = word, color = Colors.White)
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BackupWalletContent(
+            mnemonic = "",
+            showMnemonic = false,
+            isLoading = false,
+            onBackClick = {},
+            onRevealClick = {},
+            onCopyClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewShown() {
+    AppThemeSurface {
+        BackupWalletContent(
+            mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
+            showMnemonic = true,
+            isLoading = false,
+            onBackClick = {},
+            onRevealClick = {},
+            onCopyClick = {},
+        )
     }
 }
