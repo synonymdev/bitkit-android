@@ -25,6 +25,12 @@ import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 
+object SheetSize {
+    const val LARGE = .875f
+    const val MEDIUM = .755f
+    const val SMALL = .5f
+}
+
 sealed class BottomSheetType {
     data class Send(val route: SendRoute = SendRoute.Options) : BottomSheetType()
     data object Receive : BottomSheetType()

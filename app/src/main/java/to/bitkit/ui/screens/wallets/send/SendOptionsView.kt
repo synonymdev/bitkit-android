@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.util.gradientBackground
@@ -65,7 +66,7 @@ fun SendOptionsView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.875f)
+            .fillMaxHeight(SheetSize.LARGE)
             .imePadding()
     ) {
         val navController = rememberNavController()
