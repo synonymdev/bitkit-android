@@ -104,8 +104,6 @@ fun ShowMnemonicScreen(
                         title = context.getString(R.string.security__mnemonic_error),
                         description = context.getString(R.string.security__mnemonic_error_description),
                     )
-                } finally {
-                    isLoading = false
                 }
             }
         },

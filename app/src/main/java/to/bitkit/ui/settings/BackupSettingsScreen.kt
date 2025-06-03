@@ -11,8 +11,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.navigateToBackupWalletSettings
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.navigateToRestoreWalletSettings
 import to.bitkit.ui.scaffold.AppTopBar
@@ -24,8 +25,10 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun BackupSettingsScreen(
     navController: NavController,
 ) {
+    val app = appViewModel ?: return
+
     BackupSettingsScreenContent(
-        onBackupClick = { navController.navigateToBackupWalletSettings() },
+        onBackupClick = { app.showSheet(BottomSheetType.BackupNavigation) },
         onResetAndRestoreClick = { navController.navigateToRestoreWalletSettings() },
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },

@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 
 @Composable
 fun BackupNavigationSheet(
@@ -27,7 +27,7 @@ fun BackupNavigationSheet(
             navController = navController,
             startDestination = BackupRoute.ShowMnemonic,
         ) {
-            composable<BackupRoute.ShowMnemonic> {
+            composableWithDefaultTransitions<BackupRoute.ShowMnemonic> {
                 ShowMnemonicScreen(
                     onContinue = { seed, bip39Passphrase ->
                         if (bip39Passphrase.isNotEmpty()) {
@@ -39,7 +39,7 @@ fun BackupNavigationSheet(
                     onDismiss = onDismiss,
                 )
             }
-            composable<BackupRoute.ShowPassphrase> { backStackEntry ->
+            composableWithDefaultTransitions<BackupRoute.ShowPassphrase> { backStackEntry ->
                 val route = backStackEntry.toRoute<BackupRoute.ShowPassphrase>()
                 ShowPassphraseScreen(
                     seed = route.seed,
@@ -50,7 +50,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.ConfirmMnemonic> { backStackEntry ->
+            composableWithDefaultTransitions<BackupRoute.ConfirmMnemonic> { backStackEntry ->
                 val route = backStackEntry.toRoute<BackupRoute.ConfirmMnemonic>()
                 ConfirmMnemonicScreen(
                     seed = route.seed,
@@ -65,7 +65,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.ConfirmPassphrase> { backStackEntry ->
+            composableWithDefaultTransitions<BackupRoute.ConfirmPassphrase> { backStackEntry ->
                 val route = backStackEntry.toRoute<BackupRoute.ConfirmPassphrase>()
                 ConfirmPassphraseScreen(
                     bip39Passphrase = route.bip39Passphrase,
@@ -75,7 +75,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.Warning> {
+            composableWithDefaultTransitions<BackupRoute.Warning> {
                 WarningScreen(
                     onContinue = {
                         navController.navigate(BackupRoute.Success)
@@ -83,7 +83,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.Success> {
+            composableWithDefaultTransitions<BackupRoute.Success> {
                 SuccessScreen(
                     onContinue = {
                         navController.navigate(BackupRoute.MultipleDevices)
@@ -91,7 +91,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.MultipleDevices> {
+            composableWithDefaultTransitions<BackupRoute.MultipleDevices> {
                 MultipleDevicesScreen(
                     onContinue = {
                         navController.navigate(BackupRoute.Metadata)
@@ -99,7 +99,7 @@ fun BackupNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<BackupRoute.Metadata> {
+            composableWithDefaultTransitions<BackupRoute.Metadata> {
                 MetadataScreen(
                     onDismiss = onDismiss,
                     onBack = { navController.popBackStack() },

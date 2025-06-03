@@ -27,6 +27,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navOptions
 import androidx.navigation.toRoute
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -35,6 +36,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.BottomSheetType
+import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
@@ -66,11 +68,14 @@ import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
+import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
+import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
+import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
+import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
-import to.bitkit.ui.screens.widgets.facts.FactsPreviewContent
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
@@ -89,7 +94,8 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.backups.BackupWalletScreen
+import to.bitkit.ui.settings.backups.BackupNavigationSheet
+import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.RestoreWalletScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.general.GeneralSettingsScreen
@@ -101,6 +107,7 @@ import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
 import to.bitkit.ui.settings.pin.ChangePinScreen
 import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -119,6 +126,7 @@ import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
@@ -270,225 +278,301 @@ fun ContentView(
         ) {
             AutoReadClipboardHandler()
 
-            NavHost(navController, startDestination = Routes.Home) {
-                home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
-                settings(navController, settingsViewModel)
-                profile(navController, settingsViewModel)
-                shop(navController, settingsViewModel)
-                nodeState(walletViewModel, navController)
-                generalSettings(navController)
-                advancedSettings(navController)
-                aboutSettings(navController)
-                transactionSpeedSettings(navController)
-                securitySettings(navController)
-                disablePin(navController)
-                changePin(navController)
-                changePinNew(navController)
-                changePinConfirm(navController)
-                changePinResult(navController)
-                defaultUnitSettings(currencyViewModel, navController)
-                localCurrencySettings(currencyViewModel, navController)
-                backupSettings(navController)
-                backupWalletSettings(navController)
-                restoreWalletSettings(navController)
-                channelOrdersSettings(navController)
-                orderDetailSettings(navController)
-                cjitDetailSettings(navController)
-                lightning(walletViewModel, navController)
-                devSettings(walletViewModel, navController)
-                regtestSettings(navController)
-                activityItem(activityListViewModel, navController)
-                qrScanner(appViewModel, navController)
-                authCheck(navController)
-                logs(navController)
-                suggestions(navController)
-                widgets(navController, settingsViewModel, currencyViewModel)
-
-                // TODO extract transferNavigation
-                navigation<Routes.TransferRoot>(
-                    startDestination = Routes.TransferIntro,
-                ) {
-                    composable<Routes.TransferIntro> {
-                        TransferIntroScreen(
-                            onContinueClick = {
-                                navController.navigateToTransferFunding()
-                                settingsViewModel.setHasSeenTransferIntro(true)
-                            },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SavingsIntro> {
-                        SavingsIntroScreen(
-                            onContinueClick = {
-                                navController.navigate(Routes.SavingsAvailability)
-                                settingsViewModel.setHasSeenSavingsIntro(true)
-                            },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SavingsAvailability> {
-                        SavingsAvailabilityScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCancelClick = { navController.navigateToHome() },
-                            onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
-                        )
-                    }
-                    composable<Routes.SavingsConfirm> {
-                        SavingsConfirmScreen(
-                            onConfirm = { navController.navigate(Routes.SavingsProgress) },
-                            onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SavingsAdvanced> {
-                        SavingsAdvancedScreen(
-                            onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SavingsProgress> {
-                        SavingsProgressScreen(
-                            onContinueClick = { navController.navigateToHome() },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SpendingIntro> {
-                        SpendingIntroScreen(
-                            onContinueClick = {
-                                navController.navigate(Routes.SpendingAmount)
-                                settingsViewModel.setHasSeenSpendingIntro(true)
-                            },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.SpendingAmount> {
-                        SpendingAmountScreen(
-                            viewModel = transferViewModel,
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                            onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
-                        )
-                    }
-                    composable<Routes.SpendingConfirm> {
-                        SpendingConfirmScreen(
-                            viewModel = transferViewModel,
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                            onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
-                            onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
-                            onConfirm = { navController.navigate(Routes.SettingUp) },
-                        )
-                    }
-                    composable<Routes.SpendingAdvanced> {
-                        SpendingAdvancedScreen(
-                            viewModel = transferViewModel,
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                            onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
-                        )
-                    }
-                    composable<Routes.TransferLiquidity> {
-                        LiquidityScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateToHome() },
-                            onContinueClick = { navController.popBackStack() }
-                        )
-                    }
-                    composable<Routes.SettingUp> {
-                        SettingUpScreen(
-                            viewModel = transferViewModel,
-                            onCloseClick = { navController.navigateToHome() },
-                            onContinueClick = { navController.navigateToHome() },
-                        )
-                    }
-                    composable<Routes.Funding> {
-                        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
-                        FundingScreen(
-                            onTransfer = {
-                                if (!hasSeenSpendingIntro) {
-                                    navController.navigateToTransferSpendingIntro()
-                                } else {
-                                    navController.navigateToTransferSpendingAmount()
+            val currentSheet by appViewModel.currentSheet
+            SheetHost(
+                shouldExpand = currentSheet != null,
+                onDismiss = { appViewModel.hideSheet() },
+                sheets = {
+                    when (val sheet = currentSheet) {
+                        is BottomSheetType.Send -> {
+                            SendOptionsView(
+                                appViewModel = appViewModel,
+                                walletViewModel = walletViewModel,
+                                startDestination = sheet.route,
+                                onComplete = { txSheet ->
+                                    appViewModel.setSendEvent(SendEvent.Reset)
+                                    appViewModel.hideSheet()
+                                    txSheet?.let { appViewModel.showNewTransactionSheet(it) }
                                 }
-                            },
-                            onFund = {
-                                scope.launch {
-                                    // TODO show receive sheet -> ReceiveAmount
-                                    navController.navigateToHome()
-                                    delay(500) // Wait for nav to actually finish
-                                    appViewModel.showSheet(BottomSheetType.Receive)
+                            )
+                        }
+
+                        is BottomSheetType.Receive -> {
+                            val walletUiState by walletViewModel.uiState.collectAsState()
+                            ReceiveQrSheet(
+                                walletState = walletUiState,
+                                navigateToExternalConnection = {
+                                    navController.navigate(Routes.ExternalConnection)
                                 }
+                            )
+                        }
+
+                        is BottomSheetType.ActivityDateRangeSelector -> DateRangeSelectorSheet()
+                        is BottomSheetType.ActivityTagSelector -> TagSelectorSheet()
+
+                        is BottomSheetType.PinSetup -> PinNavigationSheet(
+                            onDismiss = { appViewModel.hideSheet() },
+                        )
+
+                        BottomSheetType.Backup -> BackupSheet(
+                            onDismiss = { appViewModel.hideSheet() },
+                            onBackupClick = {
+                                appViewModel.hideSheet()
+                                appViewModel.showSheet(BottomSheetType.BackupNavigation)
                             },
-                            onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.navigateUp() },
+                            walletViewModel = walletViewModel
                         )
-                    }
-                    composable<Routes.FundingAdvanced> {
-                        FundingAdvancedScreen(
-                            onLnUrl = { navController.navigateToQrScanner() },
-                            onManual = { navController.navigate(Routes.ExternalNav) },
-                            onBackClick = { navController.popBackStack() },
-                            onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+
+                        BottomSheetType.BackupNavigation -> BackupNavigationSheet(
+                            onDismiss = { appViewModel.hideSheet() },
                         )
+
+                        null -> Unit
                     }
-                    navigation<Routes.ExternalNav>(
-                        startDestination = Routes.ExternalConnection,
-                    ) {
-                        composable<Routes.ExternalConnection> {
-                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+                }
+            ) {
+                RootNavHost(
+                    navController = navController,
+                    walletViewModel = walletViewModel,
+                    appViewModel = appViewModel,
+                    activityListViewModel = activityListViewModel,
+                    settingsViewModel = settingsViewModel,
+                    currencyViewModel = currencyViewModel,
+                    transferViewModel = transferViewModel,
+                    scope = scope,
+                )
+            }
+        }
+    }
+}
 
-                            ExternalConnectionScreen(
-                                viewModel = viewModel,
-                                onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
-                                onBackClick = { navController.popBackStack() },
-                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                            )
-                        }
-                        composable<Routes.ExternalAmount> {
-                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+@Composable
+private fun RootNavHost(
+    navController: NavHostController,
+    walletViewModel: WalletViewModel,
+    appViewModel: AppViewModel,
+    activityListViewModel: ActivityListViewModel,
+    settingsViewModel: SettingsViewModel,
+    currencyViewModel: CurrencyViewModel,
+    transferViewModel: TransferViewModel,
+    scope: CoroutineScope,
+) {
+    NavHost(navController, startDestination = Routes.Home) {
+        home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
+        settings(navController, settingsViewModel)
+        profile(navController, settingsViewModel)
+        shop(navController, settingsViewModel)
+        nodeState(walletViewModel, navController)
+        generalSettings(navController)
+        advancedSettings(navController)
+        aboutSettings(navController)
+        transactionSpeedSettings(navController)
+        securitySettings(navController)
+        disablePin(navController)
+        changePin(navController)
+        changePinNew(navController)
+        changePinConfirm(navController)
+        changePinResult(navController)
+        defaultUnitSettings(currencyViewModel, navController)
+        localCurrencySettings(currencyViewModel, navController)
+        backupSettings(navController)
+        restoreWalletSettings(navController)
+        channelOrdersSettings(navController)
+        orderDetailSettings(navController)
+        cjitDetailSettings(navController)
+        lightning(walletViewModel, navController)
+        devSettings(walletViewModel, navController)
+        regtestSettings(navController)
+        activityItem(activityListViewModel, navController)
+        qrScanner(appViewModel, navController)
+        authCheck(navController)
+        logs(navController)
+        suggestions(navController)
+        widgets(navController, settingsViewModel, currencyViewModel)
 
-                            ExternalAmountScreen(
-                                viewModel = viewModel,
-                                onContinue = { navController.navigate(Routes.ExternalConfirm) },
-                                onBackClick = { navController.popBackStack() },
-                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                            )
+        // TODO extract transferNavigation
+        navigation<Routes.TransferRoot>(
+            startDestination = Routes.TransferIntro,
+        ) {
+            composable<Routes.TransferIntro> {
+                TransferIntroScreen(
+                    onContinueClick = {
+                        navController.navigateToTransferFunding()
+                        settingsViewModel.setHasSeenTransferIntro(true)
+                    },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SavingsIntro> {
+                SavingsIntroScreen(
+                    onContinueClick = {
+                        navController.navigate(Routes.SavingsAvailability)
+                        settingsViewModel.setHasSeenSavingsIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SavingsAvailability> {
+                SavingsAvailabilityScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onCancelClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
+                )
+            }
+            composable<Routes.SavingsConfirm> {
+                SavingsConfirmScreen(
+                    onConfirm = { navController.navigate(Routes.SavingsProgress) },
+                    onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SavingsAdvanced> {
+                SavingsAdvancedScreen(
+                    onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SavingsProgress> {
+                SavingsProgressScreen(
+                    onContinueClick = { navController.navigateToHome() },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SpendingIntro> {
+                SpendingIntroScreen(
+                    onContinueClick = {
+                        navController.navigate(Routes.SpendingAmount)
+                        settingsViewModel.setHasSeenSpendingIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.SpendingAmount> {
+                SpendingAmountScreen(
+                    viewModel = transferViewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                )
+            }
+            composable<Routes.SpendingConfirm> {
+                SpendingConfirmScreen(
+                    viewModel = transferViewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
+                    onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
+                    onConfirm = { navController.navigate(Routes.SettingUp) },
+                )
+            }
+            composable<Routes.SpendingAdvanced> {
+                SpendingAdvancedScreen(
+                    viewModel = transferViewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
+                )
+            }
+            composable<Routes.TransferLiquidity> {
+                LiquidityScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.popBackStack() }
+                )
+            }
+            composable<Routes.SettingUp> {
+                SettingUpScreen(
+                    viewModel = transferViewModel,
+                    onCloseClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.navigateToHome() },
+                )
+            }
+            composable<Routes.Funding> {
+                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
+                FundingScreen(
+                    onTransfer = {
+                        if (!hasSeenSpendingIntro) {
+                            navController.navigateToTransferSpendingIntro()
+                        } else {
+                            navController.navigateToTransferSpendingAmount()
                         }
-                        composable<Routes.ExternalConfirm> {
-                            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
-                            val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+                    },
+                    onFund = {
+                        scope.launch {
+                            // TODO show receive sheet -> ReceiveAmount
+                            navController.navigateToHome()
+                            delay(500) // Wait for nav to actually finish
+                            appViewModel.showSheet(BottomSheetType.Receive)
+                        }
+                    },
+                    onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateUp() },
+                )
+            }
+            composable<Routes.FundingAdvanced> {
+                FundingAdvancedScreen(
+                    onLnUrl = { navController.navigateToQrScanner() },
+                    onManual = { navController.navigate(Routes.ExternalNav) },
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                )
+            }
+            navigation<Routes.ExternalNav>(
+                startDestination = Routes.ExternalConnection,
+            ) {
+                composable<Routes.ExternalConnection> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
-                            ExternalConfirmScreen(
-                                viewModel = viewModel,
-                                onConfirm = {
-                                    walletViewModel.refreshState()
-                                    navController.navigate(Routes.ExternalSuccess)
-                                },
-                                onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
-                                onBackClick = { navController.popBackStack() },
-                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                            )
-                        }
-                        composable<Routes.ExternalSuccess> {
-                            ExternalSuccessScreen(
-                                onContinue = { navController.navigateToHome() },
-                                onClose = { navController.navigateToHome() },
-                            )
-                        }
-                        composable<Routes.ExternalFeeCustom> {
-                            ExternalFeeCustomScreen(
-                                onBackClick = { navController.popBackStack() },
-                                onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                            )
-                        }
-                    }
+                    ExternalConnectionScreen(
+                        viewModel = viewModel,
+                        onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
+                        onBackClick = { navController.popBackStack() },
+                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    )
+                }
+                composable<Routes.ExternalAmount> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
+                    ExternalAmountScreen(
+                        viewModel = viewModel,
+                        onContinue = { navController.navigate(Routes.ExternalConfirm) },
+                        onBackClick = { navController.popBackStack() },
+                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    )
+                }
+                composable<Routes.ExternalConfirm> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
+                    ExternalConfirmScreen(
+                        viewModel = viewModel,
+                        onConfirm = {
+                            walletViewModel.refreshState()
+                            navController.navigate(Routes.ExternalSuccess)
+                        },
+                        onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
+                        onBackClick = { navController.popBackStack() },
+                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    )
+                }
+                composable<Routes.ExternalSuccess> {
+                    ExternalSuccessScreen(
+                        onContinue = { navController.navigateToHome() },
+                        onClose = { navController.navigateToHome() },
+                    )
+                }
+                composable<Routes.ExternalFeeCustom> {
+                    ExternalFeeCustomScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    )
                 }
             }
         }
@@ -690,14 +774,6 @@ private fun NavGraphBuilder.backupSettings(
 ) {
     composableWithDefaultTransitions<Routes.BackupSettings> {
         BackupSettingsScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.backupWalletSettings(
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.BackupWalletSettings> {
-        BackupWalletScreen(navController)
     }
 }
 
@@ -964,7 +1040,7 @@ private fun NavGraphBuilder.widgets(
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
             val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
 
-            FactsEditScreen (
+            FactsEditScreen(
                 factsViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
@@ -1044,10 +1120,6 @@ fun NavController.navigateToLocalCurrencySettings() = navigate(
 
 fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
-)
-
-fun NavController.navigateToBackupWalletSettings() = navigate(
-    route = Routes.BackupWalletSettings,
 )
 
 fun NavController.navigateToRestoreWalletSettings() = navigate(
@@ -1216,9 +1288,6 @@ object Routes {
 
     @Serializable
     data object BackupSettings
-
-    @Serializable
-    data object BackupWalletSettings
 
     @Serializable
     data object RestoreWalletSettings
