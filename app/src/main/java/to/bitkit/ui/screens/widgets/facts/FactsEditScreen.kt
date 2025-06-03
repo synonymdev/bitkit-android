@@ -28,6 +28,7 @@ import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -105,7 +106,7 @@ fun FactsEditContent(
                     .fillMaxWidth()
                     .testTag("title_setting_row")
             ) {
-                BodyMB(
+                Title(
                     text = fact,
                     modifier = Modifier
                         .weight(1f)
