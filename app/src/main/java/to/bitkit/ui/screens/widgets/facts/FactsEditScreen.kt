@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.widgets.headlines
+package to.bitkit.ui.screens.widgets.facts
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,8 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMB
 import to.bitkit.ui.components.CaptionB
@@ -38,48 +37,42 @@ import to.bitkit.ui.theme.Colors
 
 
 @Composable
-fun HeadlinesEditScreen(
-    headlinesViewModel: HeadlinesViewModel,
+fun FactsEditScreen(
+    factsViewModel: FactsViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigatePreview: () -> Unit
 ) {
-    val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
-    val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
+    val customPreference by factsViewModel.customPreferences.collectAsStateWithLifecycle()
+    val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
 
-    HeadlinesEditContent(
+    FactsEditContent(
         onClose = onClose,
         onBack = onBack,
-        headlinePreferences = customHeadlinePreferences,
-        article = article,
-        onClickTime = {
-            headlinesViewModel.toggleShowTime()
-        },
+        factsPreferences = customPreference,
+        fact = fact,
         onClickShowSource = {
-            headlinesViewModel.toggleShowSource()
+            factsViewModel.toggleShowSource()
         },
         onClickReset = {
-            headlinesViewModel.resetCustomPreferences()
+            factsViewModel.resetCustomPreferences()
         },
-        onClickPreview = {
-            navigatePreview()
-        },
+        onClickPreview = navigatePreview,
     )
 }
 
 @Composable
-fun HeadlinesEditContent(
+fun FactsEditContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
-    onClickTime: () -> Unit,
     onClickReset: () -> Unit,
-    onClickPreview: () -> Unit,
     onClickShowSource: () -> Unit,
-    headlinePreferences: HeadlinePreferences,
-    article: ArticleModel
+    onClickPreview: () -> Unit,
+    factsPreferences: FactsPreferences,
+    fact: String
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("headlines_edit_screen")
+        modifier = Modifier.testTag("facts_edit_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__edit),
@@ -106,38 +99,6 @@ fun HeadlinesEditContent(
             Spacer(modifier = Modifier.height(32.dp))
 
             Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("time_setting_row")
-            ) {
-                BodyM(
-                    text = article.timeAgo,
-                    modifier = Modifier.testTag("time_text")
-                )
-
-                IconButton(
-                    onClick = onClickTime,
-                    modifier = Modifier.testTag("time_toggle_button")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_checkmark),
-                        contentDescription = null,
-                        tint = if (headlinePreferences.showTime) Colors.Brand else Colors.White50,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("time_toggle_icon"),
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.testTag("time_divider")
-            )
-
-            Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -146,7 +107,7 @@ fun HeadlinesEditContent(
                     .testTag("title_setting_row")
             ) {
                 Title(
-                    text = article.title,
+                    text = fact,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("title_text")
@@ -189,7 +150,7 @@ fun HeadlinesEditContent(
                 )
 
                 CaptionB(
-                    text = article.publisher,
+                    text = "synonym.to",
                     color = Colors.White64,
                     modifier = Modifier.testTag("source_text")
                 )
@@ -201,7 +162,7 @@ fun HeadlinesEditContent(
                     Icon(
                         painter = painterResource(R.drawable.ic_checkmark),
                         contentDescription = null,
-                        tint = if (headlinePreferences.showSource) Colors.Brand else Colors.White50,
+                        tint = if (factsPreferences.showSource) Colors.Brand else Colors.White50,
                         modifier = Modifier
                             .size(32.dp)
                             .testTag("source_toggle_icon"),
@@ -227,7 +188,7 @@ fun HeadlinesEditContent(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("reset_button"),
-                    enabled = !headlinePreferences.showSource || !headlinePreferences.showTime,
+                    enabled = factsPreferences != FactsPreferences(),
                     fullWidth = false,
                     onClick = onClickReset
                 )
@@ -250,20 +211,14 @@ fun HeadlinesEditContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HeadlinesEditContent(
+        FactsEditContent(
             onClose = {},
             onBack = {},
             onClickShowSource = {},
-            onClickTime = {},
             onClickReset = {},
             onClickPreview = {},
-            headlinePreferences = HeadlinePreferences(),
-            article = ArticleModel(
-                timeAgo = "21 minutes ago",
-                title = "How Bitcoin changed El Salvador in more ways",
-                publisher = "bitcoinmagazine.com",
-                link = "bitcoinmagazine.com",
-            )
+            factsPreferences = FactsPreferences(),
+            fact = "Bitcoin doesn’t need your personal information",
         )
     }
 }
@@ -272,20 +227,14 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        HeadlinesEditContent(
+        FactsEditContent(
             onClose = {},
             onBack = {},
             onClickShowSource = {},
-            onClickTime = {},
             onClickReset = {},
             onClickPreview = {},
-            headlinePreferences = HeadlinePreferences(showTime = false, showSource = false),
-            article = ArticleModel(
-                timeAgo = "21 minutes ago",
-                title = "How Bitcoin changed El Salvador in more ways",
-                publisher = "bitcoinmagazine.com",
-                link = "bitcoinmagazine.com",
-            )
+            factsPreferences = FactsPreferences(showSource = true),
+            fact = "Bitcoin doesn’t need your personal information",
         )
     }
 }

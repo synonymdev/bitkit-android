@@ -11,7 +11,6 @@ import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.models.WidgetWithPosition
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton

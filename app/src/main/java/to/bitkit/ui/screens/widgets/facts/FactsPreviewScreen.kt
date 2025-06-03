@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.widgets.headlines
+package to.bitkit.ui.screens.widgets.facts
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,8 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
@@ -41,50 +40,50 @@ import to.bitkit.ui.theme.Colors
 
 
 @Composable
-fun HeadlinesPreviewScreen(
-    headlinesViewModel: HeadlinesViewModel,
+fun FactsPreviewScreen(
+    factsViewModel: FactsViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
 ) {
-    val showWidgetTitles by headlinesViewModel.showWidgetTitles.collectAsStateWithLifecycle()
-    val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
-    val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
-    val isHeadlinesImplemented by headlinesViewModel.isNewsWidgetEnabled.collectAsStateWithLifecycle()
+    val showWidgetTitles by factsViewModel.showWidgetTitles.collectAsStateWithLifecycle()
+    val customFactsPreferences by factsViewModel.customPreferences.collectAsStateWithLifecycle()
+    val fact by factsViewModel.currentFact.collectAsStateWithLifecycle()
+    val isFactsWidgetEnabled by factsViewModel.isFactsWidgetEnabled.collectAsStateWithLifecycle()
 
-    HeadlinesPreviewContent(
+    FactsPreviewContent(
         onClose = onClose,
         onBack = onBack,
-        isHeadlinesImplemented = isHeadlinesImplemented,
-        headlinePreferences = customHeadlinePreferences,
+        isFactsWidgetEnabled = isFactsWidgetEnabled,
+        factsPreferences = customFactsPreferences,
         showWidgetTitles = showWidgetTitles,
-        article = article,
+        fact = fact,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            headlinesViewModel.removeWidget()
+            factsViewModel.removeWidget()
             onClose()
         },
         onClickSave = {
-            headlinesViewModel.savePreferences()
+            factsViewModel.savePreferences()
             onClose()
         },
     )
 }
 
 @Composable
-fun HeadlinesPreviewContent(
+fun FactsPreviewContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
     showWidgetTitles: Boolean,
-    isHeadlinesImplemented: Boolean,
-    headlinePreferences: HeadlinePreferences,
-    article: ArticleModel
+    isFactsWidgetEnabled: Boolean,
+    factsPreferences: FactsPreferences,
+    fact: String
 ) {
     ScreenColumn(
-        modifier = Modifier.testTag("headlines_preview_screen")
+        modifier = Modifier.testTag("facts_preview_screen")
     ) {
         AppTopBar(
             titleText = stringResource(R.string.widgets__widget__nav_title),
@@ -107,13 +106,13 @@ fun HeadlinesPreviewContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__news__name)),
+                    text = AnnotatedString(stringResource(R.string.widgets__facts__name)),
                     modifier = Modifier
-                        .width(263.dp)
+                        .width(200.dp)
                         .testTag("widget_title")
                 )
                 Icon(
-                    painter = painterResource(R.drawable.widget_newspaper),
+                    painter = painterResource(R.drawable.widget_lightbulb),
                     contentDescription = null,
                     tint = Color.Unspecified,
                     modifier = Modifier
@@ -123,7 +122,7 @@ fun HeadlinesPreviewContent(
             }
 
             BodyM(
-                text = stringResource(R.string.widgets__news__description),
+                text = stringResource(R.string.widgets__facts__description),
                 color = Colors.White64,
                 modifier = Modifier
                     .padding(vertical = 16.dp)
@@ -137,7 +136,7 @@ fun HeadlinesPreviewContent(
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__widget__edit),
                 value = SettingsButtonValue.StringValue(
-                    if (headlinePreferences == HeadlinePreferences()) {
+                    if (factsPreferences == FactsPreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)
                     } else {
                         stringResource(R.string.widgets__widget__edit_custom)
@@ -157,17 +156,13 @@ fun HeadlinesPreviewContent(
                     .testTag("preview_label")
             )
 
-            HeadlineCard(
+            FactsCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("headline_card"),
+                    .testTag("fact_card"),
                 showWidgetTitle = showWidgetTitles,
-                showTime = headlinePreferences.showTime,
-                showSource = headlinePreferences.showSource,
-                time = article.timeAgo,
-                headline = article.title,
-                source = article.publisher,
-                link = article.link
+                showSource = factsPreferences.showSource,
+                headline = fact,
             )
 
             Row(
@@ -177,7 +172,7 @@ fun HeadlinesPreviewContent(
                     .testTag("buttons_row"),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (isHeadlinesImplemented) {
+                if (isFactsWidgetEnabled) {
                     SecondaryButton(
                         text = stringResource(R.string.common__delete),
                         modifier = Modifier
@@ -206,21 +201,16 @@ fun HeadlinesPreviewContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HeadlinesPreviewContent(
+        FactsPreviewContent(
             onClose = {},
             onBack = {},
             showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
-            headlinePreferences = HeadlinePreferences(),
-            article = ArticleModel(
-                timeAgo = "21 minutes ago",
-                title = "How Bitcoin changed El Salvador in more ways",
-                publisher = "bitcoinmagazine.com",
-                link = "bitcoinmagazine.com",
-            ),
-            isHeadlinesImplemented = false
+            factsPreferences = FactsPreferences(),
+            fact = "Bitcoin doesn’t need your personal information",
+            isFactsWidgetEnabled = false
         )
     }
 }
@@ -229,21 +219,16 @@ private fun Preview() {
 @Composable
 private fun Preview2() {
     AppThemeSurface {
-        HeadlinesPreviewContent(
+        FactsPreviewContent(
             onClose = {},
             onBack = {},
             showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
-            headlinePreferences = HeadlinePreferences(showTime = false, showSource = false),
-            article = ArticleModel(
-                timeAgo = "21 minutes ago",
-                title = "How Bitcoin changed El Salvador in more ways",
-                publisher = "bitcoinmagazine.com",
-                link = "bitcoinmagazine.com",
-            ),
-            isHeadlinesImplemented = true
+            factsPreferences = FactsPreferences(showSource = true),
+            fact = "Bitcoin doesn’t need your personal information",
+            isFactsWidgetEnabled = true
         )
     }
 }

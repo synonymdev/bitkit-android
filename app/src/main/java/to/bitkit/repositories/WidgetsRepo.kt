@@ -4,43 +4,42 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.collections.map
-import kotlin.time.Duration.Companion.minutes
 
 @Singleton
 class WidgetsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val newsService: NewsService,
+    private val factsService: FactsService,
     private val widgetsStore: WidgetsStore,
     private val settingsStore: SettingsStore,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     val widgetsDataFlow = widgetsStore.data
-    val articlesFlow = widgetsStore.articlesFlow
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
-    val showWidgets = settingsStore.data.map { it.showWidgets }
-    val widgetsWithPosition = widgetsStore.data.map { it.widgets }
+
+    val articlesFlow = widgetsStore.articlesFlow
+    val factsFlow = widgetsStore.factsFlow
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
@@ -63,12 +62,19 @@ class WidgetsRepo @Inject constructor(
         widgetsStore.updateHeadlinePreferences(preferences)
     }
 
+    suspend fun updateFactsPreferences(preferences: FactsPreferences) = withContext(bgDispatcher) {
+        widgetsStore.updateFactsPreferences(preferences)
+    }
+
     /**
      * Start periodic updates for all widgets
      */
     private fun startPeriodicUpdates() {
         startPeriodicUpdate(newsService) { articles ->
             widgetsStore.updateArticles(articles)
+        }
+        startPeriodicUpdate(factsService) { facts ->
+            widgetsStore.updateFacts(facts)
         }
     }
 
@@ -117,6 +123,9 @@ class WidgetsRepo @Inject constructor(
             updateWidget(newsService) { articles ->
                 widgetsStore.updateArticles(articles)
             },
+            updateWidget(factsService) { facts ->
+                widgetsStore.updateFacts(facts)
+            },
         )
     }
 
@@ -149,27 +158,9 @@ class WidgetsRepo @Inject constructor(
                 throw NotImplementedError("Calculator widget not implemented yet")
             }
 
-            WidgetType.FACTS -> {
-                // TODO: Implement when FactsService is ready
-                throw NotImplementedError("Facts widget not implemented yet")
+            WidgetType.FACTS -> updateWidget(factsService) { facts ->
+                widgetsStore.updateFacts(facts)
             }
-        }
-    }
-
-    /**
-     * Get refresh state for a specific widget type
-     */
-    fun getRefreshState(widgetType: WidgetType): Flow<Boolean> {
-        return refreshStates.map { it[widgetType] ?: false }
-    }
-
-    /**
-     * Check if a widget type is currently supported
-     */
-    fun isWidgetSupported(widgetType: WidgetType): Boolean {
-        return when (widgetType) {
-            WidgetType.NEWS, WidgetType.WEATHER -> true
-            else -> false
         }
     }
 

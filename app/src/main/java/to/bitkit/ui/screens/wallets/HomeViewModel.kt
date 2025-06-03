@@ -4,17 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
@@ -23,7 +17,6 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -38,42 +31,48 @@ class HomeViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
-    // Suggestions flow
-    val suggestions: StateFlow<List<Suggestion>> = createSuggestionsFlow()
+    private val _uiState = MutableStateFlow(HomeUiState())
+    val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    // Widget-related flows
-    val showWidgets = settingsStore.data.map { it.showWidgets }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    val widgetsWithPosition = widgetsRepo.widgetsWithPosition
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val headlinePreferences = widgetsRepo.widgetsDataFlow.map { it.headlinePreferences }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeadlinePreferences())
-
-    private val articles: StateFlow<List<ArticleModel>> = widgetsRepo.articlesFlow
-        .map { articles -> articles.map { it.toArticleModel() } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Current article state (with rotation)
     private val _currentArticle = MutableStateFlow<ArticleModel?>(null)
-    val currentArticle: StateFlow<ArticleModel?> = _currentArticle.asStateFlow()
-
-    // Widget refresh states
-    val widgetRefreshStates = widgetsRepo.refreshStates
+    private val _currentFact = MutableStateFlow<String?>(null)
 
     init {
+        setupStateObservation()
         setupArticleRotation()
+        setupFactRotation()
+    }
+
+    private fun setupStateObservation() {
+        viewModelScope.launch {
+            combine(
+                createSuggestionsFlow(),
+                settingsStore.data,
+                widgetsRepo.widgetsDataFlow,
+                _currentArticle,
+                _currentFact
+            ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
+                HomeUiState(
+                    suggestions = suggestions,
+                    showWidgets = settings.showWidgets,
+                    showWidgetTitles = settings.showWidgetTitles,
+                    widgetsWithPosition = widgetsData.widgets,
+                    headlinePreferences = widgetsData.headlinePreferences,
+                    factsPreferences = widgetsData.factsPreferences,
+                    currentArticle = currentArticle,
+                    currentFact = currentFact
+                )
+            }.collect { newState ->
+                _uiState.update { newState }
+            }
+        }
     }
 
     private fun setupArticleRotation() {
         viewModelScope.launch {
             combine(
-                articles,
-                showWidgets
+                widgetsRepo.articlesFlow.map { articles -> articles.map { it.toArticleModel() } },
+                settingsStore.data.map { it.showWidgets }
             ) { articlesList, showWidgets ->
                 Pair(articlesList, showWidgets)
             }.collect { (articlesList, showWidgets) ->
@@ -86,12 +85,37 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun setupFactRotation() {
+        viewModelScope.launch {
+            combine(
+                widgetsRepo.factsFlow,
+                settingsStore.data.map { it.showWidgets }
+            ) { factList, showWidgets ->
+                Pair(factList, showWidgets)
+            }.collect { (factList, showWidgets) ->
+                if (showWidgets && factList.isNotEmpty()) {
+                    startFactsRotation(factList = factList)
+                } else {
+                    _currentArticle.value = null
+                }
+            }
+        }
+    }
+
     private suspend fun startArticleRotation(articlesList: List<ArticleModel>) {
-        while (showWidgets.first() && articlesList.isNotEmpty()) {
+        while (_uiState.value.showWidgets && articlesList.isNotEmpty()) {
             _currentArticle.value = articlesList.randomOrNull()
             delay(30.seconds)
         }
         _currentArticle.value = null
+    }
+
+    private suspend fun startFactsRotation(factList: List<String>) {
+        while (_uiState.value.showWidgets && factList.isNotEmpty()) {
+            _currentFact.value = factList.randomOrNull()
+            delay(20.seconds)
+        }
+        _currentFact.value = null
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -110,56 +134,53 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun createSuggestionsFlow(): StateFlow<List<Suggestion>> {
-        val removedSuggestions = appStorage.removedSuggestionsFlow
-            .map { stringList -> stringList.mapNotNull { it.toSuggestionOrNull() } }
-
-        return combine(
-            walletRepo.balanceState,
-            removedSuggestions,
-            settingsStore.data.map { it.isPinEnabled },
-        ) { balanceState, removedList, isPinEnabled ->
-            val baseSuggestions = when {
-                balanceState.totalLightningSats > 0uL -> { // With Lightning
-                    listOfNotNull(
-                        Suggestion.BACK_UP,
-                        Suggestion.SECURE.takeIf { !isPinEnabled },
-                        Suggestion.BUY,
-                        Suggestion.SUPPORT,
-                        Suggestion.INVITE,
-                        Suggestion.QUICK_PAY,
-                        Suggestion.SHOP,
-                        Suggestion.PROFILE,
-                    )
-                }
-
-                balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
-                    listOfNotNull(
-                        Suggestion.BACK_UP,
-                        Suggestion.SPEND,
-                        Suggestion.SECURE.takeIf { !isPinEnabled },
-                        Suggestion.BUY,
-                        Suggestion.SUPPORT,
-                        Suggestion.INVITE,
-                        Suggestion.SHOP,
-                        Suggestion.PROFILE,
-                    )
-                }
-
-                else -> { // Empty wallet
-                    listOfNotNull(
-                        Suggestion.BUY,
-                        Suggestion.SPEND,
-                        Suggestion.BACK_UP,
-                        Suggestion.SECURE.takeIf { !isPinEnabled },
-                        Suggestion.SUPPORT,
-                        Suggestion.INVITE,
-                        Suggestion.PROFILE,
-                    )
-                }
+    private fun createSuggestionsFlow() = combine(
+        walletRepo.balanceState,
+        appStorage.removedSuggestionsFlow.map { stringList ->
+            stringList.mapNotNull { it.toSuggestionOrNull() }
+        },
+        settingsStore.data.map { it.isPinEnabled },
+    ) { balanceState, removedList, isPinEnabled ->
+        val baseSuggestions = when {
+            balanceState.totalLightningSats > 0uL -> { // With Lightning
+                listOfNotNull(
+                    Suggestion.BACK_UP,
+                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.BUY,
+                    Suggestion.SUPPORT,
+                    Suggestion.INVITE,
+                    Suggestion.QUICK_PAY,
+                    Suggestion.SHOP,
+                    Suggestion.PROFILE,
+                )
             }
-            //TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
-            return@combine baseSuggestions.filterNot { it in removedList }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+            balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
+                listOfNotNull(
+                    Suggestion.BACK_UP,
+                    Suggestion.SPEND,
+                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.BUY,
+                    Suggestion.SUPPORT,
+                    Suggestion.INVITE,
+                    Suggestion.SHOP,
+                    Suggestion.PROFILE,
+                )
+            }
+
+            else -> { // Empty wallet
+                listOfNotNull(
+                    Suggestion.BUY,
+                    Suggestion.SPEND,
+                    Suggestion.BACK_UP,
+                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.SUPPORT,
+                    Suggestion.INVITE,
+                    Suggestion.PROFILE,
+                )
+            }
+        }
+        //TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
+        baseSuggestions.filterNot { it in removedList }
     }
 }
