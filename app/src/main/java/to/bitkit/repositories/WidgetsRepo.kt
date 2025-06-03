@@ -4,7 +4,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,8 +37,6 @@ class WidgetsRepo @Inject constructor(
 
     val widgetsDataFlow = widgetsStore.data
     val showWidgetTitles = settingsStore.data.map { it.showWidgetTitles }
-    val showWidgets = settingsStore.data.map { it.showWidgets }
-    val widgetsWithPosition = widgetsStore.data.map { it.widgets }
 
     val articlesFlow = widgetsStore.articlesFlow
     val factsFlow = widgetsStore.factsFlow
@@ -164,23 +161,6 @@ class WidgetsRepo @Inject constructor(
             WidgetType.FACTS -> updateWidget(factsService) { facts ->
                 widgetsStore.updateFacts(facts)
             }
-        }
-    }
-
-    /**
-     * Get refresh state for a specific widget type
-     */
-    fun getRefreshState(widgetType: WidgetType): Flow<Boolean> {
-        return refreshStates.map { it[widgetType] ?: false }
-    }
-
-    /**
-     * Check if a widget type is currently supported
-     */
-    fun isWidgetSupported(widgetType: WidgetType): Boolean {
-        return when (widgetType) {
-            WidgetType.NEWS, WidgetType.WEATHER -> true
-            else -> false
         }
     }
 

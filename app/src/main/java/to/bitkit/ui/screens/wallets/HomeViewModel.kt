@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -16,10 +15,8 @@ import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
-import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
-import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
