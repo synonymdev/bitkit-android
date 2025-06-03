@@ -137,7 +137,7 @@ fun HeadlinesPreviewContent(
             SettingsButtonRow(
                 title = stringResource(R.string.widgets__widget__edit),
                 value = SettingsButtonValue.StringValue(
-                    if (headlinePreferences.showTime && headlinePreferences.showSource) {
+                    if (headlinePreferences == HeadlinePreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)
                     } else {
                         stringResource(R.string.widgets__widget__edit_custom)
