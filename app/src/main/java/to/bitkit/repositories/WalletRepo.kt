@@ -326,7 +326,9 @@ class WalletRepo @Inject constructor(
                     amountSats = _walletState.value.bip21AmountSats,
                     description = _walletState.value.bip21Description
                 ).onSuccess { bolt11 ->
-                    setBolt11(bolt11)
+                    Logger.debug("Bolt11 created: $bolt11", context = TAG)
+                    // TODO add the actual bolt11 string which seem to be no longer available in ldk-node on `main` 🤦🏻‍♂️
+                    setBolt11(bolt11.paymentHash())
                 }
             } else {
                 setBolt11("")

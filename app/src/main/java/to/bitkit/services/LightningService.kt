@@ -366,15 +366,18 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun send(bolt11: Bolt11Invoice, sats: ULong? = null): PaymentId {
+    suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.debug("Paying bolt11: $bolt11")
 
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { e -> throw LdkError(e as NodeException) }
+
         return ServiceQueue.LDK.background {
             when (sats != null) {
-                true -> node.bolt11Payment().sendUsingAmount(bolt11, sats.millis, null)
-                else -> node.bolt11Payment().send(bolt11, null)
+                true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats.millis, null)
+                else -> node.bolt11Payment().send(bolt11Invoice, null)
             }
         }
     }
