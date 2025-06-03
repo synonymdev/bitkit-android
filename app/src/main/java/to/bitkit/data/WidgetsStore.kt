@@ -13,6 +13,7 @@ import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.serializers.WidgetsSerializer
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -40,6 +41,12 @@ class WidgetsStore @Inject constructor(
     suspend  fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
         store.updateData {
             it.copy(headlinePreferences = preferences)
+        }
+    }
+
+    suspend  fun updateFactsPreferences(preferences: FactsPreferences) {
+        store.updateData {
+            it.copy(factsPreferences = preferences)
         }
     }
 
@@ -82,5 +89,6 @@ data class WidgetsData(
     val widgets: List<WidgetWithPosition> = emptyList(),
     val articles: List<ArticleDTO> = emptyList(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
+    val factsPreferences: FactsPreferences = FactsPreferences(),
     val facts: List<String> = emptyList()
 )
