@@ -36,6 +36,7 @@ sealed class BottomSheetType {
     data object Receive : BottomSheetType()
     data object PinSetup : BottomSheetType()
     data object Backup : BottomSheetType()
+    data object BackupNavigation : BottomSheetType()
     data object ActivityDateRangeSelector : BottomSheetType()
     data object ActivityTagSelector : BottomSheetType()
 }

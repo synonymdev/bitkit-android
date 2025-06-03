@@ -784,6 +784,10 @@ class AppViewModel @Inject constructor(
         return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
     }
 
+    fun loadBip39Passphrase(): String {
+        return keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name) ?: ""
+    }
+
     // region security
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {
