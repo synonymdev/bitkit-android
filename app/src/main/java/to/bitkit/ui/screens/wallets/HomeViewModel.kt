@@ -59,8 +59,10 @@ class HomeViewModel @Inject constructor(
                     widgetsWithPosition = widgetsData.widgets,
                     headlinePreferences = widgetsData.headlinePreferences,
                     factsPreferences = widgetsData.factsPreferences,
+                    blocksPreferences = widgetsData.blocksPreferences,
                     currentArticle = currentArticle,
-                    currentFact = currentFact
+                    currentFact = currentFact,
+                    currentBlock = widgetsData.block
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -96,7 +98,7 @@ class HomeViewModel @Inject constructor(
                 if (showWidgets && factList.isNotEmpty()) {
                     startFactsRotation(factList = factList)
                 } else {
-                    _currentArticle.value = null
+                    _currentFact.value = null
                 }
             }
         }
