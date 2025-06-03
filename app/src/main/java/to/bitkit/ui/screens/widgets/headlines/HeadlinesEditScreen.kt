@@ -41,7 +41,7 @@ fun HeadlinesEditScreen(
     headlinesViewModel: HeadlinesViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
-    navigatePreview: (HeadlinePreferences) -> Unit
+    navigatePreview: () -> Unit
 ) {
     val customHeadlinePreferences by headlinesViewModel.customPreferences.collectAsStateWithLifecycle()
     val article by headlinesViewModel.currentArticle.collectAsStateWithLifecycle()
@@ -61,7 +61,7 @@ fun HeadlinesEditScreen(
             headlinesViewModel.resetCustomPreferences()
         },
         onClickPreview = {
-            navigatePreview(customHeadlinePreferences)
+            navigatePreview()
         },
     )
 }

@@ -936,7 +936,7 @@ private fun NavGraphBuilder.widgets(
                 headlinesViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigatePreview = { preferencesData ->
+                navigatePreview = {
                     navController.navigate(Routes.HeadlinesPreview)
                 }
             )
