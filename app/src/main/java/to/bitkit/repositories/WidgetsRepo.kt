@@ -13,12 +13,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
@@ -30,6 +32,7 @@ class WidgetsRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val newsService: NewsService,
     private val factsService: FactsService,
+    private val blocksService: BlocksService,
     private val widgetsStore: WidgetsStore,
     private val settingsStore: SettingsStore,
 ) {
@@ -40,6 +43,7 @@ class WidgetsRepo @Inject constructor(
 
     val articlesFlow = widgetsStore.articlesFlow
     val factsFlow = widgetsStore.factsFlow
+    val blocksFlow = widgetsStore.blocksFlow
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
@@ -66,6 +70,10 @@ class WidgetsRepo @Inject constructor(
         widgetsStore.updateFactsPreferences(preferences)
     }
 
+    suspend fun updateBlocksPreferences(preferences: BlocksPreferences) = withContext(bgDispatcher) {
+        widgetsStore.updateBlocksPreferences(preferences)
+    }
+
     /**
      * Start periodic updates for all widgets
      */
@@ -75,6 +83,9 @@ class WidgetsRepo @Inject constructor(
         }
         startPeriodicUpdate(factsService) { facts ->
             widgetsStore.updateFacts(facts)
+        }
+        startPeriodicUpdate(blocksService) { block ->
+            widgetsStore.updateBlock(block)
         }
     }
 
@@ -126,6 +137,9 @@ class WidgetsRepo @Inject constructor(
             updateWidget(factsService) { facts ->
                 widgetsStore.updateFacts(facts)
             },
+            updateWidget(blocksService) { block ->
+                widgetsStore.updateBlock(block)
+            },
         )
     }
 
@@ -139,7 +153,7 @@ class WidgetsRepo @Inject constructor(
             }
 
             WidgetType.WEATHER -> {
-                // TODO: Implement when PriceService is ready
+                // TODO: Implement when WeatherService is ready
                 throw NotImplementedError("Weather widget not implemented yet")
             }
 
@@ -148,9 +162,8 @@ class WidgetsRepo @Inject constructor(
                 throw NotImplementedError("Price widget not implemented yet")
             }
 
-            WidgetType.BLOCK -> {
-                // TODO: Implement when BlockService is ready
-                throw NotImplementedError("Block widget not implemented yet")
+            WidgetType.BLOCK -> updateWidget(blocksService) { block ->
+                widgetsStore.updateBlock(block)
             }
 
             WidgetType.CALCULATOR -> {
