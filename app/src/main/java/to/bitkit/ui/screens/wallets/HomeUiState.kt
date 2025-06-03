@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 
 @Stable
@@ -15,5 +16,6 @@ data class HomeUiState(
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val currentArticle: ArticleModel? = null,
     val currentFact: String? = null,
+    val factsPreferences: FactsPreferences = FactsPreferences(),
     val facts: List<String> = listOf(),
 )

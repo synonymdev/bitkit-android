@@ -443,7 +443,7 @@ private fun HomeContentView(
                                             FactsCard(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 showWidgetTitle = homeUiState.showWidgetTitles,
-                                                showSource = false, // TODO IMPLEMENT
+                                                showSource = homeUiState.factsPreferences.showSource,
                                                 headline = homeUiState.currentFact,
                                             )
                                         }

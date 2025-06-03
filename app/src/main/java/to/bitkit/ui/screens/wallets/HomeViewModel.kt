@@ -61,6 +61,7 @@ class HomeViewModel @Inject constructor(
                     showWidgetTitles = settings.showWidgetTitles,
                     widgetsWithPosition = widgetsData.widgets,
                     headlinePreferences = widgetsData.headlinePreferences,
+                    factsPreferences = widgetsData.factsPreferences,
                     currentArticle = currentArticle,
                     currentFact = currentFact
                 )
