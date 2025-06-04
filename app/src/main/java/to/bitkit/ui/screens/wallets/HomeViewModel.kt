@@ -18,6 +18,7 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
+import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
@@ -62,7 +63,7 @@ class HomeViewModel @Inject constructor(
                     blocksPreferences = widgetsData.blocksPreferences,
                     currentArticle = currentArticle,
                     currentFact = currentFact,
-                    currentBlock = widgetsData.block
+                    currentBlock = widgetsData.block?.toBlockModel()
                 )
             }.collect { newState ->
                 _uiState.update { newState }

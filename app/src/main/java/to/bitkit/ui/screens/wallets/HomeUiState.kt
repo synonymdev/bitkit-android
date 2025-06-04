@@ -1,10 +1,10 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.runtime.Stable
-import to.bitkit.data.dto.BlockDTO
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.ArticleModel
+import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
@@ -21,5 +21,5 @@ data class HomeUiState(
     val factsPreferences: FactsPreferences = FactsPreferences(),
     val facts: List<String> = listOf(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
-    val currentBlock: BlockDTO? = null,
+    val currentBlock: BlockModel? = null,
 )
