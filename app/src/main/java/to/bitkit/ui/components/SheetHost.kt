@@ -106,7 +106,7 @@ private fun SheetDragHandle(
         color = Colors.White32,
         shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier
-            .padding(top = 12.dp, bottom = 2.dp)
+            .padding(top = 12.dp, bottom = 4.dp)
             .semantics { contentDescription = "Drag handle" }
     ) {
         Box(Modifier.size(width = 32.dp, height = 4.dp))
