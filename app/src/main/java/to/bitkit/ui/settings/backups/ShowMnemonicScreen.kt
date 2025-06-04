@@ -68,15 +68,25 @@ fun ShowMnemonicScreen(
     val app = appViewModel ?: return
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-
-    var mnemonic by remember { mutableStateOf("") }
-    var bip39Passphrase by remember { mutableStateOf("") }
-    var showMnemonic by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    var mnemonic by remember { mutableStateOf(List(24) { "secret" }.joinToString(" ")) }
+    var bip39Passphrase by remember { mutableStateOf("") }
+    var showMnemonic by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
-        mnemonic = app.loadMnemonic()!!
-        bip39Passphrase = app.loadBip39Passphrase()
+        try {
+            mnemonic = app.loadMnemonic()!!
+            bip39Passphrase = app.loadBip39Passphrase()
+        } catch (e: Throwable) {
+            Logger.error("Error loading mnemonic", e)
+            app.toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.security__mnemonic_error),
+                description = context.getString(R.string.security__mnemonic_error_description),
+            )
+            return@LaunchedEffect
+        }
     }
 
     DisposableEffect(Unit) {
@@ -91,19 +101,8 @@ fun ShowMnemonicScreen(
         showMnemonic = showMnemonic,
         onRevealClick = {
             scope.launch {
-                try {
-                    delay(200)
-                    mnemonic = app.loadMnemonic()!!
-                    bip39Passphrase = app.loadBip39Passphrase()
-                    showMnemonic = true
-                } catch (e: Throwable) {
-                    Logger.error("Failed to load mnemonic", e)
-                    app.toast(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.security__mnemonic_error),
-                        description = context.getString(R.string.security__mnemonic_error_description),
-                    )
-                }
+                delay(200)
+                showMnemonic = true
             }
         },
         onCopyClick = {
@@ -135,9 +134,11 @@ private fun ShowMnemonicContent(
         label = "buttonAlpha"
     )
 
-    val mnemonicWords = if (mnemonic.isNotEmpty()) mnemonic.split(" ") else emptyList()
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+
+    val mnemonicWords = if (mnemonic.isNotEmpty()) mnemonic.split(" ") else emptyList()
+    val wordsCount = mnemonicWords.size
 
     // Scroll to bottom when mnemonic is revealed
     LaunchedEffect(showMnemonic) {
@@ -171,9 +172,9 @@ private fun ShowMnemonicContent(
             ) { isRevealed ->
                 BodyM(
                     text = when (isRevealed) {
-                        true -> stringResource(R.string.security__mnemonic_write)
-                        else -> stringResource(R.string.security__mnemonic_use)
-                    }.replace("{length}", "${mnemonicWords.size}"),
+                        true -> stringResource(R.string.security__mnemonic_write).replace("{length}", "$wordsCount")
+                        else -> stringResource(R.string.security__mnemonic_use).replace("12", "$wordsCount")
+                    },
                     color = Colors.White64,
                 )
             }
@@ -242,7 +243,7 @@ private fun MnemonicWordsGrid(
     showMnemonic: Boolean,
     blurRadius: Float,
 ) {
-    val placeholderWords = remember { List(24) { "secret" } }
+    val placeholderWords = remember(actualWords) { List(actualWords.size) { "secret" } }
 
     Box(
         modifier = Modifier
@@ -306,7 +307,7 @@ private fun WordItem(
 private fun Preview() {
     AppThemeSurface {
         ShowMnemonicContent(
-            mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
+            mnemonic = List(24) { "word" }.joinToString(" "),
             showMnemonic = false,
             onRevealClick = {},
             onCopyClick = {},
@@ -321,6 +322,20 @@ private fun PreviewShown() {
     AppThemeSurface {
         ShowMnemonicContent(
             mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
+            showMnemonic = true,
+            onRevealClick = {},
+            onCopyClick = {},
+            onContinueClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview12Words() {
+    AppThemeSurface {
+        ShowMnemonicContent(
+            mnemonic = List(12) { bip39Words.random() }.joinToString(" "),
             showMnemonic = true,
             onRevealClick = {},
             onCopyClick = {},
