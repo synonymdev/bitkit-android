@@ -59,7 +59,6 @@ private fun MetadataContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__mnemonic_data_header),
@@ -69,6 +68,7 @@ private fun MetadataContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.SpaceBetween
         ) {

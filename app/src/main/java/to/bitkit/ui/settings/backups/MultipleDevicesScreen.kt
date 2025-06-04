@@ -49,7 +49,6 @@ private fun MultipleDevicesContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__mnemonic_multiple_header),
@@ -59,6 +58,7 @@ private fun MultipleDevicesContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.SpaceBetween
         ) {

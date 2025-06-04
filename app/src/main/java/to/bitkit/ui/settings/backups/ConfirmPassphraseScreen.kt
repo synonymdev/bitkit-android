@@ -77,7 +77,6 @@ private fun ConfirmPassphraseContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
             .imePadding()
     ) {
         SheetTopBar(
@@ -88,6 +87,7 @@ private fun ConfirmPassphraseContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(16.dp))

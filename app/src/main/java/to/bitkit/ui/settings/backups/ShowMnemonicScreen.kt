@@ -153,13 +153,13 @@ private fun ShowMnemonicContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(titleText = stringResource(R.string.security__mnemonic_your))
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(16.dp))

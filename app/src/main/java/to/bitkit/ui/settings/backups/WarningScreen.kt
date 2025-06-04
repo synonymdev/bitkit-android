@@ -50,7 +50,6 @@ private fun WarningContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__mnemonic_keep_header),
@@ -60,6 +59,7 @@ private fun WarningContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.SpaceBetween
         ) {

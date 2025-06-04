@@ -45,7 +45,6 @@ private fun ShowPassphraseContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(
             titleText = "BIP39 Passphrase",
@@ -53,7 +52,9 @@ private fun ShowPassphraseContent(
         )
 
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
