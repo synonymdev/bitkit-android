@@ -15,14 +15,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -110,6 +114,19 @@ private fun ConfirmMnemonicContent(
     val isComplete = selectedWords.all { it != null } &&
         selectedWords.zip(originalSeed).all { (selected, original) -> selected == original }
 
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+
+    // Autoscroll to bottom when all words are correctly selected
+    LaunchedEffect(isComplete) {
+        if (isComplete) {
+            delay(300) // Wait for any UI updates to complete
+            scope.launch {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -124,7 +141,7 @@ private fun ConfirmMnemonicContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 32.dp)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
