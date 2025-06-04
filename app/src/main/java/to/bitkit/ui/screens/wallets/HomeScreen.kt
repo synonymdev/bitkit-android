@@ -447,13 +447,11 @@ private fun HomeContentView(
                                                 showDate = homeUiState.blocksPreferences.showDate,
                                                 showTransactions = homeUiState.blocksPreferences.showTransactions,
                                                 showSize = homeUiState.blocksPreferences.showSize,
-                                                showFees = homeUiState.blocksPreferences.showFees,
                                                 showSource = homeUiState.blocksPreferences.showSource,
                                                 time = time,
                                                 date = date,
                                                 transactions = transactionCount,
                                                 size = size,
-                                                fees = fees,
                                                 source = source,
                                                 block = height
                                             )

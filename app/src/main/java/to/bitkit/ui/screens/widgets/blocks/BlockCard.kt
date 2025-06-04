@@ -39,14 +39,12 @@ fun BlockCard(
     showDate: Boolean,
     showTransactions: Boolean,
     showSize: Boolean,
-    showFees: Boolean,
     showSource: Boolean,
     block: String,
     time: String,
     date: String,
     transactions: String,
     size: String,
-    fees: String,
     source: String,
 ) {
     Box(
@@ -188,27 +186,6 @@ fun BlockCard(
                 }
             }
 
-            if (showFees && fees.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("block_card_fees_row"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = "Fees",
-                        color = Colors.White64,
-                        modifier = Modifier.testTag("block_card_fees_label")
-                    )
-
-                    BodySB(
-                        text = fees,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("block_card_fees_text")
-                    )
-                }
-            }
-
             if (showSource && source.isNotEmpty()) {
                 Row(
                     modifier = Modifier
@@ -251,14 +228,12 @@ private fun FullBlockCardPreview() {
                 showDate = true,
                 showTransactions = true,
                 showSize = true,
-                showFees = true,
                 showSource = true,
                 block = "761,405",
                 time = "01:31:42 UTC",
                 date = "11/2/2022",
                 transactions = "2,175",
                 size = "1,606Kb",
-                fees = "25 059 357",
                 source = "mempool.io",
             )
 
@@ -269,14 +244,12 @@ private fun FullBlockCardPreview() {
                 showDate = true,
                 showTransactions = true,
                 showSize = true,
-                showFees = true,
                 showSource = false,
                 block = "761,405",
                 time = "01:31:42 UTC",
                 date = "11/2/2022",
                 transactions = "2,175",
                 size = "1,606Kb",
-                fees = "25 059 357",
                 source = "mempool.io", // Source text is still provided but won't be shown
             )
 
@@ -287,14 +260,12 @@ private fun FullBlockCardPreview() {
                 showDate = false,
                 showTransactions = false,
                 showSize = false,
-                showFees = false,
                 showSource = false,
                 block = "761,405",
                 time = "",
                 date = "",
                 transactions = "",
                 size = "",
-                fees = "",
                 source = "",
             )
         }

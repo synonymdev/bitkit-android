@@ -167,14 +167,12 @@ fun BlocksPreviewContent(
                     showDate = blocksPreferences.showDate,
                     showTransactions = blocksPreferences.showTransactions,
                     showSize = blocksPreferences.showSize,
-                    showFees = blocksPreferences.showFees,
                     showSource = blocksPreferences.showSource,
                     block = block.height,
                     time = block.time,
                     date = block.date,
                     transactions = block.transactionCount,
                     size = block.size,
-                    fees = block.fees,
                     source = block.source,
                 )
             }
@@ -228,7 +226,6 @@ private fun Preview() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                fees = "25 059 357",
                 source = "mempool.space"
             ),
             isBlocksWidgetEnabled = false
@@ -253,7 +250,6 @@ private fun Preview2() {
                 showDate = false,
                 showTransactions = true,
                 showSize = false,
-                showFees = true,
                 showSource = true
             ),
             block = BlockModel(
@@ -262,7 +258,6 @@ private fun Preview2() {
                 date = "2023-01-01",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                fees = "25 059 357",
                 source = "mempool.space"
             ),
             isBlocksWidgetEnabled = true

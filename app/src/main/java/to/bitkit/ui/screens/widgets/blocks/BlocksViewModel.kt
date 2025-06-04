@@ -99,12 +99,6 @@ class BlocksViewModel @Inject constructor(
         }
     }
 
-    fun toggleShowFees() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showFees = !preferences.showFees)
-        }
-    }
-
     fun toggleShowSource() {
         _customPreferences.update { preferences ->
             preferences.copy(showSource = !preferences.showSource)

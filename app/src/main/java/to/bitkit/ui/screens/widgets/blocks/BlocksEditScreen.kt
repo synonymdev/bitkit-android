@@ -52,7 +52,6 @@ fun BlocksEditScreen(
         date = "",
         transactionCount = "",
         size = "",
-        fees = "",
         source = ""
     )
 
@@ -66,7 +65,6 @@ fun BlocksEditScreen(
         onClickShowDate = { blocksViewModel.toggleShowDate() },
         onClickShowTransactions = { blocksViewModel.toggleShowTransactions() },
         onClickShowSize = { blocksViewModel.toggleShowSize() },
-        onClickShowFees = { blocksViewModel.toggleShowFees() },
         onClickShowSource = { blocksViewModel.toggleShowSource() },
         onClickReset = { blocksViewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
@@ -82,7 +80,6 @@ fun BlocksEditContent(
     onClickShowDate: () -> Unit,
     onClickShowTransactions: () -> Unit,
     onClickShowSize: () -> Unit,
-    onClickShowFees: () -> Unit,
     onClickShowSource: () -> Unit,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
@@ -163,15 +160,6 @@ fun BlocksEditContent(
                 testTagPrefix = "size"
             )
 
-            // Fees toggle
-            BlockEditOptionRow(
-                label = "Fees",
-                value = block.fees,
-                isEnabled = blocksPreferences.showFees,
-                onClick = onClickShowFees,
-                testTagPrefix = "fees"
-            )
-
             // Source toggle
             BlockEditOptionRow(
                 label = stringResource(R.string.widgets__widget__source),
@@ -201,7 +189,7 @@ fun BlocksEditContent(
 
             PrimaryButton(
                 text = stringResource(R.string.common__preview),
-                enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showFees || showSource },
+                enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showSource },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("preview_button"),
@@ -278,7 +266,6 @@ private fun Preview() {
             onClickShowDate = {},
             onClickShowTransactions = {},
             onClickShowSize = {},
-            onClickShowFees = {},
             onClickShowSource = {},
             onClickReset = {},
             onClickPreview = {},
@@ -289,7 +276,6 @@ private fun Preview() {
                 date = "01/2/2022",
                 transactionCount = "2,175",
                 size = "1,606kB",
-                fees = "25 059 357",
                 source = "mempool.io"
             ),
         )
@@ -308,7 +294,6 @@ private fun PreviewWithSomeOptionsEnabled() {
             onClickShowDate = {},
             onClickShowTransactions = {},
             onClickShowSize = {},
-            onClickShowFees = {},
             onClickShowSource = {},
             onClickReset = {},
             onClickPreview = {},
@@ -318,7 +303,6 @@ private fun PreviewWithSomeOptionsEnabled() {
                 showDate = false,
                 showTransactions = true,
                 showSize = false,
-                showFees = true,
                 showSource = true
             ),
             block = BlockModel(
@@ -327,7 +311,6 @@ private fun PreviewWithSomeOptionsEnabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                fees = "",
                 source = ""
             ),
         )
@@ -347,7 +330,6 @@ private fun PreviewWithAllDisabled() {
             onClickShowDate = {},
             onClickShowTransactions = {},
             onClickShowSize = {},
-            onClickShowFees = {},
             onClickShowSource = {},
             onClickReset = {},
             onClickPreview = {},
@@ -357,7 +339,6 @@ private fun PreviewWithAllDisabled() {
                 showDate = false,
                 showTransactions = false,
                 showSize = false,
-                showFees = false,
                 showSource = false
             ),
             block = BlockModel(
@@ -366,7 +347,6 @@ private fun PreviewWithAllDisabled() {
                 date = "",
                 transactionCount = "",
                 size = "",
-                fees = "",
                 source = ""
             ),
         )

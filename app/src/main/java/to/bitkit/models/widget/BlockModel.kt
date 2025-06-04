@@ -12,7 +12,6 @@ data class BlockModel(
     val date: String,
     val transactionCount: String,
     val size: String,
-    val fees: String,
     val source: String,
 )
 
@@ -22,6 +21,5 @@ fun BlockDTO.toBlockModel() = BlockModel(
     date = this.timestamp.toDateUTC(),
     transactionCount = this.transactionCount,
     size = this.size,
-    fees = "", //TODO
     source = this.source
 )
