@@ -66,7 +66,7 @@ class BlocksService @Inject constructor(
 
         // Format size (convert to KB)
         val sizeKb = (blockInfo.size / 1024.0)
-        val formattedSize = "${numberFormat.format(sizeKb.toInt())} KB"
+        val formattedSize = "${numberFormat.format(sizeKb.toInt())} Kb"
 
         // Format weight (convert to MWU - Million Weight Units)
         val weightMwu = (blockInfo.weight / 1024.0 / 1024.0)
@@ -88,7 +88,7 @@ class BlocksService @Inject constructor(
             weight = formattedWeight,
             difficulty = difficulty,
             merkleRoot = blockInfo.merkleRoot,
-            source = Env.mempoolBaseUrl.replace("https://", "").replaceAfter("/", "")
+            source = Env.mempoolBaseUrl.replace("https://", "").replaceAfter("/", "").replace("/", "")
         )
     }
 

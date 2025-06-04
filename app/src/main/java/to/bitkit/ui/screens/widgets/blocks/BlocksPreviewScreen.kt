@@ -175,7 +175,7 @@ fun BlocksPreviewContent(
                     transactions = block.transactionCount,
                     size = block.size,
                     fees = block.fees,
-                    source = block.fees,
+                    source = block.source,
                 )
             }
 
