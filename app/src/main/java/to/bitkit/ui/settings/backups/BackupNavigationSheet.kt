@@ -41,7 +41,6 @@ fun BackupNavigationSheet(
             composableWithDefaultTransitions<BackupRoute.ShowPassphrase> { backStackEntry ->
                 val route = backStackEntry.toRoute<BackupRoute.ShowPassphrase>()
                 ShowPassphraseScreen(
-                    seed = route.seed,
                     bip39Passphrase = route.bip39Passphrase,
                     onContinue = {
                         navController.navigate(BackupRoute.ConfirmMnemonic(route.seed, route.bip39Passphrase))

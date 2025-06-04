@@ -17,7 +17,7 @@ fun BackupSheet(
     onBackupClick: () -> Unit,
     walletViewModel: WalletViewModel,
 ) {
-    val balance : BalanceState by walletViewModel.balanceState.collectAsStateWithLifecycle()
+    val balance: BalanceState by walletViewModel.balanceState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier

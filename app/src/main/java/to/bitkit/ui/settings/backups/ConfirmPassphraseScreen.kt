@@ -6,13 +6,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -77,12 +76,11 @@ private fun ConfirmPassphraseContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
             .imePadding()
     ) {
-        SheetTopBar(
-            titleText = stringResource(R.string.security__pass_confirm),
-            onBack = onBack,
-        )
+        SheetTopBar(stringResource(R.string.security__pass_confirm), onBack = onBack)
+        Spacer(modifier = Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
@@ -90,12 +88,9 @@ private fun ConfirmPassphraseContent(
                 .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
             BodyM(
                 text = stringResource(R.string.security__pass_confirm_text),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth(),
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -127,10 +122,9 @@ private fun ConfirmPassphraseContent(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
                 enabled = isValid,
-                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

@@ -1,33 +1,43 @@
 package to.bitkit.ui.settings.backups
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun ShowPassphraseScreen(
-    seed: List<String>,
     bip39Passphrase: String,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
     ShowPassphraseContent(
-        seed = seed,
         bip39Passphrase = bip39Passphrase,
         onContinue = onContinue,
         onBack = onBack,
@@ -36,7 +46,6 @@ fun ShowPassphraseScreen(
 
 @Composable
 private fun ShowPassphraseContent(
-    seed: List<String>,
     bip39Passphrase: String,
     onContinue: () -> Unit,
     onBack: () -> Unit,
@@ -45,41 +54,59 @@ private fun ShowPassphraseContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
-        SheetTopBar(
-            titleText = "BIP39 Passphrase",
-            onBack = onBack,
-        )
+        SheetTopBar(stringResource(R.string.security__pass_your), onBack = onBack)
+        Spacer(modifier = Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 32.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
             BodyM(
-                text = "Your wallet also uses this BIP39 passphrase:",
+                text = stringResource(R.string.security__pass_text),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth(),
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            BodyM(
-                text = "Passphrase: $bip39Passphrase",
-                color = Colors.White,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(Colors.White10)
+                    .heightIn(min = 235.dp)
+                    .padding(32.dp)
+            ) {
+                BodyMSB(
+                    text = stringResource(R.string.security__pass),
+                    color = Colors.White64,
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BodyMSB(
+                    text = bip39Passphrase,
+                    color = Colors.White,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            BodyS(
+                text = stringResource(R.string.security__pass_never_share).withAccent(accentColor = Colors.Brand),
+                color = Colors.White64,
             )
 
             Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
-                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -89,8 +116,7 @@ private fun ShowPassphraseContent(
 private fun Preview() {
     AppThemeSurface {
         ShowPassphraseContent(
-            seed = listOf("word1", "word2", "word3"),
-            bip39Passphrase = "test passphrase",
+            bip39Passphrase = "mypassphrase",
             onContinue = {},
             onBack = {},
         )

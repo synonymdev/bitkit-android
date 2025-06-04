@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -131,11 +132,10 @@ private fun ConfirmMnemonicContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
-        SheetTopBar(
-            titleText = stringResource(R.string.security__mnemonic_confirm),
-            onBack = onBack,
-        )
+        SheetTopBar(stringResource(R.string.security__mnemonic_confirm), onBack = onBack)
+        Spacer(modifier = Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
@@ -143,12 +143,9 @@ private fun ConfirmMnemonicContent(
                 .padding(horizontal = 32.dp)
                 .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
             BodyM(
                 text = stringResource(R.string.security__mnemonic_confirm_tap).replace("12", "${originalSeed.size}"),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth(),
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -204,16 +201,15 @@ private fun ConfirmMnemonicContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
                 enabled = isComplete,
-                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

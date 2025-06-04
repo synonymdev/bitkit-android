@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -71,8 +72,12 @@ fun ShowMnemonicScreen(
     var mnemonic by remember { mutableStateOf("") }
     var bip39Passphrase by remember { mutableStateOf("") }
     var showMnemonic by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        mnemonic = app.loadMnemonic()!!
+        bip39Passphrase = app.loadBip39Passphrase()
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -84,16 +89,12 @@ fun ShowMnemonicScreen(
     ShowMnemonicContent(
         mnemonic = mnemonic,
         showMnemonic = showMnemonic,
-        isLoading = isLoading,
         onRevealClick = {
             scope.launch {
                 try {
-                    isLoading = true
                     delay(200)
-                    val loadedMnemonic = app.loadMnemonic()!!
-                    val loadedPassphrase = app.loadBip39Passphrase()
-                    mnemonic = loadedMnemonic
-                    bip39Passphrase = loadedPassphrase
+                    mnemonic = app.loadMnemonic()!!
+                    bip39Passphrase = app.loadBip39Passphrase()
                     showMnemonic = true
                 } catch (e: Throwable) {
                     Logger.error("Failed to load mnemonic", e)
@@ -118,7 +119,6 @@ fun ShowMnemonicScreen(
 private fun ShowMnemonicContent(
     mnemonic: String,
     showMnemonic: Boolean,
-    isLoading: Boolean,
     onRevealClick: () -> Unit,
     onCopyClick: () -> Unit,
     onContinueClick: () -> Unit,
@@ -153,8 +153,10 @@ private fun ShowMnemonicContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
-        SheetTopBar(titleText = stringResource(R.string.security__mnemonic_your))
+        SheetTopBar(stringResource(R.string.security__mnemonic_your))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Column(
             modifier = Modifier
@@ -162,30 +164,24 @@ private fun ShowMnemonicContent(
                 .padding(horizontal = 32.dp)
                 .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
             AnimatedContent(
                 targetState = showMnemonic,
                 transitionSpec = { fadeIn(tween(300)).togetherWith(fadeOut(tween(300))) },
                 label = "topText"
             ) { isRevealed ->
                 BodyM(
-                    text = if (isRevealed) {
-                        stringResource(R.string.security__mnemonic_write).replace("{length}", "${mnemonicWords.size}")
-                    } else {
-                        stringResource(R.string.security__mnemonic_use)
-                    },
+                    text = when (isRevealed) {
+                        true -> stringResource(R.string.security__mnemonic_write)
+                        else -> stringResource(R.string.security__mnemonic_use)
+                    }.replace("{length}", "${mnemonicWords.size}"),
                     color = Colors.White64,
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 32.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier
@@ -193,7 +189,7 @@ private fun ShowMnemonicContent(
                         .clip(MaterialTheme.shapes.medium)
                         .background(color = Colors.White10)
                         .clickable(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
-                        .padding(horizontal = 32.dp, vertical = 32.dp)
+                        .padding(32.dp)
                 ) {
                     MnemonicWordsGrid(
                         actualWords = mnemonicWords,
@@ -212,7 +208,6 @@ private fun ShowMnemonicContent(
                         PrimaryButton(
                             text = stringResource(R.string.security__mnemonic_reveal),
                             fullWidth = false,
-                            isLoading = isLoading,
                             onClick = onRevealClick,
                             color = Colors.Black50,
                             modifier = Modifier.alpha(buttonAlpha)
@@ -221,21 +216,22 @@ private fun ShowMnemonicContent(
                 }
             }
 
+            Spacer(modifier = Modifier.height(32.dp))
             BodyS(
                 text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
                 color = Colors.White64,
             )
 
+            Spacer(modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.height(24.dp))
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinueClick,
                 enabled = showMnemonic,
-                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -310,9 +306,8 @@ private fun WordItem(
 private fun Preview() {
     AppThemeSurface {
         ShowMnemonicContent(
-            mnemonic = "",
+            mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
             showMnemonic = false,
-            isLoading = false,
             onRevealClick = {},
             onCopyClick = {},
             onContinueClick = {},
@@ -327,7 +322,6 @@ private fun PreviewShown() {
         ShowMnemonicContent(
             mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
             showMnemonic = true,
-            isLoading = false,
             onRevealClick = {},
             onCopyClick = {},
             onContinueClick = {},
