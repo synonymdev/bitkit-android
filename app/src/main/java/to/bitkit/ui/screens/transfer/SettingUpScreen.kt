@@ -20,8 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -41,6 +39,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 import uniffi.bitkitcore.regtestMine
@@ -122,8 +121,7 @@ private fun SettingUpScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 BodyM(
-                    text = stringResource(R.string.lightning__setting_up_text)
-                        .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+                    text = stringResource(R.string.lightning__setting_up_text).withAccentBoldBright(),
                     color = Colors.White64,
                 )
             } else {

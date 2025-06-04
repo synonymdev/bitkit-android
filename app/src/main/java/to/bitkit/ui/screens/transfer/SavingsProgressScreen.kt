@@ -24,8 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -42,6 +40,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.transferViewModel
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.ui.walletViewModel
 
 enum class SavingsProgressState { PROGRESS, SUCCESS, INTERRUPTED }
@@ -128,8 +127,7 @@ private fun SavingsProgressScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     BodyM(
-                        text = stringResource(R.string.lightning__savings_progress__text)
-                            .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+                        text = stringResource(R.string.lightning__savings_progress__text).withAccentBoldBright(),
                         color = Colors.White64,
                     )
                 }
@@ -147,8 +145,7 @@ private fun SavingsProgressScreen(
                     Display(text = stringResource(R.string.lightning__savings_interrupted__title).withAccent())
                     Spacer(modifier = Modifier.height(8.dp))
                     BodyM(
-                        text = stringResource(R.string.lightning__savings_interrupted__text)
-                            .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+                        text = stringResource(R.string.lightning__savings_interrupted__text).withAccentBoldBright(),
                         color = Colors.White64,
                     )
                 }

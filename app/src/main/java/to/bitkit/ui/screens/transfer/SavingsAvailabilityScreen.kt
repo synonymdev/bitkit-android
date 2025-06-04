@@ -16,8 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -30,6 +28,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
 
 @Composable
 fun SavingsAvailabilityScreen(
@@ -51,8 +50,7 @@ fun SavingsAvailabilityScreen(
             Display(text = stringResource(R.string.lightning__availability__title).withAccent())
             Spacer(modifier = Modifier.height(8.dp))
             BodyM(
-                text = stringResource(R.string.lightning__availability__text)
-                    .withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold)),
+                text = stringResource(R.string.lightning__availability__text).withAccentBoldBright(),
                 color = Colors.White64,
             )
 
