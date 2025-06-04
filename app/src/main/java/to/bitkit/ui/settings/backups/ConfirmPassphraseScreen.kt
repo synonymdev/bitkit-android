@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -99,19 +100,15 @@ private fun ConfirmPassphraseContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            OutlinedTextField(
+            TextInput(
+                placeholder = stringResource(R.string.security__pass).replaceFirstChar { it.uppercase() },
                 value = enteredPassphrase,
                 onValueChange = onPassphraseChange,
-                placeholder = {
-                    BodyM(
-                        text = stringResource(R.string.security__pass).replaceFirstChar { it.uppercase() },
-                        color = Colors.White32
-                    )
-                },
+                singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                     imeAction = ImeAction.Done,
-                    autoCorrect = false
+                    autoCorrectEnabled = false
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
@@ -120,15 +117,6 @@ private fun ConfirmPassphraseContent(
                             onContinue()
                         }
                     }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Colors.White,
-                    unfocusedTextColor = Colors.White,
-                    focusedBorderColor = Colors.White32,
-                    unfocusedBorderColor = Colors.White16,
-                    focusedContainerColor = Colors.White10,
-                    unfocusedContainerColor = Colors.White10,
-                    cursorColor = Colors.Brand,
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
