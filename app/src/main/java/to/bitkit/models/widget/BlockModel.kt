@@ -2,6 +2,8 @@ package to.bitkit.models.widget
 
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.BlockDTO
+import to.bitkit.ext.toDateUTC
+import to.bitkit.ext.toTimeUTC
 
 @Serializable
 data class BlockModel(
@@ -16,8 +18,8 @@ data class BlockModel(
 
 fun BlockDTO.toBlockModel() = BlockModel(
     height = this.height,
-    time = this.timestamp.toString(), // TODO FORMMAT
-    date = this.timestamp.toString(), //TODO FORMAT,
+    time = this.timestamp.toTimeUTC() + " UTC",
+    date = this.timestamp.toDateUTC(),
     transactionCount = this.transactionCount,
     size = this.size,
     fees = "", //TODO

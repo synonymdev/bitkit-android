@@ -14,6 +14,18 @@ fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
     return dateTime.format(formatter)
 }
 
+fun Long.toTimeUTC(): String {
+    val instant = Instant.ofEpochMilli(this)
+    val dateTime = LocalDateTime.ofInstant(instant, ZoneId.of("UTC"))
+    return dateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+}
+
+fun Long.toDateUTC(): String {
+    val instant = Instant.ofEpochMilli(this)
+    val dateTime = LocalDateTime.ofInstant(instant, ZoneId.of("UTC"))
+    return dateTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+}
+
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
     const val INVOICE_EXPIRY = "MMM dd, h:mm a"
