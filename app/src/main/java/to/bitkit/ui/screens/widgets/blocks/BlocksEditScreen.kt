@@ -130,7 +130,7 @@ fun BlocksEditContent(
             // Time toggle
             BlockEditOptionRow(
                 label = "Time",
-                value = block.time, // Example value
+                value = block.time,
                 isEnabled = blocksPreferences.showTime,
                 onClick = onClickShowTime,
                 testTagPrefix = "time"
@@ -139,7 +139,7 @@ fun BlocksEditContent(
             // Date toggle
             BlockEditOptionRow(
                 label = "Date",
-                value = block.date, // Example value
+                value = block.date,
                 isEnabled = blocksPreferences.showDate,
                 onClick = onClickShowDate,
                 testTagPrefix = "date"
@@ -148,7 +148,7 @@ fun BlocksEditContent(
             // Transactions toggle
             BlockEditOptionRow(
                 label = "Transactions",
-                value = block.transactionCount, // Example value
+                value = block.transactionCount,
                 isEnabled = blocksPreferences.showTransactions,
                 onClick = onClickShowTransactions,
                 testTagPrefix = "transactions"
@@ -157,7 +157,7 @@ fun BlocksEditContent(
             // Size toggle
             BlockEditOptionRow(
                 label = "Size",
-                value = block.size, // Example value
+                value = block.size,
                 isEnabled = blocksPreferences.showSize,
                 onClick = onClickShowSize,
                 testTagPrefix = "size"
@@ -166,7 +166,7 @@ fun BlocksEditContent(
             // Fees toggle
             BlockEditOptionRow(
                 label = "Fees",
-                value = block.fees, // Example value
+                value = block.fees,
                 isEnabled = blocksPreferences.showFees,
                 onClick = onClickShowFees,
                 testTagPrefix = "fees"
@@ -175,7 +175,7 @@ fun BlocksEditContent(
             // Source toggle
             BlockEditOptionRow(
                 label = stringResource(R.string.widgets__widget__source),
-                value = block.source, // Example value
+                value = block.source,
                 isEnabled = blocksPreferences.showSource,
                 onClick = onClickShowSource,
                 testTagPrefix = "source"
