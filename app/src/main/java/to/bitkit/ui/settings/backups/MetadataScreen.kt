@@ -26,20 +26,19 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withBold
+import to.bitkit.viewmodels.BackupContract
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
 fun MetadataScreen(
+    uiState: BackupContract.UiState,
     onDismiss: () -> Unit,
     onBack: () -> Unit,
 ) {
-    // TODO get last backup time from actual state
-    val lastBackupTimeMs = System.currentTimeMillis()
-
     MetadataContent(
-        lastBackupTimeMs = lastBackupTimeMs,
+        lastBackupTimeMs = uiState.lastBackupTimeMs,
         onDismiss = onDismiss,
         onBack = onBack,
     )
@@ -51,7 +50,7 @@ private fun MetadataContent(
     onDismiss: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val latestBackupTime = remember {
+    val latestBackupTime = remember(lastBackupTimeMs) {
         val formatter = SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", Locale.getDefault())
         formatter.format(Date(lastBackupTimeMs))
     }

@@ -4,19 +4,52 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.viewmodels.BackupContract
+import to.bitkit.viewmodels.BackupViewModel
 
 @Composable
 fun BackupNavigationSheet(
     onDismiss: () -> Unit,
+    viewModel: BackupViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.resetState()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadMnemonicData()
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                BackupContract.SideEffect.NavigateToShowPassphrase -> navController.navigate(BackupRoute.ShowPassphrase)
+                BackupContract.SideEffect.NavigateToConfirmMnemonic -> navController.navigate(BackupRoute.ConfirmMnemonic)
+                BackupContract.SideEffect.NavigateToConfirmPassphrase -> navController.navigate(BackupRoute.ConfirmPassphrase)
+                BackupContract.SideEffect.NavigateToWarning -> navController.navigate(BackupRoute.Warning)
+                BackupContract.SideEffect.NavigateToSuccess -> navController.navigate(BackupRoute.Success)
+                BackupContract.SideEffect.NavigateToMultipleDevices -> navController.navigate(BackupRoute.MultipleDevices)
+                BackupContract.SideEffect.NavigateToMetadata -> navController.navigate(BackupRoute.Metadata)
+                BackupContract.SideEffect.DismissSheet -> onDismiss()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -29,76 +62,55 @@ fun BackupNavigationSheet(
         ) {
             composableWithDefaultTransitions<BackupRoute.ShowMnemonic> {
                 ShowMnemonicScreen(
-                    onContinue = { seed, bip39Passphrase ->
-                        if (bip39Passphrase.isNotEmpty()) {
-                            navController.navigate(BackupRoute.ShowPassphrase(seed, bip39Passphrase))
-                        } else {
-                            navController.navigate(BackupRoute.ConfirmMnemonic(seed, bip39Passphrase))
-                        }
-                    },
+                    uiState = uiState,
+                    onRevealClick = viewModel::onRevealMnemonic,
+                    onContinueClick = viewModel::onShowMnemonicContinue,
                 )
             }
-            composableWithDefaultTransitions<BackupRoute.ShowPassphrase> { backStackEntry ->
-                val route = backStackEntry.toRoute<BackupRoute.ShowPassphrase>()
+            composableWithDefaultTransitions<BackupRoute.ShowPassphrase> {
                 ShowPassphraseScreen(
-                    bip39Passphrase = route.bip39Passphrase,
-                    onContinue = {
-                        navController.navigate(BackupRoute.ConfirmMnemonic(route.seed, route.bip39Passphrase))
-                    },
+                    uiState = uiState,
+                    onContinue = viewModel::onShowPassphraseContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<BackupRoute.ConfirmMnemonic> { backStackEntry ->
-                val route = backStackEntry.toRoute<BackupRoute.ConfirmMnemonic>()
+            composableWithDefaultTransitions<BackupRoute.ConfirmMnemonic> {
                 ConfirmMnemonicScreen(
-                    seed = route.seed,
-                    onContinue = {
-                        if (route.bip39Passphrase.isNotEmpty()) {
-                            navController.navigate(BackupRoute.ConfirmPassphrase(route.bip39Passphrase))
-                        } else {
-                            navController.navigate(BackupRoute.Warning)
-                        }
-                    },
+                    uiState = uiState,
+                    onContinue = viewModel::onConfirmMnemonicContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<BackupRoute.ConfirmPassphrase> { backStackEntry ->
-                val route = backStackEntry.toRoute<BackupRoute.ConfirmPassphrase>()
+            composableWithDefaultTransitions<BackupRoute.ConfirmPassphrase> {
                 ConfirmPassphraseScreen(
-                    bip39Passphrase = route.bip39Passphrase,
-                    onContinue = {
-                        navController.navigate(BackupRoute.Warning)
-                    },
+                    uiState = uiState,
+                    onPassphraseChange = viewModel::onPassphraseInput,
+                    onContinue = viewModel::onConfirmPassphraseContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<BackupRoute.Warning> {
                 WarningScreen(
-                    onContinue = {
-                        navController.navigate(BackupRoute.Success)
-                    },
+                    onContinue = viewModel::onWarningContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<BackupRoute.Success> {
                 SuccessScreen(
-                    onContinue = {
-                        navController.navigate(BackupRoute.MultipleDevices)
-                    },
+                    onContinue = viewModel::onSuccessContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<BackupRoute.MultipleDevices> {
                 MultipleDevicesScreen(
-                    onContinue = {
-                        navController.navigate(BackupRoute.Metadata)
-                    },
+                    onContinue = viewModel::onMultipleDevicesContinue,
                     onBack = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<BackupRoute.Metadata> {
                 MetadataScreen(
-                    onDismiss = onDismiss,
+                    uiState = uiState,
+                    onDismiss = viewModel::onMetadataClose,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -111,13 +123,13 @@ object BackupRoute {
     data object ShowMnemonic
 
     @Serializable
-    data class ShowPassphrase(val seed: List<String>, val bip39Passphrase: String)
+    data object ShowPassphrase
 
     @Serializable
-    data class ConfirmMnemonic(val seed: List<String>, val bip39Passphrase: String)
+    data object ConfirmMnemonic
 
     @Serializable
-    data class ConfirmPassphrase(val bip39Passphrase: String)
+    data object ConfirmPassphrase
 
     @Serializable
     data object Warning

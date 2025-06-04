@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,61 +37,59 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.bip39Words
+import to.bitkit.viewmodels.BackupContract
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConfirmMnemonicScreen(
-    seed: List<String>,
+    uiState: BackupContract.UiState,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    // State to track user selection
-    var selectedWords by remember { mutableStateOf(arrayOfNulls<String>(seed.size)) }
-    var pressedStates by remember { mutableStateOf(BooleanArray(seed.size) { false }) }
-
-    // Shuffle the words for selection
-    val shuffledWords = remember { seed.shuffled() }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // Clear selected words from memory
-            selectedWords = arrayOfNulls(seed.size)
-        }
+    val originalSeed = remember(uiState.mnemonicString) {
+        uiState.mnemonicString.split(" ").filter { it.isNotBlank() }
+    }
+    val shuffledWords = remember(originalSeed) {
+        originalSeed.shuffled()
     }
 
+    var selectedWords by remember { mutableStateOf(arrayOfNulls<String>(originalSeed.size)) }
+    var pressedStates by remember { mutableStateOf(BooleanArray(shuffledWords.size) { false }) }
+
+    // Calculate if all words are correct
+    val isComplete = selectedWords.all { it != null } &&
+        selectedWords.zip(originalSeed).all { (selected, original) -> selected == original }
+
     ConfirmMnemonicContent(
-        originalSeed = seed,
+        originalSeed = originalSeed,
         shuffledWords = shuffledWords,
         selectedWords = selectedWords,
         pressedStates = pressedStates,
+        isComplete = isComplete,
         onWordPress = { word, shuffledIndex ->
             // Find index of the last filled word
-            val firstNullIndex = selectedWords.indexOfFirst { it == null }
-            val lastFilledIndex = if (firstNullIndex == -1) selectedWords.size - 1 else firstNullIndex - 1
-            val nextEmptyIndex = if (firstNullIndex == -1) -1 else firstNullIndex
+            val lastIndex = selectedWords.indexOfFirst { it == null } - 1
+            val nextIndex = if (lastIndex == -1) 0 else lastIndex + 1
 
-            // If this word is already pressed/selected
-            if (pressedStates[shuffledIndex]) {
-                // Allow deselecting only if it's the last word that was selected
-                // or if the word at the last position is incorrect
-                if (lastFilledIndex >= 0) {
-                    val wordAtLastPosition = selectedWords[lastFilledIndex]
-                    val isLastWordIncorrect = wordAtLastPosition != seed[lastFilledIndex]
-                    val isThisTheLastWord = wordAtLastPosition == word
+            // If the word is correct and pressed, do nothing
+            if (pressedStates[shuffledIndex] && nextIndex > 0 && originalSeed[lastIndex] == selectedWords[lastIndex]) {
+                return@ConfirmMnemonicContent
+            }
 
-                    if (isThisTheLastWord && (isLastWordIncorrect || firstNullIndex == -1)) {
-                        // Deselect this word
-                        pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = false }
-                        selectedWords = selectedWords.copyOf().apply { this[lastFilledIndex] = null }
-                    }
+            // If previous word is incorrect, allow unchecking
+            if (lastIndex >= 0 && selectedWords[lastIndex] != originalSeed[lastIndex]) {
+                // Uncheck if we tap on it
+                if (pressedStates[shuffledIndex] && word == selectedWords[lastIndex]) {
+                    pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = false }
+                    selectedWords = selectedWords.copyOf().apply { this[lastIndex] = null }
                 }
                 return@ConfirmMnemonicContent
             }
 
-            // If we have space and word is not already pressed, add it
-            if (nextEmptyIndex >= 0 && nextEmptyIndex < seed.size) {
+            // Mark word as pressed and add it to the seed
+            if (nextIndex < originalSeed.size) {
                 pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = true }
-                selectedWords = selectedWords.copyOf().apply { this[nextEmptyIndex] = word }
+                selectedWords = selectedWords.copyOf().apply { this[nextIndex] = word }
             }
         },
         onContinue = onContinue,
@@ -107,14 +104,11 @@ private fun ConfirmMnemonicContent(
     shuffledWords: List<String>,
     selectedWords: Array<String?>,
     pressedStates: BooleanArray,
+    isComplete: Boolean,
     onWordPress: (String, Int) -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    // Check if all words are correct
-    val isComplete = selectedWords.all { it != null } &&
-        selectedWords.zip(originalSeed).all { (selected, original) -> selected == original }
-
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
@@ -148,7 +142,7 @@ private fun ConfirmMnemonicContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Shuffled word buttons
             FlowRow(
@@ -159,7 +153,7 @@ private fun ConfirmMnemonicContent(
                 shuffledWords.forEachIndexed { index, word ->
                     PrimaryButton(
                         text = word,
-                        color = if (pressedStates[index]) Colors.White32 else Colors.White16,
+                        color = if (pressedStates.getOrNull(index) == true) Colors.White32 else Colors.White16,
                         fullWidth = false,
                         size = ButtonSize.Small,
                         onClick = { onWordPress(word, index) }
@@ -167,7 +161,7 @@ private fun ConfirmMnemonicContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Selected words display (2 columns)
             Row(
@@ -182,7 +176,7 @@ private fun ConfirmMnemonicContent(
                         SelectedWordItem(
                             number = index + 1,
                             word = word ?: "",
-                            correct = word == originalSeed[index]
+                            isCorrect = word == originalSeed.getOrNull(index),
                         )
                     }
                 }
@@ -195,12 +189,13 @@ private fun ConfirmMnemonicContent(
                         SelectedWordItem(
                             number = actualIndex + 1,
                             word = word ?: "",
-                            correct = word == originalSeed[actualIndex]
+                            isCorrect = word == originalSeed.getOrNull(actualIndex),
                         )
                     }
                 }
             }
 
+            Spacer(modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.height(24.dp))
 
             PrimaryButton(
@@ -218,14 +213,14 @@ private fun ConfirmMnemonicContent(
 private fun SelectedWordItem(
     number: Int,
     word: String,
-    correct: Boolean,
+    isCorrect: Boolean,
 ) {
     Row {
         BodyMSB(text = "$number.", color = Colors.White64)
         Spacer(modifier = Modifier.width(4.dp))
         BodyMSB(
             text = if (word.isEmpty()) "" else word,
-            color = if (word.isEmpty()) Colors.White64 else if (correct) Colors.Green else Colors.Red
+            color = if (word.isEmpty()) Colors.White64 else if (isCorrect) Colors.Green else Colors.Red
         )
     }
 }
@@ -233,13 +228,15 @@ private fun SelectedWordItem(
 @Preview
 @Composable
 private fun Preview() {
+    val testWords = bip39Words.take(24)
+
     AppThemeSurface {
-        val testSeed = listOf("abandon", "ability", "able", "about", "above", "absent")
         ConfirmMnemonicContent(
-            originalSeed = testSeed,
-            shuffledWords = testSeed.shuffled(),
-            selectedWords = arrayOfNulls(testSeed.size),
-            pressedStates = BooleanArray(testSeed.size) { false },
+            originalSeed = testWords,
+            shuffledWords = testWords.shuffled(),
+            selectedWords = arrayOfNulls(24),
+            pressedStates = BooleanArray(24) { false },
+            isComplete = false,
             onWordPress = { _, _ -> },
             onContinue = {},
             onBack = {},
@@ -250,13 +247,34 @@ private fun Preview() {
 @Preview
 @Composable
 private fun Preview2() {
+    val testWords = bip39Words.take(24)
+
     AppThemeSurface {
-        val testSeed = List(24) { bip39Words.random() }
         ConfirmMnemonicContent(
-            originalSeed = testSeed,
-            shuffledWords = testSeed.shuffled(),
-            selectedWords = testSeed.take(12).toTypedArray<String?>() + arrayOfNulls(12),
-            pressedStates = BooleanArray(testSeed.size) { it < 12 },
+            originalSeed = testWords,
+            shuffledWords = testWords.shuffled(),
+            selectedWords = testWords.take(12).toTypedArray<String?>() + arrayOfNulls<String>(12),
+            pressedStates = BooleanArray(24) { it < 12 },
+            isComplete = false,
+            onWordPress = { _, _ -> },
+            onContinue = {},
+            onBack = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview12Words() {
+    val testWords = bip39Words.take(12)
+
+    AppThemeSurface {
+        ConfirmMnemonicContent(
+            originalSeed = testWords,
+            shuffledWords = testWords.shuffled(),
+            selectedWords = testWords.take(6).toTypedArray<String?>() + arrayOfNulls<String>(6),
+            pressedStates = BooleanArray(6) { it < 6 },
+            isComplete = false,
             onWordPress = { _, _ -> },
             onContinue = {},
             onBack = {},

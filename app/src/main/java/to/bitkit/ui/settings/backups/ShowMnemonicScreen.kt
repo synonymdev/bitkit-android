@@ -25,13 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -39,7 +36,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,8 +43,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.Toast
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -58,65 +52,36 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.utils.Logger
 import to.bitkit.utils.bip39Words
+import to.bitkit.viewmodels.BackupContract
 
 @Composable
 fun ShowMnemonicScreen(
-    onContinue: (seed: List<String>, bip39Passphrase: String) -> Unit,
+    uiState: BackupContract.UiState,
+    onRevealClick: () -> Unit,
+    onContinueClick: () -> Unit,
 ) {
-    val app = appViewModel ?: return
-    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val scope = rememberCoroutineScope()
-
-    var mnemonic by remember { mutableStateOf(List(24) { "secret" }.joinToString(" ")) }
-    var bip39Passphrase by remember { mutableStateOf("") }
-    var showMnemonic by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        try {
-            mnemonic = app.loadMnemonic()!!
-            bip39Passphrase = app.loadBip39Passphrase()
-        } catch (e: Throwable) {
-            Logger.error("Error loading mnemonic", e)
-            app.toast(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.security__mnemonic_error),
-                description = context.getString(R.string.security__mnemonic_error_description),
-            )
-            return@LaunchedEffect
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            mnemonic = ""
-            bip39Passphrase = ""
-        }
+    val mnemonicWords = remember(uiState.mnemonicString) {
+        uiState.mnemonicString.split(" ").filter { it.isNotBlank() }
     }
 
     ShowMnemonicContent(
-        mnemonic = mnemonic,
-        showMnemonic = showMnemonic,
-        onRevealClick = {
-            scope.launch {
-                delay(200)
-                showMnemonic = true
-            }
-        },
+        mnemonic = uiState.mnemonicString,
+        mnemonicWords = mnemonicWords,
+        showMnemonic = uiState.showMnemonic,
+        onRevealClick = onRevealClick,
         onCopyClick = {
-            clipboard.setText(AnnotatedString(mnemonic))
+            clipboard.setText(AnnotatedString(uiState.mnemonicString))
         },
-        onContinueClick = {
-            onContinue(mnemonic.split(" "), bip39Passphrase)
-        },
+        onContinueClick = onContinueClick,
     )
 }
 
 @Composable
 private fun ShowMnemonicContent(
     mnemonic: String,
+    mnemonicWords: List<String>,
     showMnemonic: Boolean,
     onRevealClick: () -> Unit,
     onCopyClick: () -> Unit,
@@ -137,7 +102,6 @@ private fun ShowMnemonicContent(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
-    val mnemonicWords = if (mnemonic.isNotEmpty()) mnemonic.split(" ") else emptyList()
     val wordsCount = mnemonicWords.size
 
     // Scroll to bottom when mnemonic is revealed
@@ -218,6 +182,7 @@ private fun ShowMnemonicContent(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+
             BodyS(
                 text = stringResource(R.string.security__mnemonic_never_share).withAccent(accentColor = Colors.Brand),
                 color = Colors.White64,
@@ -307,7 +272,8 @@ private fun WordItem(
 private fun Preview() {
     AppThemeSurface {
         ShowMnemonicContent(
-            mnemonic = List(24) { "word" }.joinToString(" "),
+            mnemonic = bip39Words.take(24).joinToString(" "),
+            mnemonicWords = bip39Words.take(24),
             showMnemonic = false,
             onRevealClick = {},
             onCopyClick = {},
@@ -321,7 +287,8 @@ private fun Preview() {
 private fun PreviewShown() {
     AppThemeSurface {
         ShowMnemonicContent(
-            mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
+            mnemonic = bip39Words.take(24).joinToString(" "),
+            mnemonicWords = bip39Words.take(24),
             showMnemonic = true,
             onRevealClick = {},
             onCopyClick = {},
@@ -335,7 +302,8 @@ private fun PreviewShown() {
 private fun Preview12Words() {
     AppThemeSurface {
         ShowMnemonicContent(
-            mnemonic = List(12) { bip39Words.random() }.joinToString(" "),
+            mnemonic = bip39Words.take(12).joinToString(" "),
+            mnemonicWords = bip39Words.take(12),
             showMnemonic = true,
             onRevealClick = {},
             onCopyClick = {},

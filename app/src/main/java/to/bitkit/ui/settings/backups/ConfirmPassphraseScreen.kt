@@ -9,15 +9,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -33,26 +27,21 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.BackupContract
 
 @Composable
 fun ConfirmPassphraseScreen(
-    bip39Passphrase: String,
+    uiState: BackupContract.UiState,
+    onPassphraseChange: (String) -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var enteredPassphrase by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    DisposableEffect(Unit) {
-        onDispose {
-            enteredPassphrase = "" // Clear passphrase from memory
-        }
-    }
-
     ConfirmPassphraseContent(
-        enteredPassphrase = enteredPassphrase,
-        originalPassphrase = bip39Passphrase,
-        onPassphraseChange = { enteredPassphrase = it },
+        enteredPassphrase = uiState.enteredPassphrase,
+        isValid = uiState.isPassphraseValid,
+        onPassphraseChange = onPassphraseChange,
         onContinue = {
             keyboardController?.hide()
             onContinue()
@@ -64,14 +53,11 @@ fun ConfirmPassphraseScreen(
 @Composable
 private fun ConfirmPassphraseContent(
     enteredPassphrase: String,
-    originalPassphrase: String,
+    isValid: Boolean,
     onPassphraseChange: (String) -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val isValid = enteredPassphrase == originalPassphrase
-    val keyboardController = LocalSoftwareKeyboardController.current
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -105,14 +91,6 @@ private fun ConfirmPassphraseContent(
                     imeAction = ImeAction.Done,
                     autoCorrectEnabled = false
                 ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (isValid) {
-                            keyboardController?.hide()
-                            onContinue()
-                        }
-                    }
-                ),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -135,7 +113,7 @@ private fun Preview() {
     AppThemeSurface {
         ConfirmPassphraseContent(
             enteredPassphrase = "",
-            originalPassphrase = "test123",
+            isValid = false,
             onPassphraseChange = {},
             onContinue = {},
             onBack = {},
@@ -149,7 +127,7 @@ private fun Preview2() {
     AppThemeSurface {
         ConfirmPassphraseContent(
             enteredPassphrase = "test123",
-            originalPassphrase = "test123",
+            isValid = true,
             onPassphraseChange = {},
             onContinue = {},
             onBack = {},
