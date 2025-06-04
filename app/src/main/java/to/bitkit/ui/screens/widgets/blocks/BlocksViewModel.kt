@@ -11,9 +11,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.data.dto.BlockDTO
 import to.bitkit.models.WidgetType
+import to.bitkit.models.widget.BlockModel
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
@@ -49,8 +50,8 @@ class BlocksViewModel @Inject constructor(
             initialValue = true
         )
 
-    val currentBlock: StateFlow<BlockDTO?> = widgetsRepo.blocksFlow.map { block ->
-        block
+    val currentBlock: StateFlow<BlockModel?> = widgetsRepo.blocksFlow.map { block ->
+        block?.toBlockModel()
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),

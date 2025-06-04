@@ -87,7 +87,8 @@ class BlocksService @Inject constructor(
             size = formattedSize,
             weight = formattedWeight,
             difficulty = difficulty,
-            merkleRoot = blockInfo.merkleRoot
+            merkleRoot = blockInfo.merkleRoot,
+            source = Env.mempoolBaseUrl.replace("https://", "").replaceAfter("/", "")
         )
     }
 
