@@ -146,7 +146,7 @@ private fun ConfirmMnemonicContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             BodyM(
-                text = stringResource(R.string.security__mnemonic_confirm_tap),
+                text = stringResource(R.string.security__mnemonic_confirm_tap).replace("12", "${originalSeed.size}"),
                 color = Colors.White64,
                 modifier = Modifier.fillMaxWidth(),
             )
