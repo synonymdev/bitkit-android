@@ -63,7 +63,6 @@ import to.bitkit.utils.bip39Words
 @Composable
 fun ShowMnemonicScreen(
     onContinue: (seed: List<String>, bip39Passphrase: String) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val app = appViewModel ?: return
     val context = LocalContext.current
@@ -77,7 +76,7 @@ fun ShowMnemonicScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            mnemonic = "" // Clear mnemonic from memory when leaving screen
+            mnemonic = ""
             bip39Passphrase = ""
         }
     }
@@ -86,7 +85,6 @@ fun ShowMnemonicScreen(
         mnemonic = mnemonic,
         showMnemonic = showMnemonic,
         isLoading = isLoading,
-        onDismiss = onDismiss,
         onRevealClick = {
             scope.launch {
                 try {
@@ -121,7 +119,6 @@ private fun ShowMnemonicContent(
     mnemonic: String,
     showMnemonic: Boolean,
     isLoading: Boolean,
-    onDismiss: () -> Unit,
     onRevealClick: () -> Unit,
     onCopyClick: () -> Unit,
     onContinueClick: () -> Unit,
@@ -158,10 +155,7 @@ private fun ShowMnemonicContent(
             .gradientBackground()
             .padding(horizontal = 32.dp)
     ) {
-        SheetTopBar(
-            titleText = stringResource(R.string.security__mnemonic_your),
-            onBack = onDismiss,
-        )
+        SheetTopBar(titleText = stringResource(R.string.security__mnemonic_your))
 
         Column(
             modifier = Modifier
@@ -319,7 +313,6 @@ private fun Preview() {
             mnemonic = "",
             showMnemonic = false,
             isLoading = false,
-            onDismiss = {},
             onRevealClick = {},
             onCopyClick = {},
             onContinueClick = {},
@@ -335,7 +328,6 @@ private fun PreviewShown() {
             mnemonic = List(24) { bip39Words.random() }.joinToString(" "),
             showMnemonic = true,
             isLoading = false,
-            onDismiss = {},
             onRevealClick = {},
             onCopyClick = {},
             onContinueClick = {},

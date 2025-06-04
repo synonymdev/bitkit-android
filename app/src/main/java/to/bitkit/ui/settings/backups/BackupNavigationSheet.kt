@@ -36,7 +36,6 @@ fun BackupNavigationSheet(
                             navController.navigate(BackupRoute.ConfirmMnemonic(seed, bip39Passphrase))
                         }
                     },
-                    onDismiss = onDismiss,
                 )
             }
             composableWithDefaultTransitions<BackupRoute.ShowPassphrase> { backStackEntry ->
