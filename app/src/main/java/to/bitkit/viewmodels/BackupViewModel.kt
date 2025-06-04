@@ -43,7 +43,7 @@ class BackupViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
-                        mnemonicString = mnemonic,
+                        bip39Mnemonic = mnemonic,
                         bip39Passphrase = bip39Passphrase,
                     )
                 }
@@ -123,15 +123,17 @@ class BackupViewModel @Inject constructor(
 }
 
 interface BackupContract {
+    companion object {
+        private val PLACEHOLDER_MNEMONIC = List(24) { "secret" }.joinToString(" ")
+    }
+
     data class UiState(
-        val mnemonicString: String = "",
+        val bip39Mnemonic: String = PLACEHOLDER_MNEMONIC,
         val bip39Passphrase: String = "",
         val showMnemonic: Boolean = false,
         val enteredPassphrase: String = "",
         val lastBackupTimeMs: Long = System.currentTimeMillis(),
-    ) {
-        val isPassphraseValid get() = enteredPassphrase == bip39Passphrase
-    }
+    )
 
     sealed interface SideEffect {
         data object NavigateToShowPassphrase : SideEffect

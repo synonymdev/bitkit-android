@@ -46,8 +46,8 @@ fun ConfirmMnemonicScreen(
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val originalSeed = remember(uiState.mnemonicString) {
-        uiState.mnemonicString.split(" ").filter { it.isNotBlank() }
+    val originalSeed = remember(uiState.bip39Mnemonic) {
+        uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }
     }
     val shuffledWords = remember(originalSeed) {
         originalSeed.shuffled()

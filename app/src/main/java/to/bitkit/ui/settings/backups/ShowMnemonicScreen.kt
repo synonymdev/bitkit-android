@@ -62,17 +62,17 @@ fun ShowMnemonicScreen(
     onContinueClick: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
-    val mnemonicWords = remember(uiState.mnemonicString) {
-        uiState.mnemonicString.split(" ").filter { it.isNotBlank() }
+    val mnemonicWords = remember(uiState.bip39Mnemonic) {
+        uiState.bip39Mnemonic.split(" ").filter { it.isNotBlank() }
     }
 
     ShowMnemonicContent(
-        mnemonic = uiState.mnemonicString,
+        mnemonic = uiState.bip39Mnemonic,
         mnemonicWords = mnemonicWords,
         showMnemonic = uiState.showMnemonic,
         onRevealClick = onRevealClick,
         onCopyClick = {
-            clipboard.setText(AnnotatedString(uiState.mnemonicString))
+            clipboard.setText(AnnotatedString(uiState.bip39Mnemonic))
         },
         onContinueClick = onContinueClick,
     )

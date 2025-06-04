@@ -40,7 +40,7 @@ fun ConfirmPassphraseScreen(
 
     ConfirmPassphraseContent(
         enteredPassphrase = uiState.enteredPassphrase,
-        isValid = uiState.isPassphraseValid,
+        isValid = uiState.enteredPassphrase == uiState.bip39Passphrase,
         onPassphraseChange = onPassphraseChange,
         onContinue = {
             keyboardController?.hide()
