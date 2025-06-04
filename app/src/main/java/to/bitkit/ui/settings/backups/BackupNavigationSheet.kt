@@ -53,7 +53,6 @@ fun BackupNavigationSheet(
                 val route = backStackEntry.toRoute<BackupRoute.ConfirmMnemonic>()
                 ConfirmMnemonicScreen(
                     seed = route.seed,
-                    bip39Passphrase = route.bip39Passphrase,
                     onContinue = {
                         if (route.bip39Passphrase.isNotEmpty()) {
                             navController.navigate(BackupRoute.ConfirmPassphrase(route.bip39Passphrase))

@@ -38,7 +38,6 @@ import to.bitkit.utils.bip39Words
 @Composable
 fun ConfirmMnemonicScreen(
     seed: List<String>,
-    bip39Passphrase: String,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
