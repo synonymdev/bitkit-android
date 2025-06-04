@@ -21,7 +21,7 @@ fun BackupNavigationSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(SheetSize.MEDIUM)
+            .fillMaxHeight(SheetSize.LARGE)
     ) {
         NavHost(
             navController = navController,

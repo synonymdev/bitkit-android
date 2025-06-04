@@ -63,28 +63,32 @@ fun ConfirmMnemonicScreen(
         pressedStates = pressedStates,
         onWordPress = { word, shuffledIndex ->
             // Find index of the last filled word
-            val lastIndex = selectedWords.indexOfFirst { it == null } - 1
-            val nextIndex = if (lastIndex == -1) 0 else lastIndex + 1
+            val firstNullIndex = selectedWords.indexOfFirst { it == null }
+            val lastFilledIndex = if (firstNullIndex == -1) selectedWords.size - 1 else firstNullIndex - 1
+            val nextEmptyIndex = if (firstNullIndex == -1) -1 else firstNullIndex
 
-            // If the word is correct and pressed, do nothing
-            if (pressedStates[shuffledIndex] && nextIndex > 0 && seed[lastIndex] == selectedWords[lastIndex]) {
-                return@ConfirmMnemonicContent
-            }
+            // If this word is already pressed/selected
+            if (pressedStates[shuffledIndex]) {
+                // Allow deselecting only if it's the last word that was selected
+                // or if the word at the last position is incorrect
+                if (lastFilledIndex >= 0) {
+                    val wordAtLastPosition = selectedWords[lastFilledIndex]
+                    val isLastWordIncorrect = wordAtLastPosition != seed[lastFilledIndex]
+                    val isThisTheLastWord = wordAtLastPosition == word
 
-            // If previous word is incorrect, allow unchecking
-            if (lastIndex >= 0 && selectedWords[lastIndex] != seed[lastIndex]) {
-                // Uncheck if we tap on it
-                if (pressedStates[shuffledIndex] && word == selectedWords[lastIndex]) {
-                    pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = false }
-                    selectedWords = selectedWords.copyOf().apply { this[lastIndex] = null }
+                    if (isThisTheLastWord && (isLastWordIncorrect || firstNullIndex == -1)) {
+                        // Deselect this word
+                        pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = false }
+                        selectedWords = selectedWords.copyOf().apply { this[lastFilledIndex] = null }
+                    }
                 }
                 return@ConfirmMnemonicContent
             }
 
-            // Mark word as pressed and add it to the seed
-            if (nextIndex < seed.size) {
+            // If we have space and word is not already pressed, add it
+            if (nextEmptyIndex >= 0 && nextEmptyIndex < seed.size) {
                 pressedStates = pressedStates.copyOf().apply { this[shuffledIndex] = true }
-                selectedWords = selectedWords.copyOf().apply { this[nextIndex] = word }
+                selectedWords = selectedWords.copyOf().apply { this[nextEmptyIndex] = word }
             }
         },
         onContinue = onContinue,
@@ -111,7 +115,6 @@ private fun ConfirmMnemonicContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 32.dp)
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.security__mnemonic_confirm),
@@ -121,6 +124,7 @@ private fun ConfirmMnemonicContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(16.dp))
