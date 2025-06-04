@@ -160,10 +160,13 @@ fun ReportIssueContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ReportIssueScreen(
+        ReportIssueContent(
             onBack = {},
             onClose = {},
-            navigateResultScreen = {}
+            onConfirm = {},
+            onUpdateEmail = {},
+            onUpdateMessage = {},
+            uiState = ReportIssueUiState()
         )
     }
 }
