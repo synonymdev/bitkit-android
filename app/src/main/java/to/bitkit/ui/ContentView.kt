@@ -75,6 +75,9 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
+import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
+import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
+import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
@@ -983,7 +986,7 @@ private fun NavGraphBuilder.widgets(
             onClose = { navController.navigateToHome() },
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
-                    WidgetType.BLOCK -> {}
+                    WidgetType.BLOCK -> navController.navigate(Routes.BlocksPreview)
                     WidgetType.CALCULATOR -> {}
                     WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
                     WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
@@ -1045,6 +1048,32 @@ private fun NavGraphBuilder.widgets(
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
                 navigatePreview = { navController.navigate(Routes.FactsPreview) }
+            )
+        }
+    }
+    navigation<Routes.Blocks>(
+        startDestination = Routes.BlocksPreview
+    ) {
+        composableWithDefaultTransitions<Routes.BlocksPreview> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
+            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
+
+            BlocksPreviewScreen(
+                blocksViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigateEditWidget = { navController.navigate(Routes.BlocksEdit) },
+            )
+        }
+        composableWithDefaultTransitions<Routes.BlocksEdit> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
+            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
+
+            BlocksEditScreen(
+                blocksViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigatePreview = { navController.navigate(Routes.BlocksPreview) }
             )
         }
     }
@@ -1444,4 +1473,13 @@ object Routes {
 
     @Serializable
     data object FactsEdit
+
+    @Serializable
+    data object Blocks
+
+    @Serializable
+    data object BlocksPreview
+
+    @Serializable
+    data object BlocksEdit
 }

@@ -10,9 +10,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
+import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.serializers.WidgetsSerializer
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
+import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.utils.Logger
@@ -31,6 +33,7 @@ class WidgetsStore @Inject constructor(
     val data: Flow<WidgetsData> = store.data
     val articlesFlow: Flow<List<ArticleDTO>> = data.map { it.articles }
     val factsFlow: Flow<List<String>> = data.map { it.facts }
+    val blocksFlow: Flow<BlockDTO?> = data.map { it.block }
 
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
@@ -38,21 +41,33 @@ class WidgetsStore @Inject constructor(
         }
     }
 
-    suspend  fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
+    suspend fun updateHeadlinePreferences(preferences: HeadlinePreferences) {
         store.updateData {
             it.copy(headlinePreferences = preferences)
         }
     }
 
-    suspend  fun updateFactsPreferences(preferences: FactsPreferences) {
+    suspend fun updateFactsPreferences(preferences: FactsPreferences) {
         store.updateData {
             it.copy(factsPreferences = preferences)
+        }
+    }
+
+    suspend fun updateBlocksPreferences(preferences: BlocksPreferences) {
+        store.updateData {
+            it.copy(blocksPreferences = preferences)
         }
     }
 
     suspend fun updateFacts(facts: List<String>) {
         store.updateData {
             it.copy(facts = facts)
+        }
+    }
+
+    suspend fun updateBlock(block: BlockDTO) {
+        store.updateData {
+            it.copy(block = block)
         }
     }
 
@@ -90,5 +105,7 @@ data class WidgetsData(
     val articles: List<ArticleDTO> = emptyList(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val factsPreferences: FactsPreferences = FactsPreferences(),
-    val facts: List<String> = emptyList()
+    val blocksPreferences: BlocksPreferences = BlocksPreferences(),
+    val facts: List<String> = emptyList(),
+    val block: BlockDTO? = null,
 )

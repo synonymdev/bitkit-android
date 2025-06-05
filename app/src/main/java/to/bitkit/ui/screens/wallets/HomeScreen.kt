@@ -85,6 +85,7 @@ import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.settings.backups.BackupSheet
@@ -392,7 +393,26 @@ private fun HomeContentView(
                         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
                             homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
                                 when (widgetsWithPosition.type) {
-                                    WidgetType.BLOCK -> Unit //TODO IMPLEMENT
+                                    WidgetType.BLOCK -> {
+                                        homeUiState.currentBlock?.run {
+                                            BlockCard(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                showWidgetTitle = homeUiState.showWidgetTitles,
+                                                showBlock = homeUiState.blocksPreferences.showBlock,
+                                                showTime = homeUiState.blocksPreferences.showTime,
+                                                showDate = homeUiState.blocksPreferences.showDate,
+                                                showTransactions = homeUiState.blocksPreferences.showTransactions,
+                                                showSize = homeUiState.blocksPreferences.showSize,
+                                                showSource = homeUiState.blocksPreferences.showSource,
+                                                time = time,
+                                                date = date,
+                                                transactions = transactionCount,
+                                                size = size,
+                                                source = source,
+                                                block = height
+                                            )
+                                        }
+                                    }
                                     WidgetType.CALCULATOR -> Unit //TODO IMPLEMENT
                                     WidgetType.FACTS -> {
                                         homeUiState.currentFact?.run {
