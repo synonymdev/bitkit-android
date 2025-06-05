@@ -25,7 +25,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navOptions
 import androidx.navigation.toRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -1154,10 +1153,6 @@ fun NavController.navigateToLocalCurrencySettings() = navigate(
 
 fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
-)
-
-fun NavController.navigateToResetAndRestoreSettings() = navigate(
-    route = Routes.ResetAndRestoreSettings,
 )
 
 fun NavController.navigateToChannelOrdersSettings() = navigate(
