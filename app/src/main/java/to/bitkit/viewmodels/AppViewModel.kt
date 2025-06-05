@@ -822,8 +822,8 @@ class AppViewModel @Inject constructor(
     fun addPin(pin: String) {
         viewModelScope.launch {
             settingsStore.update { it.copy(isPinOnLaunchEnabled = true) }
+            settingsStore.addDismissedSuggestion(Suggestion.SECURE)
         }
-        appStorage.addSuggestionToRemovedList(Suggestion.SECURE)
         editPin(pin)
     }
 

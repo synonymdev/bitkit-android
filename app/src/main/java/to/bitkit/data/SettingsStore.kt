@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -41,6 +42,20 @@ class SettingsStore @Inject constructor(
     suspend fun deleteLastUsedTag(tag: String) {
         store.updateData {
             it.copy(lastUsedTags = it.lastUsedTags.filter { it != tag })
+        }
+    }
+
+    suspend fun addDismissedSuggestion(suggestion: Suggestion) {
+        store.updateData { currentSettings ->
+            val updatedDismissedSuggestions = (currentSettings.dismissedSuggestions + suggestion.name).distinct()
+            currentSettings.copy(dismissedSuggestions = updatedDismissedSuggestions)
+        }
+    }
+
+    suspend fun removeDismissedSuggestion(suggestion: Suggestion) {
+        store.updateData { currentSettings ->
+            val updatedDismissedSuggestions = currentSettings.dismissedSuggestions.filter { it != suggestion.name }
+            currentSettings.copy(dismissedSuggestions = updatedDismissedSuggestions)
         }
     }
 
@@ -82,4 +97,5 @@ data class SettingsData(
     val enableAutoReadClipboard: Boolean = false,
     val enableSendAmountWarning: Boolean = false,
     val backupVerified: Boolean = false,
+    val dismissedSuggestions: List<String> = emptyList(),
 )
