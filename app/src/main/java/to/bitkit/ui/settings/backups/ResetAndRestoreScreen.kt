@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -27,16 +31,19 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.walletViewModel
 
 object ResetAndRestoreTestTags {
     const val SCREEN = "restore_screen"
     const val BACKUP_BUTTON = "restore_backup_button"
     const val RESET_BUTTON = "restore_reset_button"
+    const val RESET_DIALOG = "restore_reset_button"
 }
 
 @Composable
@@ -44,19 +51,29 @@ fun ResetAndRestoreScreen(
     navController: NavController,
 ) {
     val app = appViewModel ?: return
+    val wallet = walletViewModel ?: return
+    var showDialog by remember { mutableStateOf(false) }
 
-    RestoreWalletContent(
+    Content(
+        showConfirmDialog = showDialog,
         onClickBackup = { app.showSheet(BottomSheetType.BackupNavigation) },
-        onClickReset = { TODO() },
+        onClickReset = { showDialog = true },
+        onResetConfirm = {
+            wallet.wipeStorage()
+        },
+        onResetDismiss = { showDialog = false },
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
     )
 }
 
 @Composable
-private fun RestoreWalletContent(
+private fun Content(
+    showConfirmDialog: Boolean,
     onClickBackup: () -> Unit,
     onClickReset: () -> Unit,
+    onResetConfirm: () -> Unit,
+    onResetDismiss: () -> Unit,
     onBack: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -111,6 +128,17 @@ private fun RestoreWalletContent(
 
             Spacer(Modifier.height(16.dp))
         }
+
+        if (showConfirmDialog) {
+            AppAlertDialog(
+                title = stringResource(R.string.security__reset_dialog_title),
+                text = stringResource(R.string.security__reset_dialog_desc),
+                confirmText = stringResource(R.string.security__reset_confirm),
+                onConfirm = onResetConfirm,
+                onDismiss = onResetDismiss,
+                modifier = Modifier.testTag(ResetAndRestoreTestTags.RESET_DIALOG)
+            )
+        }
     }
 }
 
@@ -118,11 +146,30 @@ private fun RestoreWalletContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        RestoreWalletContent(
-            onBack = {},
-            onClose = {},
+        Content(
+            showConfirmDialog = false,
             onClickBackup = {},
             onClickReset = {},
+            onResetConfirm = {},
+            onResetDismiss = {},
+            onBack = {},
+            onClose = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        Content(
+            showConfirmDialog = true,
+            onClickBackup = {},
+            onClickReset = {},
+            onResetConfirm = {},
+            onResetDismiss = {},
+            onBack = {},
+            onClose = {},
         )
     }
 }
