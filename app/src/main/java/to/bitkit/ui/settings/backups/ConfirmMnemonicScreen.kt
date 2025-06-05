@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -54,8 +55,12 @@ fun ConfirmMnemonicScreen(
         originalSeed.shuffled()
     }
 
-    var selectedWords by remember { mutableStateOf(arrayOfNulls<String>(originalSeed.size)) }
-    var pressedStates by remember { mutableStateOf(BooleanArray(shuffledWords.size) { false }) }
+    var selectedWords by rememberSaveable {
+        mutableStateOf(arrayOfNulls<String>(originalSeed.size))
+    }
+    var pressedStates by rememberSaveable {
+        mutableStateOf(BooleanArray(shuffledWords.size) { false })
+    }
 
     // Calculate if all words are correct
     val isComplete = selectedWords.all { it != null } &&
