@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -72,6 +73,14 @@ fun SheetHost(
     // TODO prevent onDismiss call during first render
     LaunchedEffect(scaffoldState.bottomSheetState.isVisible) {
         if (!scaffoldState.bottomSheetState.isVisible) {
+            onDismiss()
+        }
+    }
+
+    // Dismiss on back
+    BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
+        scope.launch {
+            scaffoldState.bottomSheetState.hide()
             onDismiss()
         }
     }
