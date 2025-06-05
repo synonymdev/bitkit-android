@@ -77,14 +77,6 @@ fun SheetHost(
         }
     }
 
-    // Dismiss on back
-    BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
-        scope.launch {
-            scaffoldState.bottomSheetState.hide()
-            onDismiss()
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
@@ -96,6 +88,15 @@ fun SheetHost(
             sheetContentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             content()
+
+            // Dismiss on back
+            BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
+                println("SheetHost: BackHandler - trigger")
+                scope.launch {
+                    scaffoldState.bottomSheetState.hide()
+                    onDismiss()
+                }
+            }
 
             Scrim(scaffoldState.bottomSheetState) {
                 scope.launch {
