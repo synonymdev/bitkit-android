@@ -122,7 +122,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
-        appStorage.addSuggestionToRemovedList(suggestion)
+        viewModelScope.launch {
+            settingsStore.addDismissedSuggestion(suggestion)
+        }
     }
 
     fun refreshWidgets() {
@@ -139,11 +141,8 @@ class HomeViewModel @Inject constructor(
 
     private fun createSuggestionsFlow() = combine(
         walletRepo.balanceState,
-        appStorage.removedSuggestionsFlow.map { stringList ->
-            stringList.mapNotNull { it.toSuggestionOrNull() }
-        },
         settingsStore.data,
-    ) { balanceState, removedList, settings ->
+    ) { balanceState, settings ->
         val baseSuggestions = when {
             balanceState.totalLightningSats > 0uL -> { // With Lightning
                 listOfNotNull(
@@ -183,7 +182,8 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }
-        //TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
-        baseSuggestions.filterNot { it in removedList }
+        // TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
+        val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
+        baseSuggestions.filterNot { it in dismissedList }
     }
 }

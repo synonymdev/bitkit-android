@@ -28,7 +28,7 @@ val LocalSettingsViewModel = staticCompositionLocalOf<SettingsViewModel?> { null
 
 val appViewModel: AppViewModel?
     @Composable get() = LocalAppViewModel.current
-@Deprecated("Prefer inject the repositories in a specific viewmodel so you don't need to handle a nullable viewmodel")
+
 val walletViewModel: WalletViewModel?
     @Composable get() = LocalWalletViewModel.current
 

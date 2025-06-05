@@ -8,7 +8,6 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
@@ -62,7 +61,6 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
-            network = Network.REGTEST
         )
     }
 
@@ -132,7 +130,6 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
-            network = Network.BITCOIN
         )
 
         val result = nonRegtestRepo.wipeWallet()
@@ -169,23 +166,25 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21 should generate new address when current has transactions`() = test {
         whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(AddressInfo(
-            address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-            chain_stats = AddressStats(
-                funded_txo_count = 1,
-                funded_txo_sum = 2,
-                spent_txo_count = 1,
-                spent_txo_sum = 1,
-                tx_count = 5
-            ),
-            mempool_stats = AddressStats(
-                funded_txo_count = 1,
-                funded_txo_sum = 2,
-                spent_txo_count = 1,
-                spent_txo_sum = 1,
-                tx_count = 5
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(
+            AddressInfo(
+                address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                chain_stats = AddressStats(
+                    funded_txo_count = 1,
+                    funded_txo_sum = 2,
+                    spent_txo_count = 1,
+                    spent_txo_sum = 1,
+                    tx_count = 5
+                ),
+                mempool_stats = AddressStats(
+                    funded_txo_count = 1,
+                    funded_txo_sum = 2,
+                    spent_txo_count = 1,
+                    spent_txo_sum = 1,
+                    tx_count = 5
+                )
             )
-        ))
+        )
 
         val result = sut.refreshBip21()
 
@@ -197,23 +196,25 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21 should keep address when current has no transactions`() = test {
         val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(AddressInfo(
-            address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-            chain_stats = AddressStats(
-                funded_txo_count = 1,
-                funded_txo_sum = 2,
-                spent_txo_count = 1,
-                spent_txo_sum = 1,
-                tx_count = 0
-            ),
-            mempool_stats = AddressStats(
-                funded_txo_count = 1,
-                funded_txo_sum = 2,
-                spent_txo_count = 1,
-                spent_txo_sum = 1,
-                tx_count = 0
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(
+            AddressInfo(
+                address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                chain_stats = AddressStats(
+                    funded_txo_count = 1,
+                    funded_txo_sum = 2,
+                    spent_txo_count = 1,
+                    spent_txo_sum = 1,
+                    tx_count = 0
+                ),
+                mempool_stats = AddressStats(
+                    funded_txo_count = 1,
+                    funded_txo_sum = 2,
+                    spent_txo_count = 1,
+                    spent_txo_sum = 1,
+                    tx_count = 0
+                )
             )
-        ))
+        )
 
         val result = sut.refreshBip21()
 
@@ -278,7 +279,14 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21ForEvent should not refresh for other events`() = test {
-        sut.refreshBip21ForEvent(Event.PaymentSuccessful(paymentId = "", paymentHash = "", paymentPreimage = "", feePaidMsat = 10uL))
+        sut.refreshBip21ForEvent(
+            Event.PaymentSuccessful(
+                paymentId = "",
+                paymentHash = "",
+                paymentPreimage = "",
+                feePaidMsat = 10uL
+            )
+        )
 
         verify(lightningRepo, never()).newAddress()
     }

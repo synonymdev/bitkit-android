@@ -16,7 +16,7 @@ object WidgetsSerializer : Serializer<WidgetsData> {
         return try {
             json.decodeFromString(input.readBytes().decodeToString())
         } catch (e: SerializationException) {
-            Logger.error("Failed to deserialize settings: $e")
+            Logger.error("Failed to deserialize: $e")
             defaultValue
         }
     }

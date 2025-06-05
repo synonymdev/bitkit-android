@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -87,6 +88,15 @@ fun SheetHost(
             sheetContentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             content()
+
+            // Dismiss on back
+            BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
+                println("SheetHost: BackHandler - trigger")
+                scope.launch {
+                    scaffoldState.bottomSheetState.hide()
+                    onDismiss()
+                }
+            }
 
             Scrim(scaffoldState.bottomSheetState) {
                 scope.launch {

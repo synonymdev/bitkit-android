@@ -220,14 +220,14 @@ class MainActivity : FragmentActivity() {
                     if (showForgotPinSheet) {
                         ForgotPinSheet(
                             onDismiss = { appViewModel.setShowForgotPin(false) },
-                            onResetClick = { walletViewModel.wipeStorage() },
+                            onResetClick = { walletViewModel.wipeWallet() },
                         )
                     }
 
                     LaunchedEffect(appViewModel) {
                         appViewModel.mainScreenEffect.collect {
                             when (it) {
-                                MainScreenEffect.WipeStorage -> walletViewModel.wipeStorage()
+                                MainScreenEffect.WipeWallet -> walletViewModel.wipeWallet()
                                 else -> Unit
                             }
                         }

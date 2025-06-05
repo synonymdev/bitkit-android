@@ -255,7 +255,7 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun wipeStorage() {
+    fun wipeWallet() {
         viewModelScope.launch(bgDispatcher) {
             walletRepo.wipeWallet().onFailure { error ->
                 ToastEventBus.send(error)

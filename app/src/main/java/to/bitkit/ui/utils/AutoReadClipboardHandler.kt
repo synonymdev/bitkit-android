@@ -72,16 +72,16 @@ fun AutoReadClipboardHandler() {
     }
 
     if (showClipboardDialog && isAuthenticated) {
-        ClipboardDataDialog(
+        AppAlertDialog(
+            title = stringResource(R.string.other__clipboard_redirect_title),
+            text = stringResource(R.string.other__clipboard_redirect_msg),
+            confirmText = stringResource(R.string.common__ok),
+            dismissText = stringResource(R.string.common__dialog_cancel),
             onConfirm = {
-                context.getClipboardText()?.let { data ->
-                    appViewModel.onClipboardAutoRead(data)
-                }
+                context.getClipboardText()?.let { data -> appViewModel.onClipboardAutoRead(data) }
                 showClipboardDialog = false
             },
-            onDismiss = {
-                showClipboardDialog = false
-            }
+            onDismiss = { showClipboardDialog = false }
         )
     }
 }
@@ -94,20 +94,4 @@ private suspend fun Context.hasScanDataInClipboard(): Boolean {
 
     val scanResult = runCatching { decode(clipText) }
     return scanResult.isSuccess
-}
-
-@Composable
-private fun ClipboardDataDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        title = stringResource(R.string.other__clipboard_redirect_title),
-        text = stringResource(R.string.other__clipboard_redirect_msg),
-        confirmButtonText = stringResource(R.string.common__ok),
-        dismissButtonText = stringResource(R.string.common__dialog_cancel),
-        onConfirm = onConfirm,
-        onDismiss = onDismiss,
-    )
 }
