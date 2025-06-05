@@ -780,10 +780,6 @@ class AppViewModel @Inject constructor(
     }
     // endregion
 
-    fun loadMnemonic(): String? {
-        return keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-    }
-
     // region security
     fun resetIsAuthenticatedState() {
         viewModelScope.launch {

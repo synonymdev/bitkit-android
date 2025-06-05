@@ -130,6 +130,7 @@ fun Subtitle(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text,
@@ -139,6 +140,7 @@ fun Subtitle(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
+            textAlign = textAlign,
         ),
         modifier = modifier,
     )

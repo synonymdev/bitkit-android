@@ -81,4 +81,5 @@ data class SettingsData(
     val hideBalanceOnOpen: Boolean = false,
     val enableAutoReadClipboard: Boolean = false,
     val enableSendAmountWarning: Boolean = false,
+    val backupVerified: Boolean = false,
 )
