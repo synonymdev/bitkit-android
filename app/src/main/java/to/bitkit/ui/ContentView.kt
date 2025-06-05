@@ -99,7 +99,7 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
 import to.bitkit.ui.settings.backups.BackupSheet
-import to.bitkit.ui.settings.backups.RestoreWalletScreen
+import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
 import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
@@ -379,7 +379,7 @@ private fun RootNavHost(
         defaultUnitSettings(currencyViewModel, navController)
         localCurrencySettings(currencyViewModel, navController)
         backupSettings(navController)
-        restoreWalletSettings(navController)
+        resetAndRestoreSettings(navController)
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
@@ -780,11 +780,11 @@ private fun NavGraphBuilder.backupSettings(
     }
 }
 
-private fun NavGraphBuilder.restoreWalletSettings(
+private fun NavGraphBuilder.resetAndRestoreSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.RestoreWalletSettings> {
-        RestoreWalletScreen(navController)
+    composableWithDefaultTransitions<Routes.ResetAndRestoreSettings> {
+        ResetAndRestoreScreen(navController)
     }
 }
 
@@ -1151,8 +1151,8 @@ fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
 )
 
-fun NavController.navigateToRestoreWalletSettings() = navigate(
-    route = Routes.RestoreWalletSettings,
+fun NavController.navigateToResetAndRestoreSettings() = navigate(
+    route = Routes.ResetAndRestoreSettings,
 )
 
 fun NavController.navigateToChannelOrdersSettings() = navigate(
@@ -1319,7 +1319,7 @@ object Routes {
     data object BackupSettings
 
     @Serializable
-    data object RestoreWalletSettings
+    data object ResetAndRestoreSettings
 
     @Serializable
     data object ChannelOrdersSettings

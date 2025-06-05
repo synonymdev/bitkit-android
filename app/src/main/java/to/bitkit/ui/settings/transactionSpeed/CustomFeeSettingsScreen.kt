@@ -100,9 +100,7 @@ private fun CustomFeeSettingsContent(
     val feeRate = input.toUIntOrNull() ?: 0u
     val isValid = feeRate != 0u
 
-    ScreenColumn(
-        modifier = Modifier.navigationBarsPadding()
-    ) {
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__general__speed_fee_custom),
             onBackClick = onBackClick,
