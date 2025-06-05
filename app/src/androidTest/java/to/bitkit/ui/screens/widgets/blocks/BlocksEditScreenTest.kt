@@ -209,8 +209,12 @@ class BlocksEditScreenTest {
         var previewClicked = false
 
         val customPreferences = BlocksPreferences(
-            showBlock = true,
-            showTime = true
+            showBlock = false,
+            showTime = false,
+            showDate = false,
+            showTransactions = false,
+            showSize = true,
+            showSource = true
         )
 
         composeTestRule.setContent {
@@ -251,11 +255,11 @@ class BlocksEditScreenTest {
         composeTestRule.onNodeWithTag("source_toggle_button").performClick()
         assert(sourceClicked)
 
-        composeTestRule.onNodeWithTag("reset_button").performClick()
-        assert(resetClicked)
-
         composeTestRule.onNodeWithTag("preview_button").performClick()
         assert(previewClicked)
+
+        composeTestRule.onNodeWithTag("reset_button").performClick()
+        assert(resetClicked)
     }
 
     @Test
@@ -311,7 +315,14 @@ class BlocksEditScreenTest {
                     onClickShowSource = {},
                     onClickReset = {},
                     onClickPreview = {},
-                    blocksPreferences = defaultPreferences.copy(showBlock = false),
+                    blocksPreferences = BlocksPreferences(
+                        showBlock = false,
+                        showTime = false,
+                        showDate = false,
+                        showTransactions = false,
+                        showSize = true,
+                        showSource = true
+                    ),
                     block = testBlock
                 )
             }
