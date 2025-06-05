@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -15,11 +16,17 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.navigateToHome
-import to.bitkit.ui.navigateToRestoreWalletSettings
+import to.bitkit.ui.navigateToResetAndRestoreSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+
+object BackupSettingsTestTags {
+    const val SCREEN = "backup_settings_screen"
+    const val BACKUP_BUTTON = "backup_settings_backup_button"
+    const val RESTORE_BUTTON = "backup_settings_restore_button"
+}
 
 @Composable
 fun BackupSettingsScreen(
@@ -29,7 +36,10 @@ fun BackupSettingsScreen(
 
     BackupSettingsScreenContent(
         onBackupClick = { app.showSheet(BottomSheetType.BackupNavigation) },
-        onResetAndRestoreClick = { navController.navigateToRestoreWalletSettings() },
+        onResetAndRestoreClick = {
+            // TODO: if isPinEnabled guard with authCheck
+            navController.navigateToResetAndRestoreSettings()
+        },
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
     )
@@ -52,14 +62,17 @@ private fun BackupSettingsScreenContent(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
+                .testTag(BackupSettingsTestTags.SCREEN)
         ) {
             SettingsButtonRow(
                 title = stringResource(R.string.settings__backup__wallet),
                 onClick = onBackupClick,
+                modifier = Modifier.testTag(BackupSettingsTestTags.BACKUP_BUTTON),
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__backup__reset),
                 onClick = onResetAndRestoreClick,
+                modifier = Modifier.testTag(BackupSettingsTestTags.RESTORE_BUTTON),
             )
         }
     }
