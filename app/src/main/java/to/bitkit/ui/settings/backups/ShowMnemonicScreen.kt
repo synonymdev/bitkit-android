@@ -220,6 +220,7 @@ private fun MnemonicWordsGrid(
         modifier = Modifier
             .fillMaxWidth()
             .blur(radius = blurRadius.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+            .alpha(1f - blurRadius * 0.075f)
     ) {
         Crossfade(
             targetState = showMnemonic,
