@@ -1082,10 +1082,15 @@ private fun NavGraphBuilder.widgets(
 // endregion
 
 // region events
-fun NavController.navigateToHome() = navigate(
-    route = Routes.Home,
-    navOptions = navOptions { popUpTo(Routes.Home) }
-)
+fun NavController.navigateToHome() {
+    val popped = popBackStack(Routes.Home, inclusive = false)
+    if (!popped) {
+        navigate(Routes.Home) {
+            popUpTo(graph.startDestinationId) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+}
 
 fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
