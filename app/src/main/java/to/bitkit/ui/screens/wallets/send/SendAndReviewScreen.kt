@@ -225,10 +225,6 @@ private fun SendAndReviewContent(
 
         if (uiState.showAmountWarningDialog) {
             AppAlertDialog(
-                onDismissRequest = {
-                    onEvent(SendEvent.DismissAmountWarning)
-                    onBack()
-                },
                 title = stringResource(R.string.common__are_you_sure),
                 text = stringResource(R.string.wallet__send_dialog1),
                 confirmButtonText = stringResource(R.string.wallet__send_yes),
