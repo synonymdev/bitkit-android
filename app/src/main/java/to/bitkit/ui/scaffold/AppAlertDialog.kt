@@ -7,8 +7,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.DialogProperties
+import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Title
@@ -17,25 +20,35 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun AppAlertDialog(
-    onDismissRequest: () -> Unit,
     title: String,
     text: String,
-    confirmButtonText: String,
-    dismissButtonText: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    properties: DialogProperties = DialogProperties(dismissOnClickOutside = false),
+    modifier: Modifier = Modifier,
+    confirmText: String = stringResource(R.string.common__ok),
+    dismissText: String = stringResource(R.string.common__dialog_cancel),
+    onDismissRequest: () -> Unit = onDismiss,
+    properties: DialogProperties = DialogProperties(
+        dismissOnClickOutside = false,
+        dismissOnBackPress = false,
+    ),
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                BodyMSB(text = confirmButtonText)
+            TextButton(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("dialog_confirm"),
+            ) {
+                BodyMSB(text = confirmText)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                BodyMSB(text = dismissButtonText, color = Colors.White64)
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("dialog_cancel"),
+            ) {
+                BodyMSB(text = dismissText, color = Colors.White64)
             }
         },
         title = { Title(text = title) },
@@ -43,6 +56,7 @@ fun AppAlertDialog(
         shape = MaterialTheme.shapes.medium,
         properties = properties,
         containerColor = Colors.Gray5,
+        modifier = modifier,
     )
 }
 
@@ -52,11 +66,8 @@ private fun Preview() {
     AppThemeSurface {
         Box(Modifier.fillMaxSize()) {
             AppAlertDialog(
-                onDismissRequest = {},
                 title = "Are you sure?",
                 text = "You're about do something critically cool. This action cannot be undone.",
-                confirmButtonText = "Yes",
-                dismissButtonText = "Cancel",
                 onConfirm = {},
                 onDismiss = {},
             )

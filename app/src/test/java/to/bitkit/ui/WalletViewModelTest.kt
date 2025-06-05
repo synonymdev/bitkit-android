@@ -127,10 +127,10 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipeStorage should call walletRepo wipeWallet and lightningRepo wipeStorage, and set walletExists`() =
+    fun `wipeWallet should call walletRepo wipeWallet`() =
         test {
             whenever(walletRepo.wipeWallet(walletIndex = 0)).thenReturn(Result.success(Unit))
-            sut.wipeStorage()
+            sut.wipeWallet()
 
             verify(walletRepo).wipeWallet(walletIndex = 0)
         }

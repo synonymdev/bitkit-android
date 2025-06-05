@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
@@ -47,7 +46,6 @@ class WalletRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
-    private val network: Network
 ) {
 
     private val _walletState = MutableStateFlow(
@@ -198,10 +196,6 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        if (network != Network.REGTEST) {
-            return@withContext Result.failure(Exception("Can only wipe on regtest."))
-        }
-
         try { //TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
             keychain.wipe()
             appStorage.clear()
