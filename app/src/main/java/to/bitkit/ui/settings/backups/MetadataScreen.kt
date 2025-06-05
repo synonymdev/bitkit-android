@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,6 +61,7 @@ private fun MetadataContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_metadata_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_data_header), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -87,6 +89,7 @@ private fun MetadataContent(
                 text = stringResource(R.string.security__mnemonic_latest_backup)
                     .replace("{time}", latestBackupTime)
                     .withBold(),
+                modifier = Modifier.testTag("backup_time_text")
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -94,6 +97,7 @@ private fun MetadataContent(
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
                 onClick = onDismiss,
+                modifier = Modifier.testTag("backup_metadata_ok_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

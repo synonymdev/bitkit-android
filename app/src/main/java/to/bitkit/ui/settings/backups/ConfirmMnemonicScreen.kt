@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -127,6 +128,7 @@ private fun ConfirmMnemonicContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_confirm_mnemonic_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_confirm), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -148,7 +150,9 @@ private fun ConfirmMnemonicContent(
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("backup_shuffled_words_grid")
             ) {
                 shuffledWords.forEachIndexed { index, word ->
                     PrimaryButton(
@@ -156,7 +160,8 @@ private fun ConfirmMnemonicContent(
                         color = if (pressedStates.getOrNull(index) == true) Colors.White32 else Colors.White16,
                         fullWidth = false,
                         size = ButtonSize.Small,
-                        onClick = { onWordPress(word, index) }
+                        onClick = { onWordPress(word, index) },
+                        modifier = Modifier.testTag("backup_shuffled_word_button_$index")
                     )
                 }
             }
@@ -202,6 +207,7 @@ private fun ConfirmMnemonicContent(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
                 enabled = isComplete,
+                modifier = Modifier.testTag("backup_confirm_mnemonic_continue_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

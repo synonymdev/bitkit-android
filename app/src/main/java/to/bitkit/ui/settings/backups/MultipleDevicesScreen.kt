@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,6 +46,7 @@ private fun MultipleDevicesContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("multiple_devices_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_multiple_header), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -71,6 +73,7 @@ private fun MultipleDevicesContent(
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
                 onClick = onContinue,
+                modifier = Modifier.testTag("multiple_devices_ok_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

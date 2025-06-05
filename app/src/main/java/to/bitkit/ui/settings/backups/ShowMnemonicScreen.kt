@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
@@ -119,6 +120,7 @@ private fun ShowMnemonicContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_show_mnemonic_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_your))
         Spacer(modifier = Modifier.height(16.dp))
@@ -155,6 +157,7 @@ private fun ShowMnemonicContent(
                         .background(color = Colors.White10)
                         .clickable(enabled = showMnemonic && mnemonic.isNotEmpty(), onClick = onCopyClick)
                         .padding(32.dp)
+                        .testTag("backup_mnemonic_words_box")
                 ) {
                     MnemonicWordsGrid(
                         actualWords = mnemonicWords,
@@ -175,7 +178,9 @@ private fun ShowMnemonicContent(
                             fullWidth = false,
                             onClick = onRevealClick,
                             color = Colors.Black50,
-                            modifier = Modifier.alpha(buttonAlpha)
+                            modifier = Modifier
+                                .alpha(buttonAlpha)
+                                .testTag("backup_reveal_mnemonic_button")
                         )
                     }
                 }
@@ -195,6 +200,7 @@ private fun ShowMnemonicContent(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinueClick,
                 enabled = showMnemonic,
+                modifier = Modifier.testTag("backup_show_mnemonic_continue_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

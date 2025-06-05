@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ private fun ShowPassphraseContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_show_passphrase_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__pass_your), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -86,6 +88,7 @@ private fun ShowPassphraseContent(
                 BodyMSB(
                     text = bip39Passphrase,
                     color = Colors.White,
+                    modifier = Modifier.testTag("backup_passphrase_text")
                 )
             }
 
@@ -101,6 +104,7 @@ private fun ShowPassphraseContent(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
+                modifier = Modifier.testTag("backup_show_passphrase_continue_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

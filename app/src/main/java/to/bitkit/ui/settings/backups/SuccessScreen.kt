@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -49,6 +50,7 @@ private fun SuccessContent(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag("backup_success_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__mnemonic_result_header), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -75,6 +77,7 @@ private fun SuccessContent(
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
                 onClick = onContinue,
+                modifier = Modifier.testTag("backup_success_ok_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))

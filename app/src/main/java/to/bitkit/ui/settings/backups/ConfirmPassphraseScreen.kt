@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -64,6 +65,7 @@ private fun ConfirmPassphraseContent(
             .gradientBackground()
             .navigationBarsPadding()
             .imePadding()
+            .testTag("backup_confirm_passphrase_screen")
     ) {
         SheetTopBar(stringResource(R.string.security__pass_confirm), onBack = onBack)
         Spacer(modifier = Modifier.height(16.dp))
@@ -91,7 +93,9 @@ private fun ConfirmPassphraseContent(
                     imeAction = ImeAction.Done,
                     autoCorrectEnabled = false
                 ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("backup_passphrase_input")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -100,6 +104,7 @@ private fun ConfirmPassphraseContent(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
                 enabled = isValid,
+                modifier = Modifier.testTag("backup_confirm_passphrase_continue_button")
             )
 
             Spacer(modifier = Modifier.height(16.dp))
