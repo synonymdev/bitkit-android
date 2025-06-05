@@ -59,7 +59,6 @@ fun DevSettingsScreen(
                 SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
                 SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
                 SettingsTextButtonRow("Reset Settings Store") { settings.reset() }
-                SettingsTextButtonRow(stringResource(R.string.security__wipe_app)) { viewModel.wipeStorage() }
             }
 
             SectionHeader(title = "DEBUG")

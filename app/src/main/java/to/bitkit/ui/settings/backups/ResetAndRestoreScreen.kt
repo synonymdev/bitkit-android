@@ -58,9 +58,7 @@ fun ResetAndRestoreScreen(
         showConfirmDialog = showDialog,
         onClickBackup = { app.showSheet(BottomSheetType.BackupNavigation) },
         onClickReset = { showDialog = true },
-        onResetConfirm = {
-            wallet.wipeStorage()
-        },
+        onResetConfirm = { wallet.wipeWallet() },
         onResetDismiss = { showDialog = false },
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },

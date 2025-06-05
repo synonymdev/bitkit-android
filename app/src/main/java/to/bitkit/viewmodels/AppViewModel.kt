@@ -813,7 +813,7 @@ class AppViewModel @Inject constructor(
                     description = resourceProvider.getString(R.string.security__wiped_message),
                 )
                 delay(250) // small delay for UI feedback
-                mainScreenEffect(MainScreenEffect.WipeStorage)
+                mainScreenEffect(MainScreenEffect.WipeWallet)
             }
         }
         return false
@@ -915,7 +915,7 @@ sealed class SendEffect {
 
 sealed class MainScreenEffect {
     data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
-    data object WipeStorage : MainScreenEffect()
+    data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }
 
