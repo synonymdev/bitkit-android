@@ -22,10 +22,11 @@ import to.bitkit.ui.theme.Colors
 fun AppAlertDialog(
     title: String,
     text: String,
-    confirmButtonText: String = stringResource(R.string.common__ok),
-    dismissButtonText: String = stringResource(R.string.common__dialog_cancel),
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    confirmText: String = stringResource(R.string.common__ok),
+    dismissText: String = stringResource(R.string.common__dialog_cancel),
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -39,7 +40,7 @@ fun AppAlertDialog(
                 onClick = onConfirm,
                 modifier = Modifier.testTag("dialog_confirm"),
             ) {
-                BodyMSB(text = confirmButtonText)
+                BodyMSB(text = confirmText)
             }
         },
         dismissButton = {
@@ -47,7 +48,7 @@ fun AppAlertDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("dialog_cancel"),
             ) {
-                BodyMSB(text = dismissButtonText, color = Colors.White64)
+                BodyMSB(text = dismissText, color = Colors.White64)
             }
         },
         title = { Title(text = title) },
@@ -55,6 +56,7 @@ fun AppAlertDialog(
         shape = MaterialTheme.shapes.medium,
         properties = properties,
         containerColor = Colors.Gray5,
+        modifier = modifier,
     )
 }
 

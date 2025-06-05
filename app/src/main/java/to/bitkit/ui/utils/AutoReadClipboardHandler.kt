@@ -75,8 +75,8 @@ fun AutoReadClipboardHandler() {
         AppAlertDialog(
             title = stringResource(R.string.other__clipboard_redirect_title),
             text = stringResource(R.string.other__clipboard_redirect_msg),
-            confirmButtonText = stringResource(R.string.common__ok),
-            dismissButtonText = stringResource(R.string.common__dialog_cancel),
+            confirmText = stringResource(R.string.common__ok),
+            dismissText = stringResource(R.string.common__dialog_cancel),
             onConfirm = {
                 context.getClipboardText()?.let { data -> appViewModel.onClipboardAutoRead(data) }
                 showClipboardDialog = false
