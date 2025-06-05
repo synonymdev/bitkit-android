@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.components.Subtitle
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
@@ -40,15 +41,13 @@ fun SheetTopBar(
             .fillMaxWidth()
             .height(42.dp)
     ) {
-        Text(
+        Subtitle(
             text = titleText,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .align(Alignment.Center),
+                .align(Alignment.Center)
         )
 
         onBack?.let { callback ->

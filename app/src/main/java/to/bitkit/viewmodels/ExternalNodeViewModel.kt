@@ -147,8 +147,8 @@ interface ExternalNodeContract {
         val localBalance: Long = 0,
     )
 
-    sealed class SideEffect {
-        data object ConnectionSuccess : SideEffect()
-        data object ConfirmSuccess : SideEffect()
+    sealed interface SideEffect {
+        data object ConnectionSuccess : SideEffect
+        data object ConfirmSuccess : SideEffect
     }
 }

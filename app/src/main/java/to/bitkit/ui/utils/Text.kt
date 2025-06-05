@@ -61,6 +61,9 @@ fun String.withAccent(
     }
 }
 
+fun String.withAccentBoldBright() =
+    this.withAccent(accentStyle = SpanStyle(color = Colors.White, fontWeight = FontWeight.Bold))
+
 fun String.withAccentLink(url: String): AnnotatedString {
     val htmlText = this
         .replace("<accent>", "<a href=\"$url\">")
@@ -115,7 +118,7 @@ fun String.withBold(
     }
 }
 
-fun String.isValidEmail() = this.isNotBlank() &&  android.util.Patterns.EMAIL_ADDRESS.matcher(this).matches()
+fun String.isValidEmail() = this.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(this).matches()
 
 @Composable
 fun localizedRandom(@StringRes id: Int): String {

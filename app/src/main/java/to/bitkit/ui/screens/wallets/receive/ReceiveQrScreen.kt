@@ -66,6 +66,7 @@ import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.components.PagerWithIndicator
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppShapes
@@ -120,7 +121,7 @@ fun ReceiveQrSheet(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight(.875f)
+            .fillMaxHeight(SheetSize.LARGE)
             .imePadding()
     ) {
         NavHost(

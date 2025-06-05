@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
+import to.bitkit.ui.components.SheetSize
 
 @Composable
 fun PinNavigationSheet(
@@ -21,7 +22,7 @@ fun PinNavigationSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.775f)
+            .fillMaxHeight(SheetSize.MEDIUM)
     ) {
         NavHost(
             navController = navController,

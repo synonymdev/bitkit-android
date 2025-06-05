@@ -27,6 +27,7 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
@@ -66,7 +67,7 @@ private fun TagSelectorSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.5f)
+            .fillMaxHeight(SheetSize.SMALL)
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)

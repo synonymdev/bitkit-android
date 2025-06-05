@@ -4,55 +4,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.rememberNavController
-import kotlinx.serialization.Serializable
-import to.bitkit.models.BalanceState
-import to.bitkit.ui.utils.composableWithDefaultTransitions
-import to.bitkit.viewmodels.WalletViewModel
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import to.bitkit.models.BalanceState
+import to.bitkit.ui.components.SheetSize
+import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun BackupSheet(
     onDismiss: () -> Unit,
+    onBackupClick: () -> Unit,
     walletViewModel: WalletViewModel,
 ) {
-    val navController = rememberNavController()
+    val balance: BalanceState by walletViewModel.balanceState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(.775f)
+            .fillMaxHeight(SheetSize.MEDIUM)
     ) {
-        NavHost(
-            navController = navController,
-            startDestination = BackupRoute.Intro,
-        ) {
-            composableWithDefaultTransitions<BackupRoute.Intro> {
-                val balance : BalanceState by walletViewModel.balanceState.collectAsStateWithLifecycle()
-                BackupIntroScreen(
-                    hasFunds = balance.totalSats > 0u,
-                    onClose = onDismiss,
-                    onConfirm = {
-                        navController.navigate(BackupRoute.Backup)
-                    }
-                )
-            }
-            composableWithDefaultTransitions<BackupRoute.Backup> {
-                BackupWalletScreen(
-                    navController = navController
-                )
-            }
-        }
+        BackupIntroScreen(
+            hasFunds = balance.totalSats > 0u,
+            onClose = onDismiss,
+            onConfirm = onBackupClick,
+        )
     }
-}
-
-object BackupRoute {
-    @Serializable
-    data object Intro
-
-    @Serializable
-    data object Backup
 }
