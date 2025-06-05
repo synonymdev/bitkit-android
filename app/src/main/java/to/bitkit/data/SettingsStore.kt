@@ -52,13 +52,6 @@ class SettingsStore @Inject constructor(
         }
     }
 
-    suspend fun removeDismissedSuggestion(suggestion: Suggestion) {
-        store.updateData { currentSettings ->
-            val updatedDismissedSuggestions = currentSettings.dismissedSuggestions.filter { it != suggestion.name }
-            currentSettings.copy(dismissedSuggestions = updatedDismissedSuggestions)
-        }
-    }
-
     suspend fun reset() {
         store.updateData { SettingsData() }
         Logger.info("Deleted all user settings data.")
