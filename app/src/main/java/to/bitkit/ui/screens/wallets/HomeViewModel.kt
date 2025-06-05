@@ -139,13 +139,13 @@ class HomeViewModel @Inject constructor(
         appStorage.removedSuggestionsFlow.map { stringList ->
             stringList.mapNotNull { it.toSuggestionOrNull() }
         },
-        settingsStore.data.map { it.isPinEnabled },
-    ) { balanceState, removedList, isPinEnabled ->
+        settingsStore.data,
+    ) { balanceState, removedList, settings ->
         val baseSuggestions = when {
             balanceState.totalLightningSats > 0uL -> { // With Lightning
                 listOfNotNull(
-                    Suggestion.BACK_UP,
-                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.BUY,
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
@@ -157,9 +157,9 @@ class HomeViewModel @Inject constructor(
 
             balanceState.totalOnchainSats > 0uL -> { // Only on chain balance
                 listOfNotNull(
-                    Suggestion.BACK_UP,
+                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
                     Suggestion.SPEND,
-                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.BUY,
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
@@ -172,8 +172,8 @@ class HomeViewModel @Inject constructor(
                 listOfNotNull(
                     Suggestion.BUY,
                     Suggestion.SPEND,
-                    Suggestion.BACK_UP,
-                    Suggestion.SECURE.takeIf { !isPinEnabled },
+                    Suggestion.BACK_UP.takeIf { !settings.backupVerified },
+                    Suggestion.SECURE.takeIf { !settings.isPinEnabled },
                     Suggestion.SUPPORT,
                     Suggestion.INVITE,
                     Suggestion.PROFILE,

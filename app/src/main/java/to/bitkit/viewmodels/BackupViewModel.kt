@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.Toast
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -24,6 +25,7 @@ import javax.inject.Inject
 @HiltViewModel
 class BackupViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val settingsStore: SettingsStore,
     private val keychain: Keychain,
 ) : ViewModel() {
 
@@ -100,8 +102,10 @@ class BackupViewModel @Inject constructor(
     }
 
     fun onSuccessContinue() {
-        // TODO: mark backup as verified to hide suggestion card
-        setEffect(SideEffect.NavigateToMultipleDevices)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(backupVerified = true) }
+            setEffect(SideEffect.NavigateToMultipleDevices)
+        }
     }
 
     fun onMultipleDevicesContinue() {
