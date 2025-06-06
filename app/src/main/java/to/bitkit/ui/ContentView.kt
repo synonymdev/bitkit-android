@@ -77,12 +77,16 @@ import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
+import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
+import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
+import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
+import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
 import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -990,7 +994,7 @@ private fun NavGraphBuilder.widgets(
                     WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
                     WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
                     WidgetType.PRICE -> {}
-                    WidgetType.WEATHER -> {}
+                    WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
                 }
             },
             fiatSymbol = currencyViewModel.getCurrencySymbol()
@@ -1073,6 +1077,32 @@ private fun NavGraphBuilder.widgets(
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
                 navigatePreview = { navController.navigate(Routes.BlocksPreview) }
+            )
+        }
+    }
+    navigation<Routes.Weather>(
+        startDestination = Routes.WeatherPreview
+    ) {
+        composableWithDefaultTransitions<Routes.WeatherPreview> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
+            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
+
+            WeatherPreviewScreen(
+                weatherViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigateEditWidget = { navController.navigate(Routes.WeatherEdit) },
+            )
+        }
+        composableWithDefaultTransitions<Routes.WeatherEdit> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
+            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
+
+            WeatherEditScreen(
+                weatherViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigatePreview = { navController.navigate(Routes.WeatherPreview) }
             )
         }
     }
@@ -1482,4 +1512,13 @@ object Routes {
 
     @Serializable
     data object BlocksEdit
+
+    @Serializable
+    data object Weather
+
+    @Serializable
+    data object WeatherPreview
+
+    @Serializable
+    data object WeatherEdit
 }
