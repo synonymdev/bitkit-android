@@ -174,7 +174,7 @@ fun WeatherPreviewContent(
 
         Row(
             modifier = Modifier
-                .padding(vertical = 21.dp)
+                .padding(vertical = 21.dp, horizontal = 16.dp)
                 .fillMaxWidth()
                 .testTag("buttons_row"),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
