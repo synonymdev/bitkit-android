@@ -82,9 +82,9 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    fun toggleShowSubTitle() {
+    fun toggleShowDescription() {
         _customPreferences.update { preferences ->
-            preferences.copy(showSubTitle = !preferences.showSubTitle)
+            preferences.copy(showDescription = !preferences.showDescription)
         }
     }
 
