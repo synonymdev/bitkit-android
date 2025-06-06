@@ -10,6 +10,7 @@ import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.FeeEstimates
 import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.models.WidgetType
+import to.bitkit.services.CurrencyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -21,6 +22,7 @@ import kotlin.time.Duration.Companion.minutes
 @Singleton
 class WeatherService @Inject constructor(
     private val client: HttpClient,
+    private val currencyService: CurrencyService,
 ) : WidgetService<WeatherDTO> {
 
     override val widgetType = WidgetType.WEATHER
@@ -28,11 +30,12 @@ class WeatherService @Inject constructor(
 
     private companion object {
         private const val TAG = "WeatherService"
-        private const val BASE_URL = "https://mempool.space/api/v1"
+        private const val BASE_URL = "https://mempool.space/api/v1" //TODO MOVE TO ENV
         private const val VBYTES_SIZE = 140 // average native segwit transaction size
         private const val USD_GOOD_THRESHOLD = 1.0 // $1 USD threshold for good condition
         private const val PERCENTILE_LOW = 0.33
         private const val PERCENTILE_HIGH = 0.66
+        private const val USD_CURRENCY = "USD"
     }
 
     override suspend fun fetchData(): Result<WeatherDTO> = runCatching {
@@ -72,7 +75,7 @@ class WeatherService @Inject constructor(
         }
     }
 
-    private fun calculateCondition(
+    private suspend fun calculateCondition(
         currentFeeRate: Double,
         history: List<BlockFeeRates>
     ): FeeCondition {
@@ -89,7 +92,7 @@ class WeatherService @Inject constructor(
 
         // Check USD threshold first
         val avgFeeSats = currentFeeRate * VBYTES_SIZE
-        val avgFeeUsd = convertSatsToUsd(avgFeeSats.toInt()) // TODO This would need to be implemented
+        val avgFeeUsd = currencyService.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY)
 
         if (avgFeeUsd <= USD_GOOD_THRESHOLD) {
             return FeeCondition.GOOD
@@ -103,19 +106,15 @@ class WeatherService @Inject constructor(
         }
     }
 
-    private fun formatFeeForDisplay(satoshis: Int): String {
+    private suspend fun formatFeeForDisplay(satoshis: Int): String {
         // TODO This would integrate with your existing display value utilities
-        // For now, returning a simple format
         val usdValue = convertSatsToUsd(satoshis)
         return "$ ${String.format("%.2f", usdValue)}"
     }
 
-    private fun convertSatsToUsd(satoshis: Int): Double {
-        // TODO This would need to integrate with your existing currency conversion logic
-        // Placeholder implementation - you'd want to use your actual exchange rate service
-        // Assuming ~$50,000 per BTC for example
-        val btcValue = satoshis / 100_000_000.0
-        return btcValue * 50000.0 // This should use actual exchange rates
+    private suspend fun convertSatsToUsd(satoshis: Int): Double {
+        val amountInUsd = currencyService.convertSatsToFiat(satoshis.toLong(), currency = USD_CURRENCY)
+        return amountInUsd
     }
 }
 /**
