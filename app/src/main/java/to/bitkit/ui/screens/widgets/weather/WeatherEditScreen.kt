@@ -129,7 +129,7 @@ fun WeatherEditContent(
                         fontFamily = InterFontFamily,
                         color = Colors.White,
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("title_text"),
                 )
 
                 weather?.icon?.let {
