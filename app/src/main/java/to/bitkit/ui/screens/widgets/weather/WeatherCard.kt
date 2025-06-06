@@ -125,7 +125,6 @@ fun WeatherCard(
                 )
             }
 
-
             if (preferences.showCurrentFee) {
                 Row(
                     modifier = Modifier
