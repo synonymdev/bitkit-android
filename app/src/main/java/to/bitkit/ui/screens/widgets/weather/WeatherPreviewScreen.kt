@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -94,6 +96,8 @@ fun WeatherPreviewContent(
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .testTag("main_content")
         ) {
             Spacer(modifier = Modifier.height(26.dp))
@@ -166,34 +170,34 @@ fun WeatherPreviewContent(
                     preferences = weatherPreferences
                 )
             }
+        }
 
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("buttons_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                if (isWeatherWidgetEnabled) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__delete),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("delete_button"),
-                        fullWidth = false,
-                        onClick = onClickDelete
-                    )
-                }
-
-                PrimaryButton(
-                    text = stringResource(R.string.common__save),
+        Row(
+            modifier = Modifier
+                .padding(vertical = 21.dp)
+                .fillMaxWidth()
+                .testTag("buttons_row"),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (isWeatherWidgetEnabled) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__delete),
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("save_button"),
+                        .testTag("delete_button"),
                     fullWidth = false,
-                    onClick = onClickSave
+                    onClick = onClickDelete
                 )
             }
+
+            PrimaryButton(
+                text = stringResource(R.string.common__save),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("save_button"),
+                fullWidth = false,
+                onClick = onClickSave
+            )
         }
     }
 }
