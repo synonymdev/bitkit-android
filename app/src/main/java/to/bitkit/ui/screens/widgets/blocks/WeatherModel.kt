@@ -30,7 +30,7 @@ fun WeatherDTO.toWeatherModel(): WeatherModel {
         title = title,
         description = description,
         currentFee = currentFee,
-        nextBlockFee = nextBlockFee.toString(),
-        icon = condition.icon
+        nextBlockFee = "$nextBlockFee ₿/vByte",
+        icon = condition.icon,
     )
 }
