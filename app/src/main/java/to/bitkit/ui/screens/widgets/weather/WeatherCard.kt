@@ -32,7 +32,6 @@ import to.bitkit.data.dto.FeeCondition
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
-import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Subtitle
 import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.theme.AppThemeSurface
@@ -87,7 +86,7 @@ fun WeatherCard(
                         .testTag("weather_card_title_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
-                )  {
+                ) {
                     Text(
                         text = stringResource(weatherModel.title).uppercase(),
                         overflow = TextOverflow.Ellipsis,
@@ -121,7 +120,9 @@ fun WeatherCard(
                 Subtitle(
                     text = stringResource(weatherModel.description),
                     color = Colors.White,
-                    modifier = Modifier.padding(top = 8.dp).testTag("weather_card_description_text")
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .testTag("weather_card_description_text")
                 )
             }
 
@@ -132,7 +133,7 @@ fun WeatherCard(
                         .padding(top = 8.dp)
                         .testTag("weather_card_current_fee_row"),
                     horizontalArrangement = Arrangement.SpaceBetween
-                )  {
+                ) {
                     BodySB(
                         text = stringResource(R.string.widgets__weather__current_fee),
                         color = Colors.White64,
