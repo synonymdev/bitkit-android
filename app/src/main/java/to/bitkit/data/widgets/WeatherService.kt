@@ -31,7 +31,7 @@ class WeatherService @Inject constructor(
 
     private companion object {
         private const val TAG = "WeatherService"
-        private const val VBYTES_SIZE = 140 // average native segwit transaction size
+        private const val AVERAGE_SEGWIT_VBYTES_SIZE = 140
         private const val USD_GOOD_THRESHOLD = 1.0 // $1 USD threshold for good condition
         private const val PERCENTILE_LOW = 0.33
         private const val PERCENTILE_HIGH = 0.66
@@ -47,7 +47,7 @@ class WeatherService @Inject constructor(
         val condition = calculateCondition(feeEstimates.normal, history)
 
         // Calculate average fee for display
-        val avgFeeSats = (feeEstimates.normal * VBYTES_SIZE).toInt()
+        val avgFeeSats = (feeEstimates.normal * AVERAGE_SEGWIT_VBYTES_SIZE).toInt()
         val currentFee = formatFeeForDisplay(avgFeeSats)
 
         WeatherDTO(
@@ -91,7 +91,7 @@ class WeatherService @Inject constructor(
         val highThreshold = historicalFees[floor(historicalFees.size * PERCENTILE_HIGH).toInt()]
 
         // Check USD threshold first
-        val avgFeeSats = currentFeeRate * VBYTES_SIZE
+        val avgFeeSats = currentFeeRate * AVERAGE_SEGWIT_VBYTES_SIZE
         val avgFeeUsd = currencyService.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY)
 
         if (avgFeeUsd <= USD_GOOD_THRESHOLD) {
@@ -107,7 +107,6 @@ class WeatherService @Inject constructor(
     }
 
     private suspend fun formatFeeForDisplay(satoshis: Int): String {
-        // TODO This would integrate with your existing display value utilities
         val usdValue = convertSatsToUsd(satoshis)
         return "$ ${String.format("%.2f", usdValue)}"
     }
