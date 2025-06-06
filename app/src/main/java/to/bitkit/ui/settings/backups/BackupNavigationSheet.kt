@@ -16,13 +16,11 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.utils.composableWithDefaultTransitions
-import to.bitkit.viewmodels.BackupContract
-import to.bitkit.viewmodels.BackupViewModel
 
 @Composable
 fun BackupNavigationSheet(
     onDismiss: () -> Unit,
-    viewModel: BackupViewModel = hiltViewModel(),
+    viewModel: BackupNavigationSheetViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
