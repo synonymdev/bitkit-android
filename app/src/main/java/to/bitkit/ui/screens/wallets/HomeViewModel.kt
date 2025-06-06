@@ -61,9 +61,11 @@ class HomeViewModel @Inject constructor(
                     headlinePreferences = widgetsData.headlinePreferences,
                     factsPreferences = widgetsData.factsPreferences,
                     blocksPreferences = widgetsData.blocksPreferences,
+                    weatherPreferences = widgetsData.weatherPreferences,
                     currentArticle = currentArticle,
                     currentFact = currentFact,
-                    currentBlock = widgetsData.block?.toBlockModel()
+                    currentBlock = widgetsData.block?.toBlockModel(),
+                    currentWeather = widgetsData.weather,
                 )
             }.collect { newState ->
                 _uiState.update { newState }
