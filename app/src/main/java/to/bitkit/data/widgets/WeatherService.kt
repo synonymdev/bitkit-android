@@ -9,6 +9,7 @@ import to.bitkit.data.dto.BlockFeeRates
 import to.bitkit.data.dto.FeeCondition
 import to.bitkit.data.dto.FeeEstimates
 import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.env.Env
 import to.bitkit.models.WidgetType
 import to.bitkit.services.CurrencyService
 import to.bitkit.utils.AppError
@@ -30,7 +31,6 @@ class WeatherService @Inject constructor(
 
     private companion object {
         private const val TAG = "WeatherService"
-        private const val BASE_URL = "https://mempool.space/api/v1" //TODO MOVE TO ENV
         private const val VBYTES_SIZE = 140 // average native segwit transaction size
         private const val USD_GOOD_THRESHOLD = 1.0 // $1 USD threshold for good condition
         private const val PERCENTILE_LOW = 0.33
@@ -59,16 +59,16 @@ class WeatherService @Inject constructor(
         Logger.warn(e = it, msg = "Failed to fetch weather data", context = TAG)
     }
 
-    private suspend fun getFeeEstimates(): FeeEstimates {
-        val response: HttpResponse = client.get("$BASE_URL/fees/recommended")
+    private suspend fun getFeeEstimates(): FeeEstimates { //TODO CACHE
+        val response: HttpResponse = client.get("${Env.mempoolBaseUrl}/v1/fees/recommended")
         return when (response.status.isSuccess()) {
             true -> response.body<FeeEstimates>()
             else -> throw WeatherError.InvalidResponse("Failed to fetch fee estimates: ${response.status.description}")
         }
     }
 
-    private suspend fun getHistoricalFeeData(): List<BlockFeeRates> {
-        val response: HttpResponse = client.get("$BASE_URL/mining/blocks/fee-rates/3m")
+    private suspend fun getHistoricalFeeData(): List<BlockFeeRates> { //TODO CACHE
+        val response: HttpResponse = client.get("${Env.mempoolBaseUrl}/v1/mining/blocks/fee-rates/3m")
         return when (response.status.isSuccess()) {
             true -> response.body<List<BlockFeeRates>>()
             else -> throw WeatherError.InvalidResponse("Failed to fetch historical fee data: ${response.status.description}")
