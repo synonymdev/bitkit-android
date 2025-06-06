@@ -15,6 +15,8 @@ import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.blocks.WeatherModel
+import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 
 @HiltViewModel
@@ -49,9 +51,9 @@ class WeatherViewModel @Inject constructor(
             initialValue = true
         )
 
-    val currentWeather: StateFlow<WeatherDTO?> = widgetsRepo.weatherFlow/*.map { weather ->
+    val currentWeather: StateFlow<WeatherModel?> = widgetsRepo.weatherFlow.map { weather ->
         weather?.toWeatherModel()
-    }*/.stateIn(
+    }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
         initialValue = null
