@@ -165,13 +165,38 @@ fun WeatherEditContent(
             HorizontalDivider(
                 modifier = Modifier.testTag("title_divider")
             )
-//            // Description toggle
-            WeatherEditOptionRow(
-                label = weather?.description?.let { stringResource(it) }.orEmpty(),
-                value = "",
-                isEnabled = weatherPreferences.showDescription,
-                onClick = onClickShowDescription,
-                testTagPrefix = "description"
+
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(vertical = 21.dp)
+                    .fillMaxWidth()
+                    .testTag("description_setting_row")
+            ) {
+                BodyM(
+                    text =weather?.description?.let { stringResource(it) }.orEmpty(),
+                    color = Colors.White,
+                    modifier = Modifier.weight(1f).testTag("description_text")
+                )
+
+                IconButton(
+                    onClick = onClickShowDescription,
+                    modifier = Modifier.testTag("description_toggle_button")
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_checkmark),
+                        contentDescription = null,
+                        tint = if (weatherPreferences.showDescription) Colors.Brand else Colors.White50,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("description_toggle_icon"),
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.testTag("description_divider")
             )
 
             // Current fee toggle
@@ -319,7 +344,7 @@ private fun PreviewWithSomeOptionsEnabled() {
             onClickPreview = {},
             weatherPreferences = WeatherPreferences(
                 showTitle = true,
-                showDescription = false,
+                showDescription = true,
                 showCurrentFee = true,
                 showNextBlockFee = false
             ),
