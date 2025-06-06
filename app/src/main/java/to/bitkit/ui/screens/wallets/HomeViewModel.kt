@@ -21,6 +21,7 @@ import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -61,9 +62,11 @@ class HomeViewModel @Inject constructor(
                     headlinePreferences = widgetsData.headlinePreferences,
                     factsPreferences = widgetsData.factsPreferences,
                     blocksPreferences = widgetsData.blocksPreferences,
+                    weatherPreferences = widgetsData.weatherPreferences,
                     currentArticle = currentArticle,
                     currentFact = currentFact,
-                    currentBlock = widgetsData.block?.toBlockModel()
+                    currentBlock = widgetsData.block?.toBlockModel(),
+                    currentWeather = widgetsData.weather?.toWeatherModel(),
                 )
             }.collect { newState ->
                 _uiState.update { newState }

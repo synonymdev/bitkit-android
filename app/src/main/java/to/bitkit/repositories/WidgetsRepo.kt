@@ -16,6 +16,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
+import to.bitkit.data.widgets.WeatherService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
@@ -23,6 +24,7 @@ import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,6 +35,7 @@ class WidgetsRepo @Inject constructor(
     private val newsService: NewsService,
     private val factsService: FactsService,
     private val blocksService: BlocksService,
+    private val weatherService: WeatherService,
     private val widgetsStore: WidgetsStore,
     private val settingsStore: SettingsStore,
 ) {
@@ -44,6 +47,7 @@ class WidgetsRepo @Inject constructor(
     val articlesFlow = widgetsStore.articlesFlow
     val factsFlow = widgetsStore.factsFlow
     val blocksFlow = widgetsStore.blocksFlow
+    val weatherFlow = widgetsStore.weatherFlow
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
@@ -74,6 +78,10 @@ class WidgetsRepo @Inject constructor(
         widgetsStore.updateBlocksPreferences(preferences)
     }
 
+    suspend fun updateWeatherPreferences(preferences: WeatherPreferences) = withContext(bgDispatcher) {
+        widgetsStore.updateWeatherPreferences(preferences)
+    }
+
     /**
      * Start periodic updates for all widgets
      */
@@ -86,6 +94,9 @@ class WidgetsRepo @Inject constructor(
         }
         startPeriodicUpdate(blocksService) { block ->
             widgetsStore.updateBlock(block)
+        }
+        startPeriodicUpdate(weatherService) { weather ->
+            widgetsStore.updateWeather(weather)
         }
     }
 
@@ -130,17 +141,18 @@ class WidgetsRepo @Inject constructor(
      * Manually refresh all widgets
      */
     suspend fun refreshAllWidgets(): Result<Unit> = runCatching {
-        listOf(
-            updateWidget(newsService) { articles ->
-                widgetsStore.updateArticles(articles)
-            },
-            updateWidget(factsService) { facts ->
-                widgetsStore.updateFacts(facts)
-            },
-            updateWidget(blocksService) { block ->
-                widgetsStore.updateBlock(block)
-            },
-        )
+        updateWidget(newsService) { articles ->
+            widgetsStore.updateArticles(articles)
+        }
+        updateWidget(factsService) { facts ->
+            widgetsStore.updateFacts(facts)
+        }
+        updateWidget(blocksService) { block ->
+            widgetsStore.updateBlock(block)
+        }
+        updateWidget(weatherService) { weather ->
+            widgetsStore.updateWeather(weather)
+        }
     }
 
     /**
@@ -152,9 +164,8 @@ class WidgetsRepo @Inject constructor(
                 widgetsStore.updateArticles(articles)
             }
 
-            WidgetType.WEATHER -> {
-                // TODO: Implement when WeatherService is ready
-                throw NotImplementedError("Weather widget not implemented yet")
+            WidgetType.WEATHER -> updateWidget(weatherService) { weather ->
+                widgetsStore.updateWeather(weather)
             }
 
             WidgetType.PRICE -> {

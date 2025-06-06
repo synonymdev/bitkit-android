@@ -11,12 +11,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
+import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.serializers.WidgetsSerializer
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +36,7 @@ class WidgetsStore @Inject constructor(
     val articlesFlow: Flow<List<ArticleDTO>> = data.map { it.articles }
     val factsFlow: Flow<List<String>> = data.map { it.facts }
     val blocksFlow: Flow<BlockDTO?> = data.map { it.block }
+    val weatherFlow: Flow<WeatherDTO?> = data.map { it.weather }
 
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
@@ -59,6 +62,12 @@ class WidgetsStore @Inject constructor(
         }
     }
 
+    suspend fun updateWeatherPreferences(preferences: WeatherPreferences) {
+        store.updateData {
+            it.copy(weatherPreferences = preferences)
+        }
+    }
+
     suspend fun updateFacts(facts: List<String>) {
         store.updateData {
             it.copy(facts = facts)
@@ -68,6 +77,12 @@ class WidgetsStore @Inject constructor(
     suspend fun updateBlock(block: BlockDTO) {
         store.updateData {
             it.copy(block = block)
+        }
+    }
+
+    suspend fun updateWeather(weather: WeatherDTO) {
+        store.updateData {
+            it.copy(weather = weather)
         }
     }
 
@@ -102,10 +117,12 @@ class WidgetsStore @Inject constructor(
 @Serializable
 data class WidgetsData(
     val widgets: List<WidgetWithPosition> = emptyList(),
-    val articles: List<ArticleDTO> = emptyList(),
     val headlinePreferences: HeadlinePreferences = HeadlinePreferences(),
     val factsPreferences: FactsPreferences = FactsPreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
+    val weatherPreferences: WeatherPreferences = WeatherPreferences(),
+    val articles: List<ArticleDTO> = emptyList(),
     val facts: List<String> = emptyList(),
     val block: BlockDTO? = null,
+    val weather: WeatherDTO? = null,
 )
