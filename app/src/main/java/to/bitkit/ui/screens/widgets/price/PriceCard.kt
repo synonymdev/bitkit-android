@@ -62,20 +62,20 @@ fun PriceCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .padding(bottom = 8.dp)
-                        .testTag("block_card_widget_title_row")
+                        .testTag("price_card_widget_title_row")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.widget_chart_line),
                         contentDescription = null,
                         modifier = Modifier
                             .size(32.dp)
-                            .testTag("block_card_widget_title_icon"),
+                            .testTag("price_card_widget_title_icon"),
                         tint = Color.Unspecified
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     BodyMSB(
                         text = stringResource(R.string.widgets__price__name),
-                        modifier = Modifier.testTag("block_card_widget_title_text")
+                        modifier = Modifier.testTag("price_card_widget_title_text")
                     )
                 }
             }
@@ -84,7 +84,7 @@ fun PriceCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("block_card_block_row"),
+                        .testTag("price_card_pair_row_${widgetData.name}"),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     BodySB(
@@ -92,13 +92,13 @@ fun PriceCard(
                         color = Colors.White64,
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("block_card_block_label")
+                            .testTag("price_card_pair_label_${widgetData.name}")
                     )
 
                     BodySB(
                         text = widgetData.change.formatted,
                         color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                        modifier = Modifier.testTag("block_card_block_text")
+                        modifier = Modifier.testTag("price_card_pair_change_${widgetData.name}")
                     )
 
                     Spacer(modifier = Modifier.width(16.dp))
@@ -106,14 +106,17 @@ fun PriceCard(
                     BodySB(
                         text = widgetData.price,
                         color = Colors.White,
-                        modifier = Modifier.testTag("block_card_block_text")
+                        modifier = Modifier.testTag("price_card_pair_price_${widgetData.name}")
                     )
                 }
             }
 
             priceDTO.widgets.firstOrNull()?.let { firstPriceData ->
                 LineChart(
-                    modifier = Modifier.fillMaxWidth().height(96.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp)
+                        .testTag("price_card_chart_${firstPriceData.name}"),
                     data = remember {
                         listOf(
                             Line(
