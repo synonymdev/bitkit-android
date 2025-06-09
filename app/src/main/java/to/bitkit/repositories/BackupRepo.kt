@@ -18,7 +18,7 @@ import to.bitkit.ext.formatPlural
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.Toast
-import to.bitkit.data.backup.BackupService
+import to.bitkit.services.backup.BackupService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
