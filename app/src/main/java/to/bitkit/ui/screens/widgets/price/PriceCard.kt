@@ -111,24 +111,25 @@ fun PriceCard(
                 }
             }
 
-            LineChart(
-                modifier = Modifier.fillMaxWidth().height(96.dp),
-                data = remember {
-                    listOf(
-                        Line(
-                            label = "",
-                            values = priceDTO.widgets.first().pastValues,
-                            color = SolidColor(
-                                if (priceDTO.widgets.first().change.isPositive) Colors.Green else Colors.Red,
-                            ),
-                            firstGradientFillColor = if (priceDTO.widgets.first().change.isPositive) Colors.Green else Colors.Red,
-                            secondGradientFillColor = Color.Transparent,
-                            gradientAnimationDelay = 1000,
-                            drawStyle = DrawStyle.Stroke(width = 2.dp),
+            priceDTO.widgets.firstOrNull()?.let { firstPriceData ->
+                LineChart(
+                    modifier = Modifier.fillMaxWidth().height(96.dp),
+                    data = remember {
+                        listOf(
+                            Line(
+                                label = firstPriceData.name,
+                                values = firstPriceData.pastValues,
+                                color = SolidColor(
+                                    if (firstPriceData.change.isPositive) Colors.Green else Colors.Red,
+                                ),
+                                firstGradientFillColor = if (firstPriceData.change.isPositive) Colors.Green else Colors.Red,
+                                secondGradientFillColor = Color.Transparent,
+                                drawStyle = DrawStyle.Stroke(width = 2.dp),
+                            )
                         )
-                    )
-                },
-            )
+                    },
+                )
+            }
         }
     }
 }
