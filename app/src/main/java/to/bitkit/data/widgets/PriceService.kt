@@ -84,7 +84,7 @@ class PriceService @Inject constructor(
         }
     }
 
-    private suspend fun fetchCandles(ticker: String): List<CandleResponse> {
+    private suspend fun fetchCandles(ticker: String): List<CandleResponse> { //TODO CREATE METHOD TO GET ALL PERIODS
         val period = widgetsStore.data.first().pricePreferences.period.value
         val response: HttpResponse = client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$period")
         return when (response.status.isSuccess()) {
