@@ -1,5 +1,8 @@
 package to.bitkit.data.dto.price
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class PriceWidgetData(
     val name: String,
     val change: Change,

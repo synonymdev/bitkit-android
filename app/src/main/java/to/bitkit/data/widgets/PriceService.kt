@@ -96,7 +96,7 @@ class PriceService @Inject constructor(
         }
     }
 
-    private fun calculateChange(pastValues: List<Double>): Change {
+    private fun calculateChange(pastValues: List<Double>): Change { //TODO COLORS
         if (pastValues.size < 2) {
             return Change(color = "green", formatted = "+0%")
         }
