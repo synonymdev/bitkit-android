@@ -8,75 +8,58 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.data.AppStorage
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import javax.inject.Inject
 
 @HiltViewModel
 class BackupSettingsViewModel @Inject constructor(
+    private val appStorage: AppStorage,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
-        loadBackupStatus()
+        observeBackupStatuses()
     }
 
-    private fun loadBackupStatus() {
+    private fun observeBackupStatuses() {
         viewModelScope.launch {
-            val categories = BackupCategory.entries
-                .map { it.toUiState() }
-                .map {
-                    // TODO: Replace with actual backup state from repository
-                    when (it.category) {
-                        BackupCategory.LDK_ACTIVITY -> it.copy(disableRetry = true)
-                        BackupCategory.WALLET -> it.copy(status = BackupItemStatus(running = true, required = 1))
-                        BackupCategory.METADATA -> it.copy(status = BackupItemStatus(required = 1))
-                        else -> it
+            appStorage.backupStatuses.collect { cachedStatuses ->
+                val categories = BackupCategory.entries.map { category ->
+                    val cachedStatus = cachedStatuses[category] ?: BackupItemStatus(synced = 0, required = 1)
+                    category.toUiState(cachedStatus).let { uiState ->
+                        when (category) {
+                            BackupCategory.LDK_ACTIVITY -> uiState.copy(disableRetry = true)
+                            else -> uiState
+                        }
                     }
                 }
-
-            _uiState.update {
-                BackupStatusUiState(categories = categories)
+                _uiState.update { it.copy(categories = categories) }
             }
         }
     }
 
     fun retryBackup(category: BackupCategory) {
         viewModelScope.launch {
+            appStorage.updateBackupStatus(category) { currentStatus ->
+                currentStatus.copy(
+                    running = true,
+                    required = System.currentTimeMillis(),
+                )
+            }
+
             // TODO: Implement actual retry logic
-            val currentState = _uiState.value
-            val updatedCategories = currentState.categories.map { categoryState ->
-                if (categoryState.category == category) {
-                    categoryState.copy(
-                        status = categoryState.status.copy(running = true)
-                    )
-                } else {
-                    categoryState
-                }
+            delay(2000) // Simulate backup completion after 2 seconds
+
+            appStorage.updateBackupStatus(category) {
+                BackupItemStatus(
+                    running = false,
+                    synced = System.currentTimeMillis(),
+                )
             }
-
-            _uiState.update { currentState.copy(categories = updatedCategories) }
-
-            // Simulate backup completion after 2 seconds
-            delay(2000)
-
-            val finalState = _uiState.value
-            val finalCategories = finalState.categories.map { categoryState ->
-                if (categoryState.category == category) {
-                    categoryState.copy(
-                        status = BackupItemStatus(
-                            synced = System.currentTimeMillis(),
-                            required = System.currentTimeMillis()
-                        )
-                    )
-                } else {
-                    categoryState
-                }
-            }
-
-            _uiState.update { finalState.copy(categories = finalCategories) }
         }
     }
 }

@@ -232,11 +232,14 @@ private fun Preview() {
     val categories = BackupCategory.entries
         .map { it.toUiState() }
         .map {
+            val minutesAgo = (5..35).random().toLong()
+            val timestamp = System.currentTimeMillis() - (minutesAgo * 60 * 1000)
+
             when (it.category) {
                 BackupCategory.LDK_ACTIVITY -> it.copy(disableRetry = true)
                 BackupCategory.WALLET -> it.copy(status = BackupItemStatus(running = true, required = 1))
                 BackupCategory.METADATA -> it.copy(status = BackupItemStatus(required = 1))
-                else -> it
+                else -> it.copy(status = BackupItemStatus(synced = timestamp, required = timestamp))
             }
         }
 

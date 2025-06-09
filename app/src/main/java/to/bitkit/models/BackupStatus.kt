@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import kotlinx.serialization.Serializable
 import to.bitkit.R
 
 /**
@@ -7,12 +8,14 @@ import to.bitkit.R
  * @property synced Timestamp in ms of last time this backup was synced
  * @property required Timestamp in ms of last time this backup was required
  */
+@Serializable
 data class BackupItemStatus(
     val running: Boolean = false,
     val synced: Long = 0L,
     val required: Long = 0L,
 )
 
+@Serializable
 enum class BackupCategory {
     LIGHTNING_CONNECTIONS,
     BLOCKTANK,
