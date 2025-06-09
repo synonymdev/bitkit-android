@@ -116,7 +116,7 @@ fun PricePreviewContent(
                 Headline(
                     text = AnnotatedString(stringResource(R.string.widgets__price__name)),
                     modifier = Modifier
-                        .width(200.dp)
+                        .width(180.dp)
                         .testTag("widget_title")
                 )
                 Icon(
