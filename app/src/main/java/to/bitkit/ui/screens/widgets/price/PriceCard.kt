@@ -28,6 +28,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ir.ehsannarmani.compose_charts.LineChart
 import ir.ehsannarmani.compose_charts.models.DrawStyle
+import ir.ehsannarmani.compose_charts.models.GridProperties
+import ir.ehsannarmani.compose_charts.models.HorizontalIndicatorProperties
+import ir.ehsannarmani.compose_charts.models.LabelHelperProperties
+import ir.ehsannarmani.compose_charts.models.LabelProperties
 import ir.ehsannarmani.compose_charts.models.Line
 import to.bitkit.R
 import to.bitkit.data.dto.price.Change
@@ -116,6 +120,7 @@ fun PriceCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(96.dp)
+                        .padding(top = 16.63.dp)
                         .testTag("price_card_chart_${firstPriceData.name}"),
                     data = remember {
                         listOf(
@@ -131,6 +136,19 @@ fun PriceCard(
                             )
                         )
                     },
+                    labelProperties = LabelProperties(
+                        enabled = false
+                    ),
+                    labelHelperProperties = LabelHelperProperties(
+                        enabled = false
+                    ),
+                    gridProperties = GridProperties(
+                        enabled = false
+                    ),
+                    indicatorProperties = HorizontalIndicatorProperties(
+                        enabled = false
+                    )
+
                 )
             }
         }
