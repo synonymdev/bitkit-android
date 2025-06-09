@@ -200,7 +200,9 @@ dependencies {
     implementation(libs.ktor.client.logging)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
-    debugImplementation(libs.slf4j.simple)
+    // Logging
+    runtimeOnly(libs.slf4j.simple)
+    implementation(libs.slf4j.api)
     // Room - DB
     implementation(libs.room.ktx)
     implementation(libs.room.runtime)
