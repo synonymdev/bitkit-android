@@ -63,6 +63,7 @@ internal object Env {
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
+    const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
 
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
