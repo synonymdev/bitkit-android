@@ -1,5 +1,6 @@
 package to.bitkit.ui.utils
 
+import android.util.Patterns
 import androidx.annotation.StringRes
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import to.bitkit.R
+import to.bitkit.ext.formatPlural
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import java.math.BigDecimal
@@ -118,7 +120,7 @@ fun String.withBold(
     }
 }
 
-fun String.isValidEmail() = this.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(this).matches()
+fun String.isValidEmail() = this.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(this).matches()
 
 @Composable
 fun localizedRandom(@StringRes id: Int): String {
@@ -161,15 +163,13 @@ fun BigDecimal.formatCurrency(): String? {
  * localizedPlural(R.string.settings__addr__spend_number, mapOf("fundsToSpend" to "1234", "count" to 2))
  * ```
  */
-@Suppress("SpellCheckingInspection")
 @Composable
 fun localizedPlural(@StringRes id: Int, argMap: Map<Any, Any>): String {
     val resources = LocalContext.current.resources
 
     return remember(id, argMap) {
         val pattern = resources.getString(id)
-        val messageFormat = android.icu.text.MessageFormat(pattern)
-        return@remember messageFormat.format(argMap)
+        return@remember pattern.formatPlural(argMap)
     }
 }
 

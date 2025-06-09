@@ -1,5 +1,7 @@
 package to.bitkit.ext
 
+import android.icu.text.MessageFormat
+
 fun String.ellipsisMiddle(totalLength: Int): String {
     return when {
         this.length > totalLength -> {
@@ -19,3 +21,14 @@ fun String.truncate(length: Int): String {
 }
 
 fun String.removeSpaces() = this.filterNot { it.isWhitespace() }
+
+
+/**
+ * Pluralizes this string using the ICU MessageFormat with the provided arguments map.
+ *
+ * @param argMap A map of arguments to be formatted into the string for pluralization.
+ */
+fun String.formatPlural(argMap: Map<Any, Any>): String {
+    val messageFormat = MessageFormat(this)
+    return messageFormat.format(argMap)
+}
