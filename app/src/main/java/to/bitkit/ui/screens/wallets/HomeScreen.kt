@@ -88,6 +88,7 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
+import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
@@ -440,7 +441,16 @@ private fun HomeContentView(
                                         }
                                     }
 
-                                    WidgetType.PRICE -> Unit //TODO IMPLEMENT
+                                    WidgetType.PRICE -> {
+                                        homeUiState.currentPrice?.run {
+                                            PriceCard(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                showWidgetTitle = homeUiState.showWidgetTitles,
+                                                pricePreferences = homeUiState.pricePreferences,
+                                                priceDTO = this,
+                                            )
+                                        }
+                                    }
                                     WidgetType.WEATHER -> {
                                         homeUiState.currentWeather?.run {
                                             WeatherCard(
