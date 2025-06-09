@@ -3,7 +3,6 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -11,11 +10,13 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
+import to.bitkit.repositories.BackupRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class BackupSettingsViewModel @Inject constructor(
     private val appStorage: AppStorage,
+    private val backupRepo: BackupRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
@@ -44,22 +45,7 @@ class BackupSettingsViewModel @Inject constructor(
 
     fun retryBackup(category: BackupCategory) {
         viewModelScope.launch {
-            appStorage.updateBackupStatus(category) { currentStatus ->
-                currentStatus.copy(
-                    running = true,
-                    required = System.currentTimeMillis(),
-                )
-            }
-
-            // TODO: Implement actual retry logic
-            delay(2000) // Simulate backup completion after 2 seconds
-
-            appStorage.updateBackupStatus(category) {
-                BackupItemStatus(
-                    running = false,
-                    synced = System.currentTimeMillis(),
-                )
-            }
+            backupRepo.triggerBackup(category)
         }
     }
 }
