@@ -16,6 +16,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.widgets.BlocksService
 import to.bitkit.data.widgets.FactsService
 import to.bitkit.data.widgets.NewsService
+import to.bitkit.data.widgets.PriceService
 import to.bitkit.data.widgets.WeatherService
 import to.bitkit.data.widgets.WidgetService
 import to.bitkit.di.BgDispatcher
@@ -24,6 +25,7 @@ import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -36,6 +38,7 @@ class WidgetsRepo @Inject constructor(
     private val factsService: FactsService,
     private val blocksService: BlocksService,
     private val weatherService: WeatherService,
+    private val priceService: PriceService,
     private val widgetsStore: WidgetsStore,
     private val settingsStore: SettingsStore,
 ) {
@@ -48,6 +51,7 @@ class WidgetsRepo @Inject constructor(
     val factsFlow = widgetsStore.factsFlow
     val blocksFlow = widgetsStore.blocksFlow
     val weatherFlow = widgetsStore.weatherFlow
+    val priceFlow = widgetsStore.priceFlow
 
     private val _refreshStates = MutableStateFlow(
         WidgetType.entries.associateWith { false }
@@ -82,6 +86,10 @@ class WidgetsRepo @Inject constructor(
         widgetsStore.updateWeatherPreferences(preferences)
     }
 
+    suspend fun updatePricePreferences(preferences: PricePreferences) = withContext(bgDispatcher) {
+        widgetsStore.updatePricePreferences(preferences)
+    }
+
     /**
      * Start periodic updates for all widgets
      */
@@ -97,6 +105,9 @@ class WidgetsRepo @Inject constructor(
         }
         startPeriodicUpdate(weatherService) { weather ->
             widgetsStore.updateWeather(weather)
+        }
+        startPeriodicUpdate(priceService) { price ->
+            widgetsStore.updatePrice(price)
         }
     }
 
@@ -153,6 +164,9 @@ class WidgetsRepo @Inject constructor(
         updateWidget(weatherService) { weather ->
             widgetsStore.updateWeather(weather)
         }
+        updateWidget(priceService) { price ->
+            widgetsStore.updatePrice(price)
+        }
     }
 
     /**
@@ -168,9 +182,8 @@ class WidgetsRepo @Inject constructor(
                 widgetsStore.updateWeather(weather)
             }
 
-            WidgetType.PRICE -> {
-                // TODO: Implement when PriceService is ready
-                throw NotImplementedError("Price widget not implemented yet")
+            WidgetType.PRICE -> updateWidget(priceService) { price ->
+                widgetsStore.updatePrice(price)
             }
 
             WidgetType.BLOCK -> updateWidget(blocksService) { block ->
