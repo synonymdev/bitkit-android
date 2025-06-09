@@ -6,7 +6,9 @@ import to.bitkit.data.dto.price.TradingPair
 
 @Serializable
 data class PricePreferences(
-    val pairs: List<TradingPair> = emptyList(),
+    val pairs: List<TradingPair> = listOf(
+        TradingPair.BTC_USD
+    ),
     val period: GraphPeriod = GraphPeriod.ONE_DAY,
     val showSource: Boolean = false
 )
