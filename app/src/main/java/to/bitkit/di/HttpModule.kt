@@ -16,7 +16,12 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ProtoClient
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -39,6 +44,23 @@ object HttpModule {
             }
             defaultRequest {
                 contentType(ContentType.Application.Json)
+            }
+        }
+    }
+
+    @ProtoClient
+    @Provides
+    @Singleton
+    fun provideProtoHttpClient(): HttpClient {
+        return HttpClient {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 30_000
+            }
+            install(Logging) {
+                logger = Logger.ANDROID
+                level = LogLevel.INFO
             }
         }
     }

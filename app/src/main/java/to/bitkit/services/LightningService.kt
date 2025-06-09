@@ -65,6 +65,7 @@ class LightningService @Inject constructor(
 ) : BaseCoroutineScope(bgDispatcher) {
 
     var node: Node? = null
+    var vssStoreId: String? = null
 
     suspend fun setup(walletIndex: Int) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
@@ -114,6 +115,7 @@ class LightningService @Inject constructor(
         val mnemonicData = mnemonic.encodeToByteArray()
         val hashedMnemonic = mnemonicData.toSha256()
         val storeIdHack = Env.vssStoreId + hashedMnemonic.toHex()
+        this.vssStoreId = storeIdHack
 
         Logger.info("storeIdHack: $storeIdHack")
 

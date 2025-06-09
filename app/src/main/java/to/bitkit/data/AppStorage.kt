@@ -102,6 +102,7 @@ class AppStorage @Inject constructor(
 
     fun clear() {
         sharedPreferences.edit { clear() }
+        _backupStatuses.value = emptyMap()
     }
 }
 

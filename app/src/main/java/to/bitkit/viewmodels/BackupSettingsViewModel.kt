@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -45,6 +46,7 @@ class BackupSettingsViewModel @Inject constructor(
 
     fun retryBackup(category: BackupCategory) {
         viewModelScope.launch {
+            delay(500) // small delay for UX feedback
             backupRepo.triggerBackup(category)
         }
     }

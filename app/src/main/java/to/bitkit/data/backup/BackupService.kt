@@ -1,6 +1,8 @@
-package to.bitkit.services.backup
+package to.bitkit.data.backup
 
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.Json
+import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -9,6 +11,7 @@ import javax.inject.Singleton
 
 @Singleton
 class BackupService @Inject constructor(
+    private val vssClient: VssBackupClient,
 ) {
     suspend fun performBackup(category: BackupCategory): Result<Unit> {
         Logger.debug("Performing backup for category: $category", context = TAG)
@@ -26,50 +29,88 @@ class BackupService @Inject constructor(
     }
 
     private suspend fun performWalletBackup(): Result<Unit> = runCatching {
-        // val walletData = walletService.exportData()
-        // val encrypted = cryptoService.encrypt(walletData)
-        // val uploaded = cloudService.upload(encrypted)
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Wallet backup")
     }
 
     private suspend fun performSettingsBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        // TODO: Get actual settings data
+        val settingsData = mapOf(
+            "placeholder" to "settings_data",
+            "timestamp" to System.currentTimeMillis().toString(),
+        )
+
+        val dataBytes = json.encodeToString(settingsData).toByteArray()
+
+        encryptAndUpload(BackupCategory.SETTINGS, dataBytes)
     }
 
     private suspend fun performWidgetsBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Widgets backup")
     }
 
     private suspend fun performMetadataBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Metadata backup")
     }
 
     private suspend fun performBlocktankBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Blocktank backup")
     }
 
     private suspend fun performSlashtagsBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Slashtags backup")
     }
 
     private suspend fun performLdkActivityBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("LDK activity backup")
     }
 
     private suspend fun performLightningConnectionsBackup(): Result<Unit> = runCatching {
         delay(1000)
-        throw BackupError.BackupFailure("TODO: backup not implemented")
+        TODO("Lightning connections backup")
     }
 
-    private fun uploadBackup(key: String, blob: ByteArray): Result<Unit> {
-        return Result.success(Unit)
+    private suspend fun encryptAndUpload(
+        category: BackupCategory,
+        dataBytes: ByteArray,
+    ): VssObjectInfo {
+        // TODO encrypt data before upload
+        val encrypted = dataBytes
+
+        val result = vssClient.putObject(category, encrypted).getOrThrow()
+
+        Logger.info("Backup uploaded for category: $category", context = TAG)
+        return result
+    }
+
+    /**
+     * Restore backup data for a specific category
+     */
+    suspend fun restoreBackup(category: BackupCategory): Result<ByteArray> {
+        Logger.debug("Restoring backup for category: $category", context = TAG)
+
+        return vssClient.getObject(category).map { it.data }
+    }
+
+    /**
+     * Delete backup data for a specific category
+     */
+    suspend fun deleteBackup(category: BackupCategory): Result<Unit> {
+        Logger.debug("Deleting backup for category: $category", context = TAG)
+        return vssClient.deleteObject(category)
+    }
+
+    /**
+     * List all available backup categories
+     */
+    suspend fun listBackups(): Result<List<VssObjectInfo>> {
+        Logger.debug("Listing all backups", context = TAG)
+        return vssClient.listObjects().map { it.objects }
     }
 
     companion object {

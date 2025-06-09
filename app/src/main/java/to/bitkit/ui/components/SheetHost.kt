@@ -91,7 +91,6 @@ fun SheetHost(
 
             // Dismiss on back
             BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
-                println("SheetHost: BackHandler - trigger")
                 scope.launch {
                     scaffoldState.bottomSheetState.hide()
                     onDismiss()
