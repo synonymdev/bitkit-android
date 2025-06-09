@@ -31,8 +31,8 @@ import to.bitkit.R
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
-import to.bitkit.models.uiIconRes
-import to.bitkit.models.uiTitleRes
+import to.bitkit.models.uiIcon
+import to.bitkit.models.uiTitle
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
@@ -51,8 +51,9 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.BackupCategoryUiState
+import to.bitkit.viewmodels.BackupSettingsViewModel
 import to.bitkit.viewmodels.BackupStatusUiState
-import to.bitkit.viewmodels.BackupStatusViewModel
+import to.bitkit.viewmodels.toUiState
 
 object BackupSettingsTestTags {
     const val SCREEN = "backup_settings_screen"
@@ -63,16 +64,16 @@ object BackupSettingsTestTags {
 @Composable
 fun BackupSettingsScreen(
     navController: NavController,
-    backupStatusViewModel: BackupStatusViewModel = hiltViewModel(),
+    viewModel: BackupSettingsViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
 
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
-    val backupUiState by backupStatusViewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     BackupSettingsScreenContent(
-        backupUiState = backupUiState,
+        uiState = uiState,
         onBackupClick = { app.showSheet(BottomSheetType.BackupNavigation) },
         onResetAndRestoreClick = {
             if (isPinEnabled) {
@@ -81,7 +82,7 @@ fun BackupSettingsScreen(
                 navController.navigate(Routes.ResetAndRestoreSettings)
             }
         },
-        onRetryBackup = { category -> backupStatusViewModel.retryBackup(category) },
+        onRetryBackup = { category -> viewModel.retryBackup(category) },
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
     )
@@ -89,7 +90,7 @@ fun BackupSettingsScreen(
 
 @Composable
 private fun BackupSettingsScreenContent(
-    backupUiState: BackupStatusUiState,
+    uiState: BackupStatusUiState,
     onBackupClick: () -> Unit,
     onResetAndRestoreClick: () -> Unit,
     onRetryBackup: (BackupCategory) -> Unit,
@@ -121,9 +122,9 @@ private fun BackupSettingsScreenContent(
 
             SectionHeader(title = stringResource(R.string.settings__backup__latest))
 
-            backupUiState.categories.map { categoryUiState ->
+            uiState.categories.map { categoryUiState ->
                 BackupStatusItem(
-                    categoryUiState = categoryUiState,
+                    uiState = categoryUiState,
                     onRetryClick = onRetryBackup,
                 )
                 HorizontalDivider()
@@ -134,11 +135,11 @@ private fun BackupSettingsScreenContent(
 
 @Composable
 private fun BackupStatusItem(
-    categoryUiState: BackupCategoryUiState,
+    uiState: BackupCategoryUiState,
     onRetryClick: (BackupCategory) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val status = categoryUiState.status
+    val status = uiState.status
 
     val subtitle = when {
         status.running -> "Running" // TODO add missing localized text
@@ -157,19 +158,19 @@ private fun BackupStatusItem(
             .height(56.dp)
     ) {
         BackupStatusIcon(
-            status = categoryUiState.status,
-            iconRes = categoryUiState.category.uiIconRes(),
+            status = uiState.status,
+            iconRes = uiState.category.uiIcon(),
         )
 
         Column(modifier = Modifier.weight(1f)) {
-            BodyMSB(text = stringResource(categoryUiState.category.uiTitleRes()))
+            BodyMSB(text = stringResource(uiState.category.uiTitle()))
             CaptionB(text = subtitle, color = Colors.White64, maxLines = 1)
         }
 
-        val showRetry = !categoryUiState.disableRetry && !status.running && status.synced < status.required
+        val showRetry = !uiState.disableRetry && !status.running && status.synced < status.required
         if (showRetry) {
             BackupRetryButton(
-                onClick = { onRetryClick(categoryUiState.category) },
+                onClick = { onRetryClick(uiState.category) },
             )
         }
     }
@@ -229,17 +230,19 @@ private fun BackupRetryButton(onClick: () -> Unit) {
 @Composable
 private fun Preview() {
     val categories = BackupCategory.entries
-        .map { BackupCategoryUiState(category = it, status = BackupItemStatus()) }
-        .toMutableList()
-        .let { list ->
-            list[3] = list[3].copy(status = BackupItemStatus(running = true, synced = 0, required = 1))
-            list[5] = list[5].copy(status = BackupItemStatus(synced = 0, required = 1))
-            list
+        .map { it.toUiState() }
+        .map {
+            when (it.category) {
+                BackupCategory.LDK_ACTIVITY -> it.copy(disableRetry = true)
+                BackupCategory.WALLET -> it.copy(status = BackupItemStatus(running = true, required = 1))
+                BackupCategory.METADATA -> it.copy(status = BackupItemStatus(required = 1))
+                else -> it
+            }
         }
 
     AppThemeSurface {
         BackupSettingsScreenContent(
-            backupUiState = BackupStatusUiState(categories = categories),
+            uiState = BackupStatusUiState(categories = categories),
             onBackupClick = {},
             onResetAndRestoreClick = {},
             onRetryBackup = {},

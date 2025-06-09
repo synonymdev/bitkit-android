@@ -24,7 +24,7 @@ enum class BackupCategory {
     SLASHTAGS,
 }
 
-fun BackupCategory.uiIconRes(): Int {
+fun BackupCategory.uiIcon(): Int {
     return when (this) {
         BackupCategory.LIGHTNING_CONNECTIONS -> R.drawable.ic_lightning
         BackupCategory.BLOCKTANK -> R.drawable.ic_note
@@ -37,7 +37,7 @@ fun BackupCategory.uiIconRes(): Int {
     }
 }
 
-fun BackupCategory.uiTitleRes(): Int {
+fun BackupCategory.uiTitle(): Int {
     return when (this) {
         BackupCategory.LIGHTNING_CONNECTIONS -> R.string.settings__backup__category_connections
         BackupCategory.BLOCKTANK -> R.string.settings__backup__category_connection_receipts
