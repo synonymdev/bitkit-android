@@ -5,6 +5,8 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.flow.first
+import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.price.CandleResponse
 import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.PriceDTO
@@ -26,12 +28,11 @@ import kotlin.time.Duration.Companion.minutes
 @Singleton
 class PriceService @Inject constructor(
     private val client: HttpClient,
+    private val widgetsStore: WidgetsStore,
 ) : WidgetService<PriceDTO> {
 
     override val widgetType = WidgetType.PRICE
     override val refreshInterval = 1.minutes
-
-    private val defaultPeriod = "1d"
 
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
         val widgets = TradingPair.entries.map { pair ->
@@ -83,8 +84,9 @@ class PriceService @Inject constructor(
         }
     }
 
-    private suspend fun fetchCandles(ticker: String): List<CandleResponse> { //TODO SET PERIOD
-        val response: HttpResponse = client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$defaultPeriod")
+    private suspend fun fetchCandles(ticker: String): List<CandleResponse> {
+        val period = widgetsStore.data.first().pricePreferences.period.value
+        val response: HttpResponse = client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$period")
         return when (response.status.isSuccess()) {
             true -> {
                 runCatching { response.body<List<CandleResponse>>() }.getOrElse {
