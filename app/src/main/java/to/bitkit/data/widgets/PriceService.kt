@@ -100,7 +100,7 @@ class PriceService @Inject constructor(
 
     private fun calculateChange(pastValues: List<Double>): Change { //TODO COLORS
         if (pastValues.size < 2) {
-            return Change(color = "green", formatted = "+0%")
+            return Change(isPositive = true, formatted = "+0%")
         }
 
         val firstValue = pastValues.first()
@@ -108,11 +108,10 @@ class PriceService @Inject constructor(
         val changeRatio = (lastValue / firstValue) - 1
 
         val sign = if (changeRatio >= 0) "+" else ""
-        val color = if (changeRatio >= 0) "green" else "red"
         val percentage = changeRatio * 100
 
         return Change(
-            color = color,
+            isPositive = changeRatio >= 0,
             formatted = "$sign${"%.2f".format(percentage)}%"
         )
     }
