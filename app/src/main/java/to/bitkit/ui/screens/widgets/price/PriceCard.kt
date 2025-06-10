@@ -137,25 +137,37 @@ fun ChartComponent(
     modifier: Modifier = Modifier
 ) {
     val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
+
+    // Normalize values like in the TypeScript version
+    val normalizedValues = remember(widgetData.pastValues) {
+        val min = widgetData.pastValues.minOrNull() ?: 0.0
+        val max = widgetData.pastValues.maxOrNull() ?: 1.0
+
+        if (max == min) {
+            // Handle edge case where all values are the same
+            widgetData.pastValues.map { 0.5 }
+        } else {
+            widgetData.pastValues.map { (it - min) / (max - min) }
+        }
+    }
+
     Box(
         modifier = modifier
             .height(96.dp)
             .clip(ShapeDefaults.Small)
     ) {
         LineChart(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp)
-            ,
-            data = remember {
+            modifier = Modifier.fillMaxSize(),
+            data = remember(normalizedValues, baseColor) {
                 listOf(
                     Line(
                         label = widgetData.name,
-                        values = widgetData.pastValues,
+                        values = normalizedValues,
                         color = SolidColor(baseColor),
-                        firstGradientFillColor = baseColor.copy(alpha = 0.64f),
-                        secondGradientFillColor =  baseColor.copy(alpha = 0.08f),
-                        drawStyle = DrawStyle.Stroke(width = 2.dp),
+                        firstGradientFillColor = baseColor.copy(alpha = 0.8f),
+                        secondGradientFillColor = baseColor.copy(alpha = 0.3f),
+                        drawStyle = DrawStyle.Stroke(width = 1.3.dp),
+                        curvedEdges = true
                     )
                 )
             },
@@ -173,14 +185,18 @@ fun ChartComponent(
             ),
             dividerProperties = DividerProperties(
                 enabled = false
-            )
+            ),
+            // Use 0-1 range since we normalized the values
+            minValue = 0.0,
+            maxValue = 1.0
         )
+
         CaptionB(
-            widgetData.period,
-            color = baseColor.copy(alpha = 0.5f),
+            text = widgetData.period,
+            color = baseColor,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(8.dp)
+                .padding(7.dp)
         )
     }
 }
