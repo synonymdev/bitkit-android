@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ir.ehsannarmani.compose_charts.LineChart
+import ir.ehsannarmani.compose_charts.models.DividerProperties
 import ir.ehsannarmani.compose_charts.models.DrawStyle
 import ir.ehsannarmani.compose_charts.models.GridProperties
 import ir.ehsannarmani.compose_charts.models.HorizontalIndicatorProperties
@@ -169,6 +170,9 @@ fun ChartComponent(
                 enabled = false
             ),
             indicatorProperties = HorizontalIndicatorProperties(
+                enabled = false
+            ),
+            dividerProperties = DividerProperties(
                 enabled = false
             )
         )
