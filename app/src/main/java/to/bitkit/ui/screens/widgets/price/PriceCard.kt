@@ -40,6 +40,7 @@ import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
+import to.bitkit.data.dto.price.displayNameToTradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
@@ -88,36 +89,38 @@ fun PriceCard(
                 }
             }
 
-            priceDTO.widgets.map { widgetData ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("price_card_pair_row_${widgetData.name}"),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    BodySB(
-                        text = widgetData.name,
-                        color = Colors.White64,
+            priceDTO.widgets //TODO IMPROVE FILTER
+                .filter { widgetData -> widgetData.name.displayNameToTradingPair() in pricePreferences.enabledPairs }
+                .map { widgetData ->
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("price_card_pair_label_${widgetData.name}")
-                    )
+                            .fillMaxWidth()
+                            .testTag("price_card_pair_row_${widgetData.name}"),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        BodySB(
+                            text = widgetData.name,
+                            color = Colors.White64,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("price_card_pair_label_${widgetData.name}")
+                        )
 
-                    BodySB(
-                        text = widgetData.change.formatted,
-                        color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                        modifier = Modifier.testTag("price_card_pair_change_${widgetData.name}")
-                    )
+                        BodySB(
+                            text = widgetData.change.formatted,
+                            color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                            modifier = Modifier.testTag("price_card_pair_change_${widgetData.name}")
+                        )
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                    BodySB(
-                        text = widgetData.price,
-                        color = Colors.White,
-                        modifier = Modifier.testTag("price_card_pair_price_${widgetData.name}")
-                    )
+                        BodySB(
+                            text = widgetData.price,
+                            color = Colors.White,
+                            modifier = Modifier.testTag("price_card_pair_price_${widgetData.name}")
+                        )
+                    }
                 }
-            }
 
             priceDTO.widgets.firstOrNull()?.let { firstPriceData ->
                 ChartComponent(
