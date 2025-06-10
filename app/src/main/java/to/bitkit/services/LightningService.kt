@@ -167,6 +167,7 @@ class LightningService @Inject constructor(
         ServiceQueue.LDK.background {
             node.stop()
             this@LightningService.node = null
+            this@LightningService.vssStoreId = null
         }
         Logger.info("Node stopped")
     }

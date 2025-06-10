@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
@@ -27,9 +28,10 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
+import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.data.SettingsStore
+import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -42,6 +44,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
+    private val backupRepo: BackupRepo,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -55,6 +58,13 @@ class WalletViewModel @Inject constructor(
     var isRestoringWallet by mutableStateOf(false)
         private set
 
+    // Backup restoration states
+    var isRestoringBackups by mutableStateOf(false)
+        private set
+
+    var backupRestoreResult by mutableStateOf<WalletInitResult?>(null)
+        private set
+
     private val _uiState = MutableStateFlow(MainUiState())
 
     @Deprecated("Prioritize get the wallet and lightning states from LightningRepo or WalletRepo")
@@ -63,6 +73,8 @@ class WalletViewModel @Inject constructor(
     private val _walletEffect = MutableSharedFlow<WalletViewModelEffects>(extraBufferCapacity = 1)
     val walletEffect = _walletEffect.asSharedFlow()
     private fun walletEffect(effect: WalletViewModelEffects) = viewModelScope.launch { _walletEffect.emit(effect) }
+
+    private var requiresRemoteRestore = false
 
     init {
         collectStates()
@@ -86,6 +98,13 @@ class WalletViewModel @Inject constructor(
                         balanceDetails = state.balanceDetails
                     )
                 }
+                if (state.walletExists && requiresRemoteRestore) {
+                    requiresRemoteRestore = false
+                    setRestoringWalletState(false) // Wallet restore is complete, now starting backup restore
+                    isRestoringBackups = true
+                    backupRestoreResult = null
+                    triggerBackupRestore()
+                }
             }
         }
 
@@ -104,8 +123,38 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    private fun triggerBackupRestore() {
+        viewModelScope.launch(bgDispatcher) {
+            backupRepo.performFullRestoreFromLatestBackup()
+                .onSuccess {
+                    isRestoringBackups = false
+                    backupRestoreResult = WalletInitResult.Restored
+                }
+                .onFailure { error ->
+                    isRestoringBackups = false
+                    backupRestoreResult = WalletInitResult.Failed(error)
+                }
+        }
+    }
+
     fun setRestoringWalletState(isRestoringWallet: Boolean) {
         walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
+
+        if (isRestoringWallet) {
+            requiresRemoteRestore = true
+            isRestoringBackups = false
+            backupRestoreResult = null
+        }
+    }
+
+    fun onBackupRestoreSuccess() {
+        backupRestoreResult = null
+    }
+
+    fun onBackupRestoreRetry() {
+        isRestoringBackups = true
+        backupRestoreResult = null
+        triggerBackupRestore()
     }
 
     fun setInitNodeLifecycleState() {

@@ -80,6 +80,7 @@ class VssBackupClient @Inject constructor(
 
     suspend fun getObject(category: BackupCategory): Result<VssObjectInfo> = runCatching {
         Logger.debug("Retrieving object for category: $category", context = TAG)
+        Logger.debug("VssStoreId: $vssStoreId", context = TAG)
 
         val key = category.name.lowercase()
         val request = GetObjectRequest.newBuilder()

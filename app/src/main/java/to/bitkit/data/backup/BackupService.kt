@@ -1,7 +1,10 @@
 package to.bitkit.data.backup
 
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.first
+import to.bitkit.data.AppStorage
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.utils.AppError
@@ -12,6 +15,8 @@ import javax.inject.Singleton
 @Singleton
 class BackupService @Inject constructor(
     private val vssClient: VssBackupClient,
+    private val settingsStore: SettingsStore,
+    private val appStorage: AppStorage,
 ) {
     suspend fun performBackup(category: BackupCategory): Result<Unit> {
         Logger.debug("Performing backup for category: $category", context = TAG)
@@ -34,11 +39,7 @@ class BackupService @Inject constructor(
     }
 
     private suspend fun performSettingsBackup(): Result<Unit> = runCatching {
-        // TODO: Get actual settings data
-        val settingsData = mapOf(
-            "placeholder" to "settings_data",
-            "timestamp" to System.currentTimeMillis().toString(),
-        )
+        val settingsData = settingsStore.data.first()
 
         val dataBytes = json.encodeToString(settingsData).toByteArray()
 
@@ -88,27 +89,35 @@ class BackupService @Inject constructor(
         return result
     }
 
-    /**
-     * Restore backup data for a specific category
-     */
-    suspend fun restoreBackup(category: BackupCategory): Result<ByteArray> {
-        Logger.debug("Restoring backup for category: $category", context = TAG)
+    suspend fun performSettingsRestore(): Result<Unit> {
+        Logger.debug("Performing settings restore", context = TAG)
 
-        return vssClient.getObject(category).map { it.data }
+        return runCatching {
+            val dataBytes = fetchBackupData(BackupCategory.SETTINGS).getOrThrow()
+
+            val restoredSettings = json.decodeFromString<SettingsData>(String(dataBytes))
+            settingsStore.update { restoredSettings }
+
+            appStorage.updateBackupStatus(BackupCategory.SETTINGS) {
+                it.copy(running = false, synced = System.currentTimeMillis())
+            }
+
+            Logger.info("Settings restore success", context = TAG)
+        }.onFailure { exception ->
+            Logger.error("Settings restore error", exception, context = TAG)
+        }
     }
 
-    /**
-     * Delete backup data for a specific category
-     */
-    suspend fun deleteBackup(category: BackupCategory): Result<Unit> {
-        Logger.debug("Deleting backup for category: $category", context = TAG)
-        return vssClient.deleteObject(category)
+    private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
+        val objectInfo = vssClient.getObject(category).getOrThrow()
+        objectInfo.data
     }
 
     /**
      * List all available backup categories
      */
     suspend fun listBackups(): Result<List<VssObjectInfo>> {
+        // TODO return a list of BackupCategories enum entries for each category that has a backup
         Logger.debug("Listing all backups", context = TAG)
         return vssClient.listObjects().map { it.objects }
     }

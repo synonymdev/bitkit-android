@@ -208,7 +208,7 @@ fun ContentView(
         }
     }
 
-    val walletUiState by walletViewModel.uiState.collectAsState()
+    val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
     val nodeLifecycleState = walletUiState.nodeLifecycleState
 
     var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
@@ -258,9 +258,20 @@ fun ContentView(
                 }
             )
         }
-    } else if (walletViewModel.isRestoringWallet) {
-        WalletInitResultView(result = WalletInitResult.Restored) {
-            walletViewModel.setRestoringWalletState(false)
+    } else if (walletViewModel.isRestoringWallet || walletViewModel.isRestoringBackups) {
+        InitializingWalletView(
+            shouldFinish = false,
+            onComplete = { /* Loading state, no completion */ },
+            isRestoringBackups = walletViewModel.isRestoringBackups
+        )
+    } else if (walletViewModel.backupRestoreResult != null) {
+        // Show backup restoration result
+        val result = walletViewModel.backupRestoreResult!!
+        WalletInitResultView(result = result) {
+            when (result) {
+                is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()
+                is WalletInitResult.Failed -> walletViewModel.onBackupRestoreRetry()
+            }
         }
     } else {
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()

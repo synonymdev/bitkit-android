@@ -156,6 +156,19 @@ class BackupRepo @Inject constructor(
         Logger.debug("Marked backup required for category: $category", context = TAG)
     }
 
+    suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Full restore starting", context = TAG)
+
+        return@withContext try {
+            // TODO restore all backup categories
+            val settingsResult = backupService.performSettingsRestore()
+            settingsResult
+        } catch (e: Throwable) {
+            Logger.error("Full restore error", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
     companion object {
         private const val TAG = "BackupRepo"
 
