@@ -164,7 +164,7 @@ fun ChartComponent(
                         color = SolidColor(baseColor),
                         firstGradientFillColor = baseColor.copy(alpha = 0.8f),
                         secondGradientFillColor = baseColor.copy(alpha = 0.3f),
-                        drawStyle = DrawStyle.Stroke(width = 1.3.dp),
+                        drawStyle = DrawStyle.Stroke(width = 1.dp),
                         curvedEdges = true
                     )
                 )
