@@ -40,7 +40,7 @@ import to.bitkit.data.dto.price.Change
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
-import to.bitkit.data.dto.price.displayNameToTradingPair
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
@@ -90,26 +90,26 @@ fun PriceCard(
             }
 
             priceDTO.widgets //TODO IMPROVE FILTER
-                .filter { widgetData -> widgetData.name.displayNameToTradingPair() in pricePreferences.enabledPairs }
+                .filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
                 .map { widgetData ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("price_card_pair_row_${widgetData.name}"),
+                            .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         BodySB(
-                            text = widgetData.name,
+                            text = widgetData.pair.displayName,
                             color = Colors.White64,
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("price_card_pair_label_${widgetData.name}")
+                                .testTag("price_card_pair_label_${widgetData.pair}")
                         )
 
                         BodySB(
                             text = widgetData.change.formatted,
                             color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                            modifier = Modifier.testTag("price_card_pair_change_${widgetData.name}")
+                            modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
                         )
 
                         Spacer(modifier = Modifier.width(16.dp))
@@ -117,7 +117,7 @@ fun PriceCard(
                         BodySB(
                             text = widgetData.price,
                             color = Colors.White,
-                            modifier = Modifier.testTag("price_card_pair_price_${widgetData.name}")
+                            modifier = Modifier.testTag("price_card_pair_price_${widgetData.pair}")
                         )
                     }
                 }
@@ -159,7 +159,7 @@ fun ChartComponent(
             data = remember(widgetData.pastValues, baseColor) {
                 listOf(
                     Line(
-                        label = widgetData.name,
+                        label = widgetData.pair.displayName,
                         values = widgetData.pastValues,
                         color = SolidColor(baseColor),
                         firstGradientFillColor = baseColor.copy(alpha = 0.8f),
@@ -215,7 +215,7 @@ private fun FullBlockCardPreview() {
                 priceDTO = PriceDTO(
                     widgets = listOf(
                         PriceWidgetData(
-                            name = "BTC/USD",
+                            pair = TradingPair.BTC_USD,
                             change = Change(
                                 isPositive = true,
                                 formatted = "$ 20,326"
@@ -230,7 +230,7 @@ private fun FullBlockCardPreview() {
                             period = GraphPeriod.ONE_DAY,
                         ),
                         PriceWidgetData(
-                            name = "BTC/EUR",
+                            pair = TradingPair.BTC_USD,
                             change = Change(
                                 isPositive = false,
                                 formatted = "€ 20,326"

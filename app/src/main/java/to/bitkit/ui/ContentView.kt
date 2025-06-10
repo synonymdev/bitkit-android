@@ -1127,7 +1127,7 @@ private fun NavGraphBuilder.widgets(
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
             val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
             PriceEditScreen(
-                viewmodel = viewModel,
+                viewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
                 navigatePreview = { navController.navigate(Routes.PricePreview) }

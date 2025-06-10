@@ -70,15 +70,17 @@ class PriceViewModel @Inject constructor(
 
     // MARK: - Public Methods
 
-    fun setPairs(pairs: List<TradingPair>) {
-        _customPreferences.update { preferences ->
-            preferences.copy(enabledPairs = pairs)
-        }
-    }
-
     fun setPeriod(period: GraphPeriod) {
         _customPreferences.update { preferences ->
             preferences.copy(period = period)
+        }
+    }
+
+    fun toggleTradingPair(pair: TradingPair) {
+        if (pair in _customPreferences.value.enabledPairs) {
+            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs - pair) }
+        } else {
+            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs + pair) }
         }
     }
 

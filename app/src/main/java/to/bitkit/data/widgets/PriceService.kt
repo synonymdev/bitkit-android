@@ -67,7 +67,7 @@ class PriceService @Inject constructor(
         val formattedPrice = formatPrice(pair, latestPrice)
 
         return PriceWidgetData(
-            name = pair.displayName,
+            pair = pair,
             change = change,
             price = formattedPrice,
             period = period,

@@ -221,7 +221,7 @@ private fun Preview() {
             priceDTO = PriceDTO(
                 widgets = listOf(
                     PriceWidgetData(
-                        name = "BTC/USD",
+                        pair = TradingPair.BTC_USD,
                         change = Change(
                             isPositive = true,
                             formatted = "$ 20,326"
@@ -231,7 +231,7 @@ private fun Preview() {
                         period = GraphPeriod.ONE_DAY,
                     ),
                     PriceWidgetData(
-                        name = "BTC/EUR",
+                        pair = TradingPair.BTC_EUR,
                         change = Change(
                             isPositive = false,
                             formatted = "€ 20,326"
@@ -266,7 +266,7 @@ private fun Preview2() {
             priceDTO = PriceDTO(
                 widgets = listOf(
                     PriceWidgetData(
-                        name = "BTC/USD",
+                        pair = TradingPair.BTC_USD,
                         change = Change(
                             isPositive = true,
                             formatted = "$ 20,326"
@@ -276,7 +276,7 @@ private fun Preview2() {
                         period = GraphPeriod.ONE_DAY,
                     ),
                     PriceWidgetData(
-                        name = "BTC/EUR",
+                        pair = TradingPair.BTC_EUR,
                         change = Change(
                             isPositive = false,
                             formatted = "€ 20,326"

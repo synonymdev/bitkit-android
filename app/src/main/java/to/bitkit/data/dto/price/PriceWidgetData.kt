@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class PriceWidgetData(
-    val name: String,
+    val pair: TradingPair,
     val period: GraphPeriod,
     val change: Change,
     val price: String,

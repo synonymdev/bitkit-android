@@ -22,10 +22,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import to.bitkit.R
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
+import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.data.dto.price.displayNameToTradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
@@ -39,28 +41,28 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun PriceEditScreen(
-    viewmodel: PriceViewModel,
+    viewModel: PriceViewModel,
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigatePreview: () -> Unit
 ) {
-    val customPreferences by viewmodel.customPreferences.collectAsStateWithLifecycle()
-    val currentPrice by viewmodel.currentPrice.collectAsStateWithLifecycle()
+    val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
+    val currentPrice by viewModel.currentPrice.collectAsStateWithLifecycle()
 
     PriceEditContent(
         onClose = onClose,
         onBack = onBack,
         preferences = customPreferences,
-        onClickReset = { viewmodel.resetCustomPreferences() },
+        onClickReset = { viewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
         priceModel = currentPrice ?: PriceDTO(
             widgets = listOf()
         ),
-        onClickTradingPair = { name ->
-
+        onClickTradingPair = { pair ->
+            viewModel.toggleTradingPair(pair = pair)
         },
         onClickGraph = { period ->
-
+            viewModel.setPeriod(period = period)
         }
     )
 }
@@ -72,7 +74,7 @@ fun PriceEditContent(
     priceModel: PriceDTO,
     onClickReset: () -> Unit,
     onClickGraph: (GraphPeriod) -> Unit,
-    onClickTradingPair: (String) -> Unit,
+    onClickTradingPair: (TradingPair) -> Unit,
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
 ) {
@@ -107,13 +109,13 @@ fun PriceEditContent(
 
             priceModel.widgets.map { data ->
                 PriceEditOptionRow(
-                    label = data.name,
+                    label = data.pair.displayName,
                     value = data.price,
-                    isEnabled = data.name.displayNameToTradingPair() in preferences.enabledPairs,
+                    isEnabled = data.pair in preferences.enabledPairs,
                     onClick = {
-                        onClickTradingPair(data.name)
+                        onClickTradingPair(data.pair)
                     },
-                    testTagPrefix = data.name
+                    testTagPrefix = data.pair.displayName
                 )
             }
 
@@ -122,7 +124,7 @@ fun PriceEditContent(
                     widgetData = it,
                     isEnabled = it.period == preferences.period,
                     onClick = onClickGraph,
-                    testTagPrefix = it.name
+                    testTagPrefix = it.pair.displayName
                 )
             }
         }
