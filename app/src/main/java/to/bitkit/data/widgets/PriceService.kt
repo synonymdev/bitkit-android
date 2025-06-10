@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.price.CandleResponse
 import to.bitkit.data.dto.price.Change
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceResponse
 import to.bitkit.data.dto.price.PriceWidgetData
@@ -35,19 +36,23 @@ class PriceService @Inject constructor(
     override val refreshInterval = 1.minutes
 
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
+        val period =
+            widgetsStore.data.first().pricePreferences.period?.value ?: GraphPeriod.ONE_DAY.value
+
         val widgets = TradingPair.entries.map { pair ->
-            fetchPairData(pair)
+            fetchPairData(pair = pair, period = period)
         }
         PriceDTO(widgets)
     }.onFailure {
         Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
     }
+    //TODO CREATE METHOD TO FETCH ALL PERIODS
 
-    private suspend fun fetchPairData(pair: TradingPair): PriceWidgetData {
+    private suspend fun fetchPairData(pair: TradingPair, period: String): PriceWidgetData {
         val ticker = pair.ticker
 
         // Fetch historical candles
-        val candles = fetchCandles(ticker)
+        val candles = fetchCandles(ticker = ticker, period = period)
         val sortedCandles = candles.sortedBy { it.timestamp }
         val pastValues = sortedCandles.map { it.close }.toMutableList()
 
@@ -84,9 +89,12 @@ class PriceService @Inject constructor(
         }
     }
 
-    private suspend fun fetchCandles(ticker: String): List<CandleResponse> { //TODO CREATE METHOD TO GET ALL PERIODS
-        val period = widgetsStore.data.first().pricePreferences.period.value
-        val response: HttpResponse = client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$period")
+    private suspend fun fetchCandles(
+        ticker: String,
+        period: String
+    ): List<CandleResponse> {
+        val response: HttpResponse =
+            client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$period")
         return when (response.status.isSuccess()) {
             true -> {
                 runCatching { response.body<List<CandleResponse>>() }.getOrElse {
@@ -98,7 +106,7 @@ class PriceService @Inject constructor(
         }
     }
 
-    private fun calculateChange(pastValues: List<Double>): Change { //TODO COLORS
+    private fun calculateChange(pastValues: List<Double>): Change {
         if (pastValues.size < 2) {
             return Change(isPositive = true, formatted = "+0%")
         }
@@ -134,7 +142,11 @@ class PriceService @Inject constructor(
             formatted.replace(currencySymbol, "").trim()
 
         } catch (e: Exception) {
-            Logger.warn(e = e, msg = "Error formatting price for ${pair.displayName}", context = TAG)
+            Logger.warn(
+                e = e,
+                msg = "Error formatting price for ${pair.displayName}",
+                context = TAG
+            )
             String.format("%.2f", price)
         }
     }
