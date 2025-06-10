@@ -93,8 +93,8 @@ class WalletViewModel @Inject constructor(
                     )
                 }
                 if (state.walletExists && restoreState == RestoreState.WaitingForWallet) {
-                    setRestoringWalletState(false)
                     triggerBackupRestore()
+                    setRestoringWalletState(false)
                 }
             }
         }
