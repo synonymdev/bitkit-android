@@ -20,7 +20,6 @@ import org.vss.PutObjectRequest
 import to.bitkit.di.ProtoClient
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
-import to.bitkit.services.LightningService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -29,12 +28,9 @@ import javax.inject.Singleton
 @Singleton
 class VssBackupClient @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
-    private val lightningService: LightningService,
+    private val vssStoreIdProvider: VssStoreIdProvider,
 ) {
-    // TODO handle vssStoreId generation using logic from LightningService.setup() so that we can access
-    //  it both here and in LightningService
-    // private val vssStoreId: String get() = Env.vssStoreId
-    private val vssStoreId: String get() = lightningService.vssStoreId ?: throw VssError.StoreIdNotSetup
+    private val vssStoreId: String get() = vssStoreIdProvider.getVssStoreId()
 
     suspend fun putObject(
         category: BackupCategory,
@@ -80,7 +76,6 @@ class VssBackupClient @Inject constructor(
 
     suspend fun getObject(category: BackupCategory): Result<VssObjectInfo> = runCatching {
         Logger.debug("Retrieving object for category: $category", context = TAG)
-        Logger.debug("VssStoreId: $vssStoreId", context = TAG)
 
         val key = category.name.lowercase()
         val request = GetObjectRequest.newBuilder()
@@ -263,5 +258,5 @@ sealed class VssError(message: String) : AppError(message) {
     class ConflictError(message: String) : VssError(message)
     class InvalidRequestError(message: String) : VssError(message)
     class NotFoundError(message: String) : VssError(message)
-    data object StoreIdNotSetup : VssError("VSS Store Id not setup")
+
 }

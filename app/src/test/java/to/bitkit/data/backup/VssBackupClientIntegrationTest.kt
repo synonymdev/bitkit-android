@@ -12,7 +12,6 @@ import org.junit.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import to.bitkit.models.BackupCategory
-import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -32,13 +31,13 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
             }
         }
 
-        val lightningService = mock<LightningService> {
-            on { vssStoreId } doReturn "test_vss_storeId"
+        val vssStoreIdProvider = mock<VssStoreIdProvider> {
+            on { getVssStoreId() } doReturn "test_vss_storeId"
         }
 
         vssClient = VssBackupClient(
             httpClient = httpClient,
-            lightningService = lightningService
+            vssStoreIdProvider = vssStoreIdProvider
         )
     }
 
