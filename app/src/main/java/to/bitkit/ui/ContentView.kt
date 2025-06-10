@@ -84,6 +84,7 @@ import to.bitkit.ui.screens.widgets.facts.FactsViewModel
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
+import to.bitkit.ui.screens.widgets.price.PriceEditScreen
 import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
 import to.bitkit.ui.screens.widgets.price.PriceViewModel
 import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
@@ -1125,13 +1126,12 @@ private fun NavGraphBuilder.widgets(
         composableWithDefaultTransitions<Routes.PriceEdit> {
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
             val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-
-//            WeatherEditScreen(
-//                weatherViewModel = viewModel,
-//                onClose = { navController.navigateToHome() },
-//                onBack = { navController.popBackStack() },
-//                navigatePreview = { navController.navigate(Routes.WeatherPreview) }
-//            )
+            PriceEditScreen(
+                viewmodel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigatePreview = { navController.navigate(Routes.PricePreview) }
+            )
         }
     }
 }

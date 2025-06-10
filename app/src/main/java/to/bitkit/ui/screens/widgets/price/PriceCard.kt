@@ -42,7 +42,6 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -146,7 +145,7 @@ fun ChartComponent(
         LineChart(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 1.dp)
+                .padding(top = 2.dp)
             ,
             data = remember {
                 listOf(
