@@ -1,6 +1,5 @@
 package to.bitkit.data.backup
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsData
@@ -24,62 +23,46 @@ class BackupService @Inject constructor(
     suspend fun performBackup(category: BackupCategory): Result<Unit> {
         Logger.debug("Performing backup for category: $category", context = TAG)
 
-        return when (category) {
-            BackupCategory.WALLET -> performWalletBackup()
-            BackupCategory.SETTINGS -> performSettingsBackup()
-            BackupCategory.WIDGETS -> performWidgetsBackup()
-            BackupCategory.METADATA -> performMetadataBackup()
-            BackupCategory.BLOCKTANK -> performBlocktankBackup()
-            BackupCategory.SLASHTAGS -> performSlashtagsBackup()
-            BackupCategory.LDK_ACTIVITY -> performLdkActivityBackup()
-            BackupCategory.LIGHTNING_CONNECTIONS -> performLightningConnectionsBackup()
+        return runCatching {
+            val dataBytes = getDataBytes(category)
+            encryptAndUpload(category, dataBytes)
         }
     }
 
-    private suspend fun performWalletBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Wallet backup")
-    }
+    private suspend fun getDataBytes(category: BackupCategory): ByteArray = when (category) {
+        BackupCategory.SETTINGS -> {
+            val data = settingsStore.data.first()
+            json.encodeToString(data).toByteArray()
+        }
 
-    private suspend fun performSettingsBackup(): Result<Unit> = runCatching {
-        val data = settingsStore.data.first()
+        BackupCategory.WIDGETS -> {
+            val data = widgetsStore.data.first()
+            json.encodeToString(data).toByteArray()
+        }
 
-        val dataBytes = json.encodeToString(data).toByteArray()
+        BackupCategory.WALLET -> {
+            throw NotImplementedError("Wallet backup not yet implemented")
+        }
 
-        encryptAndUpload(BackupCategory.SETTINGS, dataBytes)
-    }
+        BackupCategory.METADATA -> {
+            throw NotImplementedError("Metadata backup not yet implemented")
+        }
 
-    private suspend fun performWidgetsBackup(): Result<Unit> = runCatching {
-        val data = widgetsStore.data.first()
+        BackupCategory.BLOCKTANK -> {
+            throw NotImplementedError("Blocktank backup not yet implemented")
+        }
 
-        val dataBytes = json.encodeToString(data).toByteArray()
+        BackupCategory.SLASHTAGS -> {
+            throw NotImplementedError("Slashtags backup not yet implemented")
+        }
 
-        encryptAndUpload(BackupCategory.WIDGETS, dataBytes)
-    }
+        BackupCategory.LDK_ACTIVITY -> {
+            throw NotImplementedError("LDK activity backup not yet implemented")
+        }
 
-    private suspend fun performMetadataBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Metadata backup")
-    }
-
-    private suspend fun performBlocktankBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Blocktank backup")
-    }
-
-    private suspend fun performSlashtagsBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Slashtags backup")
-    }
-
-    private suspend fun performLdkActivityBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("LDK activity backup")
-    }
-
-    private suspend fun performLightningConnectionsBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Lightning connections backup")
+        BackupCategory.LIGHTNING_CONNECTIONS -> {
+            throw NotImplementedError("Lightning connections backup not yet implemented")
+        }
     }
 
     private suspend fun encryptAndUpload(
@@ -113,6 +96,7 @@ class BackupService @Inject constructor(
             Logger.debug("Restore error for: $category", context = TAG)
         }
     }
+
     suspend fun performWidgetsRestore(): Result<Unit> {
         val category = BackupCategory.WIDGETS
 
