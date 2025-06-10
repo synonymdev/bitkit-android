@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,6 +41,8 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySB
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -131,22 +134,27 @@ fun PriceCard(
 @Composable
 fun ChartComponent(
     widgetData: PriceWidgetData,
-    modifier: Modifier = Modifier)
-{
+    modifier: Modifier = Modifier
+) {
     val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
     Box(
-        modifier = modifier.height(96.dp)
+        modifier = modifier
+            .height(96.dp)
+            .clip(ShapeDefaults.Small)
     ) {
         LineChart(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 1.dp)
+            ,
             data = remember {
                 listOf(
                     Line(
                         label = widgetData.name,
                         values = widgetData.pastValues,
                         color = SolidColor(baseColor),
-                        firstGradientFillColor = baseColor,
-                        secondGradientFillColor = Color.Transparent,
+                        firstGradientFillColor = baseColor.copy(alpha = 0.64f),
+                        secondGradientFillColor =  baseColor.copy(alpha = 0.08f),
                         drawStyle = DrawStyle.Stroke(width = 2.dp),
                     )
                 )
@@ -163,6 +171,13 @@ fun ChartComponent(
             indicatorProperties = HorizontalIndicatorProperties(
                 enabled = false
             )
+        )
+        CaptionB(
+            widgetData.period,
+            color = baseColor.copy(alpha = 0.5f),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(8.dp)
         )
     }
 }
