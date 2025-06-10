@@ -77,7 +77,6 @@ import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
-import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
@@ -132,6 +131,7 @@ import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
@@ -233,6 +233,8 @@ fun ContentView(
         }
     }
 
+    val restoreState = walletViewModel.restoreState
+    val isRestoringBackups = walletViewModel.restoreState == RestoreState.RestoringBackups
     if (walletIsInitializing) {
         // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
@@ -258,15 +260,14 @@ fun ContentView(
                 }
             )
         }
-    } else if (walletViewModel.isRestoringWallet || walletViewModel.isRestoringBackups) {
+    } else if (walletViewModel.isRestoringWallet || isRestoringBackups) {
         InitializingWalletView(
             shouldFinish = false,
             onComplete = { /* Loading state, no completion */ },
-            isRestoringBackups = walletViewModel.isRestoringBackups
+            isRestoringBackups = isRestoringBackups
         )
-    } else if (walletViewModel.backupRestoreResult != null) {
-        // Show backup restoration result
-        val result = walletViewModel.backupRestoreResult!!
+    } else if (restoreState is RestoreState.BackupRestoreCompleted) {
+        val result = restoreState.result
         WalletInitResultView(result = result) {
             when (result) {
                 is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()

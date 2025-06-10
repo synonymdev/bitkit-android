@@ -58,11 +58,7 @@ class WalletViewModel @Inject constructor(
     var isRestoringWallet by mutableStateOf(false)
         private set
 
-    // Backup restoration states
-    var isRestoringBackups by mutableStateOf(false)
-        private set
-
-    var backupRestoreResult by mutableStateOf<WalletInitResult?>(null)
+    var restoreState by mutableStateOf<RestoreState>(RestoreState.None)
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -73,8 +69,6 @@ class WalletViewModel @Inject constructor(
     private val _walletEffect = MutableSharedFlow<WalletViewModelEffects>(extraBufferCapacity = 1)
     val walletEffect = _walletEffect.asSharedFlow()
     private fun walletEffect(effect: WalletViewModelEffects) = viewModelScope.launch { _walletEffect.emit(effect) }
-
-    private var requiresRemoteRestore = false
 
     init {
         collectStates()
@@ -98,11 +92,9 @@ class WalletViewModel @Inject constructor(
                         balanceDetails = state.balanceDetails
                     )
                 }
-                if (state.walletExists && requiresRemoteRestore) {
-                    requiresRemoteRestore = false
-                    setRestoringWalletState(false) // Wallet restore is complete, now starting backup restore
-                    isRestoringBackups = true
-                    backupRestoreResult = null
+                if (state.walletExists && restoreState == RestoreState.WaitingForWallet) {
+                    setRestoringWalletState(false)
+                    restoreState = RestoreState.RestoringBackups
                     triggerBackupRestore()
                 }
             }
@@ -127,12 +119,10 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             backupRepo.performFullRestoreFromLatestBackup()
                 .onSuccess {
-                    isRestoringBackups = false
-                    backupRestoreResult = WalletInitResult.Restored
+                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Restored)
                 }
                 .onFailure { error ->
-                    isRestoringBackups = false
-                    backupRestoreResult = WalletInitResult.Failed(error)
+                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(error))
                 }
         }
     }
@@ -141,19 +131,16 @@ class WalletViewModel @Inject constructor(
         walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
 
         if (isRestoringWallet) {
-            requiresRemoteRestore = true
-            isRestoringBackups = false
-            backupRestoreResult = null
+            restoreState = RestoreState.WaitingForWallet
         }
     }
 
     fun onBackupRestoreSuccess() {
-        backupRestoreResult = null
+        restoreState = RestoreState.None
     }
 
     fun onBackupRestoreRetry() {
-        isRestoringBackups = true
-        backupRestoreResult = null
+        restoreState = RestoreState.RestoringBackups
         triggerBackupRestore()
     }
 
@@ -443,4 +430,11 @@ data class MainUiState(
 
 sealed interface WalletViewModelEffects {
     data object NavigateGeoBlockScreen : WalletViewModelEffects
+}
+
+sealed interface RestoreState {
+    data object None : RestoreState
+    data object WaitingForWallet : RestoreState
+    data object RestoringBackups : RestoreState
+    data class BackupRestoreCompleted(val result: WalletInitResult) : RestoreState
 }
