@@ -1,4 +1,4 @@
-package to.bitkit.viewmodels
+package to.bitkit.ui.settings.backups
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -18,12 +18,12 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.models.Toast
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.viewmodels.BackupContract.SideEffect
-import to.bitkit.viewmodels.BackupContract.UiState
+import to.bitkit.ui.settings.backups.BackupContract.SideEffect
+import to.bitkit.ui.settings.backups.BackupContract.UiState
 import javax.inject.Inject
 
 @HiltViewModel
-class BackupViewModel @Inject constructor(
+class BackupNavigationSheetViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val keychain: Keychain,

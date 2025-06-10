@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.PrimaryButton
@@ -27,10 +28,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withBold
-import to.bitkit.viewmodels.BackupContract
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun MetadataScreen(
@@ -51,10 +48,7 @@ private fun MetadataContent(
     onDismiss: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val latestBackupTime = remember(lastBackupTimeMs) {
-        val formatter = SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", Locale.getDefault())
-        formatter.format(Date(lastBackupTimeMs))
-    }
+    val latestBackupTime = remember(lastBackupTimeMs) { lastBackupTimeMs.toLocalizedTimestamp() }
 
     Column(
         modifier = Modifier

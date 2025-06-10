@@ -30,7 +30,7 @@ mockitoKotlin = "5.4.0"
 navCompose = "2.8.9"
 robolectric = "4.14.1"
 room = "2.6.1"
-slf4j = "1.7.36"
+slf4j = "2.0.17"
 testAndroidx = "1.6.1"
 turbine = "1.0.0"
 workRuntimeKtx = "2.10.0"
@@ -94,7 +94,8 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
-slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 test-core = { module = "androidx.test:core", version.ref = "testAndroidx" }
 test-coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test" }
 test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCore" }
