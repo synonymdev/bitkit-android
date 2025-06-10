@@ -1120,7 +1120,7 @@ private fun NavGraphBuilder.widgets(
                 priceViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
-                navigateEditWidget = { /*navController.navigate(Routes.PriceEdit)*/ },
+                navigateEditWidget = { navController.navigate(Routes.PriceEdit) },
             )
         }
         composableWithDefaultTransitions<Routes.PriceEdit> {
