@@ -160,11 +160,36 @@ class BackupRepo @Inject constructor(
         Logger.debug("Full restore starting", context = TAG)
 
         return@withContext try {
-            // TODO restore all backup categories
-            val settingsResult = backupService.performSettingsRestore()
-            settingsResult
+            val restoreTasks = listOf(
+                BackupCategory.SETTINGS to suspend { backupService.performSettingsRestore() },
+                // TODO: Add other backup categories as they get implemented
+                // BackupCategory.WIDGETS to suspend { backupService.performWidgetsRestore() },
+                // BackupCategory.METADATA to suspend { backupService.performMetadataRestore() },
+                // BackupCategory.WALLET to suspend { backupService.performWalletRestore() },
+                // BackupCategory.BLOCKTANK to suspend { backupService.performBlocktankRestore() },
+                // BackupCategory.SLASHTAGS to suspend { backupService.performSlashtagsRestore() },
+                // BackupCategory.LDK_ACTIVITY to suspend { backupService.performLdkActivityRestore() },
+            )
+
+            for ((category, restoreFunction) in restoreTasks) {
+                try {
+                    val result = restoreFunction()
+                    if (result.isFailure) {
+                        // Log the error but don't fail the entire restore process
+                        // Since backup restore is not critical and mostly for user convenience
+                        Logger.warn("Error restoring $category: ${result.exceptionOrNull()?.message}", context = TAG)
+                    } else {
+                        Logger.info("Successfully restored $category", context = TAG)
+                    }
+                } catch (e: Throwable) {
+                    // Log the error but don't fail the entire restore process
+                    Logger.warn("Error restoring $category", e, context = TAG)
+                }
+            }
+
+            Logger.info("Full restore completed", context = TAG)
+            Result.success(Unit)
         } catch (e: Throwable) {
-            Logger.error("Full restore error", e, context = TAG)
             Result.failure(e)
         }
     }
