@@ -227,7 +227,8 @@ private fun Preview() {
                             formatted = "$ 20,326"
                         ),
                         price = "$20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0)
+                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
+                        period = "1D",
                     ),
                     PriceWidgetData(
                         name = "BTC/EUR",
@@ -236,7 +237,8 @@ private fun Preview() {
                             formatted = "€ 20,326"
                         ),
                         price = "€ 20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0)
+                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
+                        period = "1D",
                     )
                 )
             ),
@@ -270,7 +272,8 @@ private fun Preview2() {
                             formatted = "$ 20,326"
                         ),
                         price = "$20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0)
+                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
+                        period = "1D",
                     ),
                     PriceWidgetData(
                         name = "BTC/EUR",
@@ -279,7 +282,8 @@ private fun Preview2() {
                             formatted = "€ 20,326"
                         ),
                         price = "€ 20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0)
+                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
+                        period = "1D",
                     )
                 )
             ),

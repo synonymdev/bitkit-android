@@ -116,42 +116,54 @@ fun PriceCard(
             }
 
             priceDTO.widgets.firstOrNull()?.let { firstPriceData ->
-                LineChart(
+                ChartComponent(
+                    widgetData = firstPriceData,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(96.dp)
                         .padding(top = 16.63.dp)
-                        .testTag("price_card_chart_${firstPriceData.name}"),
-                    data = remember {
-                        listOf(
-                            Line(
-                                label = firstPriceData.name,
-                                values = firstPriceData.pastValues,
-                                color = SolidColor(
-                                    if (firstPriceData.change.isPositive) Colors.Green else Colors.Red,
-                                ),
-                                firstGradientFillColor = if (firstPriceData.change.isPositive) Colors.Green else Colors.Red,
-                                secondGradientFillColor = Color.Transparent,
-                                drawStyle = DrawStyle.Stroke(width = 2.dp),
-                            )
-                        )
-                    },
-                    labelProperties = LabelProperties(
-                        enabled = false
-                    ),
-                    labelHelperProperties = LabelHelperProperties(
-                        enabled = false
-                    ),
-                    gridProperties = GridProperties(
-                        enabled = false
-                    ),
-                    indicatorProperties = HorizontalIndicatorProperties(
-                        enabled = false
-                    )
-
+                        .testTag("price_card_chart")
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ChartComponent(
+    widgetData: PriceWidgetData,
+    modifier: Modifier = Modifier)
+{
+    val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
+    Box(
+        modifier = modifier.height(96.dp)
+    ) {
+        LineChart(
+            modifier = Modifier.fillMaxWidth(),
+            data = remember {
+                listOf(
+                    Line(
+                        label = widgetData.name,
+                        values = widgetData.pastValues,
+                        color = SolidColor(baseColor),
+                        firstGradientFillColor = baseColor,
+                        secondGradientFillColor = Color.Transparent,
+                        drawStyle = DrawStyle.Stroke(width = 2.dp),
+                    )
+                )
+            },
+            labelProperties = LabelProperties(
+                enabled = false
+            ),
+            labelHelperProperties = LabelHelperProperties(
+                enabled = false
+            ),
+            gridProperties = GridProperties(
+                enabled = false
+            ),
+            indicatorProperties = HorizontalIndicatorProperties(
+                enabled = false
+            )
+        )
     }
 }
 
@@ -183,7 +195,8 @@ private fun FullBlockCardPreview() {
                                 2.0,
                                 3.0,
                                 4.0,
-                            )
+                            ),
+                            period = "1D",
                         ),
                         PriceWidgetData(
                             name = "BTC/EUR",
@@ -197,7 +210,8 @@ private fun FullBlockCardPreview() {
                                 2.0,
                                 3.0,
                                 4.0,
-                            )
+                            ),
+                            period = "1D",
                         ),
                     ),
                 )

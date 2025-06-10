@@ -71,6 +71,7 @@ class PriceService @Inject constructor(
             name = pair.displayName,
             change = change,
             price = formattedPrice,
+            period = period,
             pastValues = pastValues
         )
     }
