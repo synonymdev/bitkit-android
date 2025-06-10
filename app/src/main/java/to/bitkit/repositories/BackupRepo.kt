@@ -160,32 +160,14 @@ class BackupRepo @Inject constructor(
         Logger.debug("Full restore starting", context = TAG)
 
         return@withContext try {
-            val restoreTasks = listOf(
-                BackupCategory.SETTINGS to suspend { backupService.performSettingsRestore() },
-                // TODO: Add other backup categories as they get implemented
-                // BackupCategory.WIDGETS to suspend { backupService.performWidgetsRestore() },
-                // BackupCategory.METADATA to suspend { backupService.performMetadataRestore() },
-                // BackupCategory.WALLET to suspend { backupService.performWalletRestore() },
-                // BackupCategory.BLOCKTANK to suspend { backupService.performBlocktankRestore() },
-                // BackupCategory.SLASHTAGS to suspend { backupService.performSlashtagsRestore() },
-                // BackupCategory.LDK_ACTIVITY to suspend { backupService.performLdkActivityRestore() },
-            )
-
-            for ((category, restoreFunction) in restoreTasks) {
-                try {
-                    val result = restoreFunction()
-                    if (result.isFailure) {
-                        // Log the error but don't fail the entire restore process
-                        // Since backup restore is not critical and mostly for user convenience
-                        Logger.warn("Error restoring $category: ${result.exceptionOrNull()?.message}", context = TAG)
-                    } else {
-                        Logger.info("Successfully restored $category", context = TAG)
-                    }
-                } catch (e: Throwable) {
-                    // Log the error but don't fail the entire restore process
-                    Logger.warn("Error restoring $category", e, context = TAG)
-                }
-            }
+            backupService.performSettingsRestore()
+            backupService.performWidgetsRestore()
+            // TODO: Add other backup categories as they get implemented:
+            // backupService.performMetadataRestore()
+            // backupService.performWalletRestore()
+            // backupService.performBlocktankRestore()
+            // backupService.performSlashtagsRestore()
+            // backupService.performLdkActivityRestore()
 
             Logger.info("Full restore completed", context = TAG)
             Result.success(Unit)

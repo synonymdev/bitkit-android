@@ -94,7 +94,6 @@ class WalletViewModel @Inject constructor(
                 }
                 if (state.walletExists && restoreState == RestoreState.WaitingForWallet) {
                     setRestoringWalletState(false)
-                    restoreState = RestoreState.RestoringBackups
                     triggerBackupRestore()
                 }
             }
@@ -116,6 +115,8 @@ class WalletViewModel @Inject constructor(
     }
 
     private fun triggerBackupRestore() {
+        restoreState = RestoreState.RestoringBackups
+
         viewModelScope.launch(bgDispatcher) {
             backupRepo.performFullRestoreFromLatestBackup()
                 .onSuccess {
@@ -140,7 +141,6 @@ class WalletViewModel @Inject constructor(
     }
 
     fun onBackupRestoreRetry() {
-        restoreState = RestoreState.RestoringBackups
         triggerBackupRestore()
     }
 

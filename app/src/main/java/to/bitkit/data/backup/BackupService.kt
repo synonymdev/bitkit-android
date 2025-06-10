@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.first
 import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsData
+import to.bitkit.data.WidgetsStore
 import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.utils.AppError
@@ -15,8 +17,9 @@ import javax.inject.Singleton
 @Singleton
 class BackupService @Inject constructor(
     private val vssClient: VssBackupClient,
-    private val settingsStore: SettingsStore,
     private val appStorage: AppStorage,
+    private val settingsStore: SettingsStore,
+    private val widgetsStore: WidgetsStore,
 ) {
     suspend fun performBackup(category: BackupCategory): Result<Unit> {
         Logger.debug("Performing backup for category: $category", context = TAG)
@@ -39,16 +42,19 @@ class BackupService @Inject constructor(
     }
 
     private suspend fun performSettingsBackup(): Result<Unit> = runCatching {
-        val settingsData = settingsStore.data.first()
+        val data = settingsStore.data.first()
 
-        val dataBytes = json.encodeToString(settingsData).toByteArray()
+        val dataBytes = json.encodeToString(data).toByteArray()
 
         encryptAndUpload(BackupCategory.SETTINGS, dataBytes)
     }
 
     private suspend fun performWidgetsBackup(): Result<Unit> = runCatching {
-        delay(1000)
-        TODO("Widgets backup")
+        val data = widgetsStore.data.first()
+
+        val dataBytes = json.encodeToString(data).toByteArray()
+
+        encryptAndUpload(BackupCategory.WIDGETS, dataBytes)
     }
 
     private suspend fun performMetadataBackup(): Result<Unit> = runCatching {
@@ -90,21 +96,39 @@ class BackupService @Inject constructor(
     }
 
     suspend fun performSettingsRestore(): Result<Unit> {
-        Logger.debug("Performing settings restore", context = TAG)
+        val category = BackupCategory.SETTINGS
 
         return runCatching {
-            val dataBytes = fetchBackupData(BackupCategory.SETTINGS).getOrThrow()
+            val dataBytes = fetchBackupData(category).getOrThrow()
 
             val restoredSettings = json.decodeFromString<SettingsData>(String(dataBytes))
             settingsStore.update { restoredSettings }
 
-            appStorage.updateBackupStatus(BackupCategory.SETTINGS) {
+            appStorage.updateBackupStatus(category) {
                 it.copy(running = false, synced = System.currentTimeMillis())
             }
 
-            Logger.info("Settings restore success", context = TAG)
+            Logger.info("Restore success for: $category", context = TAG)
         }.onFailure { exception ->
-            Logger.error("Settings restore error", exception, context = TAG)
+            Logger.debug("Restore error for: $category", context = TAG)
+        }
+    }
+    suspend fun performWidgetsRestore(): Result<Unit> {
+        val category = BackupCategory.WIDGETS
+
+        return runCatching {
+            val dataBytes = fetchBackupData(category).getOrThrow()
+            val parsed = json.decodeFromString<WidgetsData>(String(dataBytes))
+
+            widgetsStore.update { parsed }
+
+            appStorage.updateBackupStatus(category) {
+                it.copy(running = false, synced = System.currentTimeMillis())
+            }
+
+            Logger.info("Restore success for: $category", context = TAG)
+        }.onFailure { exception ->
+            Logger.debug("Restore error for: $category", context = TAG)
         }
     }
 
