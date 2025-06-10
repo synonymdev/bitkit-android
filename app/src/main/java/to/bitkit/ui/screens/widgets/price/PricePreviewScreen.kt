@@ -228,7 +228,7 @@ private fun Preview() {
                         ),
                         price = "$20,326",
                         pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = "1D",
+                        period = GraphPeriod.ONE_DAY,
                     ),
                     PriceWidgetData(
                         name = "BTC/EUR",
@@ -238,7 +238,7 @@ private fun Preview() {
                         ),
                         price = "€ 20,326",
                         pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = "1D",
+                        period = GraphPeriod.ONE_DAY,
                     )
                 )
             ),
@@ -273,7 +273,7 @@ private fun Preview2() {
                         ),
                         price = "$20,326",
                         pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = "1D",
+                        period = GraphPeriod.ONE_DAY,
                     ),
                     PriceWidgetData(
                         name = "BTC/EUR",
@@ -283,7 +283,7 @@ private fun Preview2() {
                         ),
                         price = "€ 20,326",
                         pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = "1D",
+                        period = GraphPeriod.ONE_DAY,
                     )
                 )
             ),

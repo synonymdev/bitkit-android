@@ -37,6 +37,7 @@ import ir.ehsannarmani.compose_charts.models.LabelProperties
 import ir.ehsannarmani.compose_charts.models.Line
 import to.bitkit.R
 import to.bitkit.data.dto.price.Change
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.models.widget.PricePreferences
@@ -185,7 +186,7 @@ fun ChartComponent(
         )
 
         CaptionB(
-            text = widgetData.period,
+            text = widgetData.period.value,
             color = baseColor,
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -223,7 +224,7 @@ private fun FullBlockCardPreview() {
                                 3.0,
                                 4.0,
                             ),
-                            period = "1D",
+                            period = GraphPeriod.ONE_DAY,
                         ),
                         PriceWidgetData(
                             name = "BTC/EUR",
@@ -238,7 +239,7 @@ private fun FullBlockCardPreview() {
                                 3.0,
                                 4.0,
                             ),
-                            period = "1D",
+                            period = GraphPeriod.ONE_DAY,
                         ),
                     ),
                 )

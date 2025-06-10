@@ -23,7 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.displayNameToTradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
@@ -56,6 +58,9 @@ fun PriceEditScreen(
         ),
         onClickTradingPair = { name ->
 
+        },
+        onClickGraph = { period ->
+
         }
     )
 }
@@ -66,6 +71,7 @@ fun PriceEditContent(
     onBack: () -> Unit,
     priceModel: PriceDTO,
     onClickReset: () -> Unit,
+    onClickGraph: (GraphPeriod) -> Unit,
     onClickTradingPair: (String) -> Unit,
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
@@ -108,6 +114,15 @@ fun PriceEditContent(
                         onClickTradingPair(data.name)
                     },
                     testTagPrefix = data.name
+                )
+            }
+
+            priceModel.widgets.firstOrNull()?.let {
+                PriceChartOptionRow(
+                    widgetData = it,
+                    isEnabled = it.period == preferences.period,
+                    onClick = onClickGraph,
+                    testTagPrefix = it.name
                 )
             }
         }
@@ -198,10 +213,9 @@ private fun PriceEditOptionRow(
 
 @Composable
 private fun PriceChartOptionRow(
-    label: String,
-    value: String,
+    widgetData: PriceWidgetData,
     isEnabled: Boolean,
-    onClick: () -> Unit,
+    onClick: (GraphPeriod) -> Unit,
     testTagPrefix: String
 ) {
     Column {
@@ -213,24 +227,13 @@ private fun PriceChartOptionRow(
                 .fillMaxWidth()
                 .testTag("${testTagPrefix}_setting_row")
         ) {
-            BodySSB(
-                text = label,
-                color = Colors.White64,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("${testTagPrefix}_label")
+            ChartComponent(
+                widgetData = widgetData,
+                modifier = Modifier.weight(1f)
             )
 
-            if (value.isNotEmpty()) {
-                BodySSB(
-                    text = value,
-                    color = Colors.White,
-                    modifier = Modifier.testTag("${testTagPrefix}_text")
-                )
-            }
-
             IconButton(
-                onClick = onClick,
+                onClick = { onClick(widgetData.period) },
                 modifier = Modifier.testTag("${testTagPrefix}_toggle_button")
             ) {
                 Icon(

@@ -36,8 +36,7 @@ class PriceService @Inject constructor(
     override val refreshInterval = 1.minutes
 
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
-        val period =
-            widgetsStore.data.first().pricePreferences.period?.value ?: GraphPeriod.ONE_DAY.value
+        val period = widgetsStore.data.first().pricePreferences.period ?: GraphPeriod.ONE_DAY
 
         val widgets = TradingPair.entries.map { pair ->
             fetchPairData(pair = pair, period = period)
@@ -48,7 +47,7 @@ class PriceService @Inject constructor(
     }
     //TODO CREATE METHOD TO FETCH ALL PERIODS
 
-    private suspend fun fetchPairData(pair: TradingPair, period: String): PriceWidgetData {
+    private suspend fun fetchPairData(pair: TradingPair, period: GraphPeriod): PriceWidgetData {
         val ticker = pair.ticker
 
         // Fetch historical candles
@@ -92,10 +91,11 @@ class PriceService @Inject constructor(
 
     private suspend fun fetchCandles(
         ticker: String,
-        period: String
+        period: GraphPeriod
     ): List<CandleResponse> {
-        val response: HttpResponse =
-            client.get("${Env.pricesWidgetBaseUrl}/price/$ticker/history/$period")
+        val response: HttpResponse = client.get(
+            "${Env.pricesWidgetBaseUrl}/price/$ticker/history/${period.value}"
+        )
         return when (response.status.isSuccess()) {
             true -> {
                 runCatching { response.body<List<CandleResponse>>() }.getOrElse {
