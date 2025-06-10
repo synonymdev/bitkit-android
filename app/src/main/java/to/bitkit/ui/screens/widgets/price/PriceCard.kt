@@ -138,17 +138,11 @@ fun ChartComponent(
 ) {
     val baseColor = if (widgetData.change.isPositive) Colors.Green else Colors.Red
 
-    // Normalize values like in the TypeScript version
-    val normalizedValues = remember(widgetData.pastValues) {
-        val min = widgetData.pastValues.minOrNull() ?: 0.0
-        val max = widgetData.pastValues.maxOrNull() ?: 1.0
-
-        if (max == min) {
-            // Handle edge case where all values are the same
-            widgetData.pastValues.map { 0.5 }
-        } else {
-            widgetData.pastValues.map { (it - min) / (max - min) }
-        }
+    val minValue = remember(widgetData.pastValues) {
+        widgetData.pastValues.minOrNull() ?: 0.0
+    }
+    val maxValue = remember(widgetData.pastValues) {
+        widgetData.pastValues.maxOrNull() ?: 1.0
     }
 
     Box(
@@ -158,11 +152,11 @@ fun ChartComponent(
     ) {
         LineChart(
             modifier = Modifier.fillMaxSize(),
-            data = remember(normalizedValues, baseColor) {
+            data = remember(widgetData.pastValues, baseColor) {
                 listOf(
                     Line(
                         label = widgetData.name,
-                        values = normalizedValues,
+                        values = widgetData.pastValues,
                         color = SolidColor(baseColor),
                         firstGradientFillColor = baseColor.copy(alpha = 0.8f),
                         secondGradientFillColor = baseColor.copy(alpha = 0.3f),
@@ -186,9 +180,8 @@ fun ChartComponent(
             dividerProperties = DividerProperties(
                 enabled = false
             ),
-            // Use 0-1 range since we normalized the values
-            minValue = 0.0,
-            maxValue = 1.0
+            minValue = minValue,
+            maxValue = maxValue
         )
 
         CaptionB(
