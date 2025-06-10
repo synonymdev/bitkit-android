@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.displayNameToTradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
@@ -52,7 +53,10 @@ fun PriceEditScreen(
         onClickPreview = navigatePreview,
         priceModel = currentPrice ?: PriceDTO(
             widgets = listOf()
-        )
+        ),
+        onClickTradingPair = { name ->
+
+        }
     )
 }
 
@@ -62,6 +66,7 @@ fun PriceEditContent(
     onBack: () -> Unit,
     priceModel: PriceDTO,
     onClickReset: () -> Unit,
+    onClickTradingPair: (String) -> Unit,
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
 ) {
@@ -94,10 +99,17 @@ fun PriceEditContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            priceModel.widgets.map {
-
+            priceModel.widgets.map { data ->
+                PriceEditOptionRow(
+                    label = data.name,
+                    value = data.price,
+                    isEnabled = data.name.displayNameToTradingPair() in preferences.enabledPairs,
+                    onClick = {
+                        onClickTradingPair(data.name)
+                    },
+                    testTagPrefix = data.name
+                )
             }
-
         }
 
         Row(
