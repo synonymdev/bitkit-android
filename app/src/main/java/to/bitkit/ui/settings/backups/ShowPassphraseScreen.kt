@@ -27,7 +27,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.BackupContract
 
 @Composable
 fun ShowPassphraseScreen(

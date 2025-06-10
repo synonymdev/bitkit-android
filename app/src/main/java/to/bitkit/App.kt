@@ -13,7 +13,7 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 internal open class App : Application(), Configuration.Provider {
-    @Inject
+        @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
     override val workManagerConfiguration
@@ -21,7 +21,7 @@ internal open class App : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
-    override fun onCreate() {
+        override fun onCreate() {
         super.onCreate()
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         Env.initAppStoragePath(filesDir.absolutePath)

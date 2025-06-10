@@ -279,22 +279,22 @@ private fun ReceiveQrScreen(
     onClickReceiveOnSpending: () -> Unit,
 ) {
     val context = LocalContext.current
-    val window = remember(context) { (context as Activity).window }
+    val window = remember(context) { (context as? Activity)?.window }
 
     // Keep screen on and set brightness to max while this composable is active
     DisposableEffect(Unit) {
-        val originalBrightness = window.attributes.screenBrightness
-        val originalFlags = window.attributes.flags
+        val originalBrightness = window?.attributes?.screenBrightness
+        val originalFlags = window?.attributes?.flags
 
-        window.attributes = window.attributes.apply {
+        window?.attributes = window.attributes.apply {
             screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
             flags = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         }
 
         onDispose {
-            window.attributes = window.attributes.apply {
-                screenBrightness = originalBrightness
-                flags = originalFlags
+            window?.attributes = window.attributes.apply {
+                originalBrightness?.let { screenBrightness = originalBrightness }
+                originalFlags?.let { flags = originalFlags }
             }
         }
     }

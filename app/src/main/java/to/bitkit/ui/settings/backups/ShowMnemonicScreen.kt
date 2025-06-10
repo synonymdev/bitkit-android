@@ -54,7 +54,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.utils.bip39Words
-import to.bitkit.viewmodels.BackupContract
 
 @Composable
 fun ShowMnemonicScreen(
