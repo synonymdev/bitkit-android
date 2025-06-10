@@ -48,7 +48,10 @@ class VssBackupClient @Inject constructor(
                 if (existingObject.isSuccess) {
                     existingObject.getOrThrow().version
                 } else {
-                    0L // New object starts at version 0
+                    when (val error = existingObject.exceptionOrNull()) {
+                        is VssError.NotFoundError -> 0L // New object starts at version 0
+                        else -> throw error ?: Exception("Failed to get current version")
+                    }
                 }
             }
 
