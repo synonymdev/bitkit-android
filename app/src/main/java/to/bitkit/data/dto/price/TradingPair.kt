@@ -14,3 +14,5 @@ enum class TradingPair(
     val ticker: String
         get() = "$base$quote"
 }
+
+fun String.displayNameToTradingPair() = TradingPair.entries.firstOrNull { it.displayName == this }
