@@ -50,7 +50,9 @@ fun PriceEditScreen(
         preferences = customPreferences,
         onClickReset = { viewmodel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
-        priceModel = currentPrice
+        priceModel = currentPrice ?: PriceDTO(
+            widgets = listOf()
+        )
     )
 }
 
@@ -58,7 +60,7 @@ fun PriceEditScreen(
 fun PriceEditContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
-    priceModel: PriceDTO?,
+    priceModel: PriceDTO,
     onClickReset: () -> Unit,
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
@@ -92,14 +94,9 @@ fun PriceEditContent(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-//            // Current fee toggle
-//            WeatherEditOptionRow(
-//                label = stringResource(R.string.widgets__weather__current_fee),
-//                value = priceModel?.currentFee.orEmpty(),
-//                isEnabled = preferences.showCurrentFee,
-//                onClick = onClickShowCurrentFee,
-//                testTagPrefix = "current_fee"
-//            )
+            priceModel.widgets.map {
+
+            }
 
         }
 

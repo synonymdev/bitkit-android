@@ -259,7 +259,7 @@ private fun Preview2() {
             onClickDelete = {},
             onClickSave = {},
             pricePreferences = PricePreferences(
-                pairs = listOf(TradingPair.BTC_USD, TradingPair.BTC_EUR),
+                enabledPairs = listOf(TradingPair.BTC_USD, TradingPair.BTC_EUR),
                 period = GraphPeriod.ONE_WEEK,
                 showSource = true
             ),

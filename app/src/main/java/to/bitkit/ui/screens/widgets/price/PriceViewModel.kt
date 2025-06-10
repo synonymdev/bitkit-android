@@ -72,7 +72,7 @@ class PriceViewModel @Inject constructor(
 
     fun setPairs(pairs: List<TradingPair>) {
         _customPreferences.update { preferences ->
-            preferences.copy(pairs = pairs)
+            preferences.copy(enabledPairs = pairs)
         }
     }
 
