@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -42,6 +43,8 @@ class BackupsRepo @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + bgDispatcher)
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
+    private val statusObserverJobs = mutableListOf<Job>()
+    private val dataListenerJobs = mutableListOf<Job>()
     private var periodicCheckJob: Job? = null
     private var isObserving = false
     private var isRestoring = false
@@ -52,9 +55,10 @@ class BackupsRepo @Inject constructor(
         if (isObserving) return
 
         isObserving = true
-        observeBackupStatuses()
+        startBackupStatusObservers()
+        startDataStoreListeners()
         startPeriodicBackupFailureCheck()
-        Logger.debug("Started observing backup statuses", context = TAG)
+        Logger.debug("Started observing backup statuses and data store changes", context = TAG)
     }
 
     fun stopObservingBackups() {
@@ -66,16 +70,25 @@ class BackupsRepo @Inject constructor(
         backupJobs.values.forEach { it.cancel() }
         backupJobs.clear()
 
+        // Cancel backup status observer jobs
+        statusObserverJobs.forEach { it.cancel() }
+        statusObserverJobs.clear()
+
+        // Cancel data store listener jobs
+        dataListenerJobs.forEach { it.cancel() }
+        dataListenerJobs.clear()
+
         // Cancel periodic check job
         periodicCheckJob?.cancel()
         periodicCheckJob = null
 
-        Logger.debug("Stopped observing backup statuses", context = TAG)
+        Logger.debug("Stopped observing backup statuses and data store changes", context = TAG)
     }
 
-    private fun observeBackupStatuses() {
+    private fun startBackupStatusObservers() {
+        // Observe backup status changes for each category
         BackupCategory.entries.forEach { category ->
-            scope.launch {
+            val job = scope.launch {
                 appStorage.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
@@ -88,7 +101,38 @@ class BackupsRepo @Inject constructor(
                         }
                     }
             }
+            statusObserverJobs.add(job)
         }
+
+        Logger.debug("Started ${statusObserverJobs.size} backup status observers", context = TAG)
+    }
+
+    private fun startDataStoreListeners() {
+        val settingsJob = scope.launch {
+            settingsStore.data
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (!isRestoring) {
+                        markBackupRequired(BackupCategory.SETTINGS)
+                    }
+                }
+        }
+        dataListenerJobs.add(settingsJob)
+
+        val widgetsJob = scope.launch {
+            widgetsStore.data
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (!isRestoring) {
+                        markBackupRequired(BackupCategory.WIDGETS)
+                    }
+                }
+        }
+        dataListenerJobs.add(widgetsJob)
+
+        Logger.debug("Started ${dataListenerJobs.size} data store listeners", context = TAG)
     }
 
     private fun scheduleBackup(category: BackupCategory) {
