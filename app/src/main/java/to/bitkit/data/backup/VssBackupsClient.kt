@@ -26,7 +26,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class VssBackupClient @Inject constructor(
+class VssBackupsClient @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
 ) {
@@ -218,7 +218,7 @@ class VssBackupClient @Inject constructor(
         }
     }
 
-    companion object {
+    companion object Companion {
         private const val TAG = "VssBackupClient"
     }
 }

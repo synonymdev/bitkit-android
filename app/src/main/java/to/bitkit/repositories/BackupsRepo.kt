@@ -18,7 +18,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
-import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssBackupsClient
 import to.bitkit.data.backup.VssObjectInfo
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.json
@@ -36,7 +36,7 @@ class BackupsRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val appStorage: AppStorage,
-    private val vssClient: VssBackupClient,
+    private val vssBackupsClient: VssBackupsClient,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
 ) {
@@ -235,7 +235,7 @@ class BackupsRepo @Inject constructor(
         // TODO encrypt data before upload
         val encrypted = dataBytes
 
-        val result = vssClient.putObject(category, encrypted).getOrThrow()
+        val result = vssBackupsClient.putObject(category, encrypted).getOrThrow()
 
         Logger.info("Backup uploaded for category: $category", context = TAG)
         return result
@@ -245,7 +245,7 @@ class BackupsRepo @Inject constructor(
     suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Full restore starting", context = TAG)
 
-        return@withContext runCatching {
+        return@withContext try {
             performRestore(BackupCategory.SETTINGS) { dataBytes ->
                 val parsed = json.decodeFromString<SettingsData>(String(dataBytes))
                 settingsStore.update { parsed }
@@ -263,7 +263,9 @@ class BackupsRepo @Inject constructor(
 
             Logger.info("Full restore completed", context = TAG)
             Result.success(Unit)
-        }.map { it.getOrThrow() }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 
     private suspend fun performRestore(
@@ -284,7 +286,7 @@ class BackupsRepo @Inject constructor(
     }
 
     private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
-        val objectInfo = vssClient.getObject(category).getOrThrow()
+        val objectInfo = vssBackupsClient.getObject(category).getOrThrow()
         objectInfo.data
     }
 
