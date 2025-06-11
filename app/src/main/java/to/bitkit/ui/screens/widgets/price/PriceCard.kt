@@ -95,8 +95,7 @@ fun PriceCard(
                 priceDTO.widgets.filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
             }
 
-            enabledPairs //TODO MAY THIS FILTER CAUSE UNNECESSARY RECOMPOSITION?
-                .map { widgetData ->
+            enabledPairs.map { widgetData ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
