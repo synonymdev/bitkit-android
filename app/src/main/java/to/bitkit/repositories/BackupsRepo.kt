@@ -8,13 +8,20 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.data.AppStorage
-import to.bitkit.data.backup.BackupService
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
+import to.bitkit.data.WidgetsData
+import to.bitkit.data.WidgetsStore
+import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.VssObjectInfo
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.json
 import to.bitkit.ext.formatPlural
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -29,7 +36,9 @@ class BackupsRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val appStorage: AppStorage,
-    private val backupService: BackupService,
+    private val vssClient: VssBackupClient,
+    private val settingsStore: SettingsStore,
+    private val widgetsStore: WidgetsStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + bgDispatcher)
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
@@ -147,7 +156,7 @@ class BackupsRepo @Inject constructor(
         }
 
         try {
-            val backupResult = backupService.performBackup(category)
+            val backupResult = performBackup(category)
 
             if (backupResult.isSuccess) {
                 appStorage.updateBackupStatus(category) {
@@ -181,14 +190,14 @@ class BackupsRepo @Inject constructor(
         Logger.debug("Full restore starting", context = TAG)
 
         return@withContext try {
-            backupService.performSettingsRestore()
-            backupService.performWidgetsRestore()
+            performSettingsRestore()
+            performWidgetsRestore()
             // TODO: Add other backup categories as they get implemented:
-            // backupService.performMetadataRestore()
-            // backupService.performWalletRestore()
-            // backupService.performBlocktankRestore()
-            // backupService.performSlashtagsRestore()
-            // backupService.performLdkActivityRestore()
+            // performMetadataRestore()
+            // performWalletRestore()
+            // performBlocktankRestore()
+            // performSlashtagsRestore()
+            // performLdkActivityRestore()
 
             Logger.info("Full restore completed", context = TAG)
             Result.success(Unit)
@@ -197,7 +206,108 @@ class BackupsRepo @Inject constructor(
         }
     }
 
-    companion object Companion {
+    private suspend fun performBackup(category: BackupCategory): Result<Unit> {
+        Logger.debug("Performing backup for category: $category", context = TAG)
+
+        return runCatching {
+            val dataBytes = getDataBytes(category)
+            encryptAndUpload(category, dataBytes)
+        }
+    }
+
+    private suspend fun getDataBytes(category: BackupCategory): ByteArray = when (category) {
+        BackupCategory.SETTINGS -> {
+            val data = settingsStore.data.first()
+            json.encodeToString(data).toByteArray()
+        }
+
+        BackupCategory.WIDGETS -> {
+            val data = widgetsStore.data.first()
+            json.encodeToString(data).toByteArray()
+        }
+
+        BackupCategory.WALLET -> {
+            throw NotImplementedError("Wallet backup not yet implemented")
+        }
+
+        BackupCategory.METADATA -> {
+            throw NotImplementedError("Metadata backup not yet implemented")
+        }
+
+        BackupCategory.BLOCKTANK -> {
+            throw NotImplementedError("Blocktank backup not yet implemented")
+        }
+
+        BackupCategory.SLASHTAGS -> {
+            throw NotImplementedError("Slashtags backup not yet implemented")
+        }
+
+        BackupCategory.LDK_ACTIVITY -> {
+            throw NotImplementedError("LDK activity backup not yet implemented")
+        }
+
+        BackupCategory.LIGHTNING_CONNECTIONS -> {
+            throw NotImplementedError("Lightning connections backup not yet implemented")
+        }
+    }
+
+    private suspend fun encryptAndUpload(
+        category: BackupCategory,
+        dataBytes: ByteArray,
+    ): VssObjectInfo {
+        // TODO encrypt data before upload
+        val encrypted = dataBytes
+
+        val result = vssClient.putObject(category, encrypted).getOrThrow()
+
+        Logger.info("Backup uploaded for category: $category", context = TAG)
+        return result
+    }
+
+    private suspend fun performSettingsRestore(): Result<Unit> {
+        val category = BackupCategory.SETTINGS
+
+        return runCatching {
+            val dataBytes = fetchBackupData(category).getOrThrow()
+
+            val restoredSettings = json.decodeFromString<SettingsData>(String(dataBytes))
+            settingsStore.update { restoredSettings }
+
+            appStorage.updateBackupStatus(category) {
+                it.copy(running = false, synced = System.currentTimeMillis())
+            }
+
+            Logger.info("Restore success for: $category", context = TAG)
+        }.onFailure { exception ->
+            Logger.debug("Restore error for: $category", context = TAG)
+        }
+    }
+
+    private suspend fun performWidgetsRestore(): Result<Unit> {
+        val category = BackupCategory.WIDGETS
+
+        return runCatching {
+            val dataBytes = fetchBackupData(category).getOrThrow()
+            val parsed = json.decodeFromString<WidgetsData>(String(dataBytes))
+
+            widgetsStore.update { parsed }
+
+            appStorage.updateBackupStatus(category) {
+                it.copy(running = false, synced = System.currentTimeMillis())
+            }
+
+            Logger.info("Restore success for: $category", context = TAG)
+        }.onFailure { exception ->
+            Logger.debug("Restore error for: $category", context = TAG)
+        }
+    }
+
+    private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
+        val objectInfo = vssClient.getObject(category).getOrThrow()
+        objectInfo.data
+    }
+
+    companion object {
         private const val TAG = "BackupRepo"
 
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
