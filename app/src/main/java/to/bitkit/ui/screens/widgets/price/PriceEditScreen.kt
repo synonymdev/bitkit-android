@@ -57,7 +57,8 @@ fun PriceEditScreen(
         onClickPreview = navigatePreview,
         allPeriodsUsd = allPeriodsUsd,
         priceModel = currentPrice ?: PriceDTO(
-            widgets = listOf()
+            widgets = listOf(),
+            source = ""
         ),
         onClickTradingPair = { pair ->
             viewModel.toggleTradingPair(pair = pair)

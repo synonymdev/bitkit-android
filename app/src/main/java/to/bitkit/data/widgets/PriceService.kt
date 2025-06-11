@@ -37,6 +37,7 @@ class PriceService @Inject constructor(
 
     override val widgetType = WidgetType.PRICE
     override val refreshInterval = 1.minutes
+    private val sourceLabel = "Bitfinex.com"
 
     override suspend fun fetchData(): Result<PriceDTO> = runCatching {
         val period = widgetsStore.data.first().pricePreferences.period ?: GraphPeriod.ONE_DAY
@@ -44,7 +45,7 @@ class PriceService @Inject constructor(
         val widgets = TradingPair.entries.map { pair ->
             fetchPairData(pair = pair, period = period)
         }
-        PriceDTO(widgets)
+        PriceDTO(widgets = widgets, source = sourceLabel)
     }.onFailure {
         Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
     }
@@ -54,9 +55,10 @@ class PriceService @Inject constructor(
             GraphPeriod.entries.map { period ->
                 async {
                     PriceDTO(
-                        TradingPair.entries.map { pair ->
+                        widgets = TradingPair.entries.map { pair ->
                             fetchPairData(pair = pair, period = period)
-                        }
+                        },
+                        source = sourceLabel
                     )
                 }
             }.awaitAll()

@@ -232,6 +232,7 @@ private fun Preview() {
             onClickSave = {},
             pricePreferences = PricePreferences(),
             priceDTO = PriceDTO(
+                source = "Bitfinex.com",
                 widgets = listOf(
                     PriceWidgetData(
                         pair = TradingPair.BTC_USD,
@@ -278,6 +279,7 @@ private fun Preview2() {
                 showSource = true
             ),
             priceDTO = PriceDTO(
+                source = "Bitfinex.com",
                 widgets = listOf(
                     PriceWidgetData(
                         pair = TradingPair.BTC_USD,

@@ -45,6 +45,7 @@ import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
@@ -139,6 +140,28 @@ fun PriceCard(
                         .testTag("price_card_chart")
                 )
             }
+
+            if (pricePreferences.showSource) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("source_row"),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    CaptionB(
+                        text = stringResource(R.string.widgets__widget__source),
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("source_label")
+                    )
+                    CaptionB(
+                        text = priceDTO.source,
+                        color = Colors.White64,
+                        modifier = Modifier.testTag("source_text")
+                    )
+                }
+            }
         }
     }
 }
@@ -221,8 +244,11 @@ private fun FullBlockCardPreview() {
             PriceCard(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
-                pricePreferences = PricePreferences(),
+                pricePreferences = PricePreferences(
+                    showSource = true
+                ),
                 priceDTO = PriceDTO(
+                    source = "Bitfinex.com",
                     widgets = listOf(
                         PriceWidgetData(
                             pair = TradingPair.BTC_USD,
