@@ -70,7 +70,6 @@ fun WalletInitResultView(
     var showProceedDialog by remember { mutableStateOf(false) }
     var retryCount by remember { mutableIntStateOf(0) }
 
-    // Reset retry count when result changes to success
     LaunchedEffect(result) {
         if (result is WalletInitResult.Restored) {
             retryCount = 0
@@ -151,17 +150,5 @@ fun WalletInitResultViewRestoredPreview() {
 fun WalletInitResultViewErrorPreview() {
     AppThemeSurface {
         WalletInitResultView(result = WalletInitResult.Failed(Error("Something went wrong")), onButtonClick = {})
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-fun WalletInitResultViewErrorWithRetryPreview() {
-    AppThemeSurface {
-        WalletInitResultView(
-            result = WalletInitResult.Failed(Error("Something went wrong")),
-            onButtonClick = {},
-            onProceedWithoutRestore = {}
-        )
     }
 }
