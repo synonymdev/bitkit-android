@@ -55,10 +55,11 @@ class BackupsRepo @Inject constructor(
         if (isObserving) return
 
         isObserving = true
+        Logger.debug("Start observing backup statuses and data store changes", context = TAG)
+
         startBackupStatusObservers()
         startDataStoreListeners()
         startPeriodicBackupFailureCheck()
-        Logger.debug("Started observing backup statuses and data store changes", context = TAG)
     }
 
     fun stopObservingBackups() {
@@ -200,10 +201,8 @@ class BackupsRepo @Inject constructor(
             it.copy(running = true, required = System.currentTimeMillis())
         }
 
-        try {
-            val backupResult = performBackup(category)
-
-            if (backupResult.isSuccess) {
+        performBackup(category)
+            .onSuccess {
                 appStorage.updateBackupStatus(category) {
                     it.copy(
                         running = false,
@@ -211,15 +210,13 @@ class BackupsRepo @Inject constructor(
                     )
                 }
                 Logger.info("Backup succeeded for category: $category", context = TAG)
-            } else {
-                throw backupResult.exceptionOrNull() ?: Exception("Unknown backup failure")
             }
-        } catch (e: Throwable) {
-            appStorage.updateBackupStatus(category) {
-                it.copy(running = false)
+            .onFailure { e ->
+                appStorage.updateBackupStatus(category) {
+                    it.copy(running = false)
+                }
+                Logger.error("Backup failed for category: $category", e = e, context = TAG)
             }
-            Logger.error("Backup failed for category: $category", e = e, context = TAG)
-        }
     }
 
     fun markBackupRequired(category: BackupCategory) {
@@ -235,12 +232,12 @@ class BackupsRepo @Inject constructor(
         Logger.debug("Performing backup for category: $category", context = TAG)
 
         return runCatching {
-            val dataBytes = getDataBytes(category)
-            encryptAndUpload(category, dataBytes)
+            val dataBytes = getBackupDataBytes(category)
+            encryptAndUpload(category, dataBytes).getOrThrow()
         }
     }
 
-    private suspend fun getDataBytes(category: BackupCategory): ByteArray = when (category) {
+    private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
         BackupCategory.SETTINGS -> {
             val data = settingsStore.data.first()
             json.encodeToString(data).toByteArray()
@@ -276,14 +273,14 @@ class BackupsRepo @Inject constructor(
         }
     }
 
-    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): VssObjectInfo {
+    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssObjectInfo> {
         // TODO encrypt data before upload
         val encrypted = dataBytes
 
-        val result = vssBackupsClient.putObject(category, encrypted).getOrThrow()
-
-        Logger.info("Backup uploaded for category: $category", context = TAG)
-        return result
+        return vssBackupsClient.putObject(category, encrypted)
+            .onSuccess {
+                Logger.info("Backup uploaded for category: $category", context = TAG)
+            }
     }
 
 
