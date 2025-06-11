@@ -44,6 +44,7 @@ class BackupsRepo @Inject constructor(
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
     private var periodicCheckJob: Job? = null
     private var isObserving = false
+    private var isRestoring = false
 
     private var lastNotificationTime = 0L
 
@@ -82,7 +83,7 @@ class BackupsRepo @Inject constructor(
                         old.synced == new.synced && old.required == new.required
                     }
                     .collect { status ->
-                        if (status.synced < status.required && !status.running) {
+                        if (status.synced < status.required && !status.running && !isRestoring) {
                             scheduleBackup(category)
                         }
                     }
@@ -99,7 +100,7 @@ class BackupsRepo @Inject constructor(
 
             // Double-check if backup is still needed
             val status = appStorage.backupStatuses.value[category] ?: BackupItemStatus()
-            if (status.synced < status.required && !status.running) {
+            if (status.synced < status.required && !status.running && !isRestoring) {
                 triggerBackup(category)
             }
         }
@@ -245,6 +246,8 @@ class BackupsRepo @Inject constructor(
     suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Full restore starting", context = TAG)
 
+        isRestoring = true
+
         return@withContext try {
             performRestore(BackupCategory.SETTINGS) { dataBytes ->
                 val parsed = json.decodeFromString<SettingsData>(String(dataBytes))
@@ -265,6 +268,8 @@ class BackupsRepo @Inject constructor(
             Result.success(Unit)
         } catch (e: Throwable) {
             Result.failure(e)
+        } finally {
+            isRestoring = false
         }
     }
 
