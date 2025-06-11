@@ -56,7 +56,7 @@ fun InitializingWalletView(
     ) {
         val percentage = remember { Animatable(0f) }
 
-        val animationDuration = if (isRestoringBackups) 20000 else 8000
+        val animationDuration = if (isRestoringBackups) 8000 else 2000
 
         // Progress to 100%
         LaunchedEffect(animationDuration) {
