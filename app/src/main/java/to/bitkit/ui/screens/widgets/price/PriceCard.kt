@@ -94,35 +94,35 @@ fun PriceCard(
             }
 
             enabledPairs.map { widgetData ->
-                    Row(
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    BodySB(
+                        text = widgetData.pair.displayName,
+                        color = Colors.White64,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("price_card_pair_row_${widgetData.pair.displayName}"),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        BodySB(
-                            text = widgetData.pair.displayName,
-                            color = Colors.White64,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("price_card_pair_label_${widgetData.pair}")
-                        )
+                            .weight(1f)
+                            .testTag("price_card_pair_label_${widgetData.pair}")
+                    )
 
-                        BodySB(
-                            text = widgetData.change.formatted,
-                            color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
-                            modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
-                        )
+                    BodySB(
+                        text = widgetData.change.formatted,
+                        color = if (widgetData.change.isPositive) Colors.Green else Colors.Red,
+                        modifier = Modifier.testTag("price_card_pair_change_${widgetData.pair}")
+                    )
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
 
-                        BodySB(
-                            text = widgetData.price,
-                            color = Colors.White,
-                            modifier = Modifier.testTag("price_card_pair_price_${widgetData.pair}")
-                        )
-                    }
+                    BodySB(
+                        text = widgetData.price,
+                        color = Colors.White,
+                        modifier = Modifier.testTag("price_card_pair_price_${widgetData.pair}")
+                    )
                 }
+            }
 
             val chartData = remember(enabledPairs) {
                 if (enabledPairs.isNotEmpty()) enabledPairs.first() else priceDTO.widgets.firstOrNull()
