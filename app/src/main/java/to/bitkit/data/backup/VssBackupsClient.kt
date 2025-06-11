@@ -57,6 +57,9 @@ class VssBackupsClient @Inject constructor(
 
             post("/putObjects", request)
 
+            // VSS uses optimistic concurrency control: when you specify a version, you're saying
+            // "update this object only if the current version matches". If successful, VSS
+            // increments the version and returns the new version (useVersion + 1)
             VssObjectInfo(
                 key = key,
                 version = useVersion + 1,
