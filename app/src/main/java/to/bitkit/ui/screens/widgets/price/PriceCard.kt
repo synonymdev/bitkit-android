@@ -47,6 +47,8 @@ import to.bitkit.ui.components.BodySB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun PriceCard(
@@ -89,8 +91,11 @@ fun PriceCard(
                 }
             }
 
-            priceDTO.widgets //TODO IMPROVE FILTER
-                .filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
+            val enabledPairs = remember(priceDTO.widgets) {
+                priceDTO.widgets.filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
+            }
+
+            enabledPairs //TODO MAY THIS FILTER CAUSE UNNECESSARY RECOMPOSITION?
                 .map { widgetData ->
                     Row(
                         modifier = Modifier
@@ -122,7 +127,11 @@ fun PriceCard(
                     }
                 }
 
-            priceDTO.widgets.firstOrNull()?.let { firstPriceData ->
+            val chartData = remember(enabledPairs) {
+                if (enabledPairs.isNotEmpty()) enabledPairs.first() else priceDTO.widgets.firstOrNull()
+            }
+
+            chartData?.let { firstPriceData ->
                 ChartComponent(
                     widgetData = firstPriceData,
                     modifier = Modifier
