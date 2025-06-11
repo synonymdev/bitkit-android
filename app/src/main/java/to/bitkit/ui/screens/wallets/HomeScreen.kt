@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -88,6 +90,7 @@ import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
+import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
@@ -141,6 +144,7 @@ fun HomeScreen(
                     walletNavController = walletNavController,
                     onRefresh = {
                         walletViewModel.onPullToRefresh()
+                        homeViewModel.refreshWidgets()
                         activityListViewModel.syncLdkNodePayments()
                     },
                     onRemoveSuggestion = { suggestion ->
@@ -440,7 +444,16 @@ private fun HomeContentView(
                                         }
                                     }
 
-                                    WidgetType.PRICE -> Unit //TODO IMPLEMENT
+                                    WidgetType.PRICE -> {
+                                        homeUiState.currentPrice?.run {
+                                            PriceCard(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                showWidgetTitle = homeUiState.showWidgetTitles,
+                                                pricePreferences = homeUiState.pricePreferences,
+                                                priceDTO = homeUiState.currentPrice,
+                                            )
+                                        }
+                                    }
                                     WidgetType.WEATHER -> {
                                         homeUiState.currentWeather?.run {
                                             WeatherCard(

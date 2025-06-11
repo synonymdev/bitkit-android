@@ -196,6 +196,7 @@ dependencies {
     implementation(libs.constraintlayout.compose)
 
     implementation(libs.lottie)
+    implementation(libs.charts)
 
     // Compose Navigation
     implementation(libs.navigation.compose)

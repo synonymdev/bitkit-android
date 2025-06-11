@@ -83,6 +83,9 @@ import to.bitkit.ui.screens.widgets.facts.FactsViewModel
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
 import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
+import to.bitkit.ui.screens.widgets.price.PriceEditScreen
+import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
+import to.bitkit.ui.screens.widgets.price.PriceViewModel
 import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
@@ -1018,7 +1021,7 @@ private fun NavGraphBuilder.widgets(
                     WidgetType.CALCULATOR -> {}
                     WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
                     WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
-                    WidgetType.PRICE -> {}
+                    WidgetType.PRICE -> navController.navigate(Routes.PricePreview)
                     WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
                 }
             },
@@ -1128,6 +1131,31 @@ private fun NavGraphBuilder.widgets(
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
                 navigatePreview = { navController.navigate(Routes.WeatherPreview) }
+            )
+        }
+    }
+    navigation<Routes.Price>(
+        startDestination = Routes.PricePreview
+    ) {
+        composableWithDefaultTransitions<Routes.PricePreview> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
+            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
+
+            PricePreviewScreen (
+                priceViewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigateEditWidget = { navController.navigate(Routes.PriceEdit) },
+            )
+        }
+        composableWithDefaultTransitions<Routes.PriceEdit> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
+            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
+            PriceEditScreen(
+                viewModel = viewModel,
+                onClose = { navController.navigateToHome() },
+                onBack = { navController.popBackStack() },
+                navigatePreview = { navController.navigate(Routes.PricePreview) }
             )
         }
     }
@@ -1546,4 +1574,13 @@ object Routes {
 
     @Serializable
     data object WeatherEdit
+
+    @Serializable
+    data object Price
+
+    @Serializable
+    data object PricePreview
+
+    @Serializable
+    data object PriceEdit
 }
