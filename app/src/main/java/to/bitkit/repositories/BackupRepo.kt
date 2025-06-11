@@ -69,7 +69,7 @@ class BackupRepo @Inject constructor(
 
             // Double-check if backup is still needed
             val status = appStorage.backupStatuses.value[category] ?: BackupItemStatus()
-            if (status.synced <= status.required && !status.running) {
+            if (status.synced < status.required && !status.running) {
                 triggerBackup(category)
             }
         }

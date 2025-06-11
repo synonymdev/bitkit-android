@@ -87,7 +87,7 @@ class AppStorage @Inject constructor(
 
                 _backupStatuses.value = currentStatuses
             } catch (e: Throwable) {
-                Logger.error("Failed to cache backup status for $category: $e", e)
+                Logger.error("Failed to cache backup status for $category", e)
             }
         }
     }
