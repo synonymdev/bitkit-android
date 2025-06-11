@@ -41,21 +41,8 @@ class VssBackupsClient @Inject constructor(
             Logger.debug("Storing object for category: $category", context = TAG)
 
             val key = category.name.lowercase()
-
-            // If no version is specified, get the current version or use 0 for new objects
-            val useVersion = version ?: run {
-                val existingObject = getObject(category)
-                if (existingObject.isSuccess) {
-                    existingObject.getOrThrow().version
-                } else {
-                    when (val error = existingObject.exceptionOrNull()) {
-                        is VssError.NotFoundError -> 0L // New object starts at version 0
-                        else -> throw error ?: Exception("Failed to get current version")
-                    }
-                }
-            }
-
             val dataToBackup = ByteString.copyFrom(data)
+            val useVersion = version ?: getCurrentVersionForKey(key)
 
             val keyValue = KeyValue.newBuilder()
                 .setKey(key)
@@ -196,11 +183,7 @@ class VssBackupsClient @Inject constructor(
             ) {
                 val responseBytes = response.readRawBytes()
                 if (responseBytes.isNotEmpty()) {
-                    try {
-                        ErrorResponse.parseFrom(responseBytes)
-                    } catch (_: Throwable) {
-                        null
-                    }
+                    runCatching { ErrorResponse.parseFrom(responseBytes) }.getOrNull()
                 } else null
             } else {
                 // Handle plain text or other error response formats
@@ -218,7 +201,22 @@ class VssBackupsClient @Inject constructor(
         }
     }
 
-    companion object Companion {
+    private suspend fun getCurrentVersionForKey(key: String): Long {
+        val currentVersionResult = listObjects(keyPrefix = key, pageSize = 1)
+
+        return if (currentVersionResult.isSuccess) {
+            currentVersionResult.getOrThrow().objects
+                .firstOrNull { it.key == key }
+                ?.version ?: 0L // New object starts at version 0
+        } else {
+            when (val error = currentVersionResult.exceptionOrNull()) {
+                is VssError.NotFoundError -> 0L // Treat as non-existent object
+                else -> throw error ?: Exception("Failed to get current version")
+            }
+        }
+    }
+
+    companion object {
         private const val TAG = "VssBackupClient"
     }
 }
@@ -261,5 +259,4 @@ sealed class VssError(message: String) : AppError(message) {
     class ConflictError(message: String) : VssError(message)
     class InvalidRequestError(message: String) : VssError(message)
     class NotFoundError(message: String) : VssError(message)
-
 }

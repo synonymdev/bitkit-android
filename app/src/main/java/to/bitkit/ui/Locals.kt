@@ -18,7 +18,7 @@ import to.bitkit.viewmodels.WalletViewModel
 val LocalBalances = compositionLocalOf { BalanceState() }
 val LocalCurrencies = compositionLocalOf { CurrencyUiState() }
 
-//  Static
+// Statics
 val LocalAppViewModel = staticCompositionLocalOf<AppViewModel?> { null }
 val LocalWalletViewModel = staticCompositionLocalOf<WalletViewModel?> { null }
 val LocalBlocktankViewModel = staticCompositionLocalOf<BlocktankViewModel?> { null }
