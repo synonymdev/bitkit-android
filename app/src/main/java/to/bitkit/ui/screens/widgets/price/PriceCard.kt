@@ -89,7 +89,7 @@ fun PriceCard(
                 }
             }
 
-            val enabledPairs = remember(priceDTO.widgets) {
+            val enabledPairs = remember(pricePreferences.enabledPairs) {
                 priceDTO.widgets.filter { widgetData -> widgetData.pair in pricePreferences.enabledPairs }
             }
 
@@ -124,7 +124,7 @@ fun PriceCard(
                 }
             }
 
-            val chartData = remember(enabledPairs) {
+            val chartData = remember(enabledPairs, pricePreferences.period) {
                 if (enabledPairs.isNotEmpty()) enabledPairs.first() else priceDTO.widgets.firstOrNull()
             }
 
