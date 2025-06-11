@@ -132,7 +132,7 @@ class HomeViewModel @Inject constructor(
 
     fun refreshWidgets() {
         viewModelScope.launch {
-            widgetsRepo.refreshAllWidgets()
+            widgetsRepo.refreshEnabledWidgets()
         }
     }
 

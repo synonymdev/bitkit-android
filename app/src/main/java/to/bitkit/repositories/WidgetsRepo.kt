@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -170,6 +171,12 @@ class WidgetsRepo @Inject constructor(
         }
         updateWidget(priceService) { price ->
             widgetsStore.updatePrice(price)
+        }
+    }
+
+    suspend fun refreshEnabledWidgets() = withContext(bgDispatcher) {
+        widgetsDataFlow.first().widgets.forEach {
+            refreshWidget(it.type)
         }
     }
 
