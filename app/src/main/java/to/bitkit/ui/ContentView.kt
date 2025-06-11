@@ -127,6 +127,7 @@ import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
@@ -146,6 +147,7 @@ fun ContentView(
     activityListViewModel: ActivityListViewModel,
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
+    backupsViewModel: BackupsViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -283,6 +285,9 @@ fun ContentView(
             activityListViewModel.syncLdkNodePayments()
         }
 
+        // Keep backups in sync
+        LaunchedEffect(backupsViewModel) { backupsViewModel.observeAndSyncBackups() }
+
         CompositionLocalProvider(
             LocalAppViewModel provides appViewModel,
             LocalWalletViewModel provides walletViewModel,
@@ -291,6 +296,7 @@ fun ContentView(
             LocalActivityListViewModel provides activityListViewModel,
             LocalTransferViewModel provides transferViewModel,
             LocalSettingsViewModel provides settingsViewModel,
+            LocalBackupsViewModel provides backupsViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {

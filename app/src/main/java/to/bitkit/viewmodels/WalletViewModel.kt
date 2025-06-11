@@ -28,7 +28,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.BackupsRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.onboarding.WalletInitResult
@@ -44,7 +44,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
-    private val backupRepo: BackupRepo,
+    private val backupsRepo: BackupsRepo,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -118,7 +118,7 @@ class WalletViewModel @Inject constructor(
         restoreState = RestoreState.RestoringBackups
 
         viewModelScope.launch(bgDispatcher) {
-            backupRepo.performFullRestoreFromLatestBackup()
+            backupsRepo.performFullRestoreFromLatestBackup()
                 .onSuccess {
                     restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Restored)
                 }

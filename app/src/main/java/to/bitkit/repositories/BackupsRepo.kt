@@ -25,7 +25,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BackupRepo @Inject constructor(
+class BackupsRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val appStorage: AppStorage,
@@ -34,15 +34,36 @@ class BackupRepo @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + bgDispatcher)
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
     private var periodicCheckJob: Job? = null
+    private var isObserving = false
 
     private var lastNotificationTime = 0L
 
-    init {
-        startObservingBackupStatuses()
+    fun startObservingBackups() {
+        if (isObserving) return
+
+        isObserving = true
+        observeBackupStatuses()
         startPeriodicBackupFailureCheck()
+        Logger.debug("Started observing backup statuses", context = TAG)
     }
 
-    private fun startObservingBackupStatuses() {
+    fun stopObservingBackups() {
+        if (!isObserving) return
+
+        isObserving = false
+
+        // Cancel all backup jobs
+        backupJobs.values.forEach { it.cancel() }
+        backupJobs.clear()
+
+        // Cancel periodic check job
+        periodicCheckJob?.cancel()
+        periodicCheckJob = null
+
+        Logger.debug("Stopped observing backup statuses", context = TAG)
+    }
+
+    private fun observeBackupStatuses() {
         BackupCategory.entries.forEach { category ->
             scope.launch {
                 appStorage.backupStatuses
@@ -176,7 +197,7 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    companion object {
+    companion object Companion {
         private const val TAG = "BackupRepo"
 
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds

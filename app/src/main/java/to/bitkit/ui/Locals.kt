@@ -6,6 +6,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import to.bitkit.models.BalanceState
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyUiState
 import to.bitkit.viewmodels.CurrencyViewModel
@@ -17,7 +18,7 @@ import to.bitkit.viewmodels.WalletViewModel
 val LocalBalances = compositionLocalOf { BalanceState() }
 val LocalCurrencies = compositionLocalOf { CurrencyUiState() }
 
-//  Statics
+//  Static
 val LocalAppViewModel = staticCompositionLocalOf<AppViewModel?> { null }
 val LocalWalletViewModel = staticCompositionLocalOf<WalletViewModel?> { null }
 val LocalBlocktankViewModel = staticCompositionLocalOf<BlocktankViewModel?> { null }
@@ -25,6 +26,7 @@ val LocalCurrencyViewModel = staticCompositionLocalOf<CurrencyViewModel?> { null
 val LocalActivityListViewModel = staticCompositionLocalOf<ActivityListViewModel?> { null }
 val LocalTransferViewModel = staticCompositionLocalOf<TransferViewModel?> { null }
 val LocalSettingsViewModel = staticCompositionLocalOf<SettingsViewModel?> { null }
+val LocalBackupsViewModel = staticCompositionLocalOf<BackupsViewModel?> { null }
 
 val appViewModel: AppViewModel?
     @Composable get() = LocalAppViewModel.current
@@ -46,3 +48,6 @@ val transferViewModel: TransferViewModel?
 
 val settingsViewModel: SettingsViewModel?
     @Composable get() = LocalSettingsViewModel.current
+
+val backupsViewModel: BackupsViewModel?
+    @Composable get() = LocalBackupsViewModel.current
