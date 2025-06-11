@@ -12,12 +12,14 @@ import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.data.dto.BlockDTO
 import to.bitkit.data.dto.WeatherDTO
+import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.serializers.WidgetsSerializer
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
+import to.bitkit.models.widget.PricePreferences
 import to.bitkit.models.widget.WeatherPreferences
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -37,6 +39,7 @@ class WidgetsStore @Inject constructor(
     val factsFlow: Flow<List<String>> = data.map { it.facts }
     val blocksFlow: Flow<BlockDTO?> = data.map { it.block }
     val weatherFlow: Flow<WeatherDTO?> = data.map { it.weather }
+    val priceFlow: Flow<PriceDTO?> = data.map { it.price }
 
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
@@ -68,6 +71,18 @@ class WidgetsStore @Inject constructor(
         }
     }
 
+    suspend fun updatePricePreferences(preferences: PricePreferences) {
+        store.updateData { currentStore ->
+            currentStore.copy(
+                pricePreferences = preferences.copy(
+                    enabledPairs = preferences.enabledPairs.sortedBy { tradingPair ->
+                        tradingPair.position
+                    }
+                )
+            )
+        }
+    }
+
     suspend fun updateFacts(facts: List<String>) {
         store.updateData {
             it.copy(facts = facts)
@@ -86,13 +101,19 @@ class WidgetsStore @Inject constructor(
         }
     }
 
+    suspend fun updatePrice(price: PriceDTO) {
+        store.updateData {
+            it.copy(price = price)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { WidgetsData() }
         Logger.info("Deleted all widgets data.")
     }
 
     suspend fun addWidget(type: WidgetType) {
-        if(store.data.first().widgets.map { it.type }.contains(type)) return
+        if (store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData {
             it.copy(widgets = (it.widgets + WidgetWithPosition(type = type)).sortedBy { it.position })
@@ -100,7 +121,7 @@ class WidgetsStore @Inject constructor(
     }
 
     suspend fun deleteWidget(type: WidgetType) {
-        if(!store.data.first().widgets.map { it.type }.contains(type)) return
+        if (!store.data.first().widgets.map { it.type }.contains(type)) return
 
         store.updateData {
             it.copy(widgets = it.widgets.filterNot { it.type == type })
@@ -121,8 +142,10 @@ data class WidgetsData(
     val factsPreferences: FactsPreferences = FactsPreferences(),
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val weatherPreferences: WeatherPreferences = WeatherPreferences(),
+    val pricePreferences: PricePreferences = PricePreferences(),
     val articles: List<ArticleDTO> = emptyList(),
     val facts: List<String> = emptyList(),
     val block: BlockDTO? = null,
     val weather: WeatherDTO? = null,
+    val price: PriceDTO? = null,
 )

@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
@@ -27,7 +26,6 @@ import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val appStorage: AppStorage,
     private val walletRepo: WalletRepo,
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
@@ -63,10 +61,12 @@ class HomeViewModel @Inject constructor(
                     factsPreferences = widgetsData.factsPreferences,
                     blocksPreferences = widgetsData.blocksPreferences,
                     weatherPreferences = widgetsData.weatherPreferences,
+                    pricePreferences = widgetsData.pricePreferences,
                     currentArticle = currentArticle,
                     currentFact = currentFact,
                     currentBlock = widgetsData.block?.toBlockModel(),
                     currentWeather = widgetsData.weather?.toWeatherModel(),
+                    currentPrice = widgetsData.price,
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -132,7 +132,7 @@ class HomeViewModel @Inject constructor(
 
     fun refreshWidgets() {
         viewModelScope.launch {
-            widgetsRepo.refreshAllWidgets()
+            widgetsRepo.refreshEnabledWidgets()
         }
     }
 
