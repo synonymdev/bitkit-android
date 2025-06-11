@@ -5,6 +5,9 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.price.CandleResponse
@@ -45,7 +48,23 @@ class PriceService @Inject constructor(
     }.onFailure {
         Logger.warn(e = it, msg = "Failed to fetch price data", context = TAG)
     }
-    //TODO CREATE METHOD TO FETCH ALL PERIODS
+
+    suspend fun fetchAllPeriods(): Result<List<PriceDTO>> = runCatching {
+        coroutineScope {
+            GraphPeriod.entries.map { period ->
+                async {
+                    PriceDTO(
+                        TradingPair.entries.map { pair ->
+                            fetchPairData(pair = pair, period = period)
+                        }
+                    )
+                }
+            }.awaitAll()
+        }
+    }.onFailure {
+        Logger.warn(e = it, msg = "fetchAllPeriods: Failed to fetch price data", context = TAG)
+    }
+
 
     private suspend fun fetchPairData(pair: TradingPair, period: GraphPeriod): PriceWidgetData {
         val ticker = pair.ticker
