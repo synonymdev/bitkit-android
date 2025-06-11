@@ -9,6 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -19,6 +25,8 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -32,6 +40,7 @@ sealed class WalletInitResult {
 fun WalletInitResultView(
     result: WalletInitResult,
     onButtonClick: () -> Unit,
+    onProceedWithoutRestore: (() -> Unit)? = null,
 ) {
     val titleText = when (result) {
         is WalletInitResult.Restored -> stringResource(R.string.onboarding__restore_success_header)
@@ -56,6 +65,16 @@ fun WalletInitResultView(
     val imageResource = when (result) {
         is WalletInitResult.Restored -> R.drawable.check
         is WalletInitResult.Failed -> R.drawable.cross
+    }
+
+    var showProceedDialog by remember { mutableStateOf(false) }
+    var retryCount by remember { mutableIntStateOf(0) }
+
+    // Reset retry count when result changes to success
+    LaunchedEffect(result) {
+        if (result is WalletInitResult.Restored) {
+            retryCount = 0
+        }
     }
 
     Column(
@@ -85,9 +104,37 @@ fun WalletInitResultView(
         Spacer(modifier = Modifier.weight(1f))
         PrimaryButton(
             text = buttonText,
-            onClick = onButtonClick,
+            onClick = {
+                if (result is WalletInitResult.Failed) {
+                    retryCount++
+                }
+                onButtonClick()
+            },
         )
+
+        if (result is WalletInitResult.Failed && retryCount > 1 && onProceedWithoutRestore != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            SecondaryButton(
+                text = stringResource(R.string.onboarding__restore_no_backup_button),
+                onClick = { showProceedDialog = true }
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showProceedDialog) {
+        AppAlertDialog(
+            title = stringResource(R.string.common__are_you_sure),
+            text = stringResource(R.string.onboarding__restore_no_backup_warn),
+            confirmText = stringResource(R.string.common__yes_proceed),
+            onConfirm = {
+                showProceedDialog = false
+                retryCount = 0
+                onProceedWithoutRestore?.invoke()
+            },
+            onDismiss = { showProceedDialog = false }
+        )
     }
 }
 
@@ -104,5 +151,17 @@ fun WalletInitResultViewRestoredPreview() {
 fun WalletInitResultViewErrorPreview() {
     AppThemeSurface {
         WalletInitResultView(result = WalletInitResult.Failed(Error("Something went wrong")), onButtonClick = {})
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+fun WalletInitResultViewErrorWithRetryPreview() {
+    AppThemeSurface {
+        WalletInitResultView(
+            result = WalletInitResult.Failed(Error("Something went wrong")),
+            onButtonClick = {},
+            onProceedWithoutRestore = {}
+        )
     }
 }

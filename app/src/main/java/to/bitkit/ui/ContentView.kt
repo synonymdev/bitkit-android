@@ -240,16 +240,19 @@ fun ContentView(
     if (walletIsInitializing) {
         // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
-            WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
-                scope.launch {
-                    try {
-                        walletViewModel.setInitNodeLifecycleState()
-                        walletViewModel.start()
-                    } catch (e: Exception) {
-                        Logger.error("Failed to start wallet on retry", e)
+            WalletInitResultView(
+                result = WalletInitResult.Failed(nodeLifecycleState.cause),
+                onButtonClick = {
+                    scope.launch {
+                        try {
+                            walletViewModel.setInitNodeLifecycleState()
+                            walletViewModel.start()
+                        } catch (e: Exception) {
+                            Logger.error("Failed to start wallet on retry", e)
+                        }
                     }
                 }
-            }
+            )
         } else {
             InitializingWalletView(
                 shouldFinish = walletInitShouldFinish,
@@ -270,12 +273,16 @@ fun ContentView(
         )
     } else if (restoreState is RestoreState.BackupRestoreCompleted) {
         val result = restoreState.result
-        WalletInitResultView(result = result) {
-            when (result) {
-                is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()
-                is WalletInitResult.Failed -> walletViewModel.onBackupRestoreRetry()
-            }
-        }
+        WalletInitResultView(
+            result = result,
+            onButtonClick = {
+                when (result) {
+                    is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()
+                    is WalletInitResult.Failed -> walletViewModel.onBackupRestoreRetry()
+                }
+            },
+            onProceedWithoutRestore = { walletViewModel.proceedWithoutRestore() }
+        )
     } else {
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
         val currencies by currencyViewModel.uiState.collectAsState()

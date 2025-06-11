@@ -144,6 +144,11 @@ class WalletViewModel @Inject constructor(
         triggerBackupRestore()
     }
 
+    fun proceedWithoutRestore() {
+        setRestoringWalletState(false)
+        restoreState = RestoreState.None
+    }
+
     fun setInitNodeLifecycleState() {
         lightningRepo.setInitNodeLifecycleState()
     }

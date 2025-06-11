@@ -10,8 +10,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.annotation.Config
@@ -308,8 +310,22 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.onBackupRestoreRetry()
 
-        verify(backupsRepo, org.mockito.kotlin.times(2)).performFullRestoreFromLatestBackup()
+        verify(backupsRepo, times(2)).performFullRestoreFromLatestBackup()
         assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+    }
+
+    @Test
+    fun `proceedWithoutRestore should exit restore flow`() = test {
+        val testError = Exception("Test error")
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        sut.setRestoringWalletState(true)
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(testError)), sut.restoreState)
+
+        sut.proceedWithoutRestore()
+
+        assertEquals(RestoreState.None, sut.restoreState)
+        verify(walletRepo, atLeastOnce()).setRestoringWalletState(isRestoring = false)
     }
 
     @Test
