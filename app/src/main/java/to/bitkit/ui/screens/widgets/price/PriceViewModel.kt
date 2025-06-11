@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.widgets.price
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,11 +14,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
+import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class PriceViewModel @Inject constructor(
@@ -64,8 +68,12 @@ class PriceViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
 
+    private val _allPeriodsUsd = MutableStateFlow(listOf<PriceWidgetData>())
+    val allPeriodsUsd: StateFlow<List<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
+
     init {
         initializeCustomPreferences()
+        collectAllPeriodPrices()
     }
 
     // MARK: - Public Methods
@@ -117,7 +125,20 @@ class PriceViewModel @Inject constructor(
         }
     }
 
+    private fun collectAllPeriodPrices() {
+        viewModelScope.launch {
+            widgetsRepo.fetchAllPeriods().onSuccess { data ->
+                _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() } }
+            }.onFailure {
+                Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)
+                delay(1.seconds)
+                collectAllPeriodPrices()
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "PriceViewModel"
         private const val SUBSCRIPTION_TIMEOUT = 5000L
     }
 }

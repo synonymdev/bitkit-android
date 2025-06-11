@@ -22,13 +22,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import to.bitkit.R
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
-import to.bitkit.data.dto.price.displayNameToTradingPair
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodySSB
@@ -48,6 +46,7 @@ fun PriceEditScreen(
 ) {
     val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
     val currentPrice by viewModel.currentPrice.collectAsStateWithLifecycle()
+    val allPeriodsUsd by viewModel.allPeriodsUsd.collectAsStateWithLifecycle()
 
     PriceEditContent(
         onClose = onClose,
@@ -55,6 +54,7 @@ fun PriceEditScreen(
         preferences = customPreferences,
         onClickReset = { viewModel.resetCustomPreferences() },
         onClickPreview = navigatePreview,
+        allPeriodsUsd = allPeriodsUsd,
         priceModel = currentPrice ?: PriceDTO(
             widgets = listOf()
         ),
@@ -72,6 +72,7 @@ fun PriceEditContent(
     onClose: () -> Unit,
     onBack: () -> Unit,
     priceModel: PriceDTO,
+    allPeriodsUsd: List<PriceWidgetData>,
     onClickReset: () -> Unit,
     onClickGraph: (GraphPeriod) -> Unit,
     onClickTradingPair: (TradingPair) -> Unit,
@@ -119,12 +120,12 @@ fun PriceEditContent(
                 )
             }
 
-            priceModel.widgets.firstOrNull()?.let {
+            allPeriodsUsd.map { priceData ->
                 PriceChartOptionRow(
-                    widgetData = it,
-                    isEnabled = it.period == preferences.period,
+                    widgetData = priceData,
+                    isEnabled = priceData.period == preferences.period,
                     onClick = onClickGraph,
-                    testTagPrefix = it.pair.displayName
+                    testTagPrefix = priceData.period.name
                 )
             }
         }

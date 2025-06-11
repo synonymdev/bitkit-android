@@ -92,6 +92,8 @@ class WidgetsRepo @Inject constructor(
         widgetsStore.updatePricePreferences(preferences)
     }
 
+    suspend fun fetchAllPeriods() = withContext(bgDispatcher) { priceService.fetchAllPeriods() }
+
     /**
      * Start periodic updates for all widgets
      */
