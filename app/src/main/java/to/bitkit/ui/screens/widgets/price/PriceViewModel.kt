@@ -28,8 +28,6 @@ class PriceViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo
 ) : ViewModel() {
 
-    // MARK: - Public StateFlows
-
     val pricePreferences: StateFlow<PricePreferences> = widgetsRepo.widgetsDataFlow
         .map { it.pricePreferences }
         .stateIn(
@@ -55,15 +53,12 @@ class PriceViewModel @Inject constructor(
             initialValue = true
         )
 
-    val currentPrice: StateFlow<PriceDTO?> = widgetsRepo.priceFlow.map { price ->
-        price//TODO TO MODEL
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
-        initialValue = null
-    )
-
-    // MARK: - Custom Preferences (for settings UI)
+    val currentPrice: StateFlow<PriceDTO?> = widgetsRepo.priceFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = null
+        )
 
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
@@ -80,8 +75,6 @@ class PriceViewModel @Inject constructor(
         initializeCustomPreferences()
         collectAllPeriodPrices()
     }
-
-    // MARK: - Public Methods
 
     fun setPeriod(period: GraphPeriod) {
         _customPreferences.update { preferences ->
@@ -113,6 +106,7 @@ class PriceViewModel @Inject constructor(
             widgetsRepo.updatePricePreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.PRICE)
             widgetsRepo.refreshWidget(WidgetType.PRICE)
+            _previewPrice.update { null }
         }
     }
 
@@ -121,8 +115,6 @@ class PriceViewModel @Inject constructor(
             widgetsRepo.deleteWidget(WidgetType.PRICE)
         }
     }
-
-    // MARK: - Private Methods
 
     private fun initializeCustomPreferences() {
         viewModelScope.launch {

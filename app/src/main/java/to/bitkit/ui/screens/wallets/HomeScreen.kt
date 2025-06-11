@@ -447,7 +447,7 @@ private fun HomeContentView(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 showWidgetTitle = homeUiState.showWidgetTitles,
                                                 pricePreferences = homeUiState.pricePreferences,
-                                                priceDTO = this,
+                                                priceDTO = homeUiState.currentPrice,
                                             )
                                         }
                                     }
