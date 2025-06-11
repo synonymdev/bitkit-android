@@ -70,6 +70,11 @@ class PriceViewModel @Inject constructor(
 
     private val _allPeriodsUsd = MutableStateFlow(listOf<PriceWidgetData>())
     val allPeriodsUsd: StateFlow<List<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
+    private val _allPrices = MutableStateFlow(listOf<PriceDTO>())
+
+    private val _previewPrice: MutableStateFlow<PriceDTO?> = MutableStateFlow(null)
+    val previewPrice = _previewPrice.asStateFlow()
+
 
     init {
         initializeCustomPreferences()
@@ -82,6 +87,7 @@ class PriceViewModel @Inject constructor(
         _customPreferences.update { preferences ->
             preferences.copy(period = period)
         }
+        _previewPrice.update { _allPrices.value.firstOrNull { it.widgets.firstOrNull()?.period == period } }
     }
 
     fun toggleTradingPair(pair: TradingPair) {
@@ -106,6 +112,7 @@ class PriceViewModel @Inject constructor(
         viewModelScope.launch {
             widgetsRepo.updatePricePreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.PRICE)
+            widgetsRepo.refreshWidget(WidgetType.PRICE)
         }
     }
 
@@ -128,6 +135,7 @@ class PriceViewModel @Inject constructor(
     private fun collectAllPeriodPrices() {
         viewModelScope.launch {
             widgetsRepo.fetchAllPeriods().onSuccess { data ->
+                _allPrices.update { data }
                 _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() } }
             }.onFailure {
                 Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)

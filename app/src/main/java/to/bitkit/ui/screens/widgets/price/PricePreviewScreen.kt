@@ -55,6 +55,7 @@ fun PricePreviewScreen(
     val showWidgetTitles by priceViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customPricePreferences by priceViewModel.customPreferences.collectAsStateWithLifecycle()
     val price by priceViewModel.currentPrice.collectAsStateWithLifecycle()
+    val previewPrice by priceViewModel.previewPrice.collectAsStateWithLifecycle()
     val isPriceWidgetEnabled by priceViewModel.isPriceWidgetEnabled.collectAsStateWithLifecycle()
 
     PricePreviewContent(
@@ -63,7 +64,7 @@ fun PricePreviewScreen(
         isPriceWidgetEnabled = isPriceWidgetEnabled,
         pricePreferences = customPricePreferences,
         showWidgetTitles = showWidgetTitles,
-        priceDTO = price,
+        priceDTO = previewPrice ?: price,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
             priceViewModel.removeWidget()
