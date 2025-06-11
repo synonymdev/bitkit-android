@@ -66,7 +66,10 @@ fun PriceEditScreen(
         onClickGraph = { period ->
             viewModel.setPeriod(period = period)
         },
-        isLoading = isLoading
+        isLoading = isLoading,
+        onClickSource = {
+            viewModel.toggleShowSource()
+        }
     )
 }
 
@@ -80,6 +83,7 @@ fun PriceEditContent(
     onClickGraph: (GraphPeriod) -> Unit,
     onClickTradingPair: (TradingPair) -> Unit,
     onClickPreview: () -> Unit,
+    onClickSource: () -> Unit,
     preferences: PricePreferences,
     isLoading: Boolean,
 ) {
@@ -132,6 +136,14 @@ fun PriceEditContent(
                     testTagPrefix = priceData.period.name
                 )
             }
+
+            PriceEditOptionRow(
+                label = stringResource(R.string.widgets__widget__source),
+                value = priceModel.source,
+                isEnabled = preferences.showSource,
+                onClick = onClickSource,
+                testTagPrefix = "source"
+            )
         }
 
         Row(
