@@ -173,7 +173,7 @@ class BackupsRepo @Inject constructor(
             appStorage.updateBackupStatus(category) {
                 it.copy(running = false)
             }
-            Logger.error("Backup failed for category $category", e = e, context = TAG)
+            Logger.error("Backup failed for category: $category", e = e, context = TAG)
         }
     }
 
@@ -184,26 +184,6 @@ class BackupsRepo @Inject constructor(
             }
         }
         Logger.debug("Marked backup required for category: $category", context = TAG)
-    }
-
-    suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Full restore starting", context = TAG)
-
-        return@withContext try {
-            performSettingsRestore()
-            performWidgetsRestore()
-            // TODO: Add other backup categories as they get implemented:
-            // performMetadataRestore()
-            // performWalletRestore()
-            // performBlocktankRestore()
-            // performSlashtagsRestore()
-            // performLdkActivityRestore()
-
-            Logger.info("Full restore completed", context = TAG)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Result.failure(e)
-        }
     }
 
     private suspend fun performBackup(category: BackupCategory): Result<Unit> {
@@ -251,10 +231,7 @@ class BackupsRepo @Inject constructor(
         }
     }
 
-    private suspend fun encryptAndUpload(
-        category: BackupCategory,
-        dataBytes: ByteArray,
-    ): VssObjectInfo {
+    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): VssObjectInfo {
         // TODO encrypt data before upload
         val encrypted = dataBytes
 
@@ -264,42 +241,46 @@ class BackupsRepo @Inject constructor(
         return result
     }
 
-    private suspend fun performSettingsRestore(): Result<Unit> {
-        val category = BackupCategory.SETTINGS
 
-        return runCatching {
-            val dataBytes = fetchBackupData(category).getOrThrow()
+    suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Full restore starting", context = TAG)
 
-            val restoredSettings = json.decodeFromString<SettingsData>(String(dataBytes))
-            settingsStore.update { restoredSettings }
-
-            appStorage.updateBackupStatus(category) {
-                it.copy(running = false, synced = System.currentTimeMillis())
+        return@withContext runCatching {
+            performRestore(BackupCategory.SETTINGS) { dataBytes ->
+                val parsed = json.decodeFromString<SettingsData>(String(dataBytes))
+                settingsStore.update { parsed }
             }
+            performRestore(BackupCategory.WIDGETS) { dataBytes ->
+                val parsed = json.decodeFromString<WidgetsData>(String(dataBytes))
+                widgetsStore.update { parsed }
+            }
+            // TODO: Add other backup categories as they get implemented:
+            // performMetadataRestore()
+            // performWalletRestore()
+            // performBlocktankRestore()
+            // performSlashtagsRestore()
+            // performLdkActivityRestore()
 
-            Logger.info("Restore success for: $category", context = TAG)
-        }.onFailure { exception ->
-            Logger.debug("Restore error for: $category", context = TAG)
-        }
+            Logger.info("Full restore completed", context = TAG)
+            Result.success(Unit)
+        }.map { it.getOrThrow() }
     }
 
-    private suspend fun performWidgetsRestore(): Result<Unit> {
-        val category = BackupCategory.WIDGETS
+    private suspend fun performRestore(
+        category: BackupCategory,
+        restoreAction: suspend (ByteArray) -> Unit,
+    ): Result<Unit> = runCatching {
+        val dataBytes = fetchBackupData(category).getOrThrow()
 
-        return runCatching {
-            val dataBytes = fetchBackupData(category).getOrThrow()
-            val parsed = json.decodeFromString<WidgetsData>(String(dataBytes))
+        restoreAction(dataBytes)
 
-            widgetsStore.update { parsed }
-
-            appStorage.updateBackupStatus(category) {
-                it.copy(running = false, synced = System.currentTimeMillis())
-            }
-
-            Logger.info("Restore success for: $category", context = TAG)
-        }.onFailure { exception ->
-            Logger.debug("Restore error for: $category", context = TAG)
+        appStorage.updateBackupStatus(category) {
+            it.copy(running = false, synced = System.currentTimeMillis())
         }
+
+        Logger.info("Restore success for category: $category", context = TAG)
+    }.onFailure { exception ->
+        Logger.debug("Restore error for category: $category", context = TAG)
     }
 
     private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
