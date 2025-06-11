@@ -47,6 +47,7 @@ fun PriceEditScreen(
     val customPreferences by viewModel.customPreferences.collectAsStateWithLifecycle()
     val currentPrice by viewModel.currentPrice.collectAsStateWithLifecycle()
     val allPeriodsUsd by viewModel.allPeriodsUsd.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     PriceEditContent(
         onClose = onClose,
@@ -63,7 +64,8 @@ fun PriceEditScreen(
         },
         onClickGraph = { period ->
             viewModel.setPeriod(period = period)
-        }
+        },
+        isLoading = isLoading
     )
 }
 
@@ -78,6 +80,7 @@ fun PriceEditContent(
     onClickTradingPair: (TradingPair) -> Unit,
     onClickPreview: () -> Unit,
     preferences: PricePreferences,
+    isLoading: Boolean,
 ) {
     ScreenColumn(
         modifier = Modifier.testTag("weather_edit_screen")
@@ -149,11 +152,11 @@ fun PriceEditContent(
 
             PrimaryButton(
                 text = stringResource(R.string.common__preview),
-                enabled = true, //TODO
                 modifier = Modifier
                     .weight(1f)
                     .testTag("preview_button"),
                 fullWidth = false,
+                isLoading = isLoading,
                 onClick = onClickPreview
             )
         }

@@ -137,9 +137,11 @@ class PriceViewModel @Inject constructor(
 
     private fun collectAllPeriodPrices() {
         viewModelScope.launch {
+            _isLoading.update { true }
             widgetsRepo.fetchAllPeriods().onSuccess { data ->
                 _allPrices.update { data }
                 _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() } }
+                _isLoading.update { false }
             }.onFailure {
                 Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)
                 delay(1.seconds)
