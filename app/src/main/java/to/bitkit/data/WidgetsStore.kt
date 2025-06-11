@@ -72,8 +72,14 @@ class WidgetsStore @Inject constructor(
     }
 
     suspend fun updatePricePreferences(preferences: PricePreferences) {
-        store.updateData {
-            it.copy(pricePreferences = preferences)
+        store.updateData { currentStore ->
+            currentStore.copy(
+                pricePreferences = preferences.copy(
+                    enabledPairs = preferences.enabledPairs.sortedBy { tradingPair ->
+                        tradingPair.position
+                    }
+                )
+            )
         }
     }
 
