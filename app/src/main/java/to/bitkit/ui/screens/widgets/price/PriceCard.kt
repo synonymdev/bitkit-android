@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.widgets.price
 
+import androidx.compose.animation.core.EaseInOutCubic
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -170,6 +172,8 @@ fun ChartComponent(
                         color = SolidColor(baseColor),
                         firstGradientFillColor = baseColor.copy(alpha = 0.8f),
                         secondGradientFillColor = baseColor.copy(alpha = 0.3f),
+                        strokeAnimationSpec = tween(1000, easing = EaseInOutCubic),
+                        gradientAnimationDelay = 1000,
                         drawStyle = DrawStyle.Stroke(width = 1.dp),
                         curvedEdges = true
                     )
