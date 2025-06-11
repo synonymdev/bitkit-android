@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -70,6 +72,12 @@ class PriceViewModel @Inject constructor(
     private val _previewPrice: MutableStateFlow<PriceDTO?> = MutableStateFlow(null)
     val previewPrice = _previewPrice.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _priceEffect = MutableSharedFlow<PriceEffect>(extraBufferCapacity = 1)
+    val priceEffect = _priceEffect.asSharedFlow()
+    private fun setPriceEffect(effect: PriceEffect) = viewModelScope.launch { _priceEffect.emit(effect) }
 
     init {
         initializeCustomPreferences()
@@ -103,10 +111,13 @@ class PriceViewModel @Inject constructor(
 
     fun savePreferences() {
         viewModelScope.launch {
+            _isLoading.update { true }
             widgetsRepo.updatePricePreferences(_customPreferences.value)
             widgetsRepo.addWidget(WidgetType.PRICE)
             widgetsRepo.refreshWidget(WidgetType.PRICE)
             _previewPrice.update { null }
+            setPriceEffect(PriceEffect.NavigateHome)
+            _isLoading.update { false }
         }
     }
 
@@ -141,4 +152,8 @@ class PriceViewModel @Inject constructor(
         private const val TAG = "PriceViewModel"
         private const val SUBSCRIPTION_TIMEOUT = 5000L
     }
+}
+
+sealed interface PriceEffect {
+    data object NavigateHome: PriceEffect
 }

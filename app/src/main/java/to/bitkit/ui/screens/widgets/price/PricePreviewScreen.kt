@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,15 @@ fun PricePreviewScreen(
     val price by priceViewModel.currentPrice.collectAsStateWithLifecycle()
     val previewPrice by priceViewModel.previewPrice.collectAsStateWithLifecycle()
     val isPriceWidgetEnabled by priceViewModel.isPriceWidgetEnabled.collectAsStateWithLifecycle()
+    val isLoading by priceViewModel.isLoading.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        priceViewModel.priceEffect.collect { effect ->
+            when(effect) {
+                PriceEffect.NavigateHome -> onClose()
+            }
+        }
+    }
 
     PricePreviewContent(
         onClose = onClose,
@@ -72,8 +82,8 @@ fun PricePreviewScreen(
         },
         onClickSave = {
             priceViewModel.savePreferences()
-            onClose()
         },
+        isLoading = isLoading
     )
 }
 
@@ -88,6 +98,7 @@ fun PricePreviewContent(
     isPriceWidgetEnabled: Boolean,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO?,
+    isLoading: Boolean
 ) {
     ScreenColumn(
         modifier = Modifier.testTag("price_preview_screen")
@@ -201,6 +212,7 @@ fun PricePreviewContent(
                     .weight(1f)
                     .testTag("save_button"),
                 fullWidth = false,
+                isLoading = isLoading,
                 onClick = onClickSave
             )
         }
@@ -243,7 +255,8 @@ private fun Preview() {
                     )
                 )
             ),
-            isPriceWidgetEnabled = false
+            isPriceWidgetEnabled = false,
+            isLoading = false
         )
     }
 }
@@ -288,7 +301,8 @@ private fun Preview2() {
                     )
                 )
             ),
-            isPriceWidgetEnabled = true
+            isPriceWidgetEnabled = true,
+            isLoading = false
         )
     }
 }
