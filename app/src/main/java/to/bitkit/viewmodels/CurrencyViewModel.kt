@@ -119,7 +119,7 @@ class CurrencyViewModel @Inject constructor(
                         selectedCurrency = settings.selectedCurrency,
                         displayUnit = settings.displayUnit,
                         primaryDisplay = settings.primaryDisplay,
-                        currencySymbol = currentState.rates.firstOrNull { rate -> rate.quote == currentState.selectedCurrency }?.currencySymbol.orEmpty()
+                        currencySymbol = currentState.rates.firstOrNull { rate -> rate.quote == settings.selectedCurrency }?.currencySymbol ?: "$"
                     )
                 }
             }
