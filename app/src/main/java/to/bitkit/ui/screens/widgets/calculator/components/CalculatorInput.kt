@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.TextInput
@@ -42,7 +41,7 @@ fun CalculatorInput(
                 BodyMSB(currencySymbol, color = Colors.Brand)
             }
         },
-        suffix = { CaptionB(currencyName, color = Colors.Gray1) },
+        suffix = { CaptionB(currencyName.uppercase(), color = Colors.Gray1) },
         modifier = modifier
     )
 }
