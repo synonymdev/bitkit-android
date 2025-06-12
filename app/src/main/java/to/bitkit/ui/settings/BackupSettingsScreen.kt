@@ -35,6 +35,7 @@ import to.bitkit.models.uiIcon
 import to.bitkit.models.uiTitle
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.backupsViewModel
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetType
@@ -51,7 +52,6 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.BackupCategoryUiState
-import to.bitkit.viewmodels.BackupSettingsViewModel
 import to.bitkit.viewmodels.BackupStatusUiState
 import to.bitkit.viewmodels.toUiState
 
@@ -64,10 +64,10 @@ object BackupSettingsTestTags {
 @Composable
 fun BackupSettingsScreen(
     navController: NavController,
-    viewModel: BackupSettingsViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
+    val viewModel = backupsViewModel ?: return
 
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

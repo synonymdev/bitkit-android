@@ -42,6 +42,7 @@ import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
@@ -58,6 +59,7 @@ class MainActivity : FragmentActivity() {
     private val activityListViewModel by viewModels<ActivityListViewModel>()
     private val transferViewModel by viewModels<TransferViewModel>()
     private val settingsViewModel by viewModels<SettingsViewModel>()
+    private val backupsViewModel by viewModels<BackupsViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -200,6 +202,7 @@ class MainActivity : FragmentActivity() {
                             activityListViewModel = activityListViewModel,
                             transferViewModel = transferViewModel,
                             settingsViewModel = settingsViewModel,
+                            backupsViewModel = backupsViewModel,
                         )
                     }
 

@@ -77,7 +77,6 @@ import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
-import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
@@ -131,10 +130,12 @@ import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
+import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
@@ -149,6 +150,7 @@ fun ContentView(
     activityListViewModel: ActivityListViewModel,
     transferViewModel: TransferViewModel,
     settingsViewModel: SettingsViewModel,
+    backupsViewModel: BackupsViewModel,
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -211,7 +213,7 @@ fun ContentView(
         }
     }
 
-    val walletUiState by walletViewModel.uiState.collectAsState()
+    val walletUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
     val nodeLifecycleState = walletUiState.nodeLifecycleState
 
     var walletIsInitializing by remember { mutableStateOf(nodeLifecycleState == NodeLifecycleState.Initializing) }
@@ -236,19 +238,24 @@ fun ContentView(
         }
     }
 
+    val restoreState = walletViewModel.restoreState
+    val isRestoringBackups = walletViewModel.restoreState == RestoreState.RestoringBackups
     if (walletIsInitializing) {
         // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
-            WalletInitResultView(result = WalletInitResult.Failed(nodeLifecycleState.cause)) {
-                scope.launch {
-                    try {
-                        walletViewModel.setInitNodeLifecycleState()
-                        walletViewModel.start()
-                    } catch (e: Exception) {
-                        Logger.error("Failed to start wallet on retry", e)
+            WalletInitResultView(
+                result = WalletInitResult.Failed(nodeLifecycleState.cause),
+                onButtonClick = {
+                    scope.launch {
+                        try {
+                            walletViewModel.setInitNodeLifecycleState()
+                            walletViewModel.start()
+                        } catch (e: Exception) {
+                            Logger.error("Failed to start wallet on retry", e)
+                        }
                     }
                 }
-            }
+            )
         } else {
             InitializingWalletView(
                 shouldFinish = walletInitShouldFinish,
@@ -261,10 +268,24 @@ fun ContentView(
                 }
             )
         }
-    } else if (walletViewModel.isRestoringWallet) {
-        WalletInitResultView(result = WalletInitResult.Restored) {
-            walletViewModel.setRestoringWalletState(false)
-        }
+    } else if (walletViewModel.isRestoringWallet || isRestoringBackups) {
+        InitializingWalletView(
+            shouldFinish = false,
+            onComplete = { /* Loading state, no completion */ },
+            isRestoringBackups = isRestoringBackups
+        )
+    } else if (restoreState is RestoreState.BackupRestoreCompleted) {
+        val result = restoreState.result
+        WalletInitResultView(
+            result = result,
+            onButtonClick = {
+                when (result) {
+                    is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()
+                    is WalletInitResult.Failed -> walletViewModel.onBackupRestoreRetry()
+                }
+            },
+            onProceedWithoutRestore = { walletViewModel.proceedWithoutRestore() }
+        )
     } else {
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
         val currencies by currencyViewModel.uiState.collectAsState()
@@ -274,6 +295,9 @@ fun ContentView(
             activityListViewModel.syncLdkNodePayments()
         }
 
+        // Keep backups in sync
+        LaunchedEffect(backupsViewModel) { backupsViewModel.observeAndSyncBackups() }
+
         CompositionLocalProvider(
             LocalAppViewModel provides appViewModel,
             LocalWalletViewModel provides walletViewModel,
@@ -282,6 +306,7 @@ fun ContentView(
             LocalActivityListViewModel provides activityListViewModel,
             LocalTransferViewModel provides transferViewModel,
             LocalSettingsViewModel provides settingsViewModel,
+            LocalBackupsViewModel provides backupsViewModel,
             LocalBalances provides balance,
             LocalCurrencies provides currencies,
         ) {

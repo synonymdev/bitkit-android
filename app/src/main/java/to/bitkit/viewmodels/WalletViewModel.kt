@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NewTransactionSheetDetails
@@ -27,9 +28,10 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
+import to.bitkit.repositories.BackupsRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.data.SettingsStore
+import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -42,6 +44,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
+    private val backupsRepo: BackupsRepo,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -53,6 +56,9 @@ class WalletViewModel @Inject constructor(
         private set
 
     var isRestoringWallet by mutableStateOf(false)
+        private set
+
+    var restoreState by mutableStateOf<RestoreState>(RestoreState.None)
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -86,6 +92,10 @@ class WalletViewModel @Inject constructor(
                         balanceDetails = state.balanceDetails
                     )
                 }
+                if (state.walletExists && restoreState == RestoreState.WaitingForWallet) {
+                    triggerBackupRestore()
+                    setRestoringWalletState(false)
+                }
             }
         }
 
@@ -104,8 +114,39 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    private fun triggerBackupRestore() {
+        restoreState = RestoreState.RestoringBackups
+
+        viewModelScope.launch(bgDispatcher) {
+            backupsRepo.performFullRestoreFromLatestBackup()
+                .onSuccess {
+                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Restored)
+                }
+                .onFailure { error ->
+                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(error))
+                }
+        }
+    }
+
     fun setRestoringWalletState(isRestoringWallet: Boolean) {
         walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
+
+        if (isRestoringWallet) {
+            restoreState = RestoreState.WaitingForWallet
+        }
+    }
+
+    fun onBackupRestoreSuccess() {
+        restoreState = RestoreState.None
+    }
+
+    fun onBackupRestoreRetry() {
+        triggerBackupRestore()
+    }
+
+    fun proceedWithoutRestore() {
+        setRestoringWalletState(false)
+        restoreState = RestoreState.None
     }
 
     fun setInitNodeLifecycleState() {
@@ -394,4 +435,11 @@ data class MainUiState(
 
 sealed interface WalletViewModelEffects {
     data object NavigateGeoBlockScreen : WalletViewModelEffects
+}
+
+sealed interface RestoreState {
+    data object None : RestoreState
+    data object WaitingForWallet : RestoreState
+    data object RestoringBackups : RestoreState
+    data class BackupRestoreCompleted(val result: WalletInitResult) : RestoreState
 }

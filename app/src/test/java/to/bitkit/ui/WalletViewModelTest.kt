@@ -4,24 +4,30 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.annotation.Config
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.LnPeer
+import to.bitkit.repositories.BackupsRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.TestApp
+import to.bitkit.ui.onboarding.WalletInitResult
+import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 
 @RunWith(AndroidJUnit4::class)
@@ -33,6 +39,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val walletRepo: WalletRepo = mock()
     private val lightningRepo: LightningRepo = mock()
     private val settingsStore: SettingsStore = mock()
+    private val backupsRepo: BackupsRepo = mock()
     private val context: Context = mock()
     private val mockLightningState = MutableStateFlow(LightningState())
     private val mockWalletState = MutableStateFlow(WalletState())
@@ -49,6 +56,7 @@ class WalletViewModelTest : BaseUnitTest() {
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
+            backupsRepo = backupsRepo,
         )
     }
 
@@ -213,4 +221,126 @@ class WalletViewModelTest : BaseUnitTest() {
 
         verify(walletRepo).updateBip21Description("test_description")
     }
+
+    // MARK: - Restore functionality tests
+
+    @Test
+    fun `setRestoringWalletState true should set restoreState to WaitingForWallet`() = test {
+        sut.setRestoringWalletState(true)
+
+        verify(walletRepo).setRestoringWalletState(isRestoring = true)
+        assertEquals(RestoreState.WaitingForWallet, sut.restoreState)
+    }
+
+    @Test
+    fun `setRestoringWalletState false should call walletRepo but not change restoreState`() = test {
+        sut.setRestoringWalletState(true)
+        assertEquals(RestoreState.WaitingForWallet, sut.restoreState)
+
+        sut.setRestoringWalletState(false)
+
+        verify(walletRepo).setRestoringWalletState(isRestoring = false)
+        // restoreState should remain WaitingForWallet until wallet exists and triggers backup restore
+        assertEquals(RestoreState.WaitingForWallet, sut.restoreState)
+    }
+
+    @Test
+    fun `backup restore should be triggered when wallet exists and restoreState is WaitingForWallet`() = test {
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        sut.setRestoringWalletState(true)
+        assertEquals(RestoreState.WaitingForWallet, sut.restoreState)
+
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+
+        verify(backupsRepo).performFullRestoreFromLatestBackup()
+        verify(walletRepo).setRestoringWalletState(isRestoring = false)
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+    }
+
+    @Test
+    fun `backup restore should not be triggered when wallet exists but restoreState is not WaitingForWallet`() = test {
+        assertEquals(RestoreState.None, sut.restoreState)
+
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+
+        verify(backupsRepo, never()).performFullRestoreFromLatestBackup()
+    }
+
+    @Test
+    fun `backup restore success should set restoreState to BackupRestoreCompleted with Restored result`() = test {
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        sut.setRestoringWalletState(true)
+
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+    }
+
+    @Test
+    fun `backup restore failure should set restoreState to BackupRestoreCompleted with Failed result`() = test {
+        val testError = Exception("Backup restore failed")
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        sut.setRestoringWalletState(true)
+
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(testError)), sut.restoreState)
+    }
+
+    @Test
+    fun `onBackupRestoreSuccess should reset restoreState to None`() = test {
+        sut.setRestoringWalletState(true)
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+
+        sut.onBackupRestoreSuccess()
+
+        assertEquals(RestoreState.None, sut.restoreState)
+    }
+
+    @Test
+    fun `onBackupRestoreRetry should trigger backup restore again`() = test {
+        val testError = Exception("Test error")
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        sut.setRestoringWalletState(true)
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(testError)), sut.restoreState)
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+
+        sut.onBackupRestoreRetry()
+
+        verify(backupsRepo, times(2)).performFullRestoreFromLatestBackup()
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+    }
+
+    @Test
+    fun `proceedWithoutRestore should exit restore flow`() = test {
+        val testError = Exception("Test error")
+        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        sut.setRestoringWalletState(true)
+        mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+        assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(testError)), sut.restoreState)
+
+        sut.proceedWithoutRestore()
+
+        assertEquals(RestoreState.None, sut.restoreState)
+        verify(walletRepo, atLeastOnce()).setRestoringWalletState(isRestoring = false)
+    }
+
+    @Test
+    fun `restore state should transition from None to WaitingForWallet to RestoringBackups to BackupRestoreCompleted`() =
+        test {
+            whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+            assertEquals(RestoreState.None, sut.restoreState)
+
+            sut.setRestoringWalletState(true)
+            assertEquals(RestoreState.WaitingForWallet, sut.restoreState)
+
+            mockWalletState.value = mockWalletState.value.copy(walletExists = true)
+            assertEquals(RestoreState.BackupRestoreCompleted(WalletInitResult.Restored), sut.restoreState)
+
+            sut.onBackupRestoreSuccess()
+            assertEquals(RestoreState.None, sut.restoreState)
+        }
 }

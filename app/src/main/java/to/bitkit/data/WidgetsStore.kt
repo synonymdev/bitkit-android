@@ -41,6 +41,10 @@ class WidgetsStore @Inject constructor(
     val weatherFlow: Flow<WeatherDTO?> = data.map { it.weather }
     val priceFlow: Flow<PriceDTO?> = data.map { it.price }
 
+    suspend fun update(transform: (WidgetsData) -> WidgetsData) {
+        store.updateData(transform)
+    }
+
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
             it.copy(articles = articles)

@@ -1,5 +1,6 @@
 package to.bitkit.ui.onboarding
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -42,10 +43,12 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import kotlin.math.roundToInt
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InitializingWalletView(
     shouldFinish: Boolean,
     onComplete: () -> Unit,
+    isRestoringBackups: Boolean = false,
 ) {
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
@@ -53,11 +56,13 @@ fun InitializingWalletView(
     ) {
         val percentage = remember { Animatable(0f) }
 
+        val animationDuration = if (isRestoringBackups) 8000 else 2000
+
         // Progress to 100%
-        LaunchedEffect(Unit) {
+        LaunchedEffect(animationDuration) {
             percentage.animateTo(
                 targetValue = 100f,
-                animationSpec = tween(durationMillis = 2000, easing = LinearEasing)
+                animationSpec = tween(durationMillis = animationDuration, easing = LinearEasing)
             )
         }
 

@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.protobuf)
     alias(libs.plugins.room)
 }
 
@@ -124,6 +125,22 @@ android {
             }
     }
 }
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.21.12"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") {
+                    option("lite")
+                }
+            }
+        }
+    }
+}
+
 composeCompiler {
     featureFlags = setOf(
         ComposeFeatureFlag.StrongSkipping.disabled(),
@@ -204,6 +221,8 @@ dependencies {
     // Logging
     runtimeOnly(libs.slf4j.simple)
     implementation(libs.slf4j.api)
+    // Protobuf
+    implementation(libs.protobuf.javalite)
     // Room - DB
     implementation(libs.room.ktx)
     implementation(libs.room.runtime)

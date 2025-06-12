@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -10,23 +11,26 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.AppStorage
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
-import to.bitkit.repositories.BackupRepo
+import to.bitkit.models.NodeLifecycleState
+import to.bitkit.repositories.BackupsRepo
+import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 @HiltViewModel
-class BackupSettingsViewModel @Inject constructor(
+class BackupsViewModel @Inject constructor(
     private val appStorage: AppStorage,
-    private val backupRepo: BackupRepo,
+    private val backupsRepo: BackupsRepo,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupStatusUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
-        observeBackupStatuses()
+        collectState()
     }
 
-    private fun observeBackupStatuses() {
+    private fun collectState() {
         viewModelScope.launch {
             appStorage.backupStatuses.collect { cachedStatuses ->
                 val categories = BackupCategory.entries.map { category ->
@@ -43,9 +47,26 @@ class BackupSettingsViewModel @Inject constructor(
         }
     }
 
+    fun observeAndSyncBackups() {
+        viewModelScope.launch {
+            lightningRepo.lightningState.collect { lightningState ->
+                when (lightningState.nodeLifecycleState) {
+                    NodeLifecycleState.Running -> backupsRepo.startObservingBackups()
+                    else -> backupsRepo.stopObservingBackups()
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        backupsRepo.stopObservingBackups()
+    }
+
     fun retryBackup(category: BackupCategory) {
         viewModelScope.launch {
-            backupRepo.triggerBackup(category)
+            delay(500) // small delay for UX feedback
+            backupsRepo.triggerBackup(category)
         }
     }
 }
