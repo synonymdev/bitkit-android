@@ -4,10 +4,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import to.bitkit.models.BTC_PLACEHOLDER
 import to.bitkit.models.BitcoinDisplayUnit
-import to.bitkit.models.SATS_IN_BTC
-import to.bitkit.utils.Logger
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -48,25 +45,30 @@ class BitcoinVisualTransformation(
     }
 
     private fun formatBtc(text: String): String {
-        // Remove any existing formatting
-        val cleanText = text.filter { it.isDigit() }
-
-        if (cleanText.isEmpty()) return ""
+        if (text.isEmpty()) return ""
 
         try {
-            val satsValue = cleanText.toLongOrNull() ?: 0L
+            // Allow decimal point and digits
+            val cleanText = text.filter { it.isDigit() || it == '.' }
 
-            // Convert sats to BTC (1 BTC = 100,000,000 sats)
-            val btcValue = satsValue / SATS_IN_BTC
+            if (cleanText.isEmpty()) return ""
 
-            // Format with 8 decimal places
-            val symbols = DecimalFormatSymbols(Locale.US)
-            val formatter = DecimalFormat(BTC_PLACEHOLDER, symbols)
-
-            return formatter.format(btcValue)
+            // If it contains a decimal point, treat as BTC input
+            if (cleanText.contains('.')) {
+                val btcValue = cleanText.toDoubleOrNull() ?: 0.0
+                val symbols = DecimalFormatSymbols(Locale.US)
+                val formatter = DecimalFormat("0.00000000", symbols)
+                return formatter.format(btcValue)
+            } else {
+                // If no decimal point, treat as sats and convert to BTC for display
+                val satsValue = cleanText.toLongOrNull() ?: 0L
+                val btcValue = satsValue / 100_000_000.0
+                val symbols = DecimalFormatSymbols(Locale.US)
+                val formatter = DecimalFormat("0.00000000", symbols)
+                return formatter.format(btcValue)
+            }
         } catch (e: Exception) {
-            Logger.error("formatBTC error: ", e = e, context = "BitcoinVisualTransformation")
-            return BTC_PLACEHOLDER
+            return text // Return original text if formatting fails
         }
     }
 

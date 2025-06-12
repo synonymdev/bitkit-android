@@ -169,7 +169,7 @@ private fun Preview() {
             CalculatorCardContent(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = false,
-                btcValue = "25.8", // Will display as "0.22200000" in CLASSIC mode
+                btcValue = "22200000", // Will display as "0.22200000" in CLASSIC mode
                 onBTCChange = {},
                 fiatSymbol = "$",
                 fiatValue = "4.55",
