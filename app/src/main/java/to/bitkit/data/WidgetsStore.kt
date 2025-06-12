@@ -17,6 +17,7 @@ import to.bitkit.data.serializers.WidgetsSerializer
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
@@ -45,6 +46,11 @@ class WidgetsStore @Inject constructor(
         store.updateData(transform)
     }
 
+    suspend fun updateCalculatorValues(calculatorValues: CalculatorValues) {
+        store.updateData {
+            it.copy(calculatorValues = calculatorValues)
+        }
+    }
     suspend fun updateArticles(articles: List<ArticleDTO>) {
         store.updateData {
             it.copy(articles = articles)
@@ -147,6 +153,7 @@ data class WidgetsData(
     val blocksPreferences: BlocksPreferences = BlocksPreferences(),
     val weatherPreferences: WeatherPreferences = WeatherPreferences(),
     val pricePreferences: PricePreferences = PricePreferences(),
+    val calculatorValues: CalculatorValues = CalculatorValues(),
     val articles: List<ArticleDTO> = emptyList(),
     val facts: List<String> = emptyList(),
     val block: BlockDTO? = null,

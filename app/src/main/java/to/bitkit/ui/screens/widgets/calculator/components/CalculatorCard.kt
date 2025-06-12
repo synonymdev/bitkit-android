@@ -28,6 +28,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
@@ -36,6 +37,7 @@ import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
@@ -46,31 +48,35 @@ import to.bitkit.viewmodels.CurrencyViewModel
 fun CalculatorCard(
     modifier: Modifier = Modifier,
     currencyViewModel: CurrencyViewModel,
+    calculatorViewModel: CalculatorViewModel = hiltViewModel(),
     showWidgetTitle: Boolean,
 ) {
 
     val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
-    var btcValue: String by rememberSaveable { mutableStateOf("") }
-    var fiatValue: String by rememberSaveable { mutableStateOf("") }
+    val calculatorValues by calculatorViewModel.calculatorValues.collectAsStateWithLifecycle()
+    var btcValue: String by rememberSaveable { mutableStateOf(calculatorValues.btcValue) }
+    var fiatValue: String by rememberSaveable { mutableStateOf(calculatorValues.fiatValue) }
 
     CalculatorCardContent(
         modifier = modifier,
         showWidgetTitle = showWidgetTitle,
         btcPrimaryDisplayUnit = currencyUiState.displayUnit,
-        btcValue = btcValue,
+        btcValue = btcValue.ifEmpty { calculatorValues.btcValue },
         onBTCChange = { newValue ->
             btcValue = newValue
 
             val fiat = currencyViewModel.convert(btcValue.removeSpaces().toLongOrDefault(0L))
             fiatValue = fiat?.formatted.toString()
+            calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },
         fiatSymbol = currencyUiState.currencySymbol,
         fiatName = currencyUiState.selectedCurrency,
-        fiatValue = fiatValue,
+        fiatValue = fiatValue.ifEmpty { calculatorValues.fiatValue },
         onFiatChange = { newValue ->
             fiatValue = newValue
             val satsValue = currencyViewModel.convertFiatToSats(fiatValue.toDoubleOrNull() ?: 0.0)
             btcValue = satsValue.toString()
+            calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         }
     )
 }

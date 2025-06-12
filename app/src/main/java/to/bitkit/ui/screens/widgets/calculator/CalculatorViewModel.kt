@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.models.WidgetType
+import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
@@ -27,6 +28,15 @@ class CalculatorViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
             initialValue = false
         )
+    val calculatorValues: StateFlow<CalculatorValues> = widgetsRepo.widgetsDataFlow
+        .map { widgetsData ->
+            widgetsData.calculatorValues
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
+            initialValue = CalculatorValues()
+        )
 
     val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
         .stateIn(
@@ -42,9 +52,21 @@ class CalculatorViewModel @Inject constructor(
             widgetsRepo.deleteWidget(WidgetType.CALCULATOR)
         }
     }
+
     fun saveWidget() {
         viewModelScope.launch {
             widgetsRepo.addWidget(WidgetType.CALCULATOR)
+        }
+    }
+
+    fun updateCalculatorValues(fiatValue: String, btcValue: String) {
+        viewModelScope.launch {
+            widgetsRepo.updateCalculatorValues(
+                calculatorValues = CalculatorValues(
+                    fiatValue = fiatValue,
+                    btcValue = btcValue
+                )
+            )
         }
     }
 
