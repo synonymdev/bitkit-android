@@ -32,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +46,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -66,12 +64,12 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
-import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.WalletBalanceView
+import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToQrScanner
 import to.bitkit.ui.navigateToTransferFunding
@@ -82,19 +80,13 @@ import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
-import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
-import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
-import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
-import to.bitkit.ui.screens.wallets.send.SendOptionsView
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
-import to.bitkit.ui.settings.backups.BackupSheet
-import to.bitkit.ui.settings.backups.BackupNavigationSheet
-import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
@@ -106,7 +98,6 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
-import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -395,7 +386,10 @@ private fun HomeContentView(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
                             homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
                                 when (widgetsWithPosition.type) {
                                     WidgetType.BLOCK -> {
@@ -418,7 +412,17 @@ private fun HomeContentView(
                                             )
                                         }
                                     }
-                                    WidgetType.CALCULATOR -> Unit //TODO IMPLEMENT
+
+                                    WidgetType.CALCULATOR -> {
+                                        currencyViewModel?.let {
+                                            CalculatorCard(
+                                                currencyViewModel = it,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                showWidgetTitle = homeUiState.showWidgetTitles
+                                            )
+                                        }
+                                    }
+
                                     WidgetType.FACTS -> {
                                         homeUiState.currentFact?.run {
                                             FactsCard(
@@ -429,6 +433,7 @@ private fun HomeContentView(
                                             )
                                         }
                                     }
+
                                     WidgetType.NEWS -> {
                                         homeUiState.currentArticle?.run {
                                             HeadlineCard(
@@ -454,6 +459,7 @@ private fun HomeContentView(
                                             )
                                         }
                                     }
+
                                     WidgetType.WEATHER -> {
                                         homeUiState.currentWeather?.run {
                                             WeatherCard(
