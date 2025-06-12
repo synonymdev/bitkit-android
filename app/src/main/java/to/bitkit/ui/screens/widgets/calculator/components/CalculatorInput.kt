@@ -30,6 +30,7 @@ fun CalculatorInput(
 ) {
     TextInput(
         value = value,
+        singleLine = true,
         onValueChange = onValueChange,
         leadingIcon = {
             Box(
