@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,19 +28,58 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
+import to.bitkit.currentActivity
 import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.CurrencyViewModel
+import kotlin.Boolean
 
 @Composable
 fun CalculatorCard(
     modifier: Modifier = Modifier,
+    currencyViewModel: CurrencyViewModel,
+    showWidgetTitle: Boolean,
+) {
+
+    val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
+    var btcValue: String by remember { mutableStateOf("0") }
+    var fiatValue: String by remember { mutableStateOf("0") }
+
+    CalculatorCardContent(
+        modifier = modifier,
+        showWidgetTitle = showWidgetTitle,
+        btcValue = btcValue,
+        onBTCChange = { newValue ->
+            btcValue = newValue
+
+            val fiat = currencyViewModel.convert(btcValue.toLongOrDefault(0L))
+            fiatValue = fiat.toString()
+        },
+        fiatSymbol = currencyUiState.selectedCurrency,
+        fiatName = currencyUiState.selectedCurrency,
+        fiatValue = fiatValue,
+        onFiatChange = { newValue ->
+            fiatValue = newValue
+            val satsValue = currencyViewModel.convertFiatToSats(fiatValue.toDoubleOrNull() ?: 0.0)
+            btcValue = satsValue.toString()
+        }
+    )
+}
+
+
+@Composable
+fun CalculatorCardContent(
+    modifier: Modifier = Modifier,
     showWidgetTitle: Boolean,
     btcValue: String,
-    onBTCChange:  (String) -> Unit,
+    onBTCChange: (String) -> Unit,
     fiatSymbol: String,
     fiatName: String,
     fiatValue: String,
@@ -106,7 +149,7 @@ private fun Preview() {
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CalculatorCard(
+            CalculatorCardContent(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
                 btcValue = "10000",
@@ -117,7 +160,7 @@ private fun Preview() {
                 onFiatChange = {}
             )
 
-            CalculatorCard(
+            CalculatorCardContent(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = false,
                 btcValue = "10000",
