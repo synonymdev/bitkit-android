@@ -17,7 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,15 +31,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
-import to.bitkit.currentActivity
+import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
-import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyViewModel
-import kotlin.Boolean
 
 @Composable
 fun CalculatorCard(
@@ -49,8 +47,8 @@ fun CalculatorCard(
 ) {
 
     val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
-    var btcValue: String by remember { mutableStateOf("0") }
-    var fiatValue: String by remember { mutableStateOf("0") }
+    var btcValue: String by rememberSaveable { mutableStateOf("") }
+    var fiatValue: String by rememberSaveable { mutableStateOf("") }
 
     CalculatorCardContent(
         modifier = modifier,
@@ -59,7 +57,7 @@ fun CalculatorCard(
         onBTCChange = { newValue ->
             btcValue = newValue
 
-            val fiat = currencyViewModel.convert(btcValue.toLongOrDefault(0L))
+            val fiat = currencyViewModel.convert(btcValue.removeSpaces().toLongOrDefault(0L))
             fiatValue = fiat?.formatted.toString()
         },
         fiatSymbol = currencyUiState.currencySymbol,
