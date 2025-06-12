@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.components.BodyMSB
@@ -28,7 +29,8 @@ fun CalculatorInput(
     onValueChange: (String) -> Unit,
     currencySymbol: String,
     currencyName: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
     TextInput(
         value = value,
@@ -48,7 +50,8 @@ fun CalculatorInput(
             keyboardType = KeyboardType.Number
         ),
         suffix = { CaptionB(currencyName.uppercase(), color = Colors.Gray1) },
-        modifier = modifier
+        modifier = modifier,
+        visualTransformation = visualTransformation
     )
 }
 

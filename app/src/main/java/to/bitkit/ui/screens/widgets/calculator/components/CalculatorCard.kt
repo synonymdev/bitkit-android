@@ -33,10 +33,12 @@ import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
 import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -53,6 +55,7 @@ fun CalculatorCard(
     CalculatorCardContent(
         modifier = modifier,
         showWidgetTitle = showWidgetTitle,
+        btcPrimaryDisplayUnit = currencyUiState.displayUnit,
         btcValue = btcValue,
         onBTCChange = { newValue ->
             btcValue = newValue
@@ -76,6 +79,7 @@ fun CalculatorCard(
 fun CalculatorCardContent(
     modifier: Modifier = Modifier,
     showWidgetTitle: Boolean,
+    btcPrimaryDisplayUnit: BitcoinDisplayUnit,
     btcValue: String,
     onBTCChange: (String) -> Unit,
     fiatSymbol: String,
@@ -116,16 +120,19 @@ fun CalculatorCardContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // Bitcoin input with visual transformation
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
                 value = btcValue,
                 onValueChange = onBTCChange,
                 currencySymbol = BITCOIN_SYMBOL,
-                currencyName = stringResource(R.string.settings__general__unit_bitcoin)
+                currencyName = stringResource(R.string.settings__general__unit_bitcoin),
+                visualTransformation = BitcoinVisualTransformation(btcPrimaryDisplayUnit)
             )
 
             VerticalSpacer(16.dp)
 
+            //Fiat input
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
                 value = fiatValue,
@@ -150,23 +157,25 @@ private fun Preview() {
             CalculatorCardContent(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
-                btcValue = "10000",
+                btcValue = "1800000000", // Will display as "1 800 000 000" in MODERN mode
                 onBTCChange = {},
                 fiatSymbol = "$",
                 fiatValue = "4.55",
                 fiatName = "USD",
-                onFiatChange = {}
+                onFiatChange = {},
+                btcPrimaryDisplayUnit = BitcoinDisplayUnit.MODERN
             )
 
             CalculatorCardContent(
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = false,
-                btcValue = "10000",
+                btcValue = "25.8", // Will display as "0.22200000" in CLASSIC mode
                 onBTCChange = {},
                 fiatSymbol = "$",
                 fiatValue = "4.55",
                 fiatName = "USD",
-                onFiatChange = {}
+                onFiatChange = {},
+                btcPrimaryDisplayUnit = BitcoinDisplayUnit.CLASSIC
             )
         }
     }

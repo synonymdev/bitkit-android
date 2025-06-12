@@ -9,6 +9,8 @@ import java.util.Locale
 
 const val BITCOIN_SYMBOL = "₿"
 const val SATS_IN_BTC = 100_000_000
+const val BTC_PLACEHOLDER = "0.00000000"
+const val SATS_PLACEHOLDER = "0"
 
 @Serializable
 data class FxRateResponse(
