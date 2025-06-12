@@ -21,6 +21,7 @@ object Colors {
     val Gray4 = Color(0xFF3A343C)
     val Gray3 = Color(0xFF48484A)
     val Gray2 = Color(0xFF636366)
+    val Gray1 = Color(0xFF8E8E93)
 
     // Alpha
     val Black50 = Color.Black.copy(alpha = 0.5f)
