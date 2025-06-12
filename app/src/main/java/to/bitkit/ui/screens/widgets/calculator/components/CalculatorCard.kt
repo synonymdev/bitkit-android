@@ -51,7 +51,6 @@ fun CalculatorCard(
     val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
     var btcValue: String by remember { mutableStateOf("0") }
     var fiatValue: String by remember { mutableStateOf("0") }
-    var fiatSymbol: String by remember { mutableStateOf("$") }
 
     CalculatorCardContent(
         modifier = modifier,
@@ -62,9 +61,8 @@ fun CalculatorCard(
 
             val fiat = currencyViewModel.convert(btcValue.toLongOrDefault(0L))
             fiatValue = fiat?.formatted.toString()
-            fiatSymbol = fiat?.symbol.toString()
         },
-        fiatSymbol = fiatSymbol,
+        fiatSymbol = currencyUiState.currencySymbol,
         fiatName = currencyUiState.selectedCurrency,
         fiatValue = fiatValue,
         onFiatChange = { newValue ->
