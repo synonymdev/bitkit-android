@@ -39,6 +39,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
+import to.bitkit.ui.utils.visualTransformation.DecimalVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
@@ -132,13 +133,14 @@ fun CalculatorCardContent(
 
             VerticalSpacer(16.dp)
 
-            //Fiat input
+            //Fiat input with decimal transformation
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
                 value = fiatValue,
                 onValueChange = onFiatChange,
                 currencySymbol = fiatSymbol,
-                currencyName = fiatName
+                currencyName = fiatName,
+                visualTransformation = DecimalVisualTransformation()
             )
         }
     }
