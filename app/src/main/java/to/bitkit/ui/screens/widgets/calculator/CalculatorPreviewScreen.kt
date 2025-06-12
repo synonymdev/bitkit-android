@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -40,7 +41,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 
 @Composable
 fun CalculatorPreviewScreen(
-    viewModel: CalculatorViewModel,
+    viewModel: CalculatorViewModel = hiltViewModel(),
     currencyViewModel: CurrencyViewModel?,
     onClose: () -> Unit,
     onBack: () -> Unit,
