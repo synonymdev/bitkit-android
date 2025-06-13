@@ -7,17 +7,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.models.addressTypeInfo
+import to.bitkit.models.networkUiText
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
@@ -27,21 +28,18 @@ import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun AdvancedSettingsScreen(
     navController: NavController,
+    viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
-    val settings = settingsViewModel ?: return
-    val isDevModeEnabled by settings.isDevModeEnabled.collectAsStateWithLifecycle()
-    var isRescanning by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     AdvancedSettingsContent(
-        isDevModeEnabled = isDevModeEnabled,
-        isRescanning = isRescanning,
+        uiState = uiState,
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
         onAddressTypeClick = {
@@ -77,25 +75,13 @@ fun AdvancedSettingsScreen(
         onAddressViewerClick = {
             // TODO: Navigate to AddressViewer
         },
-        onRescanClick = {
-            if (!isRescanning) {
-                isRescanning = true
-                // TODO: Implement rescan functionality
-                // After rescan completes, set isRescanning = false
-                app.toast(
-                    type = Toast.ToastType.INFO,
-                    title = "Coming Soon",
-                    description = "Rescan functionality coming soon",
-                )
-                isRescanning = false
-            }
-        },
+        onRescanClick = { viewModel.rescanAddresses() },
         onSuggestionsResetClick = {
-            // TODO: Show reset suggestions dialog
+            viewModel.resetSuggestions()
             app.toast(
-                type = Toast.ToastType.INFO,
-                title = "Coming Soon",
-                description = "Suggestions reset coming soon",
+                type = Toast.ToastType.SUCCESS,
+                title = "Suggestions Reset",
+                description = "All suggestions have been reset",
             )
         },
     )
@@ -103,8 +89,7 @@ fun AdvancedSettingsScreen(
 
 @Composable
 private fun AdvancedSettingsContent(
-    isDevModeEnabled: Boolean = false,
-    isRescanning: Boolean = false,
+    uiState: AdvancedSettingsUiState,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
@@ -133,11 +118,12 @@ private fun AdvancedSettingsContent(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
+            // Payments Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_payments))
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__address_type),
-                value = SettingsButtonValue.StringValue("P2WPKH"), // TODO: Get from state
+                value = SettingsButtonValue.StringValue(uiState.addressType.addressTypeInfo().shortName),
                 onClick = onAddressTypeClick,
             )
 
@@ -151,13 +137,14 @@ private fun AdvancedSettingsContent(
                 onClick = onPaymentPreferenceClick,
             )
 
-            if (isDevModeEnabled) {
+            if (uiState.isDevModeEnabled) {
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__gap_limit),
                     onClick = onGapLimitClick,
                 )
             }
 
+            // Networks Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_networks))
 
             SettingsButtonRow(
@@ -185,10 +172,10 @@ private fun AdvancedSettingsContent(
                 onClick = onWebRelayClick,
             )
 
-            if (isDevModeEnabled) {
+            if (uiState.isDevModeEnabled) {
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__bitcoin_network),
-                    value = SettingsButtonValue.StringValue("Regtest"), // TODO: Get from state
+                    value = SettingsButtonValue.StringValue(uiState.currentNetwork.networkUiText()),
                     onClick = onBitcoinNetworkClick,
                 )
             }
@@ -203,8 +190,8 @@ private fun AdvancedSettingsContent(
 
             SettingsTextButtonRow(
                 title = stringResource(R.string.settings__adv__rescan),
-                value = if (isRescanning) "Rescanning..." else "",
-                enabled = !isRescanning,
+                value = if (uiState.isRescanning) "Rescanning..." else "", // TODO add missing localized text
+                enabled = !uiState.isRescanning,
                 onClick = onRescanClick,
             )
 
@@ -220,16 +207,22 @@ private fun AdvancedSettingsContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        AdvancedSettingsContent()
+        AdvancedSettingsContent(
+            uiState = AdvancedSettingsUiState()
+        )
     }
 }
 
+@Preview
 @Composable
 private fun PreviewDev() {
     AppThemeSurface {
         AdvancedSettingsContent(
-            isDevModeEnabled = true,
-            isRescanning = true,
+            uiState = AdvancedSettingsUiState(
+                isDevModeEnabled = true,
+                isRescanning = true,
+                currentNetwork = Network.REGTEST,
+            )
         )
     }
 }
