@@ -1,9 +1,7 @@
 package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +22,7 @@ import to.bitkit.R
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.networkUiText
 import to.bitkit.ui.Routes
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
@@ -241,7 +240,7 @@ private fun Content(
                 modifier = Modifier.testTag(AdvancedSettingsTestTags.SUGGESTIONS_RESET_BUTTON),
             )
 
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
         }
 
         if (showResetSuggestionsDialog) {
