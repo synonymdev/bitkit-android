@@ -138,14 +138,16 @@ fun localizedRandom(@StringRes id: Int): String {
     }
 }
 
-fun BigDecimal.formatCurrency(): String? {
+fun BigDecimal.formatCurrency(decimalPlaces: Int = 2): String? {
     val symbols = DecimalFormatSymbols(Locale.getDefault()).apply {
         decimalSeparator = '.'
         groupingSeparator = ','
     }
-    val formatter = DecimalFormat("#,##0.00", symbols).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = 2
+
+    val decimalPlacesString = "0".repeat(decimalPlaces)
+    val formatter = DecimalFormat("#,##0.$decimalPlacesString", symbols).apply {
+        minimumFractionDigits = decimalPlaces
+        maximumFractionDigits = decimalPlaces
     }
 
     return runCatching { formatter.format(this) }.getOrNull()

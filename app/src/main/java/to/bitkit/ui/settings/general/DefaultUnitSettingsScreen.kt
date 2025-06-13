@@ -32,7 +32,7 @@ fun DefaultUnitSettingsScreen(
     currencyViewModel: CurrencyViewModel,
     navController: NavController,
 ) {
-    val (_, _, _, selectedCurrency, displayUnit, primaryDisplay) = LocalCurrencies.current
+    val (_, _, _, selectedCurrency, _, displayUnit, primaryDisplay) = LocalCurrencies.current
 
     DefaultUnitSettingsScreenContent(
         selectedCurrency = selectedCurrency,

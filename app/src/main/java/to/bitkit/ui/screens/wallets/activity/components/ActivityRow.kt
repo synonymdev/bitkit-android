@@ -168,7 +168,7 @@ private fun AmountView(
 
     val settings = settingsViewModel ?: return
     val currency = currencyViewModel ?: return
-    val (_, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
+    val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current
 
     val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
 

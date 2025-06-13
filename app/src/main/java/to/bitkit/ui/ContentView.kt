@@ -77,6 +77,7 @@ import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
 import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
+import to.bitkit.ui.screens.widgets.calculator.CalculatorPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
 import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
 import to.bitkit.ui.screens.widgets.facts.FactsViewModel
@@ -1054,7 +1055,7 @@ private fun NavGraphBuilder.widgets(
             onWidgetSelected = { widgetType ->
                 when (widgetType) {
                     WidgetType.BLOCK -> navController.navigate(Routes.BlocksPreview)
-                    WidgetType.CALCULATOR -> {}
+                    WidgetType.CALCULATOR -> navController.navigate(Routes.CalculatorPreview)
                     WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
                     WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
                     WidgetType.PRICE -> navController.navigate(Routes.PricePreview)
@@ -1062,6 +1063,13 @@ private fun NavGraphBuilder.widgets(
                 }
             },
             fiatSymbol = currencyViewModel.getCurrencySymbol()
+        )
+    }
+    composableWithDefaultTransitions<Routes.CalculatorPreview> {
+        CalculatorPreviewScreen(
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            currencyViewModel = currencyViewModel
         )
     }
     navigation<Routes.Headlines>(
@@ -1177,7 +1185,7 @@ private fun NavGraphBuilder.widgets(
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
             val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
 
-            PricePreviewScreen (
+            PricePreviewScreen(
                 priceViewModel = viewModel,
                 onClose = { navController.navigateToHome() },
                 onBack = { navController.popBackStack() },
@@ -1642,4 +1650,8 @@ object Routes {
 
     @Serializable
     data object PriceEdit
+
+
+    @Serializable
+    data object CalculatorPreview
 }
