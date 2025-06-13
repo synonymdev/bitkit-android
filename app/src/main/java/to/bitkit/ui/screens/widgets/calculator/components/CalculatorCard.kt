@@ -43,9 +43,9 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
-import to.bitkit.ui.utils.visualTransformation.DecimalVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @Composable
 fun CalculatorCard(
@@ -67,8 +67,15 @@ fun CalculatorCard(
         btcValue = btcValue.ifEmpty { calculatorValues.btcValue },
         onBTCChange = { newValue ->
             btcValue = newValue
-            val sats = btcValue.removeSpaces().toLongOrDefault(0L)
-            val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) sats else sats.btcToSats()
+            val satsOrBtc = btcValue.removeSpaces()
+            val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) {
+                satsOrBtc.toLongOrDefault(0L)
+            } else {
+                val btcDecimal = BigDecimal.valueOf(satsOrBtc.toDoubleOrNull() ?: 0.0)
+                val satsDecimal = btcDecimal.multiply(BigDecimal(SATS_IN_BTC))
+                val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+                roundedNumber.toLong()
+            }
             val fiat = currencyViewModel.convert(sats = satsLong)
             fiatValue = fiat?.formatted.toString()
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
@@ -139,7 +146,6 @@ fun CalculatorCardContent(
                 onValueChange = onBTCChange,
                 currencySymbol = BITCOIN_SYMBOL,
                 currencyName = stringResource(R.string.settings__general__unit_bitcoin),
-                visualTransformation = BitcoinVisualTransformation(btcPrimaryDisplayUnit)
             )
 
             VerticalSpacer(16.dp)
@@ -151,7 +157,6 @@ fun CalculatorCardContent(
                 onValueChange = onFiatChange,
                 currencySymbol = fiatSymbol,
                 currencyName = fiatName,
-                visualTransformation = DecimalVisualTransformation()
             )
         }
     }
