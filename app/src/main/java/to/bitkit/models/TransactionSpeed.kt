@@ -1,5 +1,7 @@
 package to.bitkit.models
 
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -7,6 +9,7 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import to.bitkit.R
 
 @Serializable(with = TransactionSpeedSerializer::class)
 sealed class TransactionSpeed {
@@ -49,5 +52,15 @@ private object TransactionSpeedSerializer : KSerializer<TransactionSpeed> {
 
     override fun deserialize(decoder: Decoder): TransactionSpeed {
         return TransactionSpeed.fromString(decoder.decodeString())
+    }
+}
+
+@Composable
+fun TransactionSpeed.transactionSpeedUiText(): String {
+    return when (this) {
+        is TransactionSpeed.Fast -> stringResource(R.string.settings__fee__fast__value)
+        is TransactionSpeed.Medium -> stringResource(R.string.settings__fee__normal__value)
+        is TransactionSpeed.Slow -> stringResource(R.string.settings__fee__slow__value)
+        is TransactionSpeed.Custom -> stringResource(R.string.settings__fee__custom__value)
     }
 }
