@@ -18,9 +18,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -55,6 +57,7 @@ fun DragAndDropWidget(
                 text = title,
                 modifier = Modifier
                     .weight(1f)
+                    .padding(start = 16.dp)
                     .testTag("${title}_drag_and_drop_title")
             )
 
@@ -63,6 +66,7 @@ fun DragAndDropWidget(
                 modifier = Modifier.testTag("${title}_drag_and_drop_delete")
             ) {
                 Icon(
+                    modifier = Modifier.size(24.dp),
                     painter = painterResource(R.drawable.ic_trash),
                     contentDescription = stringResource(R.string.common__delete)
                 )
@@ -73,6 +77,7 @@ fun DragAndDropWidget(
                 modifier = Modifier.testTag("${title}_drag_and_drop_edit")
             ) {
                 Icon(
+                    modifier = Modifier.size(24.dp),
                     painter = painterResource(R.drawable.ic_settings),
                     contentDescription = stringResource(R.string.common__edit)
                 )
@@ -83,10 +88,25 @@ fun DragAndDropWidget(
                 modifier = Modifier.testTag("${title}_drag_and_drop_move")
             ) {
                 Icon(
+                    modifier = Modifier.size(24.dp),
                     painter = painterResource(R.drawable.ic_list),
                     contentDescription = null
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        DragAndDropWidget(
+            modifier = Modifier.padding(16.dp),
+            iconRes = R.drawable.widget_cube,
+            title = stringResource(R.string.widgets__blocks__name),
+            onClickDelete = {},
+            onClickSettings = {}
+        )
     }
 }
