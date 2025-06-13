@@ -1,7 +1,9 @@
 package to.bitkit.ui.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -66,16 +68,16 @@ fun AdvancedSettingsScreen(
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
         onAddressTypeClick = {
-            // TODO: Navigate to AddressTypePreference
+            navController.navigate(Routes.AddressTypePreference)
         },
         onCoinSelectionClick = {
-            // TODO: Navigate to CoinSelectPreference
+            navController.navigate(Routes.CoinSelectPreference)
         },
         onPaymentPreferenceClick = {
-            // TODO: Navigate to PaymentPreference
+            navController.navigate(Routes.PaymentPreference)
         },
         onGapLimitClick = {
-            // TODO: Navigate to GapLimit
+            navController.navigate(Routes.GapLimit)
         },
         onLightningConnectionsClick = {
             navController.navigate(Routes.LightningConnections)
@@ -84,19 +86,19 @@ fun AdvancedSettingsScreen(
             navController.navigateToNodeState()
         },
         onElectrumServerClick = {
-            // TODO: Navigate to ElectrumConfig
+            navController.navigate(Routes.ElectrumConfig)
         },
         onRgsServerClick = {
-            // TODO: Navigate to RGSServer
+            navController.navigate(Routes.RgsServer)
         },
         onWebRelayClick = {
-            // TODO: Navigate to WebRelay
+            navController.navigate(Routes.WebRelay)
         },
         onBitcoinNetworkClick = {
-            // TODO: Navigate to BitcoinNetworkSelection
+            navController.navigate(Routes.BitcoinNetworkSelection)
         },
         onAddressViewerClick = {
-            // TODO: Navigate to AddressViewer
+            navController.navigate(Routes.AddressViewer)
         },
         onRescanClick = { viewModel.rescanAddresses() },
         onSuggestionsResetClick = { showResetSuggestionsDialog = true },
@@ -238,6 +240,8 @@ private fun Content(
                 onClick = onSuggestionsResetClick,
                 modifier = Modifier.testTag(AdvancedSettingsTestTags.SUGGESTIONS_RESET_BUTTON),
             )
+
+            Spacer(Modifier.height(32.dp))
         }
 
         if (showResetSuggestionsDialog) {

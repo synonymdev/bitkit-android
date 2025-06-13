@@ -102,6 +102,15 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
+import to.bitkit.ui.settings.advanced.AddressViewerScreen
+import to.bitkit.ui.settings.advanced.BitcoinNetworkSelectionScreen
+import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
+import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
+import to.bitkit.ui.settings.advanced.GapLimitScreen
+import to.bitkit.ui.settings.advanced.PaymentPreferenceScreen
+import to.bitkit.ui.settings.advanced.RgsServerScreen
+import to.bitkit.ui.settings.advanced.WebRelayScreen
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
@@ -727,6 +736,33 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
 private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.AdvancedSettings> {
         AdvancedSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.AddressTypePreference> {
+        AddressTypePreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.CoinSelectPreference> {
+        CoinSelectPreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.PaymentPreference> {
+        PaymentPreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.GapLimit> {
+        GapLimitScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.ElectrumConfig> {
+        ElectrumConfigScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.RgsServer> {
+        RgsServerScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.WebRelay> {
+        WebRelayScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.BitcoinNetworkSelection> {
+        BitcoinNetworkSelectionScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.AddressViewer> {
+        AddressViewerScreen(navController)
     }
 }
 
@@ -1355,6 +1391,33 @@ object Routes {
 
     @Serializable
     data object AdvancedSettings
+
+    @Serializable
+    data object AddressTypePreference
+
+    @Serializable
+    data object CoinSelectPreference
+
+    @Serializable
+    data object PaymentPreference
+
+    @Serializable
+    data object GapLimit
+
+    @Serializable
+    data object ElectrumConfig
+
+    @Serializable
+    data object RgsServer
+
+    @Serializable
+    data object WebRelay
+
+    @Serializable
+    data object BitcoinNetworkSelection
+
+    @Serializable
+    data object AddressViewer
 
     @Serializable
     data object AboutSettings
