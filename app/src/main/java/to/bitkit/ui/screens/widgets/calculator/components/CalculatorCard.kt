@@ -35,6 +35,8 @@ import to.bitkit.R
 import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.SATS_IN_BTC
+import to.bitkit.models.btcToSats
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
@@ -64,8 +66,9 @@ fun CalculatorCard(
         btcValue = btcValue.ifEmpty { calculatorValues.btcValue },
         onBTCChange = { newValue ->
             btcValue = newValue
-
-            val fiat = currencyViewModel.convert(btcValue.removeSpaces().toLongOrDefault(0L))
+            val sats = btcValue.removeSpaces().toLongOrDefault(0L)
+            val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) sats else sats.btcToSats()
+            val fiat = currencyViewModel.convert(sats = satsLong)
             fiatValue = fiat?.formatted.toString()
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },
