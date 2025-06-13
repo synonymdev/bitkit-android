@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,24 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+
+object AdvancedSettingsTestTags {
+    const val SCREEN = "advanced_settings_screen"
+    const val ADDRESS_TYPE_BUTTON = "address_type_button"
+    const val COIN_SELECTION_BUTTON = "coin_selection_button"
+    const val PAYMENT_PREFERENCE_BUTTON = "payment_preference_button"
+    const val GAP_LIMIT_BUTTON = "gap_limit_button"
+    const val LIGHTNING_CONNECTIONS_BUTTON = "lightning_connections_button"
+    const val LIGHTNING_NODE_BUTTON = "lightning_node_button"
+    const val ELECTRUM_SERVER_BUTTON = "electrum_server_button"
+    const val RGS_SERVER_BUTTON = "rgs_server_button"
+    const val WEB_RELAY_BUTTON = "web_relay_button"
+    const val BITCOIN_NETWORK_BUTTON = "bitcoin_network_button"
+    const val ADDRESS_VIEWER_BUTTON = "address_viewer_button"
+    const val RESCAN_BUTTON = "rescan_button"
+    const val SUGGESTIONS_RESET_BUTTON = "suggestions_reset_button"
+    const val RESET_SUGGESTIONS_DIALOG = "reset_suggestions_dialog"
+}
 
 @Composable
 fun AdvancedSettingsScreen(
@@ -123,6 +142,7 @@ private fun Content(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .testTag(AdvancedSettingsTestTags.SCREEN)
         ) {
             // Payments Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_payments))
@@ -131,22 +151,26 @@ private fun Content(
                 title = stringResource(R.string.settings__adv__address_type),
                 value = SettingsButtonValue.StringValue(uiState.addressType.addressTypeInfo().shortName),
                 onClick = onAddressTypeClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.ADDRESS_TYPE_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__coin_selection),
                 onClick = onCoinSelectionClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.COIN_SELECTION_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__payment_preference),
                 onClick = onPaymentPreferenceClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.PAYMENT_PREFERENCE_BUTTON),
             )
 
             if (uiState.isDevModeEnabled) {
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__gap_limit),
                     onClick = onGapLimitClick,
+                    modifier = Modifier.testTag(AdvancedSettingsTestTags.GAP_LIMIT_BUTTON),
                 )
             }
 
@@ -156,26 +180,31 @@ private fun Content(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__lightning_connections),
                 onClick = onLightningConnectionsClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.LIGHTNING_CONNECTIONS_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__lightning_node),
                 onClick = onLightningNodeClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.LIGHTNING_NODE_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__electrum_server),
                 onClick = onElectrumServerClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.ELECTRUM_SERVER_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__rgs_server),
                 onClick = onRgsServerClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.RGS_SERVER_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__web_relay),
                 onClick = onWebRelayClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.WEB_RELAY_BUTTON),
             )
 
             if (uiState.isDevModeEnabled) {
@@ -183,6 +212,7 @@ private fun Content(
                     title = stringResource(R.string.settings__adv__bitcoin_network),
                     value = SettingsButtonValue.StringValue(uiState.currentNetwork.networkUiText()),
                     onClick = onBitcoinNetworkClick,
+                    modifier = Modifier.testTag(AdvancedSettingsTestTags.BITCOIN_NETWORK_BUTTON),
                 )
             }
 
@@ -192,6 +222,7 @@ private fun Content(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__address_viewer),
                 onClick = onAddressViewerClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.ADDRESS_VIEWER_BUTTON),
             )
 
             SettingsTextButtonRow(
@@ -199,11 +230,13 @@ private fun Content(
                 value = if (uiState.isRescanning) "Rescanning..." else "", // TODO add missing localized text
                 enabled = !uiState.isRescanning,
                 onClick = onRescanClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.RESCAN_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__suggestions_reset),
                 onClick = onSuggestionsResetClick,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.SUGGESTIONS_RESET_BUTTON),
             )
         }
 
@@ -214,6 +247,7 @@ private fun Content(
                 confirmText = stringResource(R.string.settings__adv__reset_confirm),
                 onConfirm = onResetSuggestionsDialogConfirm,
                 onDismiss = onResetSuggestionsDialogCancel,
+                modifier = Modifier.testTag(AdvancedSettingsTestTags.RESET_SUGGESTIONS_DIALOG),
             )
         }
     }
