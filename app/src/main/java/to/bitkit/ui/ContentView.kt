@@ -103,6 +103,15 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
+import to.bitkit.ui.settings.advanced.AddressViewerScreen
+import to.bitkit.ui.settings.advanced.BitcoinNetworkSelectionScreen
+import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
+import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
+import to.bitkit.ui.settings.advanced.GapLimitScreen
+import to.bitkit.ui.settings.advanced.PaymentPreferenceScreen
+import to.bitkit.ui.settings.advanced.RgsServerScreen
+import to.bitkit.ui.settings.advanced.WebRelayScreen
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
@@ -415,7 +424,7 @@ private fun RootNavHost(
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
-        lightning(walletViewModel, navController)
+        lightningConnections(walletViewModel, navController)
         devSettings(walletViewModel, navController)
         regtestSettings(navController)
         activityItem(activityListViewModel, navController)
@@ -729,6 +738,33 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.AdvancedSettings> {
         AdvancedSettingsScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.AddressTypePreference> {
+        AddressTypePreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.CoinSelectPreference> {
+        CoinSelectPreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.PaymentPreference> {
+        PaymentPreferenceScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.GapLimit> {
+        GapLimitScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.ElectrumConfig> {
+        ElectrumConfigScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.RgsServer> {
+        RgsServerScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.WebRelay> {
+        WebRelayScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.BitcoinNetworkSelection> {
+        BitcoinNetworkSelectionScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.AddressViewer> {
+        AddressViewerScreen(navController)
+    }
 }
 
 private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
@@ -854,11 +890,11 @@ private fun NavGraphBuilder.cjitDetailSettings(
     }
 }
 
-private fun NavGraphBuilder.lightning(
+private fun NavGraphBuilder.lightningConnections(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.Lightning> {
+    composableWithDefaultTransitions<Routes.LightningConnections> {
         LightningSettingsScreen(viewModel, navController)
     }
 }
@@ -1258,10 +1294,6 @@ fun NavController.navigateToCjitDetail(id: String) = navigate(
     route = Routes.CjitDetail(id),
 )
 
-fun NavController.navigateToLightning() = navigate(
-    route = Routes.Lightning,
-)
-
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
 )
@@ -1369,6 +1401,33 @@ object Routes {
     data object AdvancedSettings
 
     @Serializable
+    data object AddressTypePreference
+
+    @Serializable
+    data object CoinSelectPreference
+
+    @Serializable
+    data object PaymentPreference
+
+    @Serializable
+    data object GapLimit
+
+    @Serializable
+    data object ElectrumConfig
+
+    @Serializable
+    data object RgsServer
+
+    @Serializable
+    data object WebRelay
+
+    @Serializable
+    data object BitcoinNetworkSelection
+
+    @Serializable
+    data object AddressViewer
+
+    @Serializable
     data object AboutSettings
 
     @Serializable
@@ -1428,7 +1487,7 @@ object Routes {
     data class CjitDetail(val id: String)
 
     @Serializable
-    data object Lightning
+    data object LightningConnections
 
     @Serializable
     data object DevSettings

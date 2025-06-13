@@ -15,6 +15,7 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.transactionSpeedUiText
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
@@ -30,7 +31,6 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.utils.displayText
 
 @Composable
 fun GeneralSettingsScreen(
@@ -100,7 +100,7 @@ private fun GeneralSettingsContent(
             )
             SettingsButtonRow(
                 title = stringResource(R.string.settings__general__speed),
-                value = SettingsButtonValue.StringValue(defaultTransactionSpeed.displayText),
+                value = SettingsButtonValue.StringValue(defaultTransactionSpeed.transactionSpeedUiText()),
                 onClick = onTransactionSpeedClick,
             )
             SettingsButtonRow(
