@@ -4,13 +4,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import to.bitkit.models.BitcoinDisplayUnit
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
-class BitcoinVisualTransformation(
-    private val displayUnit: BitcoinDisplayUnit
+class MonetaryVisualTransformation(
+    private val decimalPlaces: Int = 2
 ) : VisualTransformation {
 
     override fun filter(text: AnnotatedString): TransformedText {
@@ -20,11 +19,7 @@ class BitcoinVisualTransformation(
             return TransformedText(text, OffsetMapping.Identity)
         }
 
-        val formattedText = when (displayUnit) {
-            BitcoinDisplayUnit.MODERN -> formatModernDisplay(originalText)
-            BitcoinDisplayUnit.CLASSIC -> formatClassicDisplay(originalText)
-        }
-
+        val formattedText = formatMonetaryValue(originalText)
         val offsetMapping = createOffsetMapping(originalText, formattedText)
 
         return TransformedText(
@@ -33,40 +28,33 @@ class BitcoinVisualTransformation(
         )
     }
 
-    private fun formatModernDisplay(text: String): String {
-        val cleanText = text.replace(" ", "")
-        val longValue = cleanText.toLongOrNull() ?: return text
-
-        val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-            groupingSeparator = ' '
-        }
-        val formatter = DecimalFormat("#,###", formatSymbols).apply {
-            isGroupingUsed = true
-        }
-        return formatter.format(longValue)
-    }
-
-    private fun formatClassicDisplay(text: String): String {
-        val cleanText = text.replace(" ", "").replace(",", "")
+    private fun formatMonetaryValue(text: String): String {
+        val cleanText = text.replace(",", "").replace(" ", "")
         val doubleValue = cleanText.toDoubleOrNull() ?: return text
 
         val formatSymbols = DecimalFormatSymbols(Locale.getDefault()).apply {
-            groupingSeparator = ' '
+            groupingSeparator = ','
             decimalSeparator = '.'
         }
-        val formatter = DecimalFormat("#,##0.########", formatSymbols)
+
+        val decimalPlacesPattern = "#".repeat(decimalPlaces)
+        val formatter = DecimalFormat("#,##0.$decimalPlacesPattern", formatSymbols).apply {
+            minimumFractionDigits = 0
+            maximumFractionDigits = decimalPlaces
+        }
+
         return formatter.format(doubleValue)
     }
 
     private fun createOffsetMapping(original: String, transformed: String): OffsetMapping {
         return object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                val cleanOriginal = original.take(offset).replace(" ", "")
+                val cleanOriginal = original.take(offset).replace(",", "").replace(" ", "")
                 var transformedOffset = 0
                 var cleanOffset = 0
 
                 for (char in transformed) {
-                    if (char == ' ') {
+                    if (char == ',' || char == ' ') {
                         transformedOffset++
                     } else {
                         if (cleanOffset >= cleanOriginal.length) break
@@ -80,13 +68,13 @@ class BitcoinVisualTransformation(
 
             override fun transformedToOriginal(offset: Int): Int {
                 val transformedSubstring = transformed.take(offset)
-                val cleanCount = transformedSubstring.count { it != ' ' }
+                val cleanCount = transformedSubstring.count { it != ',' && it != ' ' }
 
                 var originalOffset = 0
                 var cleanOffset = 0
 
                 for (char in original) {
-                    if (char != ' ') {
+                    if (char != ',' && char != ' ') {
                         if (cleanOffset >= cleanCount) break
                         cleanOffset++
                     }

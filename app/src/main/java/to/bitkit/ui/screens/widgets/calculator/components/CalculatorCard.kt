@@ -30,22 +30,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import okhttp3.internal.toLongOrDefault
 import to.bitkit.R
-import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
-import to.bitkit.models.SATS_IN_BTC
-import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.formatCurrency
+import to.bitkit.ui.utils.visualTransformation.BitcoinVisualTransformation
+import to.bitkit.ui.utils.visualTransformation.CalculatorFormatter
+import to.bitkit.ui.utils.visualTransformation.MonetaryVisualTransformation
 import to.bitkit.viewmodels.CurrencyViewModel
-import java.math.BigDecimal
-import java.math.RoundingMode
 
 @Composable
 fun CalculatorCard(
@@ -54,7 +50,6 @@ fun CalculatorCard(
     calculatorViewModel: CalculatorViewModel = hiltViewModel(),
     showWidgetTitle: Boolean,
 ) {
-
     val currencyUiState by currencyViewModel.uiState.collectAsStateWithLifecycle()
     val calculatorValues by calculatorViewModel.calculatorValues.collectAsStateWithLifecycle()
     var btcValue: String by rememberSaveable { mutableStateOf(calculatorValues.btcValue) }
@@ -67,17 +62,12 @@ fun CalculatorCard(
         btcValue = btcValue.ifEmpty { calculatorValues.btcValue },
         onBtcChange = { newValue ->
             btcValue = newValue
-            val satsOrBtc = btcValue.removeSpaces()
-            val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) {
-                satsOrBtc.toLongOrDefault(0L)
-            } else {
-                val btcDecimal = BigDecimal.valueOf(satsOrBtc.toDoubleOrNull() ?: 0.0)
-                val satsDecimal = btcDecimal.multiply(BigDecimal(SATS_IN_BTC))
-                val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
-                roundedNumber.toLong()
-            }
-            val fiat = currencyViewModel.convert(sats = satsLong)
-            fiatValue = fiat?.formatted.toString()
+            val convertedFiat = CalculatorFormatter.convertBtcToFiat(
+                btcValue = btcValue,
+                displayUnit = currencyUiState.displayUnit,
+                currencyViewModel = currencyViewModel
+            )
+            fiatValue = convertedFiat.orEmpty()
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         },
         fiatSymbol = currencyUiState.currencySymbol,
@@ -85,19 +75,15 @@ fun CalculatorCard(
         fiatValue = fiatValue.ifEmpty { calculatorValues.fiatValue },
         onFiatChange = { newValue ->
             fiatValue = newValue
-            val satsValue = currencyViewModel.convertFiatToSats(fiatValue.toDoubleOrNull() ?: 0.0)
-            val formatted = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) {
-                satsValue.formatToModernDisplay()
-            } else {
-                val btcAmount = BigDecimal(satsValue).divide(BigDecimal(SATS_IN_BTC)).formatCurrency(decimalPlaces = 8).orEmpty()
-                btcAmount
-            }
-            btcValue = formatted
+            btcValue = CalculatorFormatter.convertFiatToBtc(
+                fiatValue = fiatValue,
+                displayUnit = currencyUiState.displayUnit,
+                currencyViewModel = currencyViewModel
+            )
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         }
     )
 }
-
 
 @Composable
 fun CalculatorCardContent(
@@ -111,7 +97,6 @@ fun CalculatorCardContent(
     fiatValue: String,
     onFiatChange: (String) -> Unit,
 ) {
-
     Box(
         modifier = modifier
             .clip(shape = MaterialTheme.shapes.medium)
@@ -123,24 +108,7 @@ fun CalculatorCardContent(
                 .padding(16.dp)
         ) {
             if (showWidgetTitle) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testTag("widget_title_row")
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.widget_math_operation),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("widget_title_icon"),
-                        tint = Color.Unspecified
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    BodyMSB(
-                        text = stringResource(R.string.widgets__calculator__name),
-                        modifier = Modifier.testTag("widget_title_text")
-                    )
-                }
+                WidgetTitleRow()
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -151,19 +119,43 @@ fun CalculatorCardContent(
                 onValueChange = onBtcChange,
                 currencySymbol = BITCOIN_SYMBOL,
                 currencyName = stringResource(R.string.settings__general__unit_bitcoin),
+                visualTransformation = BitcoinVisualTransformation(btcPrimaryDisplayUnit)
             )
 
             VerticalSpacer(16.dp)
 
-            //Fiat input with decimal transformation
+            // Fiat input with decimal transformation
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
                 value = fiatValue,
                 onValueChange = onFiatChange,
                 currencySymbol = fiatSymbol,
                 currencyName = fiatName,
+                visualTransformation = MonetaryVisualTransformation(decimalPlaces = 2)
             )
         }
+    }
+}
+
+@Composable
+private fun WidgetTitleRow() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.testTag("widget_title_row")
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.widget_math_operation),
+            contentDescription = null,
+            modifier = Modifier
+                .size(32.dp)
+                .testTag("widget_title_icon"),
+            tint = Color.Unspecified
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        BodyMSB(
+            text = stringResource(R.string.widgets__calculator__name),
+            modifier = Modifier.testTag("widget_title_text")
+        )
     }
 }
 
