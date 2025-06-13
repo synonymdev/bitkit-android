@@ -19,7 +19,6 @@ import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToHome
-import to.bitkit.ui.navigateToLightning
 import to.bitkit.ui.navigateToLogs
 import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.scaffold.AppTopBar
@@ -48,7 +47,6 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Lightning") { navController.navigateToLightning() }
             SettingsButtonRow("Channel Orders") { navController.navigateToChannelOrdersSettings() }
             SettingsButtonRow("Logs") { navController.navigateToLogs() }
 
