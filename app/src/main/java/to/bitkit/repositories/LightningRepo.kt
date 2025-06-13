@@ -19,6 +19,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.SettingsStore
@@ -296,17 +297,28 @@ class LightningRepo @Inject constructor(
      * @param address The bitcoin address to send to
      * @param sats The amount in  satoshis to send
      * @param speed The desired transaction speed determining the fee rate. If null, the user's default speed is used.
+     * @param utxosToSpend Manually specify UTXO's to spend if not null.
      * @return A `Result` with the `Txid` of sent transaction, or an error if the transaction fails
      * or the fee rate cannot be retrieved.
      */
-    suspend fun sendOnChain(address: Address, sats: ULong, speed: TransactionSpeed? = null): Result<Txid> =
+    suspend fun sendOnChain(
+        address: Address,
+        sats: ULong,
+        speed: TransactionSpeed? = null,
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
 
-            var fees = coreService.blocktank.getFees().getOrThrow()
-            var satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+            val fees = coreService.blocktank.getFees().getOrThrow()
+            val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
 
-            val txId = lightningService.send(address = address, sats = sats, satsPerVByte = satsPerVByte)
+            val txId = lightningService.send(
+                address = address,
+                sats = sats,
+                satsPerVByte = satsPerVByte,
+                utxosToSpend = utxosToSpend,
+            )
             syncState()
             Result.success(txId)
         }

@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
@@ -278,7 +279,7 @@ class LightningService @Inject constructor(
                     nodeId = peer.nodeId,
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
-                    pushToCounterpartyMsat = pushToCounterpartySats?.millis,
+                    pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
                     channelConfig = null,
                 )
 
@@ -314,7 +315,7 @@ class LightningService @Inject constructor(
                 Logger.debug("Creating bolt11 for $sat sats")
                 node.bolt11Payment()
                     .receive(
-                        amountMsat = sat.millis,
+                        amountMsat = sat * 1000u,
                         description = Bolt11InvoiceDescription.Direct(
                             description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
                         ),
@@ -352,7 +353,12 @@ class LightningService @Inject constructor(
         return true
     }
 
-    suspend fun send(address: Address, sats: ULong, satsPerVByte: UInt): Txid {
+    suspend fun send(
+        address: Address,
+        sats: ULong,
+        satsPerVByte: UInt,
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.info("Sending $sats sats to $address with satsPerVByte=$satsPerVByte")
@@ -361,7 +367,8 @@ class LightningService @Inject constructor(
             node.onchainPayment().sendToAddress(
                 address = address,
                 amountSats = sats,
-                feeRate = convertVByteToKwu(satsPerVByte)
+                feeRate = convertVByteToKwu(satsPerVByte),
+                utxosToSpend = utxosToSpend,
             )
         }
     }
@@ -376,7 +383,7 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             when (sats != null) {
-                true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats.millis, null)
+                true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
                 else -> node.bolt11Payment().send(bolt11Invoice, null)
             }
         }
