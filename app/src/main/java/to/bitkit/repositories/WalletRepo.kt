@@ -324,11 +324,10 @@ class WalletRepo @Inject constructor(
             if (hasChannels && _walletState.value.receiveOnSpendingBalance) {
                 lightningRepo.createInvoice(
                     amountSats = _walletState.value.bip21AmountSats,
-                    description = _walletState.value.bip21Description
+                    description = _walletState.value.bip21Description,
                 ).onSuccess { bolt11 ->
                     Logger.debug("Bolt11 created: $bolt11", context = TAG)
-                    // TODO add the actual bolt11 string which seem to be no longer available in ldk-node on `main` 🤦🏻‍♂️
-                    setBolt11(bolt11.paymentHash())
+                    setBolt11(bolt11)
                 }
             } else {
                 setBolt11("")

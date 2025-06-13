@@ -14,7 +14,6 @@ import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
-import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -37,13 +36,14 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
-import to.bitkit.ext.millis
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -261,7 +261,8 @@ class LightningService @Inject constructor(
         } catch (e: NodeException) {
             Logger.warn("Peer disconnect error: $peer", LdkError(e))
         }
-    } // endregion
+    }
+     // endregion
 
     // region channels
     suspend fun openChannel(
@@ -307,30 +308,40 @@ class LightningService @Inject constructor(
     // endregion
 
     // region payments
-    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): Bolt11Invoice {
+    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
+        val message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
+        val amountSats = sat ?: 0u
+
         return ServiceQueue.LDK.background {
-            if (sat != null) {
-                Logger.debug("Creating bolt11 for $sat sats")
-                node.bolt11Payment()
-                    .receive(
-                        amountMsat = sat * 1000u,
-                        description = Bolt11InvoiceDescription.Direct(
-                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
-                        ),
-                        expirySecs = expirySecs,
-                    )
-            } else {
-                Logger.debug("Creating bolt11 for variable amount")
-                node.bolt11Payment()
-                    .receiveVariableAmount(
-                        description = Bolt11InvoiceDescription.Direct(
-                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
-                        ),
-                        expirySecs = expirySecs,
-                    )
-            }
+            val bip21 = node.unifiedQrPayment().receive(
+                amountSats = amountSats,
+                message = message,
+                expirySec = expirySecs,
+            )
+
+            return@background extractBolt11String(bip21)
+
+            // TODO restore when ldk-node brings back support to get bolt11 string from 'Bolt11Invoice' model
+            // if (sat != null) {
+            //     node.bolt11Payment()
+            //         .receive(
+            //             amountMsat = sat * 1000u,
+            //             description = Bolt11InvoiceDescription.Direct(
+            //                 description = message
+            //             ),
+            //             expirySecs = expirySecs,
+            //         )
+            // } else {
+            //     node.bolt11Payment()
+            //         .receiveVariableAmount(
+            //             description = Bolt11InvoiceDescription.Direct(
+            //                 description = message
+            //             ),
+            //             expirySecs = expirySecs,
+            //         )
+            // }
         }
     }
 
@@ -487,18 +498,6 @@ class LightningService @Inject constructor(
         }
     }.flowOn(bgDispatcher)
     // endregion
-
-    private fun generateLogFilePath(): String {
-        val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-        val timestamp = dateFormatter.format(Date())
-
-        val sessionLogFilePath = File(Env.logDir).resolve("ldk_$timestamp.log").path
-
-        Logger.debug("Generated LDK log file path: $sessionLogFilePath")
-        return sessionLogFilePath
-    }
 }
 
 // region helpers
@@ -508,11 +507,28 @@ fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
     return this.filter { it.isChannelReady }
 }
 
+private fun generateLogFilePath(): String {
+    val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    val timestamp = dateFormatter.format(Date())
+
+    val sessionLogFilePath = File(Env.logDir).resolve("ldk_$timestamp.log").path
+
+    Logger.debug("Generated LDK log file path: $sessionLogFilePath")
+    return sessionLogFilePath
+}
 
 private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
     // 1 vbyte = 4 weight units, so 1 sats/vbyte = 250 sats/kwu
     val satPerKwu = satsPerVByte.toULong() * 250u
     // Ensure we're above the minimum relay fee
     return FeeRate.fromSatPerKwu(maxOf(satPerKwu, 253u)) // FEERATE_FLOOR_SATS_PER_KW is 253 in LDK
+}
+
+private suspend fun extractBolt11String(bip21: String): String {
+    return (decode(bip21.lowercase()) as? Scanner.OnChain)
+        ?.let { onchainScan -> onchainScan.invoice.params?.get("lightning") }
+        ?: error("Invalid bip21 string format")
 }
 // endregion

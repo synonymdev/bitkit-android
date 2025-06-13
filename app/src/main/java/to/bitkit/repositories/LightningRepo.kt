@@ -274,7 +274,7 @@ class LightningRepo @Inject constructor(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = 86_400u
-    ): Result<Bolt11Invoice> = executeWhenNodeRunning("Create invoice") {
+    ): Result<String> = executeWhenNodeRunning("Create invoice") {
 
         if (coreService.shouldBlockLightning()) {
             return@executeWhenNodeRunning Result.failure(ServiceError.GeoBlocked)
