@@ -20,11 +20,13 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.networkUiText
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -42,8 +44,8 @@ fun AdvancedSettingsScreen(
     Content(
         uiState = uiState,
         showResetSuggestionsDialog = showResetSuggestionsDialog,
-        onBackClick = { navController.popBackStack() },
-        onCloseClick = { navController.navigateToHome() },
+        onBack = { navController.popBackStack() },
+        onClose = { navController.navigateToHome() },
         onAddressTypeClick = {
             // TODO: Navigate to AddressTypePreference
         },
@@ -57,10 +59,10 @@ fun AdvancedSettingsScreen(
             // TODO: Navigate to GapLimit
         },
         onLightningConnectionsClick = {
-            // TODO: Navigate to Channels
+            navController.navigate(Routes.LightningConnections)
         },
         onLightningNodeClick = {
-            // TODO: Navigate to LightningNodeInfo
+            navController.navigateToNodeState()
         },
         onElectrumServerClick = {
             // TODO: Navigate to ElectrumConfig
@@ -92,8 +94,8 @@ fun AdvancedSettingsScreen(
 private fun Content(
     uiState: AdvancedSettingsUiState,
     showResetSuggestionsDialog: Boolean,
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
+    onBack: () -> Unit = {},
+    onClose: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
     onCoinSelectionClick: () -> Unit = {},
     onPaymentPreferenceClick: () -> Unit = {},
@@ -113,8 +115,8 @@ private fun Content(
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__advanced_title),
-            onBackClick = onBackClick,
-            actions = { CloseNavIcon(onCloseClick) },
+            onBackClick = onBack,
+            actions = { CloseNavIcon(onClose) },
         )
         Column(
             modifier = Modifier

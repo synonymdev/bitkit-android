@@ -414,7 +414,7 @@ private fun RootNavHost(
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
-        lightning(walletViewModel, navController)
+        lightningConnections(walletViewModel, navController)
         devSettings(walletViewModel, navController)
         regtestSettings(navController)
         activityItem(activityListViewModel, navController)
@@ -853,11 +853,11 @@ private fun NavGraphBuilder.cjitDetailSettings(
     }
 }
 
-private fun NavGraphBuilder.lightning(
+private fun NavGraphBuilder.lightningConnections(
     viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.Lightning> {
+    composableWithDefaultTransitions<Routes.LightningConnections> {
         LightningSettingsScreen(viewModel, navController)
     }
 }
@@ -1250,10 +1250,6 @@ fun NavController.navigateToCjitDetail(id: String) = navigate(
     route = Routes.CjitDetail(id),
 )
 
-fun NavController.navigateToLightning() = navigate(
-    route = Routes.Lightning,
-)
-
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
 )
@@ -1420,7 +1416,7 @@ object Routes {
     data class CjitDetail(val id: String)
 
     @Serializable
-    data object Lightning
+    data object LightningConnections
 
     @Serializable
     data object DevSettings
