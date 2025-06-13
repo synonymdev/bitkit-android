@@ -94,7 +94,3 @@ fun Long.formatToModernDisplay(): String {
     }
     return formatter.format(sats)
 }
-
-fun Long.btcToSats() = this * SATS_IN_BTC
-fun Long.satsToBtc() = this / SATS_IN_BTC
-
