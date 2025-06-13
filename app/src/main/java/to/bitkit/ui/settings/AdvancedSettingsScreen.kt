@@ -7,6 +7,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -14,17 +17,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.models.Toast
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.networkUiText
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -35,11 +36,12 @@ fun AdvancedSettingsScreen(
     navController: NavController,
     viewModel: AdvancedSettingsViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showResetSuggestionsDialog by remember { mutableStateOf(false) }
 
-    AdvancedSettingsContent(
+    Content(
         uiState = uiState,
+        showResetSuggestionsDialog = showResetSuggestionsDialog,
         onBackClick = { navController.popBackStack() },
         onCloseClick = { navController.navigateToHome() },
         onAddressTypeClick = {
@@ -76,20 +78,20 @@ fun AdvancedSettingsScreen(
             // TODO: Navigate to AddressViewer
         },
         onRescanClick = { viewModel.rescanAddresses() },
-        onSuggestionsResetClick = {
+        onSuggestionsResetClick = { showResetSuggestionsDialog = true },
+        onResetSuggestionsDialogConfirm = {
             viewModel.resetSuggestions()
-            app.toast(
-                type = Toast.ToastType.SUCCESS,
-                title = "Suggestions Reset",
-                description = "All suggestions have been reset",
-            )
+            showResetSuggestionsDialog = false
+            navController.navigateToHome()
         },
+        onResetSuggestionsDialogCancel = { showResetSuggestionsDialog = false },
     )
 }
 
 @Composable
-private fun AdvancedSettingsContent(
+private fun Content(
     uiState: AdvancedSettingsUiState,
+    showResetSuggestionsDialog: Boolean,
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
     onAddressTypeClick: () -> Unit = {},
@@ -105,6 +107,8 @@ private fun AdvancedSettingsContent(
     onAddressViewerClick: () -> Unit = {},
     onRescanClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
+    onResetSuggestionsDialogConfirm: () -> Unit = {},
+    onResetSuggestionsDialogCancel: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -200,6 +204,16 @@ private fun AdvancedSettingsContent(
                 onClick = onSuggestionsResetClick,
             )
         }
+
+        if (showResetSuggestionsDialog) {
+            AppAlertDialog(
+                title = stringResource(R.string.settings__adv__reset_title),
+                text = stringResource(R.string.settings__adv__reset_desc),
+                confirmText = stringResource(R.string.settings__adv__reset_confirm),
+                onConfirm = onResetSuggestionsDialogConfirm,
+                onDismiss = onResetSuggestionsDialogCancel,
+            )
+        }
     }
 }
 
@@ -207,8 +221,9 @@ private fun AdvancedSettingsContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        AdvancedSettingsContent(
-            uiState = AdvancedSettingsUiState()
+        Content(
+            uiState = AdvancedSettingsUiState(),
+            showResetSuggestionsDialog = false,
         )
     }
 }
@@ -217,12 +232,23 @@ private fun Preview() {
 @Composable
 private fun PreviewDev() {
     AppThemeSurface {
-        AdvancedSettingsContent(
+        Content(
             uiState = AdvancedSettingsUiState(
                 isDevModeEnabled = true,
                 isRescanning = true,
-                currentNetwork = Network.REGTEST,
-            )
+            ),
+            showResetSuggestionsDialog = false,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewDialog() {
+    AppThemeSurface {
+        Content(
+            uiState = AdvancedSettingsUiState(),
+            showResetSuggestionsDialog = true,
         )
     }
 }

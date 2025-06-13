@@ -61,7 +61,7 @@ class AdvancedSettingsViewModel @Inject constructor(
 
     fun resetSuggestions() {
         viewModelScope.launch {
-            // TODO: Implement actual suggestions reset
+            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
         }
     }
 
