@@ -15,22 +15,21 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.repositories.WalletRepo
 import uniffi.bitkitcore.AddressType
 import javax.inject.Inject
 
 @HiltViewModel
 class AdvancedSettingsViewModel @Inject constructor(
+    private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
-
-    // TODO Use actual wallet state
-    private val addressType: StateFlow<AddressType> = MutableStateFlow(AddressType.P2WPKH).asStateFlow()
 
     private val _isRescanning = MutableStateFlow(false)
 
     val uiState: StateFlow<AdvancedSettingsUiState> = combine(
         _isRescanning,
-        addressType,
+        walletRepo.walletState.map { it.addressType },
         settingsStore.data.map { it.isDevModeEnabled },
     ) { isRescanning, addressType, devMode ->
         AdvancedSettingsUiState(

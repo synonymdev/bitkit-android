@@ -28,6 +28,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.Activity
 import uniffi.bitkitcore.ActivityFilter
+import uniffi.bitkitcore.AddressType
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import uniffi.bitkitcore.decode
@@ -540,4 +541,5 @@ data class WalletState(
     val walletExists: Boolean = false,
     val isRestoringWallet: Boolean = false,
     val balanceDetails: BalanceDetails? = null, //TODO KEEP ONLY BalanceState IF POSSIBLE
+    val addressType: AddressType = AddressType.P2WPKH,
 )
