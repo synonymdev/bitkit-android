@@ -36,13 +36,13 @@ import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.SATS_IN_BTC
-import to.bitkit.models.btcToSats
-import to.bitkit.models.satsToBtc
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.screens.widgets.calculator.CalculatorViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.viewmodels.CurrencyViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -65,7 +65,7 @@ fun CalculatorCard(
         showWidgetTitle = showWidgetTitle,
         btcPrimaryDisplayUnit = currencyUiState.displayUnit,
         btcValue = btcValue.ifEmpty { calculatorValues.btcValue },
-        onBTCChange = { newValue ->
+        onBtcChange = { newValue ->
             btcValue = newValue
             val satsOrBtc = btcValue.removeSpaces()
             val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) {
@@ -86,8 +86,13 @@ fun CalculatorCard(
         onFiatChange = { newValue ->
             fiatValue = newValue
             val satsValue = currencyViewModel.convertFiatToSats(fiatValue.toDoubleOrNull() ?: 0.0)
-            val satsLong = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) satsValue else satsValue.satsToBtc()
-            btcValue = satsLong.toString()
+            val formatted = if (currencyUiState.displayUnit == BitcoinDisplayUnit.MODERN) {
+                satsValue.formatToModernDisplay()
+            } else {
+                val btcAmount = BigDecimal(satsValue).divide(BigDecimal(SATS_IN_BTC)).formatCurrency(decimalPlaces = 8).orEmpty()
+                btcAmount
+            }
+            btcValue = formatted
             calculatorViewModel.updateCalculatorValues(fiatValue = fiatValue, btcValue = btcValue)
         }
     )
@@ -100,7 +105,7 @@ fun CalculatorCardContent(
     showWidgetTitle: Boolean,
     btcPrimaryDisplayUnit: BitcoinDisplayUnit,
     btcValue: String,
-    onBTCChange: (String) -> Unit,
+    onBtcChange: (String) -> Unit,
     fiatSymbol: String,
     fiatName: String,
     fiatValue: String,
@@ -143,7 +148,7 @@ fun CalculatorCardContent(
             CalculatorInput(
                 modifier = Modifier.fillMaxWidth(),
                 value = btcValue,
-                onValueChange = onBTCChange,
+                onValueChange = onBtcChange,
                 currencySymbol = BITCOIN_SYMBOL,
                 currencyName = stringResource(R.string.settings__general__unit_bitcoin),
             )
@@ -176,7 +181,7 @@ private fun Preview() {
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = true,
                 btcValue = "1800000000", // Will display as "1 800 000 000" in MODERN mode
-                onBTCChange = {},
+                onBtcChange = {},
                 fiatSymbol = "$",
                 fiatValue = "4.55",
                 fiatName = "USD",
@@ -188,7 +193,7 @@ private fun Preview() {
                 modifier = Modifier.fillMaxWidth(),
                 showWidgetTitle = false,
                 btcValue = "22200000", // Will display as "0.22200000" in CLASSIC mode
-                onBTCChange = {},
+                onBtcChange = {},
                 fiatSymbol = "$",
                 fiatValue = "4.55",
                 fiatName = "USD",
