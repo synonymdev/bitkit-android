@@ -24,6 +24,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
@@ -202,14 +203,17 @@ class WidgetsRepo @Inject constructor(
             }
 
             WidgetType.CALCULATOR -> {
-                // TODO: Implement when CalculatorService is ready
-                throw NotImplementedError("Calculator widget not implemented yet")
+                throw NotImplementedError("Calculator widget doesn't need a service")
             }
 
             WidgetType.FACTS -> updateWidget(factsService) { facts ->
                 widgetsStore.updateFacts(facts)
             }
         }
+    }
+
+    suspend fun updateCalculatorValues(calculatorValues: CalculatorValues) = withContext(bgDispatcher) {
+        widgetsStore.updateCalculatorValues(calculatorValues)
     }
 
     companion object {

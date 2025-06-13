@@ -114,11 +114,12 @@ class CurrencyViewModel @Inject constructor(
     private fun collectSettingsData() {
         viewModelScope.launch {
             settingsStore.data.collect { settings ->
-                _uiState.update {
-                    it.copy(
+                _uiState.update { currentState ->
+                    currentState.copy(
                         selectedCurrency = settings.selectedCurrency,
                         displayUnit = settings.displayUnit,
                         primaryDisplay = settings.primaryDisplay,
+                        currencySymbol = currentState.rates.firstOrNull { rate -> rate.quote == settings.selectedCurrency }?.currencySymbol ?: "$"
                     )
                 }
             }
@@ -177,6 +178,7 @@ data class CurrencyUiState(
     val error: Throwable? = null,
     val hasStaleData: Boolean = false,
     val selectedCurrency: String = "USD",
+    val currencySymbol: String = "$",
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
 )
