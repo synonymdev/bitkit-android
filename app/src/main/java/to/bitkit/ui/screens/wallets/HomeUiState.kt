@@ -30,5 +30,6 @@ data class HomeUiState(
     val weatherPreferences: WeatherPreferences = WeatherPreferences(),
     val currentWeather: WeatherModel? = null,
     val pricePreferences: PricePreferences = PricePreferences(),
-    val currentPrice: PriceDTO? = null
+    val currentPrice: PriceDTO? = null,
+    val isEditingWidgets: Boolean = false
 )

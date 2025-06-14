@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.IconButton
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -81,6 +82,7 @@ import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
+import to.bitkit.ui.screens.widgets.DragAndDropWidget
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
@@ -207,7 +209,11 @@ fun HomeScreen(
                         } else {
                             rootNavController.navigate(Routes.AddWidget)
                         }
-                    }
+                    },
+                    onClickConfirmEdit = {},
+                    onClickEnableEdit = {},
+                    onClickEditWidget = {},
+                    onClickDeleteWidget = {},
                 )
             }
             composable<HomeRoutes.Savings>(
@@ -283,6 +289,10 @@ private fun HomeContentView(
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
     onClickAddWidget: () -> Unit,
+    onClickEnableEdit: () -> Unit,
+    onClickConfirmEdit: () -> Unit,
+    onClickEditWidget: (WidgetType) -> Unit,
+    onClickDeleteWidget: (WidgetType) -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -380,94 +390,135 @@ private fun HomeContentView(
 
                     if (homeUiState.showWidgets) {
                         Spacer(modifier = Modifier.height(32.dp))
-                        Text13Up(
-                            stringResource(R.string.widgets__widgets),
-                            color = Colors.White64
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text13Up(
+                                stringResource(R.string.widgets__widgets),
+                                color = Colors.White64
+                            )
+
+                            if (homeUiState.isEditingWidgets) {
+                                IconButton(
+                                    onClick = onClickConfirmEdit
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_check),
+                                        contentDescription = null
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = onClickEnableEdit
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_sort_ascending),
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) { //TODO IMPLEMENT DRAGABLE IN OTHER PR
-                            homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
-                                when (widgetsWithPosition.type) {
-                                    WidgetType.BLOCK -> {
-                                        homeUiState.currentBlock?.run {
-                                            BlockCard(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles,
-                                                showBlock = homeUiState.blocksPreferences.showBlock,
-                                                showTime = homeUiState.blocksPreferences.showTime,
-                                                showDate = homeUiState.blocksPreferences.showDate,
-                                                showTransactions = homeUiState.blocksPreferences.showTransactions,
-                                                showSize = homeUiState.blocksPreferences.showSize,
-                                                showSource = homeUiState.blocksPreferences.showSource,
-                                                time = time,
-                                                date = date,
-                                                transactions = transactionCount,
-                                                size = size,
-                                                source = source,
-                                                block = height
-                                            )
-                                        }
-                                    }
+                        ) {
+                            if (homeUiState.isEditingWidgets) {
+                                homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
+                                    //TODO IMPLEMENT DRAGGABLE COLUMN AND IMPLEMENT GRAD AND DROP DROP
+                                    DragAndDropWidget(
+                                        iconRes = widgetsWithPosition.type.iconRes,
+                                        title = stringResource(widgetsWithPosition.type.title),
+                                        onClickSettings = { onClickEditWidget(widgetsWithPosition.type) },
+                                        onClickDelete = { onClickDeleteWidget(widgetsWithPosition.type) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
 
-                                    WidgetType.CALCULATOR -> {
-                                        currencyViewModel?.let {
-                                            CalculatorCard(
-                                                currencyViewModel = it,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles
-                                            )
-                                        }
-                                    }
+                                }
+                            } else {
 
-                                    WidgetType.FACTS -> {
-                                        homeUiState.currentFact?.run {
-                                            FactsCard(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles,
-                                                showSource = homeUiState.factsPreferences.showSource,
-                                                headline = homeUiState.currentFact,
-                                            )
+                                homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
+                                    when (widgetsWithPosition.type) {
+                                        WidgetType.BLOCK -> {
+                                            homeUiState.currentBlock?.run {
+                                                BlockCard(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles,
+                                                    showBlock = homeUiState.blocksPreferences.showBlock,
+                                                    showTime = homeUiState.blocksPreferences.showTime,
+                                                    showDate = homeUiState.blocksPreferences.showDate,
+                                                    showTransactions = homeUiState.blocksPreferences.showTransactions,
+                                                    showSize = homeUiState.blocksPreferences.showSize,
+                                                    showSource = homeUiState.blocksPreferences.showSource,
+                                                    time = time,
+                                                    date = date,
+                                                    transactions = transactionCount,
+                                                    size = size,
+                                                    source = source,
+                                                    block = height
+                                                )
+                                            }
                                         }
-                                    }
 
-                                    WidgetType.NEWS -> {
-                                        homeUiState.currentArticle?.run {
-                                            HeadlineCard(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles,
-                                                showTime = homeUiState.headlinePreferences.showTime,
-                                                showSource = homeUiState.headlinePreferences.showSource,
-                                                headline = title,
-                                                time = timeAgo,
-                                                source = publisher,
-                                                link = link
-                                            )
+                                        WidgetType.CALCULATOR -> {
+                                            currencyViewModel?.let {
+                                                CalculatorCard(
+                                                    currencyViewModel = it,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles
+                                                )
+                                            }
                                         }
-                                    }
 
-                                    WidgetType.PRICE -> {
-                                        homeUiState.currentPrice?.run {
-                                            PriceCard(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles,
-                                                pricePreferences = homeUiState.pricePreferences,
-                                                priceDTO = homeUiState.currentPrice,
-                                            )
+                                        WidgetType.FACTS -> {
+                                            homeUiState.currentFact?.run {
+                                                FactsCard(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles,
+                                                    showSource = homeUiState.factsPreferences.showSource,
+                                                    headline = homeUiState.currentFact,
+                                                )
+                                            }
                                         }
-                                    }
 
-                                    WidgetType.WEATHER -> {
-                                        homeUiState.currentWeather?.run {
-                                            WeatherCard(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                showWidgetTitle = homeUiState.showWidgetTitles,
-                                                weatherModel = this,
-                                                preferences = homeUiState.weatherPreferences
-                                            )
+                                        WidgetType.NEWS -> {
+                                            homeUiState.currentArticle?.run {
+                                                HeadlineCard(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles,
+                                                    showTime = homeUiState.headlinePreferences.showTime,
+                                                    showSource = homeUiState.headlinePreferences.showSource,
+                                                    headline = title,
+                                                    time = timeAgo,
+                                                    source = publisher,
+                                                    link = link
+                                                )
+                                            }
+                                        }
+
+                                        WidgetType.PRICE -> {
+                                            homeUiState.currentPrice?.run {
+                                                PriceCard(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles,
+                                                    pricePreferences = homeUiState.pricePreferences,
+                                                    priceDTO = homeUiState.currentPrice,
+                                                )
+                                            }
+                                        }
+
+                                        WidgetType.WEATHER -> {
+                                            homeUiState.currentWeather?.run {
+                                                WeatherCard(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    showWidgetTitle = homeUiState.showWidgetTitles,
+                                                    weatherModel = this,
+                                                    preferences = homeUiState.weatherPreferences
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -566,7 +617,11 @@ private fun HomeContentViewPreview() {
             onClickSuggestion = {},
             onRemoveSuggestion = {},
             onClickAddWidget = {},
-            homeUiState = HomeUiState()
+            homeUiState = HomeUiState(),
+            onClickConfirmEdit = {},
+            onClickEnableEdit = {},
+            onClickEditWidget = {},
+            onClickDeleteWidget = {},
         )
     }
 }
