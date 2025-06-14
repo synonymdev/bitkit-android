@@ -142,6 +142,44 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun enableEditMode() {
+        _uiState.update { it.copy(isEditingWidgets = true) }
+    }
+
+    fun disableEditMode() {
+        _uiState.update { it.copy(isEditingWidgets = false) }
+    }
+
+    fun moveWidget(fromIndex: Int, toIndex: Int) {
+        val currentWidgets = _uiState.value.widgetsWithPosition.toMutableList()
+        if (fromIndex in currentWidgets.indices && toIndex in currentWidgets.indices) {
+            val item = currentWidgets.removeAt(fromIndex)
+            currentWidgets.add(toIndex, item)
+
+            // Update positions
+            val updatedWidgets = currentWidgets.mapIndexed { index, widget ->
+                widget.copy(position = index)
+            }
+
+            _uiState.update { it.copy(widgetsWithPosition = updatedWidgets) }
+        }
+    }
+
+    fun confirmWidgetOrder() {
+        viewModelScope.launch {
+            val widgets = _uiState.value.widgetsWithPosition
+            widgetsRepo.updateWidgets(widgets)
+            disableEditMode()
+        }
+    }
+
+    fun deleteWidget(widgetType: WidgetType) {
+        viewModelScope.launch {
+            widgetsRepo.deleteWidget(widgetType)
+        }
+    }
+
+
     private fun createSuggestionsFlow() = combine(
         walletRepo.balanceState,
         settingsStore.data,

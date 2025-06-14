@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -83,6 +84,7 @@ import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
+import to.bitkit.ui.screens.widgets.DragDropColumn
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
 import to.bitkit.ui.screens.widgets.facts.FactsCard
@@ -210,10 +212,21 @@ fun HomeScreen(
                             rootNavController.navigate(Routes.AddWidget)
                         }
                     },
-                    onClickConfirmEdit = {},
-                    onClickEnableEdit = {},
-                    onClickEditWidget = {},
-                    onClickDeleteWidget = {},
+                    onClickConfirmEdit = {
+                        homeViewModel.confirmWidgetOrder()
+                    },
+                    onClickEnableEdit = {
+                        homeViewModel.enableEditMode()
+                    },
+                    onClickEditWidget = { widgetType ->
+                        // Handle widget settings
+                    },
+                    onClickDeleteWidget = { widgetType ->
+                        homeViewModel.deleteWidget(widgetType)
+                    },
+                    onMoveWidget = { fromIndex, toIndex ->
+                        homeViewModel.moveWidget(fromIndex, toIndex)
+                    }
                 )
             }
             composable<HomeRoutes.Savings>(
@@ -293,6 +306,7 @@ private fun HomeContentView(
     onClickConfirmEdit: () -> Unit,
     onClickEditWidget: (WidgetType) -> Unit,
     onClickDeleteWidget: (WidgetType) -> Unit,
+    onMoveWidget: (Int, Int) -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
     onRefresh: () -> Unit,
@@ -392,7 +406,8 @@ private fun HomeContentView(
                         Spacer(modifier = Modifier.height(32.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text13Up(
                                 stringResource(R.string.widgets__widgets),
@@ -422,25 +437,30 @@ private fun HomeContentView(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            if (homeUiState.isEditingWidgets) {
-                                homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
-                                    //TODO IMPLEMENT DRAGGABLE COLUMN AND IMPLEMENT GRAD AND DROP DROP
-                                    DragAndDropWidget(
-                                        iconRes = widgetsWithPosition.type.iconRes,
-                                        title = stringResource(widgetsWithPosition.type.title),
-                                        onClickSettings = { onClickEditWidget(widgetsWithPosition.type) },
-                                        onClickDelete = { onClickDeleteWidget(widgetsWithPosition.type) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                }
-                            } else {
-
-                                homeUiState.widgetsWithPosition.map { widgetsWithPosition ->
+                        if (homeUiState.isEditingWidgets) {
+                            DragDropColumn(
+                                items = homeUiState.widgetsWithPosition,
+                                onMove = onMoveWidget,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { widgetWithPosition, isDragging ->
+                                DragAndDropWidget(
+                                    iconRes = widgetWithPosition.type.iconRes,
+                                    title = stringResource(widgetWithPosition.type.title),
+                                    onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
+                                    onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer {
+                                            alpha = if (isDragging) 0.8f else 1.0f
+                                        }
+                                )
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                homeUiState.widgetsWithPosition.forEach { widgetsWithPosition ->
                                     when (widgetsWithPosition.type) {
                                         WidgetType.BLOCK -> {
                                             homeUiState.currentBlock?.run {
@@ -524,6 +544,7 @@ private fun HomeContentView(
                                 }
                             }
                         }
+
                         Spacer(modifier = Modifier.height(32.dp))
                         TertiaryButton(
                             text = stringResource(R.string.widgets__add),
@@ -622,6 +643,7 @@ private fun HomeContentViewPreview() {
             onClickEnableEdit = {},
             onClickEditWidget = {},
             onClickDeleteWidget = {},
+            onMoveWidget = { _, _ -> },
         )
     }
 }
