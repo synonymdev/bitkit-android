@@ -179,6 +179,18 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun displayAlertDeleteWidget(widgetType: WidgetType) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(deleteWidgetAlert = widgetType) }
+        }
+    }
+
+    fun dismissAlertDeleteWidget() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(deleteWidgetAlert = null) }
+        }
+    }
+
 
     private fun createSuggestionsFlow() = combine(
         walletRepo.balanceState,

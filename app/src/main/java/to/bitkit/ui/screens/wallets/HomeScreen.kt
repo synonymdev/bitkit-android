@@ -24,12 +24,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.IconButton
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +80,7 @@ import to.bitkit.ui.navigateToTransferSavingsAvailability
 import to.bitkit.ui.navigateToTransferSavingsIntro
 import to.bitkit.ui.navigateToTransferSpendingAmount
 import to.bitkit.ui.navigateToTransferSpendingIntro
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
@@ -102,6 +103,7 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
+import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -115,6 +117,9 @@ fun HomeScreen(
     rootNavController: NavController,
 ) {
     val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         val walletNavController = rememberNavController()
@@ -124,8 +129,6 @@ fun HomeScreen(
         ) {
             composable<HomeRoutes.Home> {
                 val context = LocalContext.current
-                val homeViewModel: HomeViewModel = hiltViewModel()
-                val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
                 val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                 val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                 val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
@@ -229,7 +232,7 @@ fun HomeScreen(
                         }
                     },
                     onClickDeleteWidget = { widgetType ->
-                        homeViewModel.deleteWidget(widgetType)
+                        homeViewModel.displayAlertDeleteWidget(widgetType)
                     },
                     onMoveWidget = { fromIndex, toIndex ->
                         homeViewModel.moveWidget(fromIndex, toIndex)
@@ -288,6 +291,22 @@ fun HomeScreen(
                     onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                 )
             }
+        }
+
+        homeUiState.deleteWidgetAlert?.let { type ->
+            AppAlertDialog(
+                title = stringResource(R.string.widgets__delete__title),
+                text = stringResource(R.string.widgets__delete__description).replace(
+                    "{name}",
+                    stringResource(type.title)
+                ),
+                confirmText = stringResource(R.string.common__delete_yes),
+                dismissText = stringResource(R.string.common__dialog_cancel),
+                onConfirm = { homeViewModel.deleteWidget(widgetType = type) },
+                onDismiss = {
+                    homeViewModel.dismissAlertDeleteWidget()
+                },
+            )
         }
 
         TabBar(

@@ -1,9 +1,9 @@
 package to.bitkit.ui.screens.wallets
 
 import androidx.compose.runtime.Stable
-import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.models.Suggestion
+import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
@@ -31,5 +31,6 @@ data class HomeUiState(
     val currentWeather: WeatherModel? = null,
     val pricePreferences: PricePreferences = PricePreferences(),
     val currentPrice: PriceDTO? = null,
-    val isEditingWidgets: Boolean = false
+    val isEditingWidgets: Boolean = false,
+    val deleteWidgetAlert: WidgetType? = null
 )
