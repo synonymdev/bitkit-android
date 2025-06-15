@@ -219,7 +219,14 @@ fun HomeScreen(
                         homeViewModel.enableEditMode()
                     },
                     onClickEditWidget = { widgetType ->
-                        // Handle widget settings
+                        when (widgetType) {
+                            WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
+                            WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)
+                            WidgetType.FACTS -> rootNavController.navigate(Routes.FactsPreview)
+                            WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
+                            WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
+                            WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
+                        }
                     },
                     onClickDeleteWidget = { widgetType ->
                         homeViewModel.deleteWidget(widgetType)
