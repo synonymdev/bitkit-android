@@ -17,6 +17,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -396,6 +397,38 @@ class LightningService @Inject constructor(
             when (sats != null) {
                 true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
                 else -> node.bolt11Payment().send(bolt11Invoice, null)
+            }
+        }
+    }
+    // endregion
+
+    // region utxo selection
+    suspend fun listSpendableOutputs(): List<SpendableUtxo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().listSpendableOutputs()
+        }
+    }
+
+    suspend fun selectUtxosWithAlgorithm(
+        targetAmountSats: ULong,
+        satsPerVByte: UInt,
+        algorithm: CoinSelectionAlgorithm,
+        utxos: List<SpendableUtxo>?,
+    ): List<SpendableUtxo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().selectUtxosWithAlgorithm(
+                    targetAmountSats = targetAmountSats,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    algorithm = algorithm,
+                    utxos = utxos,
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
             }
         }
     }
