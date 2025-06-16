@@ -326,7 +326,6 @@ class WalletRepo @Inject constructor(
                     amountSats = _walletState.value.bip21AmountSats,
                     description = _walletState.value.bip21Description,
                 ).onSuccess { bolt11 ->
-                    Logger.debug("Bolt11 created: $bolt11", context = TAG)
                     setBolt11(bolt11)
                 }
             } else {
