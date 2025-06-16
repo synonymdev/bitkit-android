@@ -32,5 +32,5 @@ data class HomeUiState(
     val pricePreferences: PricePreferences = PricePreferences(),
     val currentPrice: PriceDTO? = null,
     val isEditingWidgets: Boolean = false,
-    val deleteWidgetAlert: WidgetType? = null
+    val deleteWidgetAlert: WidgetType? = null,
 )
