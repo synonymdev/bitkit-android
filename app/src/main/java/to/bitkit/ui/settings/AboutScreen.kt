@@ -25,6 +25,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -91,95 +92,7 @@ fun AboutScreen(
                     .weight(1f)
             )
 
-            FlowRow(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_WEBSITE.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_globe),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_MEDIUM.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_medium),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_X.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_x_twitter),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_DISCORD.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_discord),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_TELEGRAM.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_telegram),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_GITHUB.toUri())
-                        context.startActivity(intent)
-                    },
-                    containerColor = Colors.White16,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_github),
-                        contentDescription = null,
-                        tint = Colors.White
-                    )
-                }
-            }
+            Links(modifier = Modifier.fillMaxWidth())
 
             VerticalSpacer(16.dp)
         }
