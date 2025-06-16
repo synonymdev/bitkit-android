@@ -135,4 +135,6 @@ internal object Env {
     const val BITKIT_TELEGRAM = "https://t.me/bitkitchat"
     const val BITKIT_GITHUB = "https://github.com/synonymdev"
     const val BITKIT_HELP_CENTER = "https://help.bitkit.to"
+
+    const val TERMS_OF_USE_URL = "https://bitkit.to/terms-of-use"
 }

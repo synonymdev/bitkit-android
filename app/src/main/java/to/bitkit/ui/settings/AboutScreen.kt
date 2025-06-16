@@ -4,14 +4,10 @@ import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,8 +54,10 @@ fun AboutScreen(
             VerticalSpacer(32.dp)
 
             SettingsButtonRow(title = stringResource(R.string.settings__about__legal), onClick = {
-
+                val intent = Intent(Intent.ACTION_VIEW, Env.TERMS_OF_USE_URL.toUri())
+                context.startActivity(intent)
             })
+
             SettingsButtonRow(title = stringResource(R.string.settings__about__share), onClick = {
                 shareText(
                     context,
