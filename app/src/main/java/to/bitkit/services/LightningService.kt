@@ -434,6 +434,47 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    // region boost
+    suspend fun bumpFeeByRbf(txid: Txid, satsPerVByte: UInt): Txid {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Bumping fee for tx $txid with satsPerVByte=$satsPerVByte")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().bumpFeeByRbf(
+                    txid = txid,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
+    suspend fun accelerateByCpfp(
+        txid: Txid,
+        satsPerVByte: UInt,
+        destinationAddress: Address,
+    ): Txid {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Accelerating tx $txid by CPFP, satsPerVByte=$satsPerVByte, destinationAddress=$destinationAddress")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().accelerateByCpfp(
+                    txid = txid,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    destinationAddress = destinationAddress,
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+    // endregion
+
     // region events
     private var shouldListenForEvents = true
 
