@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -13,11 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,16 +30,20 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +60,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -103,7 +111,6 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
-import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -119,7 +126,7 @@ fun HomeScreen(
     val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
     val homeViewModel: HomeViewModel = hiltViewModel()
     val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
-
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     Box(modifier = Modifier.fillMaxSize()) {
         val walletNavController = rememberNavController()
@@ -140,6 +147,7 @@ fun HomeScreen(
                     homeUiState = homeUiState,
                     rootNavController = rootNavController,
                     walletNavController = walletNavController,
+                    drawerState = drawerState,
                     onRefresh = {
                         walletViewModel.onPullToRefresh()
                         homeViewModel.refreshWidgets()
@@ -335,11 +343,64 @@ private fun HomeContentView(
     onMoveWidget: (Int, Int) -> Unit,
     rootNavController: NavController,
     walletNavController: NavController,
+    drawerState: DrawerState,
     onRefresh: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+
+
     AppScaffold(
-        navController = rootNavController,
         titleText = stringResource(R.string.slashtags__your_name_capital),
+        drawerState = drawerState,
+        actions = {
+//            IconButton(onClick = navController::navigateToNodeState) {
+//                Icon(
+//                    imageVector = Icons.Default.Bolt,
+//                    contentDescription = stringResource(R.string.settings__adv__lightning_node),
+//                )
+//            }
+//            IconButton(navController::navigateToSettings) {
+//                Icon(
+//                    imageVector = Icons.Outlined.Settings,
+//                    contentDescription = stringResource(R.string.settings__settings),
+//                )
+//            }
+            IconButton(onClick = {
+                scope.launch {
+                    drawerState.open()
+                }
+            }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_list),
+                    contentDescription = stringResource(R.string.settings__settings),
+                )
+            }
+        },
+        drawerContent = {
+            val drawerWidth = 240.dp
+
+            Column(
+                modifier = Modifier
+                    .width(drawerWidth)
+                    .fillMaxHeight()
+                    .background(Colors.Brand)
+            ) {
+
+
+//                NavigationDrawerItem(
+//                    label = { Text(stringResource(R.string.menu__settings)) },
+//                    selected = false,
+//                    onClick = {
+//                        scope.launch {
+//                            rootNavController.navigateToSettings()
+//                        }
+//                    },
+//                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+//                )
+
+                // Add more items as needed
+            }
+        }
     ) {
         RequestNotificationPermissions()
         val balances = LocalBalances.current
@@ -661,6 +722,7 @@ private fun HomeContentViewPreview() {
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
             onRefresh = {},
+            drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
             onClickSuggestion = {},
             onRemoveSuggestion = {},
             onClickAddWidget = {},
