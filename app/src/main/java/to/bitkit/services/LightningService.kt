@@ -263,7 +263,7 @@ class LightningService @Inject constructor(
             Logger.warn("Peer disconnect error: $peer", LdkError(e))
         }
     }
-     // endregion
+    // endregion
 
     // region channels
     suspend fun openChannel(
