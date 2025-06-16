@@ -434,7 +434,7 @@ private fun HomeContentView(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
-                    label = stringResource(R.string.wallet__drawer__widgets),
+                    label = stringResource(R.string.wallet__drawer__shop),
                     iconRes = R.drawable.ic_store_front
                 )
 
