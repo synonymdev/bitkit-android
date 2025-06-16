@@ -769,7 +769,14 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
 
 private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.AboutSettings> {
-        AboutScreen(navController)
+        AboutScreen(
+            onBack = {
+                navController.popBackStack()
+            },
+            onClose = {
+                navController.navigateToHome()
+            }
+        )
     }
 }
 

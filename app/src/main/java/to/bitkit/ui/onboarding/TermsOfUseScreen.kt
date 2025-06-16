@@ -36,6 +36,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
@@ -98,7 +99,7 @@ fun TermsOfUseScreen(
                 CheckButton(
                     title = stringResource(R.string.onboarding__tos_checkbox),
                     htmlText = stringResource(R.string.onboarding__tos_checkbox_value)
-                        .withAccentLink("https://bitkit.to/terms-of-use"),
+                        .withAccentLink(Env.TERMS_OF_USE_URL),
                     isChecked = termsAccepted,
                     onCheckedChange = { termsAccepted = it },
                     modifier = Modifier.padding(horizontal = horizontalPadding)
