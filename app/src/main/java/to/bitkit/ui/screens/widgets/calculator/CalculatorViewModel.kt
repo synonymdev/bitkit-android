@@ -44,9 +44,6 @@ class CalculatorViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
             initialValue = true
         )
-
-    //TODO PERSIST CURRENT VALUE
-
     fun removeWidget() {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.CALCULATOR)
