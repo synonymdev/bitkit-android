@@ -1,52 +1,193 @@
 package to.bitkit.ui.settings
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
+import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.NavController
+import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import to.bitkit.BuildConfig
 import to.bitkit.R
-import to.bitkit.ui.navigateToHome
+import to.bitkit.env.Env
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @Composable
 fun AboutScreen(
-    navController: NavController,
+    onBack: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    AboutContent(
-        onBackClick = { navController.popBackStack() },
-        onCloseClick = { navController.navigateToHome() },
-    )
-}
+    val context = LocalContext.current
 
-@Composable
-private fun AboutContent(
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
-) {
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.settings__about_title),
-            onBackClick = onBackClick,
-            actions = { CloseNavIcon(onCloseClick) },
+            titleText = stringResource(R.string.settings__about__title),
+            onBackClick = onBack,
+            actions = { CloseNavIcon(onClick = onClose) },
         )
-        Box(modifier = Modifier.fillMaxSize()) {
-            Text("TODO: About Screen", modifier = Modifier.align(Alignment.Center))
+
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            VerticalSpacer(32.dp)
+
+            BodyM(text = stringResource(R.string.settings__about__text), color = Colors.White64)
+
+            VerticalSpacer(32.dp)
+
+            SettingsButtonRow(title = stringResource(R.string.settings__about__legal), onClick = {
+
+            })
+            SettingsButtonRow(title = stringResource(R.string.settings__about__share), onClick = {
+
+            })
+
+            VerticalSpacer(14.dp)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                BodyM(text = stringResource(R.string.settings__about__version))
+                BodyM(text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = Colors.White50)
+            }
+
+            VerticalSpacer(14.dp)
+
+            HorizontalDivider()
+
+            Image(
+                painter = painterResource(R.drawable.bitkit_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
+                    .weight(1f)
+            )
+
+            FlowRow(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_WEBSITE.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_globe),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_MEDIUM.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_medium),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_X.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_x_twitter),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_DISCORD.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_discord),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_TELEGRAM.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_telegram),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_GITHUB.toUri())
+                        context.startActivity(intent)
+                    },
+                    containerColor = Colors.White16,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_github),
+                        contentDescription = null,
+                        tint = Colors.White
+                    )
+                }
+            }
+
+            VerticalSpacer(16.dp)
         }
     }
 }
+
 
 @Preview
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        AboutContent()
+        AboutScreen(
+            onBack = {},
+            onClose = {}
+        )
     }
 }
