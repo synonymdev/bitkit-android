@@ -27,14 +27,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.Text
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -52,8 +56,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -72,12 +79,15 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetType
+import to.bitkit.ui.components.DrawerItem
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
@@ -105,6 +115,7 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.InterFontFamily
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
@@ -377,7 +388,7 @@ private fun HomeContentView(
             }
         },
         drawerContent = {
-            val drawerWidth = 240.dp
+            val drawerWidth = 200.dp
 
             Column(
                 modifier = Modifier
@@ -385,20 +396,56 @@ private fun HomeContentView(
                     .fillMaxHeight()
                     .background(Colors.Brand)
             ) {
+                VerticalSpacer(60.dp)
 
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__wallet),
+                    iconRes = R.drawable.ic_coins
+                )
 
-//                NavigationDrawerItem(
-//                    label = { Text(stringResource(R.string.menu__settings)) },
-//                    selected = false,
-//                    onClick = {
-//                        scope.launch {
-//                            rootNavController.navigateToSettings()
-//                        }
-//                    },
-//                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-//                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-                // Add more items as needed
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__activity),
+                    iconRes = R.drawable.ic_heartbeat
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__contacts),
+                    iconRes = R.drawable.ic_users
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__profile),
+                    iconRes = R.drawable.ic_user_square
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__widgets),
+                    iconRes = R.drawable.ic_stack
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__widgets),
+                    iconRes = R.drawable.ic_store_front
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                DrawerItem(
+                    label = stringResource(R.string.wallet__drawer__settings),
+                    iconRes = R.drawable.ic_settings
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
         }
     ) {
