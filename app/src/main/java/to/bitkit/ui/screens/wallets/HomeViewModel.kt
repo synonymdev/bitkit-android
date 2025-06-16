@@ -52,7 +52,7 @@ class HomeViewModel @Inject constructor(
                 _currentArticle,
                 _currentFact
             ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
-                HomeUiState(
+                _uiState.value.copy(
                     suggestions = suggestions,
                     showWidgets = settings.showWidgets,
                     showWidgetTitles = settings.showWidgetTitles,
@@ -176,6 +176,7 @@ class HomeViewModel @Inject constructor(
     fun deleteWidget(widgetType: WidgetType) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(widgetType)
+            dismissAlertDeleteWidget()
         }
     }
 
