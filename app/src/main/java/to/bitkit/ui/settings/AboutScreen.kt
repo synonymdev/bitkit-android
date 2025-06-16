@@ -29,6 +29,7 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -59,7 +60,12 @@ fun AboutScreen(
 
             })
             SettingsButtonRow(title = stringResource(R.string.settings__about__share), onClick = {
-
+                shareText(
+                    context,
+                    context.getString(R.string.settings__about__shareText)
+                        .replace("{appStoreUrl}", Env.APP_STORE_URL)
+                        .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
+                )
             })
 
             VerticalSpacer(14.dp)
