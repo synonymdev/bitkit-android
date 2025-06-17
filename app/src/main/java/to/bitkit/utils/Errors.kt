@@ -127,6 +127,11 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is NodeException.InvalidCustomTlvs -> "Invalid custom TLVs"
                 is NodeException.InvalidDateTime -> "Invalid date time"
                 is NodeException.InvalidFeeRate -> "Invalid fee rate"
+                is NodeException.CannotRbfFundingTransaction -> "Cannot RBF funding transaction"
+                is NodeException.CoinSelectionFailed -> "Coin selection failed"
+                is NodeException.NoSpendableOutputs -> "No spendable outputs"
+                is NodeException.TransactionAlreadyConfirmed -> "Transaction already confirmed"
+                is NodeException.TransactionNotFound -> "Transaction not found"
                 else -> exception.message
             }?.let { "LDK Node error: $it" }
         }

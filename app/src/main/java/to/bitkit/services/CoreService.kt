@@ -557,6 +557,33 @@ class BlocktankService(
             openChannel(orderId = orderId, connectionString = nodeId)
         }
     }
+
+    // MARK: - Regtest methods
+    suspend fun regtestMine(count: UInt = 1u) {
+        uniffi.bitkitcore.regtestMine(count = count)
+    }
+
+    suspend fun regtestDeposit(address: String, amountSat: ULong = 10_000_000uL): String {
+        return uniffi.bitkitcore.regtestDeposit(
+            address = address,
+            amountSat = amountSat,
+        )
+    }
+
+    suspend fun regtestPay(invoice: String, amountSat: ULong? = null): String {
+        return uniffi.bitkitcore.regtestPay(
+            invoice = invoice,
+            amountSat = amountSat,
+        )
+    }
+
+    suspend fun regtestCloseChannel(fundingTxId: String, vout: UInt, forceCloseAfterS: ULong = 86_400uL): String {
+        return uniffi.bitkitcore.regtestCloseChannel(
+            fundingTxId = fundingTxId,
+            vout = vout,
+            forceCloseAfterS = forceCloseAfterS,
+        )
+    }
 }
 
 // endregion

@@ -14,10 +14,10 @@ import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
-import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
@@ -36,13 +37,14 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
-import to.bitkit.ext.millis
 import to.bitkit.ext.uByteList
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import uniffi.bitkitcore.Scanner
+import uniffi.bitkitcore.decode
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -260,7 +262,8 @@ class LightningService @Inject constructor(
         } catch (e: NodeException) {
             Logger.warn("Peer disconnect error: $peer", LdkError(e))
         }
-    } // endregion
+    }
+    // endregion
 
     // region channels
     suspend fun openChannel(
@@ -278,7 +281,7 @@ class LightningService @Inject constructor(
                     nodeId = peer.nodeId,
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
-                    pushToCounterpartyMsat = pushToCounterpartySats?.millis,
+                    pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
                     channelConfig = null,
                 )
 
@@ -306,30 +309,40 @@ class LightningService @Inject constructor(
     // endregion
 
     // region payments
-    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): Bolt11Invoice {
+    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
+        val message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
+        val amountSats = sat ?: 0u
+
         return ServiceQueue.LDK.background {
-            if (sat != null) {
-                Logger.debug("Creating bolt11 for $sat sats")
-                node.bolt11Payment()
-                    .receive(
-                        amountMsat = sat.millis,
-                        description = Bolt11InvoiceDescription.Direct(
-                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
-                        ),
-                        expirySecs = expirySecs,
-                    )
-            } else {
-                Logger.debug("Creating bolt11 for variable amount")
-                node.bolt11Payment()
-                    .receiveVariableAmount(
-                        description = Bolt11InvoiceDescription.Direct(
-                            description = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
-                        ),
-                        expirySecs = expirySecs,
-                    )
-            }
+            val bip21 = node.unifiedQrPayment().receive(
+                amountSats = amountSats,
+                message = message,
+                expirySec = expirySecs,
+            )
+
+            return@background extractBolt11String(bip21)
+
+            // TODO restore when ldk-node brings back support to get bolt11 string from 'Bolt11Invoice' model
+            // if (sat != null) {
+            //     node.bolt11Payment()
+            //         .receive(
+            //             amountMsat = sat * 1000u,
+            //             description = Bolt11InvoiceDescription.Direct(
+            //                 description = message
+            //             ),
+            //             expirySecs = expirySecs,
+            //         )
+            // } else {
+            //     node.bolt11Payment()
+            //         .receiveVariableAmount(
+            //             description = Bolt11InvoiceDescription.Direct(
+            //                 description = message
+            //             ),
+            //             expirySecs = expirySecs,
+            //         )
+            // }
         }
     }
 
@@ -352,7 +365,12 @@ class LightningService @Inject constructor(
         return true
     }
 
-    suspend fun send(address: Address, sats: ULong, satsPerVByte: UInt): Txid {
+    suspend fun send(
+        address: Address,
+        sats: ULong,
+        satsPerVByte: UInt,
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.info("Sending $sats sats to $address with satsPerVByte=$satsPerVByte")
@@ -361,20 +379,97 @@ class LightningService @Inject constructor(
             node.onchainPayment().sendToAddress(
                 address = address,
                 amountSats = sats,
-                feeRate = convertVByteToKwu(satsPerVByte)
+                feeRate = convertVByteToKwu(satsPerVByte),
+                utxosToSpend = utxosToSpend,
             )
         }
     }
 
-    suspend fun send(bolt11: Bolt11Invoice, sats: ULong? = null): PaymentId {
+    suspend fun send(bolt11: String, sats: ULong? = null): PaymentId {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.debug("Paying bolt11: $bolt11")
 
+        val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
+            .getOrElse { e -> throw LdkError(e as NodeException) }
+
         return ServiceQueue.LDK.background {
             when (sats != null) {
-                true -> node.bolt11Payment().sendUsingAmount(bolt11, sats.millis, null)
-                else -> node.bolt11Payment().send(bolt11, null)
+                true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
+                else -> node.bolt11Payment().send(bolt11Invoice, null)
+            }
+        }
+    }
+    // endregion
+
+    // region utxo selection
+    suspend fun listSpendableOutputs(): List<SpendableUtxo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().listSpendableOutputs()
+        }
+    }
+
+    suspend fun selectUtxosWithAlgorithm(
+        targetAmountSats: ULong,
+        satsPerVByte: UInt,
+        algorithm: CoinSelectionAlgorithm,
+        utxos: List<SpendableUtxo>?,
+    ): List<SpendableUtxo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().selectUtxosWithAlgorithm(
+                    targetAmountSats = targetAmountSats,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    algorithm = algorithm,
+                    utxos = utxos,
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+    // endregion
+
+    // region boost
+    suspend fun bumpFeeByRbf(txid: Txid, satsPerVByte: UInt): Txid {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Bumping fee for tx $txid with satsPerVByte=$satsPerVByte")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().bumpFeeByRbf(
+                    txid = txid,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
+    suspend fun accelerateByCpfp(
+        txid: Txid,
+        satsPerVByte: UInt,
+        destinationAddress: Address,
+    ): Txid {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Accelerating tx $txid by CPFP, satsPerVByte=$satsPerVByte, destinationAddress=$destinationAddress")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().accelerateByCpfp(
+                    txid = txid,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    destinationAddress = destinationAddress,
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
             }
         }
     }
@@ -477,18 +572,6 @@ class LightningService @Inject constructor(
         }
     }.flowOn(bgDispatcher)
     // endregion
-
-    private fun generateLogFilePath(): String {
-        val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-        val timestamp = dateFormatter.format(Date())
-
-        val sessionLogFilePath = File(Env.logDir).resolve("ldk_$timestamp.log").path
-
-        Logger.debug("Generated LDK log file path: $sessionLogFilePath")
-        return sessionLogFilePath
-    }
 }
 
 // region helpers
@@ -498,11 +581,28 @@ fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
     return this.filter { it.isChannelReady }
 }
 
+private fun generateLogFilePath(): String {
+    val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    val timestamp = dateFormatter.format(Date())
+
+    val sessionLogFilePath = File(Env.logDir).resolve("ldk_$timestamp.log").path
+
+    Logger.debug("Generated LDK log file path: $sessionLogFilePath")
+    return sessionLogFilePath
+}
 
 private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
     // 1 vbyte = 4 weight units, so 1 sats/vbyte = 250 sats/kwu
     val satPerKwu = satsPerVByte.toULong() * 250u
     // Ensure we're above the minimum relay fee
     return FeeRate.fromSatPerKwu(maxOf(satPerKwu, 253u)) // FEERATE_FLOOR_SATS_PER_KW is 253 in LDK
+}
+
+private suspend fun extractBolt11String(bip21: String): String {
+    return (decode(bip21.lowercase()) as? Scanner.OnChain)
+        ?.let { onchainScan -> onchainScan.invoice.params?.get("lightning") }
+        ?: error("Invalid bip21 string format")
 }
 // endregion

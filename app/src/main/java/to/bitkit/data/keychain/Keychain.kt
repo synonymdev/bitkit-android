@@ -1,6 +1,7 @@
 package to.bitkit.data.keychain
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,17 +24,18 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.keychainDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "keychain"
+)
+
 @Singleton
 class Keychain @Inject constructor(
     private val db: AppDb,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : BaseCoroutineScope(dispatcher) {
-    private val alias = "keychain"
-    private val keyStore by lazy { AndroidKeyStore(alias) }
-
-    private val Context.keychain by preferencesDataStore(alias, scope = this)
-    private val keychain = context.keychain
+    private val keyStore by lazy { AndroidKeyStore(alias = "keychain") }
+    private val keychain = context.keychainDataStore
 
     val snapshot get() = runBlocking(this.coroutineContext) { keychain.data.first() }
 
