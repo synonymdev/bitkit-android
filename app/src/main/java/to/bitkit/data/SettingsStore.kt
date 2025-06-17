@@ -40,8 +40,8 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun deleteLastUsedTag(tag: String) {
-        store.updateData {
-            it.copy(lastUsedTags = it.lastUsedTags.filter { it != tag })
+        store.updateData { currentSettings ->
+            currentSettings.copy(lastUsedTags = currentSettings.lastUsedTags.filter { it != tag })
         }
     }
 
