@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.Text
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -38,8 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -57,11 +54,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -80,7 +74,6 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.DrawerItem
 import to.bitkit.ui.components.EmptyStateView
@@ -117,7 +110,6 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.InterFontFamily
 import to.bitkit.ui.utils.screenSlideIn
 import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
@@ -361,23 +353,10 @@ private fun HomeContentView(
 ) {
     val scope = rememberCoroutineScope()
 
-
     AppScaffold(
         titleText = stringResource(R.string.slashtags__your_name_capital),
         drawerState = drawerState,
         actions = {
-//            IconButton(onClick = navController::navigateToNodeState) {
-//                Icon(
-//                    imageVector = Icons.Default.Bolt,
-//                    contentDescription = stringResource(R.string.settings__adv__lightning_node),
-//                )
-//            }
-//            IconButton(navController::navigateToSettings) {
-//                Icon(
-//                    imageVector = Icons.Outlined.Settings,
-//                    contentDescription = stringResource(R.string.settings__settings),
-//                )
-//            }
             IconButton(onClick = {
                 scope.launch {
                     drawerState.open()
@@ -463,6 +442,8 @@ private fun HomeContentView(
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                //TODO NAVIGATE TO APP STATE
             }
         }
     ) {
