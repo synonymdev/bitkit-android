@@ -324,7 +324,7 @@ class WalletRepo @Inject constructor(
             if (hasChannels && _walletState.value.receiveOnSpendingBalance) {
                 lightningRepo.createInvoice(
                     amountSats = _walletState.value.bip21AmountSats,
-                    description = _walletState.value.bip21Description
+                    description = _walletState.value.bip21Description,
                 ).onSuccess { bolt11 ->
                     setBolt11(bolt11)
                 }
