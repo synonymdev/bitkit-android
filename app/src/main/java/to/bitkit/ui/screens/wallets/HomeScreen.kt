@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -92,6 +93,7 @@ import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToQrScanner
+import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.navigateToTransferSavingsAvailability
@@ -400,49 +402,64 @@ private fun HomeContentView(
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__wallet),
-                    iconRes = R.drawable.ic_coins
+                    iconRes = R.drawable.ic_coins,
+                    modifier = Modifier.clickable {
+                        scope.launch { drawerState.close() }
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__activity),
-                    iconRes = R.drawable.ic_heartbeat
+                    iconRes = R.drawable.ic_heartbeat,
+                    modifier = Modifier.clickable {
+                        walletNavController.navigate(HomeRoutes.AllActivity)
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__contacts),
-                    iconRes = R.drawable.ic_users
+                    iconRes = R.drawable.ic_users // TODO IMPLEMENT CONTACTS
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__profile),
-                    iconRes = R.drawable.ic_user_square
+                    iconRes = R.drawable.ic_user_square, // TODO IMPLEMENT
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__widgets),
-                    iconRes = R.drawable.ic_stack
+                    iconRes = R.drawable.ic_stack,
+                    modifier = Modifier.clickable {
+                        onClickAddWidget()
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__shop),
-                    iconRes = R.drawable.ic_store_front
+                    iconRes = R.drawable.ic_store_front,
+                    modifier = Modifier.clickable {
+                        rootNavController.navigate(Routes.ShopDiscover)
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 DrawerItem(
                     label = stringResource(R.string.wallet__drawer__settings),
-                    iconRes = R.drawable.ic_settings
+                    iconRes = R.drawable.ic_settings,
+                    modifier = Modifier.clickable {
+                        rootNavController.navigateToSettings()
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
