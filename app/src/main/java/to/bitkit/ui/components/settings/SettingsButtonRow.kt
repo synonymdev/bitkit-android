@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,11 +54,12 @@ fun SettingsButtonRow(
     loading: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Column {
-        Column(
-            modifier = modifier
-                .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
-        ) {
+    val alphaModifier = Modifier.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
+    Column(
+        modifier = modifier
+            .clickableAlpha(onClick = if (enabled) onClick else null)
+    ) {
+        Column(modifier = alphaModifier) {
             val rowHeight = when {
                 subtitle != null && iconRes != null -> 90.dp
                 subtitle != null -> 74.dp
@@ -67,8 +69,7 @@ fun SettingsButtonRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(rowHeight)
-                    .clickableAlpha(onClick = if (enabled) onClick else null)
+                    .heightIn(min = rowHeight)
             ) {
                 if (iconRes != null) {
                     Icon(
@@ -142,15 +143,17 @@ fun SettingsButtonRow(
                     }
                 }
             }
-            if (description != null) {
-                BodyS(
-                    text = description,
-                    color = Colors.White64,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-                )
-            }
         }
         HorizontalDivider()
+        if (description != null) {
+            BodyS(
+                text = description,
+                color = Colors.White64,
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .then(alphaModifier),
+            )
+        }
     }
 }
 
@@ -192,6 +195,11 @@ private fun Preview() {
                 iconRes = R.drawable.ic_copy,
                 loading = true,
                 value = SettingsButtonValue.BooleanValue(true),
+                onClick = {},
+            )
+            SettingsButtonRow(
+                title = "Item With Description",
+                description = "This is a long description text that should normally overflow when rendered in preview.",
                 onClick = {},
             )
             SettingsButtonRow(
