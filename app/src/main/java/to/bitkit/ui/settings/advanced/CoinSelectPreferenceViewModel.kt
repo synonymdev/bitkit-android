@@ -50,5 +50,5 @@ class CoinSelectPreferenceViewModel @Inject constructor(
 
 data class CoinSelectPreferenceUiState(
     val isAutoPilot: Boolean = false,
-    val coinSelectionPreference: CoinSelectionPreference = CoinSelectionPreference.SmallestFirst,
+    val coinSelectionPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
 )

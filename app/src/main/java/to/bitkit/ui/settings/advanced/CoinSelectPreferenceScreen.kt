@@ -36,13 +36,9 @@ fun CoinSelectPreferenceScreen(
         uiState = uiState,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
-        onManualModeClick = { viewModel.setAutoMode(false) },
-        onAutopilotModeClick = { viewModel.setAutoMode(true) },
-        onSmallestFirstClick = { viewModel.setCoinSelectionPreference(CoinSelectionPreference.SmallestFirst) },
-        onLargestFirstClick = { viewModel.setCoinSelectionPreference(CoinSelectionPreference.LargestFirst) },
-        onConsolidateClick = { viewModel.setCoinSelectionPreference(CoinSelectionPreference.Consolidate) },
-        onFirstInFirstOutClick = { viewModel.setCoinSelectionPreference(CoinSelectionPreference.FirstInFirstOut) },
-        onLastInFirstOutClick = { viewModel.setCoinSelectionPreference(CoinSelectionPreference.LastInFirstOut) },
+        onClickManual = { viewModel.setAutoMode(false) },
+        onClickAutopilot = { viewModel.setAutoMode(true) },
+        onClickCoinSelectionPreference = { preference -> viewModel.setCoinSelectionPreference(preference) },
     )
 }
 
@@ -51,13 +47,9 @@ private fun Content(
     uiState: CoinSelectPreferenceUiState,
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
-    onManualModeClick: () -> Unit = {},
-    onAutopilotModeClick: () -> Unit = {},
-    onSmallestFirstClick: () -> Unit = {},
-    onLargestFirstClick: () -> Unit = {},
-    onConsolidateClick: () -> Unit = {},
-    onFirstInFirstOutClick: () -> Unit = {},
-    onLastInFirstOutClick: () -> Unit = {},
+    onClickManual: () -> Unit = {},
+    onClickAutopilot: () -> Unit = {},
+    onClickCoinSelectionPreference: (CoinSelectionPreference) -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -76,52 +68,82 @@ private fun Content(
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__cs_manual),
                 value = SettingsButtonValue.BooleanValue(!uiState.isAutoPilot),
-                onClick = onManualModeClick,
+                onClick = onClickManual,
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__cs_auto),
                 value = SettingsButtonValue.BooleanValue(uiState.isAutoPilot),
-                onClick = onAutopilotModeClick,
+                onClick = onClickAutopilot,
             )
 
-            // TODO use existing CoinSelectionAlgorithm from ldk-node fork instead
             if (uiState.isAutoPilot) {
                 SectionHeader(title = stringResource(R.string.settings__adv__cs_auto_mode))
 
-                SettingsButtonRow(
-                    title = stringResource(R.string.settings__adv__cs_max),
-                    description = stringResource(R.string.settings__adv__cs_max_description),
-                    value = SettingsButtonValue.BooleanValue(uiState.coinSelectionPreference == CoinSelectionPreference.SmallestFirst),
-                    onClick = onSmallestFirstClick,
-                )
+                // TODO add if available or implementing custom sort logic
+                // SettingsButtonRow(
+                //     title = stringResource(R.string.settings__adv__cs_max),
+                //     description = stringResource(R.string.settings__adv__cs_max_description),
+                //     value = SettingsButtonValue.BooleanValue(
+                //         uiState.coinSelectionPreference == CoinSelectionPreference.SmallestFirst
+                //     ),
+                //     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.SmallestFirst) },
+                // )
 
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__cs_min),
                     description = stringResource(R.string.settings__adv__cs_min_description),
-                    value = SettingsButtonValue.BooleanValue(uiState.coinSelectionPreference == CoinSelectionPreference.LargestFirst),
-                    onClick = onLargestFirstClick,
+                    value = SettingsButtonValue.BooleanValue(
+                        uiState.coinSelectionPreference == CoinSelectionPreference.LargestFirst
+                    ),
+                    onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.LargestFirst) },
                 )
 
-                SettingsButtonRow(
-                    title = stringResource(R.string.settings__adv__cs_consolidate),
-                    description = stringResource(R.string.settings__adv__cs_consolidate_description),
-                    value = SettingsButtonValue.BooleanValue(uiState.coinSelectionPreference == CoinSelectionPreference.Consolidate),
-                    onClick = onConsolidateClick,
-                )
+                // TODO add if available or implementing custom sort logic
+                // SettingsButtonRow(
+                //     title = stringResource(R.string.settings__adv__cs_consolidate),
+                //     description = stringResource(R.string.settings__adv__cs_consolidate_description),
+                //     value = SettingsButtonValue.BooleanValue(
+                //         uiState.coinSelectionPreference == CoinSelectionPreference.Consolidate
+                //     ),
+                //     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.Consolidate) },
+                // )
 
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__cs_first_in_first_out),
                     description = stringResource(R.string.settings__adv__cs_first_in_first_out_description),
-                    value = SettingsButtonValue.BooleanValue(uiState.coinSelectionPreference == CoinSelectionPreference.FirstInFirstOut),
-                    onClick = onFirstInFirstOutClick,
+                    value = SettingsButtonValue.BooleanValue(
+                        uiState.coinSelectionPreference == CoinSelectionPreference.FirstInFirstOut
+                    ),
+                    onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.FirstInFirstOut) },
+                )
+
+                // TODO add if available or implementing custom sort logic
+                // SettingsButtonRow(
+                //     title = stringResource(R.string.settings__adv__cs_last_in_last_out),
+                //     description = stringResource(R.string.settings__adv__cs_last_in_last_out_description),
+                //     value = SettingsButtonValue.BooleanValue(
+                //         uiState.coinSelectionPreference == CoinSelectionPreference.LastInFirstOut
+                //     ),
+                //     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.LastInFirstOut) },
+                // )
+
+                SettingsButtonRow(
+                    title = "Branch and Bound", // TODO add missing localized text
+                    description = "Finds exact amount matches to minimize change", // TODO add missing localized text
+                    value = SettingsButtonValue.BooleanValue(
+                        uiState.coinSelectionPreference == CoinSelectionPreference.BranchAndBound
+                    ),
+                    onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.BranchAndBound) },
                 )
 
                 SettingsButtonRow(
-                    title = stringResource(R.string.settings__adv__cs_last_in_last_out),
-                    description = stringResource(R.string.settings__adv__cs_last_in_last_out_description),
-                    value = SettingsButtonValue.BooleanValue(uiState.coinSelectionPreference == CoinSelectionPreference.LastInFirstOut),
-                    onClick = onLastInFirstOutClick,
+                    title = "Single Random Draw", // TODO add missing localized text
+                    description = "Random selection for privacy", // TODO add missing localized text
+                    value = SettingsButtonValue.BooleanValue(
+                        uiState.coinSelectionPreference == CoinSelectionPreference.SingleRandomDraw
+                    ),
+                    onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.SingleRandomDraw) },
                 )
             }
         }

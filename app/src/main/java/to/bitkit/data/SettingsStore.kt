@@ -93,5 +93,5 @@ data class SettingsData(
     val backupVerified: Boolean = false,
     val dismissedSuggestions: List<String> = emptyList(),
     val coinSelectAuto: Boolean = true,
-    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.SmallestFirst,
+    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
 )
