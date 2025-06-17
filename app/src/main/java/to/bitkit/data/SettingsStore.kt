@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
@@ -91,4 +92,6 @@ data class SettingsData(
     val enableSendAmountWarning: Boolean = false,
     val backupVerified: Boolean = false,
     val dismissedSuggestions: List<String> = emptyList(),
+    val coinSelectAuto: Boolean = true,
+    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.SmallestFirst,
 )
