@@ -153,7 +153,7 @@ class UtxoSelectionTests {
 
         // List utxos and make sure we have the right amount
         println("Listing UTXOs to verify amounts")
-        val outputs = lightningService.listSpendableOutputs()
+        val outputs = lightningService.listSpendableOutputs().getOrThrow()
         println("Found ${outputs.size} spendable outputs")
         assertEquals(depositAmounts.size, outputs.size, "Number of UTXOs should match number of deposits")
 
@@ -226,7 +226,7 @@ class UtxoSelectionTests {
 
         // List UTXOs again and verify the spent ones are missing
         println("Listing UTXOs after spending to verify the spent ones are missing")
-        val remainingOutputs = lightningService.listSpendableOutputs()
+        val remainingOutputs = lightningService.listSpendableOutputs().getOrThrow()
         println("Found ${remainingOutputs.size} remaining spendable outputs")
 
         // Verify the specific UTXOs we spent are no longer in the list
@@ -314,7 +314,7 @@ class UtxoSelectionTests {
 
         // Get all available UTXOs
         println("Listing all available UTXOs")
-        val allUtxos = lightningService.listSpendableOutputs()
+        val allUtxos = lightningService.listSpendableOutputs().getOrThrow()
         println("Found ${allUtxos.size} spendable outputs")
         assertEquals(depositAmounts.size, allUtxos.size, "Number of UTXOs should match number of deposits")
 
@@ -333,7 +333,7 @@ class UtxoSelectionTests {
                 satsPerVByte = feeRate,
                 algorithm = algorithm,
                 utxos = allUtxos
-            )
+            ).getOrThrow()
 
             assertTrue(selectedUtxos.isNotEmpty(), "Selected UTXOs should not be empty for algorithm $algorithm")
 
@@ -364,7 +364,7 @@ class UtxoSelectionTests {
             satsPerVByte = feeRate,
             algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
             utxos = allUtxos
-        )
+        ).getOrThrow()
         println("Largest first for $smallTargetAmount sats selected ${smallAmountUtxos.size} UTXOs")
 
         // Test with large amount (might need multiple UTXOs)
@@ -374,7 +374,7 @@ class UtxoSelectionTests {
             satsPerVByte = feeRate,
             algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
             utxos = allUtxos
-        )
+        ).getOrThrow()
         println("Largest first for $largeTargetAmount sats selected ${largeAmountUtxos.size} UTXOs")
 
         val largeSelectedAmount = largeAmountUtxos.sumOf { it.valueSats }
@@ -388,7 +388,7 @@ class UtxoSelectionTests {
             satsPerVByte = feeRate,
             algorithm = CoinSelectionAlgorithm.BRANCH_AND_BOUND,
             utxos = subsetUtxos
-        )
+        ).getOrThrow()
         println("Branch and bound with subset selected ${subsetSelectedUtxos.size} UTXOs from ${subsetUtxos.size} available")
 
         // Clean up by stopping the lightning node
