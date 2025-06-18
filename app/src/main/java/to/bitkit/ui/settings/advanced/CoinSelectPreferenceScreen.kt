@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,17 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+
+object CoinSelectPreferenceTestTags {
+    const val SCREEN = "coin_select_preference_screen"
+    const val MANUAL_BUTTON = "manual_button"
+    const val AUTOPILOT_BUTTON = "autopilot_button"
+    const val LARGEST_FIRST_BUTTON = "largest_first_button"
+    const val CONSOLIDATE_BUTTON = "consolidate_button"
+    const val FIRST_IN_FIRST_OUT_BUTTON = "first_in_first_out_button"
+    const val BRANCH_AND_BOUND_BUTTON = "branch_and_bound_button"
+    const val SINGLE_RANDOM_DRAW_BUTTON = "single_random_draw_button"
+}
 
 @Composable
 fun CoinSelectPreferenceScreen(
@@ -62,6 +74,7 @@ private fun Content(
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .testTag(CoinSelectPreferenceTestTags.SCREEN)
         ) {
             SectionHeader(title = stringResource(R.string.settings__adv__cs_method))
 
@@ -69,12 +82,14 @@ private fun Content(
                 title = stringResource(R.string.settings__adv__cs_manual),
                 value = SettingsButtonValue.BooleanValue(!uiState.isAutoPilot),
                 onClick = onClickManual,
+                modifier = Modifier.testTag(CoinSelectPreferenceTestTags.MANUAL_BUTTON),
             )
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__adv__cs_auto),
                 value = SettingsButtonValue.BooleanValue(uiState.isAutoPilot),
                 onClick = onClickAutopilot,
+                modifier = Modifier.testTag(CoinSelectPreferenceTestTags.AUTOPILOT_BUTTON),
             )
 
             if (uiState.isAutoPilot) {
@@ -97,6 +112,7 @@ private fun Content(
                         uiState.coinSelectionPreference == CoinSelectionPreference.LargestFirst
                     ),
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.LargestFirst) },
+                    modifier = Modifier.testTag(CoinSelectPreferenceTestTags.LARGEST_FIRST_BUTTON),
                 )
 
                 SettingsButtonRow(
@@ -106,6 +122,7 @@ private fun Content(
                         uiState.coinSelectionPreference == CoinSelectionPreference.Consolidate
                     ),
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.Consolidate) },
+                    modifier = Modifier.testTag(CoinSelectPreferenceTestTags.CONSOLIDATE_BUTTON),
                 )
 
                 SettingsButtonRow(
@@ -115,6 +132,7 @@ private fun Content(
                         uiState.coinSelectionPreference == CoinSelectionPreference.FirstInFirstOut
                     ),
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.FirstInFirstOut) },
+                    modifier = Modifier.testTag(CoinSelectPreferenceTestTags.FIRST_IN_FIRST_OUT_BUTTON),
                 )
 
                 // TODO uncomment if available or implementing custom coin selection logic
@@ -134,6 +152,7 @@ private fun Content(
                         uiState.coinSelectionPreference == CoinSelectionPreference.BranchAndBound
                     ),
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.BranchAndBound) },
+                    modifier = Modifier.testTag(CoinSelectPreferenceTestTags.BRANCH_AND_BOUND_BUTTON),
                 )
 
                 SettingsButtonRow(
@@ -143,6 +162,7 @@ private fun Content(
                         uiState.coinSelectionPreference == CoinSelectionPreference.SingleRandomDraw
                     ),
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.SingleRandomDraw) },
+                    modifier = Modifier.testTag(CoinSelectPreferenceTestTags.SINGLE_RANDOM_DRAW_BUTTON),
                 )
             }
         }
