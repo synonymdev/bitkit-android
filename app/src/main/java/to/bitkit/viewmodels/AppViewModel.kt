@@ -337,7 +337,7 @@ class AppViewModel @Inject constructor(
                 amount = amount.toULongOrNull() ?: 0u,
             )
         }
-        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && settingsStore.data.first().coinSelectAuto) {
+        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && !settingsStore.data.first().coinSelectAuto) {
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
         }
