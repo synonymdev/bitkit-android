@@ -4,17 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
@@ -25,9 +23,7 @@ import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
-import to.bitkit.viewmodels.MainScreenEffect
 import javax.inject.Inject
-import kotlin.math.roundToLong
 import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
@@ -49,6 +45,7 @@ class HomeViewModel @Inject constructor(
         setupFactRotation()
         checkHighBalance()
     }
+
     private fun setupStateObservation() {
         viewModelScope.launch {
             combine(
@@ -133,25 +130,29 @@ class HomeViewModel @Inject constructor(
     private fun checkHighBalance() {
         viewModelScope.launch {
             delay(CHECK_DELAY_MILLISECONDS)
-            val lastTimeAskedMock =
-                Clock.System.now().toEpochMilliseconds() + ASK_INTERVAL_MILLISECONDS + 1L //TODO GET FROM PERSISTENCE
-            val currentWarningsMock = 2 //TODO GET FROM PERSISTENCE
 
-            val balanceUsdLong = satsToUsdLong(walletRepo.balanceState.value.totalOnchainSats)
+            val settings = settingsStore.data.first()
 
-            val thresholdReached = balanceUsdLong > BALANCE_THRESHOLD_SATS
-            val isTimeOutOver = lastTimeAskedMock - ASK_INTERVAL_MILLISECONDS > ASK_INTERVAL_MILLISECONDS
-            val belowMaxWarnings = currentWarningsMock < MAX_WARNINGS
+            val totalOnChainSats = walletRepo.balanceState.value.totalOnchainSats
+            val balanceUsdLong = satsToUsdLong(totalOnChainSats)
+            val thresholdReached = totalOnChainSats > BALANCE_THRESHOLD_SATS || balanceUsdLong > BALANCE_THRESHOLD_USD
+            val isTimeOutOver = settings.lastTimeAskedBalanceWarningMillis - ASK_INTERVAL_MILLIS > ASK_INTERVAL_MILLIS
+            val belowMaxWarnings = settings.balanceWarningTimes < MAX_WARNINGS
 
-            if (thresholdReached && isTimeOutOver && belowMaxWarnings) {
-                //TODO PERSIST LAST TIME ASKED
-                // TODO INCREASE currentWarning
+            if (thresholdReached && isTimeOutOver && belowMaxWarnings && !_uiState.value.highBalanceSheetVisible) {
+                settingsStore.update {
+                    it.copy(
+                        balanceWarningTimes = it.balanceWarningTimes + 1,
+                        lastTimeAskedBalanceWarningMillis = Clock.System.now().toEpochMilliseconds()
+                    )
+                }
                 _uiState.update { it.copy(highBalanceSheetVisible = true) }
             }
         }
     }
+
     private fun satsToUsdLong(sats: ULong): ULong {
-        return(sats.toDouble() * 0.00105).toULong() //todo IMPLEMENT
+        return (sats.toDouble() * 0.00105).toULong() //todo IMPLEMENT
     }
 
     fun dismissHighBalanceSheet() {
@@ -167,12 +168,6 @@ class HomeViewModel @Inject constructor(
     fun refreshWidgets() {
         viewModelScope.launch {
             widgetsRepo.refreshEnabledWidgets()
-        }
-    }
-
-    fun refreshSpecificWidget(widgetType: WidgetType) {
-        viewModelScope.launch {
-            widgetsRepo.refreshWidget(widgetType)
         }
     }
 
@@ -277,14 +272,14 @@ class HomeViewModel @Inject constructor(
 
     companion object {
         /**How high the balance must be to show this warning to the user (in USD)*/
-        private const val BALANCE_THRESHOLD_USD = 500
+        private const val BALANCE_THRESHOLD_USD = 500U
 
         /**how high the balance must be to show this warning to the user (in Sats)*/
-        private const val BALANCE_THRESHOLD_SATS = 100uL
+        private const val BALANCE_THRESHOLD_SATS = 700000U
         private const val MAX_WARNINGS = 3
 
         /** 1 day - how long this prompt will be hidden if user taps Later*/
-        private const val ASK_INTERVAL_MILLISECONDS = 1000 * 10
+        private const val ASK_INTERVAL_MILLIS = 1000 * 60 * 60 * 24
 
         /**How long user needs to stay on the home screen before he will see this prompt*/
         private const val CHECK_DELAY_MILLISECONDS = 2500L
