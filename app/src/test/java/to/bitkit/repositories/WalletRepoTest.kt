@@ -17,6 +17,7 @@ import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.CoreService
@@ -42,6 +43,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val addressChecker: AddressChecker = mock()
     private val lightningRepo: LightningRepo = mock()
 
+    private val cacheStore: CacheStore = mock()
     @Before
     fun setUp() {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
@@ -61,6 +63,7 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
+            cacheStore = cacheStore
         )
     }
 
@@ -130,6 +133,7 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
+            cacheStore = cacheStore
         )
 
         val result = nonRegtestRepo.wipeWallet()
