@@ -336,9 +336,6 @@ fun HomeScreen(
                 .systemBarsPadding()
         )
 
-
-        // Drawer overlay and content - moved from AppScaffold to here
-        // Semi-transparent overlay when drawer is open
         AnimatedVisibility(
             visible = drawerState.currentValue == DrawerValue.Open,
             modifier = Modifier

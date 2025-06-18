@@ -45,6 +45,7 @@ sealed class BottomSheetType {
     data object BackupNavigation : BottomSheetType()
     data object ActivityDateRangeSelector : BottomSheetType()
     data object ActivityTagSelector : BottomSheetType()
+    data object HighBalanceWarning : BottomSheetType()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
