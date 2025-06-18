@@ -20,7 +20,7 @@ import kotlin.reflect.KProperty
 
 const val APP_PREFS = "bitkit_prefs"
 
-// TODO refactor to dataStore (named 'CacheStore'?!)
+@Deprecated("Replace with CacheStore")
 @Singleton
 class AppStorage @Inject constructor(
     @ApplicationContext private val appContext: Context,
