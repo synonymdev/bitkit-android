@@ -80,7 +80,7 @@ private fun Content(
             if (uiState.isAutoPilot) {
                 SectionHeader(title = stringResource(R.string.settings__adv__cs_auto_mode))
 
-                // TODO add if available or implementing custom sort logic
+                // TODO uncomment if available or implementing custom coin selection logic
                 // SettingsButtonRow(
                 //     title = stringResource(R.string.settings__adv__cs_max),
                 //     description = stringResource(R.string.settings__adv__cs_max_description),
@@ -117,7 +117,7 @@ private fun Content(
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.FirstInFirstOut) },
                 )
 
-                // TODO add if available or implementing custom sort logic
+                // TODO uncomment if available or implementing custom coin selection logic
                 // SettingsButtonRow(
                 //     title = stringResource(R.string.settings__adv__cs_last_in_last_out),
                 //     description = stringResource(R.string.settings__adv__cs_last_in_last_out_description),

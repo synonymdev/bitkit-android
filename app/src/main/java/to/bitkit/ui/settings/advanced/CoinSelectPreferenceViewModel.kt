@@ -36,14 +36,12 @@ class CoinSelectPreferenceViewModel @Inject constructor(
     fun setAutoMode(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(coinSelectAuto = value) }
-            // TODO: Integrate with wallet coin selection: set coinSelectPreference=default(which?)
         }
     }
 
     fun setCoinSelectionPreference(preference: CoinSelectionPreference) {
         viewModelScope.launch {
             settingsStore.update { it.copy(coinSelectPreference = preference) }
-            // TODO: Integrate with wallet coin selection: set coinSelectPreference=preference
         }
     }
 }
