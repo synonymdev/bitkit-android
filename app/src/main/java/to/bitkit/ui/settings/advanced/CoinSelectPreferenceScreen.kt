@@ -99,15 +99,14 @@ private fun Content(
                     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.LargestFirst) },
                 )
 
-                // TODO add if available or implementing custom sort logic
-                // SettingsButtonRow(
-                //     title = stringResource(R.string.settings__adv__cs_consolidate),
-                //     description = stringResource(R.string.settings__adv__cs_consolidate_description),
-                //     value = SettingsButtonValue.BooleanValue(
-                //         uiState.coinSelectionPreference == CoinSelectionPreference.Consolidate
-                //     ),
-                //     onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.Consolidate) },
-                // )
+                SettingsButtonRow(
+                    title = stringResource(R.string.settings__adv__cs_consolidate),
+                    description = stringResource(R.string.settings__adv__cs_consolidate_description),
+                    value = SettingsButtonValue.BooleanValue(
+                        uiState.coinSelectionPreference == CoinSelectionPreference.Consolidate
+                    ),
+                    onClick = { onClickCoinSelectionPreference(CoinSelectionPreference.Consolidate) },
+                )
 
                 SettingsButtonRow(
                     title = stringResource(R.string.settings__adv__cs_first_in_first_out),

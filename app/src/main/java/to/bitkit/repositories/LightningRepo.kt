@@ -25,6 +25,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.getSatsPerVByteFor
+import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
@@ -338,18 +339,24 @@ class LightningRepo @Inject constructor(
             val settings = settingsStore.data.first()
             if (settings.coinSelectAuto) {
                 val coinSelectionPreference = settings.coinSelectPreference
+
+                val allSpendableUtxos = lightningService.listSpendableOutputs().getOrThrow()
+
+                if (coinSelectionPreference == CoinSelectionPreference.Consolidate) {
+                    Logger.info("Consolidating by spending all ${allSpendableUtxos.size} UTXOs", context = TAG)
+                    return allSpendableUtxos
+                }
+
                 val coinSelectionAlgorithm = coinSelectionPreference.toCoinSelectAlgorithm().getOrThrow()
 
-                val spendableUtxos = lightningService.listSpendableOutputs().getOrThrow()
-
                 Logger.info("Selecting UTXOs with algorithm: $coinSelectionAlgorithm for sats: $sats", context = TAG)
-                Logger.debug("All spendable UTXOs: $spendableUtxos", context = TAG)
+                Logger.debug("All spendable UTXOs: $allSpendableUtxos", context = TAG)
 
                 lightningService.selectUtxosWithAlgorithm(
                     targetAmountSats = sats,
                     algorithm = coinSelectionAlgorithm,
                     satsPerVByte = satsPerVByte,
-                    utxos = spendableUtxos
+                    utxos = allSpendableUtxos,
                 ).getOrThrow()
             } else {
                 null // let ldk-node handle utxos
