@@ -27,6 +27,7 @@ import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
 import to.bitkit.viewmodels.MainScreenEffect
 import javax.inject.Inject
+import kotlin.math.roundToLong
 import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
@@ -136,8 +137,9 @@ class HomeViewModel @Inject constructor(
                 Clock.System.now().toEpochMilliseconds() + ASK_INTERVAL_MILLISECONDS + 1L //TODO GET FROM PERSISTENCE
             val currentWarningsMock = 2 //TODO GET FROM PERSISTENCE
 
-            val thresholdReached =
-                walletRepo.balanceState.value.totalOnchainSats > BALANCE_THRESHOLD_SATS //TODO GET BALANCE USD
+            val balanceUsdLong = satsToUsdLong(walletRepo.balanceState.value.totalOnchainSats)
+
+            val thresholdReached = balanceUsdLong > BALANCE_THRESHOLD_SATS
             val isTimeOutOver = lastTimeAskedMock - ASK_INTERVAL_MILLISECONDS > ASK_INTERVAL_MILLISECONDS
             val belowMaxWarnings = currentWarningsMock < MAX_WARNINGS
 
@@ -147,6 +149,9 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(highBalanceSheetVisible = true) }
             }
         }
+    }
+    private fun satsToUsdLong(sats: ULong): ULong {
+        return(sats.toDouble() * 0.00105).toULong() //todo IMPLEMENT
     }
 
     fun dismissHighBalanceSheet() {
@@ -275,11 +280,11 @@ class HomeViewModel @Inject constructor(
         private const val BALANCE_THRESHOLD_USD = 500
 
         /**how high the balance must be to show this warning to the user (in Sats)*/
-        private const val BALANCE_THRESHOLD_SATS = 700000uL
+        private const val BALANCE_THRESHOLD_SATS = 100uL
         private const val MAX_WARNINGS = 3
 
         /** 1 day - how long this prompt will be hidden if user taps Later*/
-        private const val ASK_INTERVAL_MILLISECONDS = 1000 * 60 * 60 * 24
+        private const val ASK_INTERVAL_MILLISECONDS = 1000 * 10
 
         /**How long user needs to stay on the home screen before he will see this prompt*/
         private const val CHECK_DELAY_MILLISECONDS = 2500L
