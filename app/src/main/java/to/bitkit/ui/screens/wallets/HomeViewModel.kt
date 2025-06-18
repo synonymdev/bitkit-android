@@ -48,11 +48,6 @@ class HomeViewModel @Inject constructor(
         setupFactRotation()
         checkHighBalance()
     }
-
-    private val _homeEffect = MutableSharedFlow<HomeEffects>(extraBufferCapacity = 1)
-    val homeEffect = _homeEffect.asSharedFlow()
-    private fun homeEffect(effect: HomeEffects) = viewModelScope.launch { _homeEffect.emit(effect) }
-
     private fun setupStateObservation() {
         viewModelScope.launch {
             combine(
@@ -149,9 +144,13 @@ class HomeViewModel @Inject constructor(
             if (thresholdReached && isTimeOutOver && belowMaxWarnings) {
                 //TODO PERSIST LAST TIME ASKED
                 // TODO INCREASE currentWarning
-                homeEffect(HomeEffects.DisplayHighBalanceSheet)
+                _uiState.update { it.copy(highBalanceSheetVisible = true) }
             }
         }
+    }
+
+    fun dismissHighBalanceSheet() {
+        _uiState.update { it.copy(highBalanceSheetVisible = false) }
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -269,10 +268,6 @@ class HomeViewModel @Inject constructor(
         // TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions.filterNot { it in dismissedList }
-    }
-
-    sealed interface HomeEffects {
-        data object DisplayHighBalanceSheet : HomeEffects
     }
 
     companion object {

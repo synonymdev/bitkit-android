@@ -4,10 +4,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,21 +25,54 @@ import androidx.compose.ui.unit.sp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.ModalBottomSheetHandle
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
+import to.bitkit.ui.theme.ModalSheetTopPadding
 import to.bitkit.ui.utils.withAccent
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HighBalanceWarningSheet(
+    onDismiss: () -> Unit,
     understoodClick: () -> Unit,
     learnMoreClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+) {
+    val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = AppShapes.sheet,
+        containerColor = Colors.Black,
+        dragHandle = { ModalBottomSheetHandle() },
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = ModalSheetTopPadding)
+    ) {
+        HighBalanceWarningContent(
+            understoodClick = understoodClick,
+            learnMoreClick = learnMoreClick,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+fun HighBalanceWarningContent(
+    understoodClick: () -> Unit,
+    learnMoreClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
         modifier = modifier
@@ -65,7 +101,7 @@ fun HighBalanceWarningSheet(
                     .fillMaxWidth()
                     .testTag("high_balance_title")
             )
-            Spacer(Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(
                 text =
                     stringResource(R.string.other__high_balance__text).withAccent(
@@ -82,7 +118,7 @@ fun HighBalanceWarningSheet(
                 modifier = Modifier
                     .testTag("high_balance_description")
             )
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,19 +143,20 @@ fun HighBalanceWarningSheet(
                         .testTag("understood_button"),
                 )
             }
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HighBalanceWarningSheet(
+        HighBalanceWarningContent(
             understoodClick = {},
-            learnMoreClick = {}
+            learnMoreClick = {},
         )
     }
 }

@@ -146,29 +146,12 @@ fun HomeScreen(
             navController = walletNavController,
             startDestination = HomeRoutes.Home,
         ) {
-            composable<HomeRoutes.HighBalanceWarning> {
-                HighBalanceWarningSheet(
-                    understoodClick = {},
-                    learnMoreClick = {}
-                )
-            }
-
             composable<HomeRoutes.Home> {
                 val context = LocalContext.current
                 val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                 val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                 val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                 val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
-
-                LaunchedEffect(Unit) {
-                    homeViewModel.homeEffect.collect { effect ->
-                        when(effect) {
-                            HomeViewModel.HomeEffects.DisplayHighBalanceSheet -> {
-                                walletNavController.navigate(HomeRoutes.HighBalanceWarning)
-                            }
-                        }
-                    }
-                }
 
                 HomeContentView(
                     mainUiState = uiState,
@@ -272,7 +255,8 @@ fun HomeScreen(
                     },
                     onMoveWidget = { fromIndex, toIndex ->
                         homeViewModel.moveWidget(fromIndex, toIndex)
-                    }
+                    },
+                    onDismissHighBalanceSheet = { homeViewModel.dismissHighBalanceSheet() },
                 )
             }
             composable<HomeRoutes.Savings>(
@@ -513,6 +497,7 @@ private fun HomeContentView(
     walletNavController: NavController,
     drawerState: DrawerState,
     onRefresh: () -> Unit,
+    onDismissHighBalanceSheet: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -804,6 +789,14 @@ private fun HomeContentView(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            if (homeUiState.highBalanceSheetVisible) {
+                HighBalanceWarningSheet(
+                    onDismiss = onDismissHighBalanceSheet,
+                    understoodClick = onDismissHighBalanceSheet,
+                    learnMoreClick = {} //TODO NAVIGATE INTENT
+                )
+            }
         }
     }
 }
@@ -840,9 +833,6 @@ object HomeRoutes {
 
     @Serializable
     data object AllActivity
-
-    @Serializable
-    data object HighBalanceWarning
 }
 
 @Preview(showBackground = true, showSystemUi = true)
@@ -863,6 +853,7 @@ private fun HomeContentViewPreview() {
             onClickEnableEdit = {},
             onClickEditWidget = {},
             onClickDeleteWidget = {},
+            onDismissHighBalanceSheet = {},
             onMoveWidget = { _, _ -> },
         )
     }
