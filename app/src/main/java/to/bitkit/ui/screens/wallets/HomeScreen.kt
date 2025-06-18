@@ -101,6 +101,7 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
+import to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
 import to.bitkit.ui.screens.widgets.DragDropColumn
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
@@ -145,12 +146,29 @@ fun HomeScreen(
             navController = walletNavController,
             startDestination = HomeRoutes.Home,
         ) {
+            composable<HomeRoutes.HighBalanceWarning> {
+                HighBalanceWarningSheet(
+                    understoodClick = {},
+                    learnMoreClick = {}
+                )
+            }
+
             composable<HomeRoutes.Home> {
                 val context = LocalContext.current
                 val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
                 val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
                 val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
                 val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
+
+                LaunchedEffect(Unit) {
+                    homeViewModel.homeEffect.collect { effect ->
+                        when(effect) {
+                            HomeViewModel.HomeEffects.DisplayHighBalanceSheet -> {
+                                walletNavController.navigate(HomeRoutes.HighBalanceWarning)
+                            }
+                        }
+                    }
+                }
 
                 HomeContentView(
                     mainUiState = uiState,
@@ -822,6 +840,9 @@ object HomeRoutes {
 
     @Serializable
     data object AllActivity
+
+    @Serializable
+    data object HighBalanceWarning
 }
 
 @Preview(showBackground = true, showSystemUi = true)
