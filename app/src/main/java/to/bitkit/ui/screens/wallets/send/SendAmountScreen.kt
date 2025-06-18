@@ -152,10 +152,14 @@ private fun SendAmountNodeRunning(
     ) {
         Spacer(Modifier.height(16.dp))
 
-        NumberPadTextField(input = input,
+        NumberPadTextField(
+            input = input,
             displayUnit = displayUnit,
             primaryDisplay = primaryDisplay,
-            modifier = Modifier.fillMaxWidth().testTag("amount_input_field"))
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("amount_input_field")
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
@@ -170,7 +174,7 @@ private fun SendAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MoneySSB(sats = availableAmount.toLong())
+            MoneySSB(sats = availableAmount)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -189,7 +193,9 @@ private fun SendAmountNodeRunning(
                 onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
             },
             isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
-            modifier = Modifier.fillMaxWidth().testTag("amount_keyboard"),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("amount_keyboard"),
         )
 
         Spacer(modifier = Modifier.height(41.dp))
@@ -217,7 +223,9 @@ private fun PaymentMethodButton(
             SendMethod.ONCHAIN -> Colors.Brand
             SendMethod.LIGHTNING -> Colors.Purple
         },
-        modifier = Modifier.height(28.dp).testTag("payment_method_button")
+        modifier = Modifier
+            .height(28.dp)
+            .testTag("payment_method_button")
     ) {
         Text13Up(
             text = when (uiState.payMethod) {
