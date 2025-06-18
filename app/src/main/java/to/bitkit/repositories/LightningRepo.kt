@@ -14,7 +14,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -29,6 +28,7 @@ import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -309,19 +309,53 @@ class LightningRepo @Inject constructor(
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
-
             val fees = coreService.blocktank.getFees().getOrThrow()
             val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+
+            // if utxos are manually specified, use them, otherwise run auto coin select if enabled
+            val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
+                sats = sats,
+                satsPerVByte = satsPerVByte,
+            )
+
+            Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
 
             val txId = lightningService.send(
                 address = address,
                 sats = sats,
                 satsPerVByte = satsPerVByte,
-                utxosToSpend = utxosToSpend,
+                utxosToSpend = finalUtxosToSpend,
             )
             syncState()
             Result.success(txId)
         }
+
+    private suspend fun determineUtxosToSpend(
+        sats: ULong,
+        satsPerVByte: UInt,
+    ): List<SpendableUtxo>? {
+        return runCatching {
+            val settings = settingsStore.data.first()
+            if (settings.coinSelectAuto) {
+                val coinSelectionPreference = settings.coinSelectPreference
+                val coinSelectionAlgorithm = coinSelectionPreference.toCoinSelectAlgorithm().getOrThrow()
+
+                val spendableUtxos = lightningService.listSpendableOutputs().getOrThrow()
+
+                Logger.info("Selecting UTXOs with algorithm: $coinSelectionAlgorithm for sats: $sats", context = TAG)
+                Logger.debug("All spendable UTXOs: $spendableUtxos", context = TAG)
+
+                lightningService.selectUtxosWithAlgorithm(
+                    targetAmountSats = sats,
+                    algorithm = coinSelectionAlgorithm,
+                    satsPerVByte = satsPerVByte,
+                    utxos = spendableUtxos
+                ).getOrThrow()
+            } else {
+                null // let ldk-node handle utxos
+            }
+        }.getOrNull()
+    }
 
     suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("Get payments") {
         val payments = lightningService.payments
@@ -345,8 +379,6 @@ class LightningRepo @Inject constructor(
             syncState()
             Result.success(Unit)
         }
-
-
 
     suspend fun syncState() {
         _lightningState.update {
