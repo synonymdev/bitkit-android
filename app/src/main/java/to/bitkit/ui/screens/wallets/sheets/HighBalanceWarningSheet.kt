@@ -49,7 +49,6 @@ fun HighBalanceWarningSheet(
 ) {
     val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -74,8 +73,9 @@ fun HighBalanceWarningContent(
     learnMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ScreenColumn(
+    Column(
         modifier = modifier
+            .fillMaxWidth()
             .gradientBackground()
             .testTag("high_balance_intro_screen")
     ) {
