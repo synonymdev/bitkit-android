@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -37,6 +39,7 @@ class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
+    private val cacheStore: CacheStore
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -57,7 +60,7 @@ class CurrencyRepo @Inject constructor(
     init {
         startPolling()
         observeStaleData()
-        collectSettingsData()
+        collectCachedData()
     }
 
     private fun startPolling() {
@@ -82,19 +85,20 @@ class CurrencyRepo @Inject constructor(
         }
     }
 
-    private fun collectSettingsData() {
+    private fun collectCachedData() {
         repoScope.launch {
-            settingsStore.data.collect { settings ->
-                _currencyState.update { currentState ->
-                    currentState.copy(
-                        selectedCurrency = settings.selectedCurrency,
-                        displayUnit = settings.displayUnit,
-                        primaryDisplay = settings.primaryDisplay,
-                        currencySymbol = currentState.rates.firstOrNull { rate ->
-                            rate.quote == settings.selectedCurrency
-                        }?.currencySymbol ?: "$"
-                    )
-                }
+            combine(settingsStore.data, cacheStore.data) { settings, cachedData ->
+                _currencyState.value.copy(
+                    rates = cachedData.cachedRates,
+                    selectedCurrency = settings.selectedCurrency,
+                    displayUnit = settings.displayUnit,
+                    primaryDisplay = settings.primaryDisplay,
+                    currencySymbol = cachedData.cachedRates.firstOrNull { rate ->
+                        rate.quote == settings.selectedCurrency
+                    }?.currencySymbol ?: "$"
+                )
+            }.collect { newState ->
+                _currencyState.update { newState }
             }
         }
     }
@@ -108,9 +112,9 @@ class CurrencyRepo @Inject constructor(
         isRefreshing = true
         try {
             val fetchedRates = currencyService.fetchLatestRates()
+            cacheStore.update { it.copy(cachedRates = fetchedRates) }
             _currencyState.update {
                 it.copy(
-                    rates = fetchedRates,
                     error = null,
                     hasStaleData = false
                 )
