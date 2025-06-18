@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
@@ -41,6 +43,7 @@ class HomeViewModel @Inject constructor(
         setupStateObservation()
         setupArticleRotation()
         setupFactRotation()
+        checkHighBalance()
     }
 
     private fun setupStateObservation() {
@@ -122,6 +125,26 @@ class HomeViewModel @Inject constructor(
             delay(20.seconds)
         }
         _currentFact.value = null
+    }
+
+    private fun checkHighBalance() {
+        viewModelScope.launch {
+            delay(CHECK_DELAY_MILLISECONDS)
+            val lastTimeAskedMock =
+                Clock.System.now().toEpochMilliseconds() + ASK_INTERVAL_MILLISECONDS + 1L //TODO GET FROM PERSISTENCE
+            val currentWarningsMock = 2 //TODO GET FROM PERSISTENCE
+
+            val thresholdReached =
+                walletRepo.balanceState.value.totalOnchainSats > BALANCE_THRESHOLD_SATS //TODO GET BALANCE USD
+            val isTimeOutOver = lastTimeAskedMock - ASK_INTERVAL_MILLISECONDS > ASK_INTERVAL_MILLISECONDS
+            val belowMaxWarnings = currentWarningsMock < MAX_WARNINGS
+
+            if (thresholdReached && isTimeOutOver && belowMaxWarnings) {
+                //TODO PERSIST LAST TIME ASKED
+                // TODO INCREASE currentWarning
+                // TODO SEND EFFECT NAVIGATION
+            }
+        }
     }
 
     fun removeSuggestion(suggestion: Suggestion) {
@@ -239,5 +262,20 @@ class HomeViewModel @Inject constructor(
         // TODO REMOVE PROFILE CARD IF THE USER ALREADY HAS one
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions.filterNot { it in dismissedList }
+    }
+
+    companion object {
+        /**How high the balance must be to show this warning to the user (in USD)*/
+        private const val BALANCE_THRESHOLD_USD = 500
+
+        /**how high the balance must be to show this warning to the user (in Sats)*/
+        private const val BALANCE_THRESHOLD_SATS = 700000uL
+        private const val MAX_WARNINGS = 3
+
+        /** 1 day - how long this prompt will be hidden if user taps Later*/
+        private const val ASK_INTERVAL_MILLISECONDS = 1000 * 60 * 60 * 24
+
+        /**How long user needs to stay on the home screen before he will see this prompt*/
+        private const val CHECK_DELAY_MILLISECONDS = 2500L
     }
 }
