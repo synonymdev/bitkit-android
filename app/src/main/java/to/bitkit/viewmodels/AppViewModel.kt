@@ -331,11 +331,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onAmountContinue(amount: String) {
+    private suspend fun onAmountContinue(amount: String) {
         _sendUiState.update {
             it.copy(
                 amount = amount.toULongOrNull() ?: 0u,
             )
+        }
+        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && settingsStore.data.first().coinSelectAuto) {
+            setSendEffect(SendEffect.NavigateToCoinSelection)
+            return
         }
         setSendEffect(SendEffect.NavigateToReview)
     }
@@ -909,6 +913,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
+    data object NavigateToCoinSelection : SendEffect()
     data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }

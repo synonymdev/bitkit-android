@@ -76,11 +76,13 @@ fun SendOptionsView(
                     is SendEffect.NavigateToAmount -> navController.navigate(SendRoute.Amount)
                     is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
                     is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
+                    is SendEffect.NavigateToCoinSelection -> navController.navigate(SendRoute.CoinSelection)
                     is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
                     is SendEffect.PaymentSuccess -> {
                         onComplete(it.sheet)
                         context.setClipboardText(text = "")
                     }
+
                     is SendEffect.NavigateToQuickPay -> {
                         navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
                     }
@@ -121,6 +123,12 @@ fun SendOptionsView(
                     appViewModel.onScanSuccess(data = qrCode)
                 }
             }
+            composableWithDefaultTransitions<SendRoute.CoinSelection> {
+                CoinSelectionScreen(
+                    onBack = { navController.popBackStack() },
+                    onContinue = { navController.navigate(SendRoute.ReviewAndSend) },
+                )
+            }
             composableWithDefaultTransitions<SendRoute.ReviewAndSend> { backStackEntry ->
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
@@ -130,7 +138,7 @@ fun SendOptionsView(
                     onEvent = { appViewModel.setSendEvent(it) },
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
-                    onNavigateToPin = { navController.navigate(SendRoute.PinCheck) }
+                    onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
                 )
             }
             composableWithDefaultTransitions<SendRoute.AddTag> {
@@ -289,7 +297,7 @@ private fun SendOptionsContentPreview() {
     }
 }
 
-interface SendRoute {
+sealed interface SendRoute {
     @Serializable
     data object Options : SendRoute
 
@@ -310,6 +318,9 @@ interface SendRoute {
 
     @Serializable
     data object PinCheck : SendRoute
+
+    @Serializable
+    data object CoinSelection : SendRoute
 
     @Serializable
     data class QuickPay(val invoice: String, val amount: Long) : SendRoute
