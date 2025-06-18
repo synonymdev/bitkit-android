@@ -15,7 +15,7 @@ enum class CoinSelectionPreference {
 fun CoinSelectionPreference.toCoinSelectAlgorithm(): Result<CoinSelectionAlgorithm> {
     return when (this) {
         CoinSelectionPreference.SmallestFirst -> Result.failure(
-            NotImplementedError("SmallestFirst not implemented")
+            NotImplementedError("SmallestFirst not implemented as algorithm in ldk-node")
         )
 
         CoinSelectionPreference.LargestFirst -> Result.success(
@@ -23,7 +23,7 @@ fun CoinSelectionPreference.toCoinSelectAlgorithm(): Result<CoinSelectionAlgorit
         )
 
         CoinSelectionPreference.Consolidate -> Result.failure(
-            NotImplementedError("Consolidate not implemented") // approx match: LARGEST_FIRST
+            NotImplementedError("Consolidate not implemented as algorithm in ldk-node")
         )
 
         CoinSelectionPreference.FirstInFirstOut -> Result.success(
@@ -31,7 +31,7 @@ fun CoinSelectionPreference.toCoinSelectAlgorithm(): Result<CoinSelectionAlgorit
         )
 
         CoinSelectionPreference.LastInFirstOut -> Result.failure(
-            NotImplementedError("LastInFirstOut not implemented")
+            NotImplementedError("LastInFirstOut not implemented as algorithm in ldk-node")
         )
 
         CoinSelectionPreference.BranchAndBound -> Result.success(
