@@ -370,6 +370,10 @@ class LightningRepo @Inject constructor(
         Result.success(payments)
     }
 
+    suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> = executeWhenNodeRunning("List spendable outputs") {
+        lightningService.listSpendableOutputs()
+    }
+
     suspend fun openChannel(
         peer: LnPeer,
         channelAmountSats: ULong,

@@ -124,9 +124,11 @@ fun SendOptionsView(
                 }
             }
             composableWithDefaultTransitions<SendRoute.CoinSelection> {
+                val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 CoinSelectionScreen(
+                    requiredAmount = sendUiState.amount,
                     onBack = { navController.popBackStack() },
-                    onContinue = { navController.navigate(SendRoute.ReviewAndSend) },
+                    onContinue = { utxos -> appViewModel.setSendEvent(SendEvent.CoinSelectionContinue(utxos)) },
                 )
             }
             composableWithDefaultTransitions<SendRoute.ReviewAndSend> { backStackEntry ->

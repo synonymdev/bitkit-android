@@ -81,7 +81,7 @@ internal object Env {
 
     object TransactionDefaults {
         val recommendedBaseFee = 256u // Total recommended tx base fee in sats
-        // val dustLimit = 546
+        val dustLimit = 546u
     }
 
     private lateinit var appStoragePath: String

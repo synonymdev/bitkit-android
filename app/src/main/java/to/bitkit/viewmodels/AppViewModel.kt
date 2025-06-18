@@ -23,9 +23,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.R
-import to.bitkit.data.AppStorage
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -53,14 +53,12 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ResourceProvider
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
 import javax.inject.Inject
-
 
 private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
 
@@ -75,8 +73,6 @@ class AppViewModel @Inject constructor(
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
-    private val resourceProvider: ResourceProvider,
-    private val appStorage: AppStorage,
     private val currencyService: CurrencyService,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
@@ -263,6 +259,8 @@ class AppViewModel @Inject constructor(
                     is SendEvent.AmountContinue -> onAmountContinue(it.amount)
                     SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
 
+                    is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
+
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     SendEvent.Reset -> resetSendState()
@@ -340,6 +338,13 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && !settingsStore.data.first().coinSelectAuto) {
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
+        }
+        setSendEffect(SendEffect.NavigateToReview)
+    }
+
+    private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
+        _sendUiState.update {
+            it.copy(manuallySelectedUtxos = utxos)
         }
         setSendEffect(SendEffect.NavigateToReview)
     }
@@ -650,7 +655,8 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
-        return lightningService.sendOnChain(address = address, amount).onFailure {
+        val utxos = _sendUiState.value.manuallySelectedUtxos.takeIf { it.isNotEmpty() }
+        return lightningService.sendOnChain(address, amount, utxosToSpend = utxos).onFailure {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = "Error Sending",
@@ -813,8 +819,8 @@ class AppViewModel @Inject constructor(
             if (newAttempts <= 0) {
                 toast(
                     type = Toast.ToastType.SUCCESS,
-                    title = resourceProvider.getString(R.string.security__wiped_title),
-                    description = resourceProvider.getString(R.string.security__wiped_message),
+                    title = context.getString(R.string.security__wiped_title),
+                    description = context.getString(R.string.security__wiped_message),
                 )
                 delay(250) // small delay for UI feedback
                 mainScreenEffect(MainScreenEffect.WipeWallet)
@@ -904,6 +910,7 @@ data class SendUiState(
     val decodedInvoice: LightningInvoice? = null,
     val showAmountWarningDialog: Boolean = false,
     val shouldConfirmPay: Boolean = false,
+    val manuallySelectedUtxos: List<SpendableUtxo> = emptyList(),
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
@@ -936,6 +943,8 @@ sealed class SendEvent {
     data object AmountReset : SendEvent()
     data class AmountContinue(val amount: String) : SendEvent()
     data class AmountChange(val value: String) : SendEvent()
+
+    data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent()
 
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
