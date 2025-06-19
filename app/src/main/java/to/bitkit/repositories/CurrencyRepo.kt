@@ -37,7 +37,6 @@ import java.math.RoundingMode
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.roundToLong
 
 @Singleton
 class CurrencyRepo @Inject constructor(
@@ -50,10 +49,13 @@ class CurrencyRepo @Inject constructor(
     private val _currencyState = MutableStateFlow(CurrencyState())
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
 
+    @Volatile
     private var lastSuccessfulRefresh: Date? = null
+
+    @Volatile
     private var isRefreshing = false
 
-    private val pollingFlow: Flow<Unit>
+    private val fxRatePollingFlow: Flow<Unit>
         get() = flow {
             while (currentCoroutineContext().isActive) {
                 emit(Unit)
@@ -69,7 +71,7 @@ class CurrencyRepo @Inject constructor(
 
     private fun startPolling() {
         repoScope.launch {
-            pollingFlow.collect {
+            fxRatePollingFlow.collect {
                 refresh()
             }
         }
@@ -77,29 +79,38 @@ class CurrencyRepo @Inject constructor(
 
     private fun observeStaleData() {
         repoScope.launch {
-            currencyState.map { it.hasStaleData }.distinctUntilChanged().collect { isStale ->
-                if (isStale) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = "Rates currently unavailable",
-                        description = "An error has occurred. Please try again later."
-                    )
+            currencyState
+                .map { it.hasStaleData }
+                .distinctUntilChanged()
+                .collect { isStale ->
+                    if (isStale) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = "Rates currently unavailable",
+                            description = "An error has occurred. Please try again later."
+                        )
+                    }
                 }
-            }
         }
     }
 
     private fun collectCachedData() {
         repoScope.launch {
-            combine(settingsStore.data, cacheStore.data) { settings, cachedData ->
+            combine(
+                settingsStore.data.distinctUntilChanged(),
+                cacheStore.data.distinctUntilChanged()
+            ) { settings, cachedData ->
+                val selectedRate = cachedData.cachedRates.firstOrNull { rate ->
+                    rate.quote == settings.selectedCurrency
+                }
                 _currencyState.value.copy(
                     rates = cachedData.cachedRates,
                     selectedCurrency = settings.selectedCurrency,
                     displayUnit = settings.displayUnit,
                     primaryDisplay = settings.primaryDisplay,
-                    currencySymbol = cachedData.cachedRates.firstOrNull { rate ->
-                        rate.quote == settings.selectedCurrency
-                    }?.currencySymbol ?: "$"
+                    currencySymbol = selectedRate?.currencySymbol ?: "$",
+                    error = null,
+                    hasStaleData = false
                 )
             }.collect { newState ->
                 _currencyState.update { newState }
@@ -126,13 +137,12 @@ class CurrencyRepo @Inject constructor(
             lastSuccessfulRefresh = Date()
             Logger.debug("Currency rates refreshed successfully", context = TAG)
         } catch (e: Exception) {
-            _currencyState.update { it.copy(error = e) }
             Logger.error("Currency rates refresh failed", e, context = TAG)
+            _currencyState.update { it.copy(error = e) }
 
             lastSuccessfulRefresh?.let { last ->
-                _currencyState.update {
-                    it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold)
-                }
+                val isStale = Date().time - last.time > Env.fxRateStaleThreshold
+                _currencyState.update { it.copy(hasStaleData = isStale) }
             }
         } finally {
             isRefreshing = false
@@ -140,10 +150,13 @@ class CurrencyRepo @Inject constructor(
     }
 
     suspend fun togglePrimaryDisplay() = withContext(bgDispatcher) {
-        currencyState.value.primaryDisplay.let {
-            val newDisplay =
-                if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
-            settingsStore.update { it.copy(primaryDisplay = newDisplay) }
+        settingsStore.update { settings ->
+            val newDisplay = if (settings.primaryDisplay == PrimaryDisplay.BITCOIN) {
+                PrimaryDisplay.FIAT
+            } else {
+                PrimaryDisplay.BITCOIN
+            }
+            settings.copy(primaryDisplay = newDisplay)
         }
     }
 
@@ -161,13 +174,9 @@ class CurrencyRepo @Inject constructor(
     }
 
     fun getCurrencySymbol(): String {
-        val currentState = currencyState.value
-        return currentState.rates.firstOrNull {
-            it.quote == currentState.selectedCurrency
-        }?.currencySymbol ?: ""
+        return _currencyState.value.currencySymbol
     }
 
-    // Conversion helpers
     fun getCurrentRate(currency: String): FxRate? {
         return _currencyState.value.rates.firstOrNull { it.quote == currency }
     }
@@ -176,34 +185,26 @@ class CurrencyRepo @Inject constructor(
         sats: Long,
         currency: String? = null,
     ): Result<ConvertedAmount> = runCatching {
-        val targetCurrency = currency ?: currencyState.value.selectedCurrency
-        val rate = getCurrentRate(targetCurrency)
+        val targetCurrency = currency ?: _currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency) ?: throw IllegalStateException(
+            "Rate not found for currency: $targetCurrency. Available currencies: ${
+                _currencyState.value.rates.joinToString { it.quote }
+            }"
+        )
 
-        if (rate == null) {
-            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
-            Logger.error("Rate not found", exception, context = TAG)
-            return Result.failure(exception)
-        }
+        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)
+        val value = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
+        val formatted = value.formatCurrency() ?: throw IllegalStateException(
+            "Failed to format value: $value for currency: $targetCurrency"
+        )
 
-        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
-        val value: BigDecimal = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
-        val formatted = value.formatCurrency()
-
-        if (formatted == null) {
-            val exception = Exception("Error formatting currency: $value")
-            Logger.error("Error formatting currency", exception, context = TAG)
-            return Result.failure(exception)
-        }
-
-        return Result.success(
-            ConvertedAmount(
-                value = value,
-                formatted = formatted,
-                symbol = rate.currencySymbol,
-                currency = rate.quote,
-                flag = rate.currencyFlag,
-                sats = sats,
-            )
+        ConvertedAmount(
+            value = value,
+            formatted = formatted,
+            symbol = rate.currencySymbol,
+            currency = rate.quote,
+            flag = rate.currencyFlag,
+            sats = sats,
         )
     }
 
@@ -211,19 +212,17 @@ class CurrencyRepo @Inject constructor(
         fiatValue: BigDecimal,
         currency: String? = null,
     ): Result<ULong> = runCatching {
-        val targetCurrency = currency ?: currencyState.value.selectedCurrency
-        val rate = getCurrentRate(targetCurrency)
+        val targetCurrency = currency ?: _currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency) ?: throw IllegalStateException(
+            "Rate not found for currency: $targetCurrency. Available currencies: ${
+                _currencyState.value.rates.joinToString { it.quote }
+            }"
+        )
 
-        if (rate == null) {
-            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
-            Logger.error("Rate not found", exception, context = TAG)
-            return Result.failure(exception)
-        }
-
-        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
+        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), BTC_SCALE, RoundingMode.HALF_UP)
         val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
-        val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
-        return Result.success(roundedNumber.toLong().toULong())
+        val roundedSats = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+        roundedSats.toLong().toULong()
     }
 
     fun convertFiatToSats(
@@ -238,6 +237,7 @@ class CurrencyRepo @Inject constructor(
 
     companion object {
         private const val TAG = "CurrencyRepo"
+        private const val BTC_SCALE = 8
     }
 }
 
