@@ -247,7 +247,7 @@ class LightningRepo @Inject constructor(
                 _lightningState.update {
                     LightningState(
                         nodeStatus = it.nodeStatus,
-                        nodeLifecycleState = it.nodeLifecycleState
+                        nodeLifecycleState = it.nodeLifecycleState,
                     )
                 }
                 Result.success(Unit)

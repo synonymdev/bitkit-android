@@ -68,9 +68,8 @@ fun CoinSelectionScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagsByTxId by viewModel.tagsByTxId.collectAsStateWithLifecycle()
 
-    // Get onchain activities from ActivityListViewModel
-    val activityListViewModel = activityListViewModel
-    val onchainActivities by activityListViewModel?.onchainActivities?.collectAsStateWithLifecycle()
+    val activity = activityListViewModel
+    val onchainActivities by activity?.onchainActivities?.collectAsStateWithLifecycle()
         ?: remember { mutableStateOf(emptyList()) }
 
     LaunchedEffect(requiredAmount, onchainActivities) {
@@ -114,6 +113,7 @@ private fun Content(
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
+            // Auto item
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -134,6 +134,7 @@ private fun Content(
                 HorizontalDivider()
             }
 
+            // Utxo items
             items(uiState.availableUtxos) { utxo ->
                 UtxoRow(
                     utxo = utxo,
