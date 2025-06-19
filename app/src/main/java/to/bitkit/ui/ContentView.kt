@@ -370,7 +370,6 @@ fun ContentView(
                         BottomSheetType.BackupNavigation -> BackupNavigationSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
-
                         null -> Unit
                     }
                 }
