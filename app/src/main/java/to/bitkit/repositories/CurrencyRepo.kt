@@ -52,9 +52,6 @@ class CurrencyRepo @Inject constructor(
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
 
     @Volatile
-    private var lastSuccessfulRefresh: Date? = null
-
-    @Volatile
     private var isRefreshing = false
 
     private val fxRatePollingFlow: Flow<Unit>
@@ -138,14 +135,13 @@ class CurrencyRepo @Inject constructor(
                     hasStaleData = false
                 )
             }
-            lastSuccessfulRefresh = Date()
             Logger.debug("Currency rates refreshed successfully", context = TAG)
         } catch (e: Exception) {
             Logger.error("Currency rates refresh failed", e, context = TAG)
             _currencyState.update { it.copy(error = e) }
 
-            lastSuccessfulRefresh?.let { last ->
-                val isStale = Date().time - last.time > Env.fxRateStaleThreshold
+           _currencyState.value.rates.firstOrNull()?.lastUpdatedAt?.let { lastUpdatedAt ->
+                val isStale = Date().time - lastUpdatedAt > Env.fxRateStaleThreshold
                 _currencyState.update { it.copy(hasStaleData = isStale) }
             }
         } finally {
@@ -190,16 +186,20 @@ class CurrencyRepo @Inject constructor(
         currency: String? = null,
     ): Result<ConvertedAmount> = runCatching {
         val targetCurrency = currency ?: _currencyState.value.selectedCurrency
-        val rate = getCurrentRate(targetCurrency) ?: throw IllegalStateException(
-            "Rate not found for currency: $targetCurrency. Available currencies: ${
-                _currencyState.value.rates.joinToString { it.quote }
-            }"
+        val rate = getCurrentRate(targetCurrency) ?: return Result.failure(
+            IllegalStateException(
+                "Rate not found for currency: $targetCurrency. Available currencies: ${
+                    _currencyState.value.rates.joinToString { it.quote }
+                }"
+            )
         )
 
         val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)
         val value = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
-        val formatted = value.formatCurrency() ?: throw IllegalStateException(
-            "Failed to format value: $value for currency: $targetCurrency"
+        val formatted = value.formatCurrency() ?: return Result.failure(
+            IllegalStateException(
+                "Failed to format value: $value for currency: $targetCurrency"
+            )
         )
 
         ConvertedAmount(
