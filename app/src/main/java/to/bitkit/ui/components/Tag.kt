@@ -25,7 +25,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun TagButton(
     text: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     displayIconClose: Boolean = false,
@@ -40,7 +40,7 @@ fun TagButton(
         modifier = modifier
             .wrapContentWidth()
             .border(width = 1.dp, color = borderColor, shape = AppShapes.small)
-            .clickableAlpha { onClick() }
+            .clickableAlpha(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         BodySSB(

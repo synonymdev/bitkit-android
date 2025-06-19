@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
@@ -98,6 +99,7 @@ fun SendAmountContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
         SheetTopBar(stringResource(R.string.wallet__send_amount)) {
@@ -152,10 +154,14 @@ private fun SendAmountNodeRunning(
     ) {
         Spacer(Modifier.height(16.dp))
 
-        NumberPadTextField(input = input,
+        NumberPadTextField(
+            input = input,
             displayUnit = displayUnit,
             primaryDisplay = primaryDisplay,
-            modifier = Modifier.fillMaxWidth().testTag("amount_input_field"))
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("amount_input_field")
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
@@ -170,7 +176,7 @@ private fun SendAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MoneySSB(sats = availableAmount.toLong())
+            MoneySSB(sats = availableAmount)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -189,7 +195,9 @@ private fun SendAmountNodeRunning(
                 onInputChanged(if (input.length > 1) input.dropLast(1) else "0")
             },
             isDecimal = currencyUiState.primaryDisplay == PrimaryDisplay.FIAT,
-            modifier = Modifier.fillMaxWidth().testTag("amount_keyboard"),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("amount_keyboard"),
         )
 
         Spacer(modifier = Modifier.height(41.dp))
@@ -217,7 +225,9 @@ private fun PaymentMethodButton(
             SendMethod.ONCHAIN -> Colors.Brand
             SendMethod.LIGHTNING -> Colors.Purple
         },
-        modifier = Modifier.height(28.dp).testTag("payment_method_button")
+        modifier = Modifier
+            .height(28.dp)
+            .testTag("payment_method_button")
     ) {
         Text13Up(
             text = when (uiState.payMethod) {
@@ -232,7 +242,7 @@ private fun PaymentMethodButton(
     }
 }
 
-@Preview(showBackground = true, name = "Running - Lightning")
+@Preview(showSystemUi = true, name = "Running - Lightning")
 @Composable
 private fun PreviewRunningLightning() {
     AppThemeSurface {
@@ -257,7 +267,7 @@ private fun PreviewRunningLightning() {
     }
 }
 
-@Preview(showBackground = true, name = "Running - Onchain")
+@Preview(showSystemUi = true, name = "Running - Onchain")
 @Composable
 private fun PreviewRunningOnchain() {
     AppThemeSurface {
@@ -282,7 +292,7 @@ private fun PreviewRunningOnchain() {
     }
 }
 
-@Preview(showBackground = true, name = "Initializing")
+@Preview(showSystemUi = true, name = "Initializing")
 @Composable
 private fun PreviewInitializing() {
     AppThemeSurface {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
@@ -40,8 +41,8 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun deleteLastUsedTag(tag: String) {
-        store.updateData {
-            it.copy(lastUsedTags = it.lastUsedTags.filter { it != tag })
+        store.updateData { currentSettings ->
+            currentSettings.copy(lastUsedTags = currentSettings.lastUsedTags.filter { it != tag })
         }
     }
 
@@ -93,4 +94,6 @@ data class SettingsData(
     val dismissedSuggestions: List<String> = emptyList(),
     val lastTimeAskedBalanceWarningMillis: Long = 0,
     val balanceWarningTimes: Int = 0,
+    val coinSelectAuto: Boolean = true,
+    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
 )
