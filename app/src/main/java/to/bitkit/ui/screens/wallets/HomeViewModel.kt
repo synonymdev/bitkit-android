@@ -136,7 +136,7 @@ class HomeViewModel @Inject constructor(
 
             val settings = settingsStore.data.first()
 
-            val totalOnChainSats = walletRepo.balanceState.value.totalOnchainSats
+            val totalOnChainSats = walletRepo.balanceState.value.totalSats
             val balanceUsd = satsToUsd(totalOnChainSats) ?: return@launch
             val thresholdReached = balanceUsd > BigDecimal(BALANCE_THRESHOLD_USD)
             val isTimeOutOver = settings.lastTimeAskedBalanceWarningMillis - ASK_INTERVAL_MILLIS > ASK_INTERVAL_MILLIS
