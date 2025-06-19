@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.CurrencyService
 import to.bitkit.services.LightningService
@@ -33,12 +34,13 @@ import javax.inject.Inject
 import kotlin.math.ceil
 import kotlin.math.min
 
+private const val EUR_CURRENCY = "EUR"
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningService: LightningService,
-    private val currencyService: CurrencyService,
+    private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
     var orders = mutableListOf<IBtOrder>()
         private set
@@ -199,22 +201,19 @@ class BlocktankViewModel @Inject constructor(
         }
         val maxLspBalance = info?.options?.maxChannelSizeSat ?: 0uL
 
-        // Get current fx rates
-        val rates = currencyService.loadCachedRates()
-        val eurRate = rates?.let { currencyService.getCurrentRate("EUR", it) }
-        if (eurRate == null) {
-            Logger.error("Failed to get rates for lspBalance calculation", context = "BlocktankViewModel")
-            throw ServiceError.CurrencyRateUnavailable
-        }
-
         // Calculate thresholds in sats
-        val threshold1 = currencyService.convertFiatToSats(BigDecimal("225"), eurRate)
-        val threshold2 = currencyService.convertFiatToSats(BigDecimal("495"), eurRate)
-        val defaultLspBalanceSats = currencyService.convertFiatToSats(BigDecimal("450"), eurRate)
+        val threshold1 = currencyRepo.convertFiatToSats(BigDecimal(225), EUR_CURRENCY).getOrNull()
+        val threshold2 = currencyRepo.convertFiatToSats(BigDecimal(495), EUR_CURRENCY).getOrNull()
+        val defaultLspBalanceSats = currencyRepo.convertFiatToSats(BigDecimal(450), EUR_CURRENCY).getOrNull()
 
         Logger.debug("getDefaultLspBalance - clientBalance: $clientBalance")
         Logger.debug("getDefaultLspBalance - maxLspBalance: $maxLspBalance")
         Logger.debug("getDefaultLspBalance - defaultLspBalance: $defaultLspBalanceSats")
+
+        if (threshold1 == null || threshold2 == null || defaultLspBalanceSats == null) {
+            Logger.error("Failed to get rates for lspBalance calculation", context = "BlocktankViewModel")
+            throw ServiceError.CurrencyRateUnavailable
+        }
 
         // Safely calculate lspBalance to avoid arithmetic overflow
         var lspBalance: ULong = 0u
