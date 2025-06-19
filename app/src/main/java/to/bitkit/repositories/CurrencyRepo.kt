@@ -229,21 +229,11 @@ class CurrencyRepo @Inject constructor(
     fun convertFiatToSats(
         fiatAmount: Double,
         currency: String?
-    ): Result<Long> {
-        val targetCurrency = currency ?: currencyState.value.selectedCurrency
-        val rate = getCurrentRate(targetCurrency)
-
-        if (rate == null) {
-            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
-            Logger.error("Rate not found", exception, context = TAG)
-            return Result.failure(exception)
-        }
-
-        // Convert the fiat amount to BTC, then to sats
-        val btc = fiatAmount / rate.rate
-        val sats = (btc * SATS_IN_BTC).roundToLong()
-
-        return Result.success(sats)
+    ): Result<ULong> {
+        return convertFiatToSats(
+            fiatValue = BigDecimal.valueOf(fiatAmount),
+            currency = currency
+        )
     }
 
     companion object {
