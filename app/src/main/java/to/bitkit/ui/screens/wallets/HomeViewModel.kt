@@ -138,8 +138,7 @@ class HomeViewModel @Inject constructor(
 
             val totalOnChainSats = walletRepo.balanceState.value.totalOnchainSats
             val balanceUsd = satsToUsd(totalOnChainSats) ?: return@launch
-            val thresholdReached =
-                totalOnChainSats > BALANCE_THRESHOLD_SATS || balanceUsd > BigDecimal(BALANCE_THRESHOLD_USD)
+            val thresholdReached = balanceUsd > BigDecimal(BALANCE_THRESHOLD_USD)
             val isTimeOutOver = settings.lastTimeAskedBalanceWarningMillis - ASK_INTERVAL_MILLIS > ASK_INTERVAL_MILLIS
             val belowMaxWarnings = settings.balanceWarningTimes < MAX_WARNINGS
 
@@ -286,9 +285,6 @@ class HomeViewModel @Inject constructor(
     companion object {
         /**How high the balance must be to show this warning to the user (in USD)*/
         private const val BALANCE_THRESHOLD_USD = 500L
-
-        /**how high the balance must be to show this warning to the user (in Sats)*/
-        private const val BALANCE_THRESHOLD_SATS = 700000U
         private const val MAX_WARNINGS = 3
 
         /** 1 day - how long this prompt will be hidden if user taps Later*/
