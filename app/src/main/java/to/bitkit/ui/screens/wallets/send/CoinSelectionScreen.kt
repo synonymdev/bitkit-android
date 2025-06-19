@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
+import to.bitkit.ext.uniqueUtxoKey
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
@@ -48,6 +50,13 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+
+object CoinSelectionTestTags {
+    const val SCREEN = "coin_selection_screen"
+    const val AUTO_SELECT_ROW = "auto_select_row"
+    const val UTXO_ROW_PREFIX = "utxo_row"
+    const val CONTINUE_BUTTON = "continue_button"
+}
 
 @Composable
 fun CoinSelectionScreen(
@@ -95,6 +104,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .testTag(CoinSelectionTestTags.SCREEN)
     ) {
         SheetTopBar(stringResource(R.string.wallet__selection_title), onBack = onBack)
 
@@ -112,6 +122,7 @@ private fun Content(
                         .fillMaxWidth()
                         .height(72.dp)
                         .clickableAlpha { onClickAuto() }
+                        .testTag(CoinSelectionTestTags.AUTO_SELECT_ROW)
                 ) {
                     BodyMSB(text = stringResource(R.string.wallet__selection_auto))
                     Switch(
@@ -126,7 +137,7 @@ private fun Content(
             items(uiState.availableUtxos) { utxo ->
                 UtxoRow(
                     utxo = utxo,
-                    isSelected = uiState.selectedUtxos.any { it.outpoint.txid == utxo.outpoint.txid && it.outpoint.vout == utxo.outpoint.vout },
+                    isSelected = uiState.selectedUtxos.any { it.outpoint == utxo.outpoint },
                     tags = tagsByTxId[utxo.outpoint.txid] ?: emptyList(),
                     onTap = { onClickUtxo(utxo) },
                     onRender = onRenderUtxo,
@@ -166,6 +177,7 @@ private fun Content(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isSelectionValid,
                 onClick = onContinue,
+                modifier = Modifier.testTag(CoinSelectionTestTags.CONTINUE_BUTTON)
             )
             VerticalSpacer(16.dp)
         }
@@ -188,6 +200,7 @@ private fun UtxoRow(
             .fillMaxWidth()
             .height(72.dp)
             .clickableAlpha { onTap() }
+            .testTag("${CoinSelectionTestTags.UTXO_ROW_PREFIX}_${utxo.uniqueUtxoKey()}")
     ) {
         Column {
             val amount = utxo.valueSats.toLong()
