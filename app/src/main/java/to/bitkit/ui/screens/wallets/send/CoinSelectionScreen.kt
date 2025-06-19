@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -29,11 +32,14 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Subtitle
+import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -51,27 +57,38 @@ fun CoinSelectionScreen(
     viewModel: CoinSelectionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val tagsByTxId by viewModel.tagsByTxId.collectAsStateWithLifecycle()
 
-    LaunchedEffect(requiredAmount) {
+    // Get onchain activities from ActivityListViewModel
+    val activityListViewModel = activityListViewModel
+    val onchainActivities by activityListViewModel?.onchainActivities?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(emptyList()) }
+
+    LaunchedEffect(requiredAmount, onchainActivities) {
+        viewModel.setOnchainActivities(onchainActivities.orEmpty())
         viewModel.loadUtxos(requiredAmount)
     }
 
     Content(
         uiState = uiState,
+        tagsByTxId = tagsByTxId,
         onBack = onBack,
         onContinue = { onContinue(uiState.selectedUtxos) },
         onClickAuto = { viewModel.onToggleAuto() },
         onClickUtxo = { viewModel.onToggleUtxo(it) },
+        onRenderUtxo = { viewModel.loadTagsForUtxo(it) },
     )
 }
 
 @Composable
 private fun Content(
     uiState: CoinSelectionUiState,
+    tagsByTxId: Map<String, List<String>> = emptyMap(),
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
     onClickAuto: () -> Unit = {},
     onClickUtxo: (SpendableUtxo) -> Unit = {},
+    onRenderUtxo: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -110,7 +127,9 @@ private fun Content(
                 UtxoRow(
                     utxo = utxo,
                     isSelected = uiState.selectedUtxos.any { it.outpoint.txid == utxo.outpoint.txid && it.outpoint.vout == utxo.outpoint.vout },
-                    onTap = { onClickUtxo(utxo) }
+                    tags = tagsByTxId[utxo.outpoint.txid] ?: emptyList(),
+                    onTap = { onClickUtxo(utxo) },
+                    onRender = onRenderUtxo,
                 )
                 HorizontalDivider()
             }
@@ -157,11 +176,14 @@ private fun Content(
 private fun UtxoRow(
     utxo: SpendableUtxo,
     isSelected: Boolean,
+    tags: List<String>,
     onTap: () -> Unit,
+    onRender: (String) -> Unit = {},
 ) {
+    LaunchedEffect(utxo.outpoint.txid) { onRender(utxo.outpoint.txid) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
             .height(72.dp)
@@ -187,6 +209,21 @@ private fun UtxoRow(
             }
         }
 
+        if (tags.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            ) {
+                items(tags) { tag ->
+                    TagButton(text = tag, onClick = null)
+                }
+            }
+        } else {
+            FillWidth()
+        }
+
         Switch(
             checked = isSelected,
             onCheckedChange = null, // handled by parent
@@ -202,41 +239,21 @@ private fun Preview() {
         Content(
             uiState = CoinSelectionUiState(
                 availableUtxos = listOf(
-                    SpendableUtxo(
-                        outpoint = OutPoint(
-                            txid = "abc123",
-                            vout = 0u
-                        ),
-                        valueSats = 50000uL
-                    ),
-                    SpendableUtxo(
-                        outpoint = OutPoint(
-                            txid = "def456",
-                            vout = 1u
-                        ),
-                        valueSats = 25000uL
-                    ),
-                    SpendableUtxo(
-                        outpoint = OutPoint(
-                            txid = "ghi789",
-                            vout = 0u
-                        ),
-                        valueSats = 10000uL
-                    )
+                    SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
+                    SpendableUtxo(outpoint = OutPoint(txid = "def456", vout = 1u), valueSats = 25000uL),
+                    SpendableUtxo(outpoint = OutPoint(txid = "ghi789", vout = 0u), valueSats = 10000uL)
                 ),
                 selectedUtxos = listOf(
-                    SpendableUtxo(
-                        outpoint = OutPoint(
-                            txid = "abc123",
-                            vout = 0u
-                        ),
-                        valueSats = 50000uL
-                    )
+                    SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
                 ),
                 autoSelectCoinsOn = false,
                 totalRequired = 30000uL,
                 totalSelected = 50000uL,
-                isSelectionValid = true
+                isSelectionValid = true,
+            ),
+            tagsByTxId = mapOf(
+                "abc123" to listOf("coffee", "work"),
+                "def456" to listOf("shopping", "groceries", "food"),
             )
         )
     }
@@ -250,10 +267,11 @@ private fun Preview2() {
             uiState = CoinSelectionUiState(
                 availableUtxos = emptyList(),
                 autoSelectCoinsOn = true,
-                totalRequired = 0uL,
+                totalRequired = 1000uL,
                 totalSelected = 0uL,
                 isSelectionValid = false
-            )
+            ),
+            tagsByTxId = emptyMap()
         )
     }
 }
