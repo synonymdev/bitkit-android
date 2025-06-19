@@ -20,9 +20,11 @@ import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.screens.widgets.blocks.toWeatherModel
+import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -31,6 +33,7 @@ class HomeViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val widgetsRepo: WidgetsRepo,
     private val settingsStore: SettingsStore,
+    private val currencyRepo: CurrencyRepo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -134,8 +137,9 @@ class HomeViewModel @Inject constructor(
             val settings = settingsStore.data.first()
 
             val totalOnChainSats = walletRepo.balanceState.value.totalOnchainSats
-            val balanceUsdLong = satsToUsdLong(totalOnChainSats)
-            val thresholdReached = totalOnChainSats > BALANCE_THRESHOLD_SATS || balanceUsdLong > BALANCE_THRESHOLD_USD
+            val balanceUsd = satsToUsd(totalOnChainSats) ?: return@launch
+            val thresholdReached =
+                totalOnChainSats > BALANCE_THRESHOLD_SATS || balanceUsd > BigDecimal(BALANCE_THRESHOLD_USD)
             val isTimeOutOver = settings.lastTimeAskedBalanceWarningMillis - ASK_INTERVAL_MILLIS > ASK_INTERVAL_MILLIS
             val belowMaxWarnings = settings.balanceWarningTimes < MAX_WARNINGS
 
@@ -151,8 +155,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun satsToUsdLong(sats: ULong): ULong {
-        return (sats.toDouble() * 0.00105).toULong() //todo IMPLEMENT
+    private fun satsToUsd(sats: ULong): BigDecimal? {
+        val converted = currencyRepo.convertSatsToFiat(sats = sats.toLong(), currency = "USD")
+        return converted?.value
     }
 
     fun dismissHighBalanceSheet() {
@@ -272,7 +277,7 @@ class HomeViewModel @Inject constructor(
 
     companion object {
         /**How high the balance must be to show this warning to the user (in USD)*/
-        private const val BALANCE_THRESHOLD_USD = 500U
+        private const val BALANCE_THRESHOLD_USD = 500L
 
         /**how high the balance must be to show this warning to the user (in Sats)*/
         private const val BALANCE_THRESHOLD_SATS = 700000U
