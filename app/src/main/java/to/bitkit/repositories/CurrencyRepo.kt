@@ -36,6 +36,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Date
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
@@ -43,7 +44,8 @@ class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
-    private val cacheStore: CacheStore
+    private val cacheStore: CacheStore,
+    @Named("enablePolling") private val enablePolling: Boolean,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val _currencyState = MutableStateFlow(CurrencyState())
@@ -64,7 +66,9 @@ class CurrencyRepo @Inject constructor(
         }.flowOn(bgDispatcher)
 
     init {
-        startPolling()
+        if (enablePolling) {
+            startPolling()
+        }
         observeStaleData()
         collectCachedData()
     }
