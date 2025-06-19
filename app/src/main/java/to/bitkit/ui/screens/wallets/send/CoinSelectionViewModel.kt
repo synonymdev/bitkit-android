@@ -131,7 +131,7 @@ class CoinSelectionViewModel @Inject constructor(
             totalSelectedSat >= totalRequiredSat
     }
 
-        private suspend fun calculateTotalRequired(amount: ULong): ULong {
+    private suspend fun calculateTotalRequired(amount: ULong): ULong {
         val estimatedFee = lightningRepo.estimateTotalFee().getOrThrow()
         return amount + estimatedFee
     }
