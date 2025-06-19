@@ -48,10 +48,10 @@ class CurrencyService @Inject constructor( //TODO REPLACE DIRECT ACCESS WITH Cur
         throw lastError ?: CurrencyError.Unknown
     }
 
-    fun loadCachedRates(): List<FxRate>? {
-        // TODO load from disk
-        return cachedRates
-    }
+//    fun loadCachedRates(): List<FxRate>? {
+//        // TODO load from disk
+//        return cachedRates
+//    }
 
     fun convert(sats: Long, rate: FxRate): ConvertedAmount? {
         val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
@@ -69,40 +69,40 @@ class CurrencyService @Inject constructor( //TODO REPLACE DIRECT ACCESS WITH Cur
         )
     }
 
-    suspend fun convertSatsToFiat(satsAmount: Long, currency: String): Double {
-        val rates = cachedRates ?: fetchLatestRates()
-        val rate = getCurrentRate(currency, rates) ?: return 0.0
+//    suspend fun convertSatsToFiat(satsAmount: Long, currency: String): Double {
+//        val rates = cachedRates ?: fetchLatestRates()
+//        val rate = getCurrentRate(currency, rates) ?: return 0.0
+//
+//        return convert(satsAmount.toLong(), rate)?.value?.toDouble() ?: 0.0
+//    }
 
-        return convert(satsAmount.toLong(), rate)?.value?.toDouble() ?: 0.0
-    }
+//    fun convertFiatToSats(fiatValue: BigDecimal, rate: FxRate): ULong {
+//        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
+//        val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
+//
+//        val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+//
+//        return roundedNumber.toLong().toULong()
+//    }
 
-    fun convertFiatToSats(fiatValue: BigDecimal, rate: FxRate): ULong {
-        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
-        val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
+//    fun convertFiatToSats(fiatAmount: Double, currency: String, rates: List<FxRate>): Long {
+//        val rate = getCurrentRate(currency, rates) ?: return 0
+//
+//        // Convert the fiat amount to BTC, then to sats
+//        val btc = fiatAmount / rate.rate
+//        val sats = (btc * SATS_IN_BTC).roundToLong()
+//
+//        return sats
+//    }
 
-        val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+//    suspend fun convertFiatToSats(fiatAmount: Double, currency: String): Long {
+//        val rates = cachedRates ?: fetchLatestRates()
+//        return convertFiatToSats(fiatAmount, currency, rates)
+//    }
 
-        return roundedNumber.toLong().toULong()
-    }
-
-    fun convertFiatToSats(fiatAmount: Double, currency: String, rates: List<FxRate>): Long {
-        val rate = getCurrentRate(currency, rates) ?: return 0
-
-        // Convert the fiat amount to BTC, then to sats
-        val btc = fiatAmount / rate.rate
-        val sats = (btc * SATS_IN_BTC).roundToLong()
-
-        return sats
-    }
-
-    suspend fun convertFiatToSats(fiatAmount: Double, currency: String): Long {
-        val rates = cachedRates ?: fetchLatestRates()
-        return convertFiatToSats(fiatAmount, currency, rates)
-    }
-
-    fun getCurrentRate(currency: String, rates: List<FxRate>): FxRate? {
-        return rates.firstOrNull { it.quote == currency }
-    }
+//    fun getCurrentRate(currency: String, rates: List<FxRate>): FxRate? {
+//        return rates.firstOrNull { it.quote == currency }
+//    }
 }
 
 sealed class CurrencyError(message: String) : AppError(message) {
