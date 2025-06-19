@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +61,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -791,10 +793,15 @@ private fun HomeContentView(
             )
 
             if (homeUiState.highBalanceSheetVisible) {
+                val context = LocalContext.current
                 HighBalanceWarningSheet(
                     onDismiss = onDismissHighBalanceSheet,
                     understoodClick = onDismissHighBalanceSheet,
-                    learnMoreClick = {} //TODO NAVIGATE INTENT
+                    learnMoreClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.STORING_BITCOINS_URL.toUri())
+                        context.startActivity(intent)
+                        onDismissHighBalanceSheet()
+                    }
                 )
             }
         }
