@@ -1,5 +1,11 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,12 +33,6 @@ import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.AddressType
-import uniffi.bitkitcore.PaymentType
-import uniffi.bitkitcore.Scanner
-import uniffi.bitkitcore.decode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.days

@@ -168,9 +168,8 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
-    implementation(libs.ldk.node.android) {
-        exclude(group = "net.java.dev.jna", module = "jna") // fix for ldk-node fork builds
-    }
+    implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
+    implementation(libs.bitkitcore) { exclude(group = "net.java.dev.jna", module = "jna") }
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

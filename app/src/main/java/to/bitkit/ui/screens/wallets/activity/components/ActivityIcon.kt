@@ -17,14 +17,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
 
 @Composable
 fun ActivityIcon(

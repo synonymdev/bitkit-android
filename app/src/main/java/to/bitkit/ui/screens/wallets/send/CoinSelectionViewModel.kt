@@ -2,6 +2,8 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.Activity.Onchain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +18,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.Activity.Onchain
 import javax.inject.Inject
 
 @HiltViewModel

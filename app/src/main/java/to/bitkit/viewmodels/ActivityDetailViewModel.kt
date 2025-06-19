@@ -2,6 +2,7 @@ package to.bitkit.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Activity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +15,6 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TxDetails
-import uniffi.bitkitcore.Activity
 import javax.inject.Inject
 
 @HiltViewModel

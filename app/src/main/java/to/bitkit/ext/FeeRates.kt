@@ -1,7 +1,7 @@
 package to.bitkit.ext
 
+import com.synonym.bitkitcore.FeeRates
 import to.bitkit.models.TransactionSpeed
-import uniffi.bitkitcore.FeeRates
 
 fun FeeRates.getSatsPerVByteFor(speed: TransactionSpeed): UInt {
     return when (speed) {

@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.IBtInfo
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +38,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.IBtInfo
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration

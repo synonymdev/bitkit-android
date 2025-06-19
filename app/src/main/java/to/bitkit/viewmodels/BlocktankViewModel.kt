@@ -5,6 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.CreateCjitOptions
+import com.synonym.bitkitcore.CreateOrderOptions
+import com.synonym.bitkitcore.IBtEstimateFeeResponse2
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IcJitEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
@@ -23,12 +29,6 @@ import to.bitkit.services.CurrencyService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.CreateCjitOptions
-import uniffi.bitkitcore.CreateOrderOptions
-import uniffi.bitkitcore.IBtEstimateFeeResponse2
-import uniffi.bitkitcore.IBtInfo
-import uniffi.bitkitcore.IBtOrder
-import uniffi.bitkitcore.IcJitEntry
 import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.math.ceil

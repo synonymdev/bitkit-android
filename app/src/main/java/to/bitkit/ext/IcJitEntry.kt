@@ -1,11 +1,11 @@
 package to.bitkit.ext
 
-import uniffi.bitkitcore.BtBolt11InvoiceState
-import uniffi.bitkitcore.CJitStateEnum
-import uniffi.bitkitcore.IBtBolt11Invoice
-import uniffi.bitkitcore.IBtChannel
-import uniffi.bitkitcore.ILspNode
-import uniffi.bitkitcore.IcJitEntry
+import com.synonym.bitkitcore.BtBolt11InvoiceState
+import com.synonym.bitkitcore.CJitStateEnum
+import com.synonym.bitkitcore.IBtBolt11Invoice
+import com.synonym.bitkitcore.IBtChannel
+import com.synonym.bitkitcore.ILspNode
+import com.synonym.bitkitcore.IcJitEntry
 
 fun IcJitEntry.Companion.mock(
     state: CJitStateEnum = CJitStateEnum.CREATED,

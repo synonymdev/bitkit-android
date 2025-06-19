@@ -6,6 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.Scanner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -53,11 +58,6 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.LightningInvoice
-import uniffi.bitkitcore.OnChainInvoice
-import uniffi.bitkitcore.PaymentType
-import uniffi.bitkitcore.Scanner
 import java.math.BigDecimal
 import javax.inject.Inject
 

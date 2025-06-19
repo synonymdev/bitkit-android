@@ -45,7 +45,7 @@ class BlocktankNotificationsService @Inject constructor(
         keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
         ServiceQueue.CORE.background {
-            uniffi.bitkitcore.registerDevice(
+            com.synonym.bitkitcore.registerDevice(
                 deviceToken = deviceToken,
                 publicKey = publicKey,
                 features = Env.pushNotificationFeatures.map { it.toString() },
@@ -53,6 +53,7 @@ class BlocktankNotificationsService @Inject constructor(
                 isoTimestamp = "$timestamp",
                 signature = signature,
                 customUrl = Env.blocktankPushNotificationServer,
+                isProduction = null,
             )
         }
 
@@ -69,7 +70,7 @@ class BlocktankNotificationsService @Inject constructor(
         Logger.debug("Sending test notification to self…")
 
         ServiceQueue.CORE.background {
-            uniffi.bitkitcore.testNotification(
+            com.synonym.bitkitcore.testNotification(
                 deviceToken = deviceToken,
                 secretMessage = "hello",
                 notificationType = "incomingHtlc",

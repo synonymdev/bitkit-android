@@ -33,6 +33,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.NetworkType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -57,8 +59,6 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
-import uniffi.bitkitcore.LightningInvoice
-import uniffi.bitkitcore.NetworkType
 import java.time.Instant
 
 @OptIn(ExperimentalLayoutApi::class)

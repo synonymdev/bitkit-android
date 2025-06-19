@@ -1,6 +1,6 @@
 package to.bitkit.models
 
-import uniffi.bitkitcore.AddressType
+import com.synonym.bitkitcore.AddressType
 
 data class AddressTypeInfo(
     val path: String,

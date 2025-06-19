@@ -1,10 +1,10 @@
 package to.bitkit.ui.screens.wallets.activity.utils
 
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
 import java.util.Calendar
 
 val previewActivityItems = buildList {

@@ -2,6 +2,9 @@ package to.bitkit.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -27,9 +30,6 @@ import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.BtOrderState2
-import uniffi.bitkitcore.IBtInfo
-import uniffi.bitkitcore.IBtOrder
 import java.math.BigDecimal
 import javax.inject.Inject
 import kotlin.math.max
