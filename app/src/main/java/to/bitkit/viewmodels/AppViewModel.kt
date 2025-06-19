@@ -53,7 +53,6 @@ import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ResourceProvider
 import uniffi.bitkitcore.ActivityFilter
 import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
@@ -75,7 +74,6 @@ class AppViewModel @Inject constructor(
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
-    private val resourceProvider: ResourceProvider,
     private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
@@ -523,7 +521,8 @@ class AppViewModel @Inject constructor(
             return false
         }
 
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull() ?: return false
+        val quickPayAmountSats =
+            currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull() ?: return false
 
         if (amountSats <= quickPayAmountSats) {
             Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
@@ -676,7 +675,8 @@ class AppViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
+        val hash =
+            lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
 
         // Wait until matching payment event is received
         val result = ldkNodeEventBus.events.watchUntil { event ->
