@@ -49,14 +49,19 @@ fun Modifier.clickableAlpha(
 
     this
         .graphicsLayer { this.alpha = alpha }
-        .clickable(
-            enabled = onClick != null,
-            onClick = {
-                wasClicked.value = true
-                onClick?.invoke()
-            },
-            interactionSource = interactionSource,
-            indication = null,
+        .then(
+            if (onClick != null) {
+                Modifier.clickable(
+                    onClick = {
+                        wasClicked.value = true
+                        onClick()
+                    },
+                    interactionSource = interactionSource,
+                    indication = null,
+                )
+            } else {
+                Modifier
+            }
         )
 }
 

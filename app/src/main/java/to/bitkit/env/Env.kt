@@ -80,8 +80,13 @@ internal object Env {
     const val DERIVATION_NAME = "bitkit-notifications"
 
     object TransactionDefaults {
-        val recommendedBaseFee = 256u // Total recommended tx base fee in sats
-        // val dustLimit = 546
+        /** Total recommended tx base fee in sats */
+        val recommendedBaseFee = 256u
+        /**
+         * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
+         * required to include them in a block would be greater than the value of the transaction itself.
+         * */
+        val dustLimit = 546u
     }
 
     private lateinit var appStoragePath: String

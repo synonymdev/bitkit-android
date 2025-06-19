@@ -403,11 +403,18 @@ class LightningService @Inject constructor(
     // endregion
 
     // region utxo selection
-    suspend fun listSpendableOutputs(): List<SpendableUtxo> {
+    suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
-            node.onchainPayment().listSpendableOutputs()
+            return@background try {
+                val result = node.onchainPayment().listSpendableOutputs()
+                Result.success(result)
+            } catch (e: Exception) {
+                Result.failure(
+                    if (e is NodeException) LdkError(e) else e
+                )
+            }
         }
     }
 
@@ -416,19 +423,22 @@ class LightningService @Inject constructor(
         satsPerVByte: UInt,
         algorithm: CoinSelectionAlgorithm,
         utxos: List<SpendableUtxo>?,
-    ): List<SpendableUtxo> {
+    ): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         return ServiceQueue.LDK.background {
             return@background try {
-                node.onchainPayment().selectUtxosWithAlgorithm(
+                val result = node.onchainPayment().selectUtxosWithAlgorithm(
                     targetAmountSats = targetAmountSats,
                     feeRate = convertVByteToKwu(satsPerVByte),
                     algorithm = algorithm,
                     utxos = utxos,
                 )
-            } catch (e: NodeException) {
-                throw LdkError(e)
+                Result.success(result)
+            } catch (e: Exception) {
+                Result.failure(
+                    if (e is NodeException) LdkError(e) else e
+                )
             }
         }
     }
