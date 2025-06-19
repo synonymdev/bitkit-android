@@ -11,9 +11,11 @@ import to.bitkit.data.dto.FeeEstimates
 import to.bitkit.data.dto.WeatherDTO
 import to.bitkit.env.Env
 import to.bitkit.models.WidgetType
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.services.CurrencyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import java.math.BigDecimal
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.floor
@@ -23,7 +25,7 @@ import kotlin.time.Duration.Companion.minutes
 @Singleton
 class WeatherService @Inject constructor(
     private val client: HttpClient,
-    private val currencyService: CurrencyService,
+    private val currencyRepo: CurrencyRepo,
 ) : WidgetService<WeatherDTO> {
 
     override val widgetType = WidgetType.WEATHER
@@ -92,9 +94,9 @@ class WeatherService @Inject constructor(
 
         // Check USD threshold first
         val avgFeeSats = currentFeeRate * AVERAGE_SEGWIT_VBYTES_SIZE
-        val avgFeeUsd = currencyService.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY)
+        val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY).getOrNull() ?: return FeeCondition.AVERAGE
 
-        if (avgFeeUsd <= USD_GOOD_THRESHOLD) {
+        if (avgFeeUsd.value <= BigDecimal(USD_GOOD_THRESHOLD)) {
             return FeeCondition.GOOD
         }
 
@@ -107,13 +109,8 @@ class WeatherService @Inject constructor(
     }
 
     private suspend fun formatFeeForDisplay(satoshis: Int): String {
-        val usdValue = convertSatsToUsd(satoshis)
-        return "$ ${String.format("%.2f", usdValue)}"
-    }
-
-    private suspend fun convertSatsToUsd(satoshis: Int): Double {
-        val amountInUsd = currencyService.convertSatsToFiat(satoshis.toLong(), currency = USD_CURRENCY)
-        return amountInUsd
+        val usdValue = currencyRepo.convertSatsToFiat(satoshis.toLong(), currency = USD_CURRENCY).getOrNull()
+        return usdValue?.formatted.orEmpty()
     }
 }
 /**
