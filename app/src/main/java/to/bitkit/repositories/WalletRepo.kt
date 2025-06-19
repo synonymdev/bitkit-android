@@ -13,6 +13,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.keychain.Keychain
@@ -47,6 +48,7 @@ class WalletRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
+    private val cacheStore: CacheStore
 ) {
 
     private val _walletState = MutableStateFlow(
@@ -201,6 +203,7 @@ class WalletRepo @Inject constructor(
             keychain.wipe()
             appStorage.clear()
             settingsStore.reset()
+            cacheStore.reset()
             coreService.activity.removeAll()
             deleteAllInvoices()
             _walletState.update { WalletState() }

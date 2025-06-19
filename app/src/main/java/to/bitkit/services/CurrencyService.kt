@@ -16,7 +16,7 @@ import kotlin.math.pow
 import kotlin.math.roundToLong
 
 @Singleton
-class CurrencyService @Inject constructor(
+class CurrencyService @Inject constructor( //TODO REPLACE DIRECT ACCESS WITH CurrencyRepo
     private val blocktankHttpClient: BlocktankHttpClient,
 ) {
     private var cachedRates: List<FxRate>? = null
