@@ -70,7 +70,7 @@ class LightningRepo @Inject constructor(
     private suspend fun <T> executeWhenNodeRunning(
         operationName: String,
         waitTimeout: Duration = 1.minutes,
-        operation: suspend () -> Result<T>
+        operation: suspend () -> Result<T>,
     ): Result<T> = withContext(bgDispatcher) {
         Logger.debug("Operation called: $operationName", context = TAG)
 
@@ -108,7 +108,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun <T> executeOperation(
         operationName: String,
-        operation: suspend () -> Result<T>
+        operation: suspend () -> Result<T>,
     ): Result<T> {
         return try {
             operation()
@@ -132,7 +132,7 @@ class LightningRepo @Inject constructor(
         walletIndex: Int = 0,
         timeout: Duration? = null,
         shouldRetry: Boolean = true,
-        eventHandler: NodeEventHandler? = null
+        eventHandler: NodeEventHandler? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
             return@withContext Result.success(Unit)
@@ -244,7 +244,12 @@ class LightningRepo @Inject constructor(
             return@withContext try {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lightningService.wipeStorage(walletIndex)
-                _lightningState.update { LightningState(nodeStatus = it.nodeStatus, nodeLifecycleState = it.nodeLifecycleState) }
+                _lightningState.update {
+                    LightningState(
+                        nodeStatus = it.nodeStatus,
+                        nodeLifecycleState = it.nodeLifecycleState
+                    )
+                }
                 Result.success(Unit)
             } catch (e: Throwable) {
                 Logger.error("Wipe storage error", e, context = TAG)
@@ -274,7 +279,7 @@ class LightningRepo @Inject constructor(
     suspend fun createInvoice(
         amountSats: ULong? = null,
         description: String,
-        expirySeconds: UInt = 86_400u
+        expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("Create invoice") {
 
         if (coreService.shouldBlockLightning()) {
@@ -374,10 +379,33 @@ class LightningRepo @Inject constructor(
         lightningService.listSpendableOutputs()
     }
 
+    suspend fun estimateTotalFee(speed: TransactionSpeed? = null): Result<ULong> = withContext(bgDispatcher) {
+        return@withContext try {
+            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
+            val fees = coreService.blocktank.getFees().getOrThrow()
+            val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+
+            // TODO: Add proper fee estimation
+            // Conservative estimate for a typical transaction:
+            // - 2-3 P2WPKH inputs (~68 vBytes each)
+            // - 2 P2WPKH outputs (~31 vBytes each) - recipient + change
+            // - Transaction overhead (~10-15 vBytes)
+            // Total: ~220-250 vBytes for a typical transaction
+            val transactionSizeInVBytes = 250u // Conservative estimate
+
+            val fee = transactionSizeInVBytes * satsPerVByte
+            Result.success(fee.toULong())
+        } catch (e: Throwable) {
+            val rawFee = 1000uL
+            Logger.error("Estimate fee error, using conservative fallback of $rawFee", e, context = TAG)
+            Result.success(rawFee)
+        }
+    }
+
     suspend fun openChannel(
         peer: LnPeer,
         channelAmountSats: ULong,
-        pushToCounterpartySats: ULong? = null
+        pushToCounterpartySats: ULong? = null,
     ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
         val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
         syncState()
@@ -408,18 +436,23 @@ class LightningRepo @Inject constructor(
 
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
-    fun getNodeId(): String? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
+    fun getNodeId(): String? =
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
 
-    fun getBalances(): BalanceDetails? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
+    fun getBalances(): BalanceDetails? =
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
 
-    fun getStatus(): NodeStatus? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.status else null
+    fun getStatus(): NodeStatus? =
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.status else null
 
-    fun getPeers(): List<LnPeer>? = if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.peers else null
+    fun getPeers(): List<LnPeer>? =
+        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.peers else null
 
     fun getChannels(): List<ChannelDetails>? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.channels else null
 
-    fun hasChannels(): Boolean = _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
+    fun hasChannels(): Boolean =
+        _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
 
     // Notification handling
     suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
@@ -484,5 +517,5 @@ data class LightningState(
     val peers: List<LnPeer> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
     val isSyncingWallet: Boolean = false,
-    val shouldBlockLightning: Boolean = false
+    val shouldBlockLightning: Boolean = false,
 )
