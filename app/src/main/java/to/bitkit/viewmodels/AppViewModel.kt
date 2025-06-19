@@ -656,7 +656,11 @@ class AppViewModel @Inject constructor(
 
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
         val utxos = _sendUiState.value.selectedUtxos
-        return lightningService.sendOnChain(address, amount, utxosToSpend = utxos).onFailure {
+        return lightningService.sendOnChain(
+            address = address,
+            sats = amount,
+            utxosToSpend = utxos,
+        ).onFailure {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = "Error Sending",

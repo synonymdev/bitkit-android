@@ -145,7 +145,7 @@ private fun Content(
                     .padding(vertical = 8.dp)
             ) {
                 Caption13Up(text = stringResource(R.string.wallet__selection_total_required), color = Colors.White64)
-                Subtitle(text = uiState.totalRequired.toLong().formatToModernDisplay())
+                Subtitle(text = uiState.totalRequiredSat.toLong().formatToModernDisplay())
             }
             HorizontalDivider()
 
@@ -158,7 +158,7 @@ private fun Content(
                     .padding(vertical = 8.dp)
             ) {
                 Caption13Up(stringResource(R.string.wallet__selection_total_selected), color = Colors.White64)
-                Subtitle(text = uiState.totalSelected.toLong().formatToModernDisplay(), color = Colors.Green)
+                Subtitle(text = uiState.totalSelectedSat.toLong().formatToModernDisplay(), color = Colors.Green)
             }
             VerticalSpacer(16.dp)
 
@@ -247,8 +247,8 @@ private fun Preview() {
                     SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
                 ),
                 autoSelectCoinsOn = false,
-                totalRequired = 30000uL,
-                totalSelected = 50000uL,
+                totalRequiredSat = 30000uL,
+                totalSelectedSat = 50000uL,
                 isSelectionValid = true,
             ),
             tagsByTxId = mapOf(
@@ -267,8 +267,8 @@ private fun Preview2() {
             uiState = CoinSelectionUiState(
                 availableUtxos = emptyList(),
                 autoSelectCoinsOn = true,
-                totalRequired = 1000uL,
-                totalSelected = 0uL,
+                totalRequiredSat = 1000uL,
+                totalSelectedSat = 0uL,
                 isSelectionValid = false
             ),
             tagsByTxId = emptyMap()

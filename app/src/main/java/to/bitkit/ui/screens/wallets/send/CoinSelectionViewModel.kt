@@ -53,8 +53,8 @@ class CoinSelectionViewModel @Inject constructor(
                         availableUtxos = sortedUtxos,
                         selectedUtxos = sortedUtxos,
                         autoSelectCoinsOn = true,
-                        totalRequired = totalRequired,
-                        totalSelected = totalSelected,
+                        totalRequiredSat = totalRequired,
+                        totalSelectedSat = totalSelected,
                         isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
                     )
                 }
@@ -66,7 +66,6 @@ class CoinSelectionViewModel @Inject constructor(
     }
 
     fun loadTagsForUtxo(txId: String) {
-        // Skip if already loaded
         if (_tagsByTxId.value.containsKey(txId)) return
 
         viewModelScope.launch(bgDispatcher) {
@@ -94,13 +93,13 @@ class CoinSelectionViewModel @Inject constructor(
         } else {
             _uiState.update { state ->
                 val allSelected = state.availableUtxos
-                val newTotal = allSelected.sumOf { it.valueSats }
+                val newTotalSat = allSelected.sumOf { it.valueSats }
 
                 state.copy(
                     autoSelectCoinsOn = true,
                     selectedUtxos = allSelected,
-                    totalSelected = newTotal,
-                    isSelectionValid = validateCoinSelection(newTotal, state.totalRequired)
+                    totalSelectedSat = newTotalSat,
+                    isSelectionValid = validateCoinSelection(newTotalSat, state.totalRequiredSat)
                 )
             }
         }
@@ -119,23 +118,22 @@ class CoinSelectionViewModel @Inject constructor(
 
             state.copy(
                 selectedUtxos = newSelection,
-                totalSelected = newTotal,
+                totalSelectedSat = newTotal,
                 autoSelectCoinsOn = false,
-                isSelectionValid = validateCoinSelection(newTotal, state.totalRequired)
+                isSelectionValid = validateCoinSelection(newTotal, state.totalRequiredSat)
             )
         }
     }
 
-    private fun validateCoinSelection(totalSelected: ULong, totalRequired: ULong): Boolean {
-        val dustLimit = Env.TransactionDefaults.dustLimit
-        return totalSelected > dustLimit &&
-            totalRequired > dustLimit &&
-            totalSelected >= totalRequired
+    private fun validateCoinSelection(totalSelectedSat: ULong, totalRequiredSat: ULong): Boolean {
+        return totalSelectedSat > Env.TransactionDefaults.dustLimit &&
+            totalRequiredSat > Env.TransactionDefaults.dustLimit &&
+            totalSelectedSat >= totalRequiredSat
     }
 
     private fun calculateTotalRequired(amount: ULong): ULong {
-        // TODO: Add proper fee calculation
-        val estimatedFee = 1000uL // Mock fee
+        // TODO: Add proper fee estimation
+        val estimatedFee = 1000uL // conservative raw fee estimate
         return amount + estimatedFee
     }
 }
@@ -144,8 +142,7 @@ data class CoinSelectionUiState(
     val availableUtxos: List<SpendableUtxo> = emptyList(),
     val selectedUtxos: List<SpendableUtxo> = emptyList(),
     val autoSelectCoinsOn: Boolean = true,
-    val totalRequired: ULong = 0u,
-    val totalSelected: ULong = 0u,
+    val totalRequiredSat: ULong = 0u,
+    val totalSelectedSat: ULong = 0u,
     val isSelectionValid: Boolean = false,
-    val errorMessage: String? = null,
 )
