@@ -26,13 +26,18 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.utils.Logger
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.roundToLong
 
 @Singleton
 class CurrencyRepo @Inject constructor(
@@ -42,7 +47,6 @@ class CurrencyRepo @Inject constructor(
     private val cacheStore: CacheStore
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
-
     private val _currencyState = MutableStateFlow(CurrencyState())
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
 
@@ -137,7 +141,8 @@ class CurrencyRepo @Inject constructor(
 
     suspend fun togglePrimaryDisplay() = withContext(bgDispatcher) {
         currencyState.value.primaryDisplay.let {
-            val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
+            val newDisplay =
+                if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
             settingsStore.update { it.copy(primaryDisplay = newDisplay) }
         }
     }
@@ -157,19 +162,88 @@ class CurrencyRepo @Inject constructor(
 
     fun getCurrencySymbol(): String {
         val currentState = currencyState.value
-        return currentState.rates.firstOrNull { it.quote == currentState.selectedCurrency }?.currencySymbol ?: ""
+        return currentState.rates.firstOrNull {
+            it.quote == currentState.selectedCurrency
+        }?.currencySymbol ?: ""
     }
 
     // Conversion helpers
-    fun convertSatsToFiat(sats: Long, currency: String? = null): ConvertedAmount? {
-        val targetCurrency = currency ?: currencyState.value.selectedCurrency
-        val rate = currencyService.getCurrentRate(targetCurrency, currencyState.value.rates)
-        return rate?.let { currencyService.convert(sats = sats, rate = it) }
+    fun getCurrentRate(currency: String): FxRate? {
+        return _currencyState.value.rates.firstOrNull { it.quote == currency }
     }
 
-    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long {
-        val sourceCurrency = currency ?: currencyState.value.selectedCurrency
-        return currencyService.convertFiatToSats(fiatAmount, sourceCurrency, currencyState.value.rates)
+    fun convertSatsToFiat(
+        sats: Long,
+        currency: String? = null,
+    ): Result<ConvertedAmount> = runCatching {
+        val targetCurrency = currency ?: currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency)
+
+        if (rate == null) {
+            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
+            Logger.error("Rate not found", exception, context = TAG)
+            return Result.failure(exception)
+        }
+
+        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
+        val value: BigDecimal = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
+        val formatted = value.formatCurrency()
+
+        if (formatted == null) {
+            val exception = Exception("Error formatting currency: $value")
+            Logger.error("Error formatting currency", exception, context = TAG)
+            return Result.failure(exception)
+        }
+
+        return Result.success(
+            ConvertedAmount(
+                value = value,
+                formatted = formatted,
+                symbol = rate.currencySymbol,
+                currency = rate.quote,
+                flag = rate.currencyFlag,
+                sats = sats,
+            )
+        )
+    }
+
+    fun convertFiatToSats(
+        fiatValue: BigDecimal,
+        currency: String? = null,
+    ): Result<ULong> = runCatching {
+        val targetCurrency = currency ?: currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency)
+
+        if (rate == null) {
+            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
+            Logger.error("Rate not found", exception, context = TAG)
+            return Result.failure(exception)
+        }
+
+        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), 8, RoundingMode.HALF_UP)
+        val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
+        val roundedNumber = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+        return Result.success(roundedNumber.toLong().toULong())
+    }
+
+    fun convertFiatToSats(
+        fiatAmount: Double,
+        currency: String?
+    ): Result<Long> {
+        val targetCurrency = currency ?: currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency)
+
+        if (rate == null) {
+            val exception = Exception("Rate not found for targetCurrency: $targetCurrency")
+            Logger.error("Rate not found", exception, context = TAG)
+            return Result.failure(exception)
+        }
+
+        // Convert the fiat amount to BTC, then to sats
+        val btc = fiatAmount / rate.rate
+        val sats = (btc * SATS_IN_BTC).roundToLong()
+
+        return Result.success(sats)
     }
 
     companion object {
