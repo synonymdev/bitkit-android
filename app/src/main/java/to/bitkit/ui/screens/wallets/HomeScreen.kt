@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +61,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -101,6 +103,7 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
+import to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
 import to.bitkit.ui.screens.widgets.DragDropColumn
 import to.bitkit.ui.screens.widgets.blocks.BlockCard
@@ -254,7 +257,8 @@ fun HomeScreen(
                     },
                     onMoveWidget = { fromIndex, toIndex ->
                         homeViewModel.moveWidget(fromIndex, toIndex)
-                    }
+                    },
+                    onDismissHighBalanceSheet = { homeViewModel.dismissHighBalanceSheet() },
                 )
             }
             composable<HomeRoutes.Savings>(
@@ -336,9 +340,6 @@ fun HomeScreen(
                 .systemBarsPadding()
         )
 
-
-        // Drawer overlay and content - moved from AppScaffold to here
-        // Semi-transparent overlay when drawer is open
         AnimatedVisibility(
             visible = drawerState.currentValue == DrawerValue.Open,
             modifier = Modifier
@@ -498,6 +499,7 @@ private fun HomeContentView(
     walletNavController: NavController,
     drawerState: DrawerState,
     onRefresh: () -> Unit,
+    onDismissHighBalanceSheet: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -789,6 +791,19 @@ private fun HomeContentView(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            if (homeUiState.highBalanceSheetVisible) {
+                val context = LocalContext.current
+                HighBalanceWarningSheet(
+                    onDismiss = onDismissHighBalanceSheet,
+                    understoodClick = onDismissHighBalanceSheet,
+                    learnMoreClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Env.STORING_BITCOINS_URL.toUri())
+                        context.startActivity(intent)
+                        onDismissHighBalanceSheet()
+                    }
+                )
+            }
         }
     }
 }
@@ -845,6 +860,7 @@ private fun HomeContentViewPreview() {
             onClickEnableEdit = {},
             onClickEditWidget = {},
             onClickDeleteWidget = {},
+            onDismissHighBalanceSheet = {},
             onMoveWidget = { _, _ -> },
         )
     }
