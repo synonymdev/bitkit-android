@@ -33,4 +33,5 @@ data class HomeUiState(
     val currentPrice: PriceDTO? = null,
     val isEditingWidgets: Boolean = false,
     val deleteWidgetAlert: WidgetType? = null,
+    val highBalanceSheetVisible: Boolean = false,
 )
