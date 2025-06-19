@@ -344,7 +344,7 @@ class AppViewModel @Inject constructor(
 
     private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
         _sendUiState.update {
-            it.copy(manuallySelectedUtxos = utxos)
+            it.copy(selectedUtxos = utxos)
         }
         setSendEffect(SendEffect.NavigateToReview)
     }
@@ -655,7 +655,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
-        val utxos = _sendUiState.value.manuallySelectedUtxos.takeIf { it.isNotEmpty() }
+        val utxos = _sendUiState.value.selectedUtxos
         return lightningService.sendOnChain(address, amount, utxosToSpend = utxos).onFailure {
             toast(
                 type = Toast.ToastType.ERROR,
@@ -910,7 +910,7 @@ data class SendUiState(
     val decodedInvoice: LightningInvoice? = null,
     val showAmountWarningDialog: Boolean = false,
     val shouldConfirmPay: Boolean = false,
-    val manuallySelectedUtxos: List<SpendableUtxo> = emptyList(),
+    val selectedUtxos: List<SpendableUtxo>? = null,
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
