@@ -152,6 +152,14 @@ class HomeViewModel @Inject constructor(
                 }
                 _uiState.update { it.copy(highBalanceSheetVisible = true) }
             }
+
+            if (!thresholdReached) {
+                settingsStore.update {
+                    it.copy(
+                        balanceWarningTimes = 0,
+                    )
+                }
+            }
         }
     }
 
