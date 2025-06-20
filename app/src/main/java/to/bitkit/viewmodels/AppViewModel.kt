@@ -493,6 +493,12 @@ class AppViewModel @Inject constructor(
                 }
             }
 
+            is Scanner.LnurlAddress -> TODO("Not implemented")
+            is Scanner.LnurlPay -> TODO("Not implemented")
+            is Scanner.LnurlWithdraw -> TODO("Not implemented")
+            is Scanner.LnurlAuth -> TODO("Not implemented")
+            is Scanner.LnurlChannel -> TODO("Not implemented")
+
             null -> {
                 toast(
                     type = Toast.ToastType.ERROR,
