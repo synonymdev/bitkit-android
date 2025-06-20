@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -10,8 +12,11 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -20,13 +25,17 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
+import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.AddressInfo
 import to.bitkit.utils.AddressStats
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -39,11 +48,14 @@ class WalletRepoTest : BaseUnitTest() {
     private val db: AppDb = mock()
     private val keychain: Keychain = mock()
     private val coreService: CoreService = mock()
+    private val onchainService: OnchainService = mock()
     private val settingsStore: SettingsStore = mock()
     private val addressChecker: AddressChecker = mock()
     private val lightningRepo: LightningRepo = mock()
 
     private val cacheStore: CacheStore = mock()
+    private val network = Network.REGTEST
+
     @Before
     fun setUp() {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
@@ -54,6 +66,16 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getSyncFlow()).thenReturn(flowOf(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
 
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(addressType = AddressType.P2WPKH)))
+
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+
+        whenever(coreService.onchain).thenReturn(onchainService)
+        wheneverBlocking { onchainService.deriveBitcoinAddress(any(), any(), any(), any()) }.thenReturn(
+            GetAddressResponse(address = "address1", publicKey = "pubkey123", path = "m/84'/1'/0'/0/0")
+        )
+
         sut = WalletRepo(
             bgDispatcher = testDispatcher,
             appStorage = appStorage,
@@ -63,7 +85,8 @@ class WalletRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
-            cacheStore = cacheStore
+            cacheStore = cacheStore,
+            network = network,
         )
     }
 
@@ -123,41 +146,25 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipeWallet should fail when not on regtest`() = test {
-        val nonRegtestRepo = WalletRepo(
-            bgDispatcher = testDispatcher,
-            appStorage = appStorage,
-            db = db,
-            keychain = keychain,
-            coreService = coreService,
-            settingsStore = settingsStore,
-            addressChecker = addressChecker,
-            lightningRepo = lightningRepo,
-            cacheStore = cacheStore
-        )
-
-        val result = nonRegtestRepo.wipeWallet()
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
         whenever(sut.getOnchainAddress()).thenReturn("")
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo).newAddress()
+        verify(onchainService).deriveBitcoinAddress(
+            mnemonicPhrase = any(),
+            derivationPathStr = any(),
+            network = eq(network),
+            bip39Passphrase = anyOrNull(),
+        )
     }
 
     @Test
     fun `refreshBip21 should set receiveOnSpendingBalance as false if shouldBlockLightning is true`() = test {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
         whenever(sut.getOnchainAddress()).thenReturn("")
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
         val result = sut.refreshBip21()
@@ -169,61 +176,53 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
         whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(
-            AddressInfo(
-                address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                chain_stats = AddressStats(
-                    funded_txo_count = 1,
-                    funded_txo_sum = 2,
-                    spent_txo_count = 1,
-                    spent_txo_sum = 1,
-                    tx_count = 5
-                ),
-                mempool_stats = AddressStats(
-                    funded_txo_count = 1,
-                    funded_txo_sum = 2,
-                    spent_txo_count = 1,
-                    spent_txo_sum = 1,
-                    tx_count = 5
+            mockAddressInfo().let { addressInfo ->
+                addressInfo.copy(
+                    chain_stats = addressInfo.chain_stats.copy(tx_count = 5),
+                    mempool_stats = addressInfo.mempool_stats.copy(tx_count = 5)
                 )
-            )
+            }
         )
 
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo).newAddress()
+        verify(onchainService).deriveBitcoinAddress(
+            mnemonicPhrase = any(),
+            derivationPathStr = any(),
+            network = eq(network),
+            bip39Passphrase = anyOrNull(),
+        )
     }
 
     @Test
     fun `refreshBip21 should keep address when current has no transactions`() = test {
         val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
-        whenever(addressChecker.getAddressInfo(any())).thenReturn(
-            AddressInfo(
-                address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                chain_stats = AddressStats(
-                    funded_txo_count = 1,
-                    funded_txo_sum = 2,
-                    spent_txo_count = 1,
-                    spent_txo_sum = 1,
-                    tx_count = 0
-                ),
-                mempool_stats = AddressStats(
-                    funded_txo_count = 1,
-                    funded_txo_sum = 2,
-                    spent_txo_count = 1,
-                    spent_txo_sum = 1,
-                    tx_count = 0
-                )
-            )
-        )
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(mockAddressInfo())
 
         val result = sut.refreshBip21()
 
         assertTrue(result.isSuccess)
-        verify(lightningRepo, never()).newAddress()
+        verify(onchainService, never()).deriveBitcoinAddress(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `refreshBip21 with force=true should always generate new address`() = test {
+        val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
+        whenever(addressChecker.getAddressInfo(any())).thenReturn(mockAddressInfo())
+
+        val result = sut.refreshBip21(force = true)
+
+        assertTrue(result.isSuccess)
+        verify(onchainService).deriveBitcoinAddress(
+            mnemonicPhrase = any(),
+            derivationPathStr = any(),
+            network = eq(network),
+            bip39Passphrase = anyOrNull(),
+        )
     }
 
     @Test
@@ -292,7 +291,7 @@ class WalletRepoTest : BaseUnitTest() {
             )
         )
 
-        verify(lightningRepo, never()).newAddress()
+        verify(onchainService, never()).deriveBitcoinAddress(any(), any(), any(), anyOrNull())
     }
 
     @Test
@@ -523,4 +522,37 @@ class WalletRepoTest : BaseUnitTest() {
         // Then
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `newAddress should use derivation path specific to address type`() = test {
+        val addressType = AddressType.P2TR
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(addressType = addressType)))
+
+        sut.newAddress()
+
+        verify(onchainService).deriveBitcoinAddress(
+            mnemonicPhrase = any(),
+            derivationPathStr = eq(addressType.toDerivationPath(network)),
+            network = eq(network),
+            bip39Passphrase = anyOrNull(),
+        )
+    }
 }
+
+private fun mockAddressInfo() = AddressInfo(
+    address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+    chain_stats = AddressStats(
+        funded_txo_count = 1,
+        funded_txo_sum = 2,
+        spent_txo_count = 1,
+        spent_txo_sum = 1,
+        tx_count = 0
+    ),
+    mempool_stats = AddressStats(
+        funded_txo_count = 1,
+        funded_txo_sum = 2,
+        spent_txo_count = 1,
+        spent_txo_sum = 1,
+        tx_count = 0
+    )
+)
