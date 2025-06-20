@@ -5,16 +5,21 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.ui.theme.AppThemeSurface
-
+@HiltAndroidTest
 class HeadlinesEditContentTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @get:Rule
+    val hiltRule = HiltAndroidRule(this)
 
     private val mockArticle = ArticleModel(
         title = "Test Article Title for Testing Very Long Headlines That Might Wrap",
@@ -55,53 +60,53 @@ class HeadlinesEditContentTest {
         }
 
         // Assert main elements exist
-        composeTestRule.onNodeWithTag("headlines_edit_screen").assertExists()
-        composeTestRule.onNodeWithTag("main_content").assertExists()
+        composeTestRule.onNodeWithTag("headlines_edit_screen", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("main_content", useUnmergedTree = true).assertExists()
 
         // Verify description
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
+        composeTestRule.onNodeWithTag("edit_description", useUnmergedTree = true).assertExists()
 
         // Verify time setting row
-        composeTestRule.onNodeWithTag("time_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("time_text").assertExists()
-        composeTestRule.onNodeWithTag("time_toggle_button").assertExists()
+        composeTestRule.onNodeWithTag("time_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_toggle_button", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("time_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify title setting row
-        composeTestRule.onNodeWithTag("title_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("title_text").assertExists()
-        composeTestRule.onNodeWithTag("title_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("title_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("title_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_toggle_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify source setting row
-        composeTestRule.onNodeWithTag("source_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("source_label").assertExists()
-        composeTestRule.onNodeWithTag("source_text").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
+        composeTestRule.onNodeWithTag("source_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_label", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_icon", useUnmergedTree = true).assertExists()
 
         // Verify dividers
-        composeTestRule.onNodeWithTag("time_divider").assertExists()
-        composeTestRule.onNodeWithTag("title_divider").assertExists()
-        composeTestRule.onNodeWithTag("source_divider").assertExists()
+        composeTestRule.onNodeWithTag("time_divider", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_divider", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_divider", useUnmergedTree = true).assertExists()
 
         // Verify buttons
-        composeTestRule.onNodeWithTag("buttons_row").assertExists()
-        composeTestRule.onNodeWithTag("reset_button").assertExists()
-        composeTestRule.onNodeWithTag("preview_button").assertExists()
+        composeTestRule.onNodeWithTag("buttons_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preview_button", useUnmergedTree = true).assertExists()
 
         // Test button clicks
-        composeTestRule.onNodeWithTag("time_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("time_toggle_button", useUnmergedTree = true).performClick()
         assert(timeClicked)
 
-        composeTestRule.onNodeWithTag("source_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("source_toggle_button", useUnmergedTree = true).performClick()
         assert(sourceClicked)
 
-        composeTestRule.onNodeWithTag("preview_button").performClick()
+        composeTestRule.onNodeWithTag("preview_button", useUnmergedTree = true).performClick()
         assert(previewClicked)
 
         // Reset button should be disabled when both options are enabled (default state)
-        composeTestRule.onNodeWithTag("reset_button").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertIsNotEnabled()
     }
 
     @Test
@@ -131,10 +136,10 @@ class HeadlinesEditContentTest {
         }
 
         // Assert reset button should be enabled when not all options are enabled
-        composeTestRule.onNodeWithTag("reset_button").assertIsEnabled()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertIsEnabled()
 
         // Test reset button click
-        composeTestRule.onNodeWithTag("reset_button").performClick()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).performClick()
         assert(resetClicked)
     }
 
@@ -163,12 +168,12 @@ class HeadlinesEditContentTest {
         }
 
         // Assert reset button should be enabled when not all options are enabled
-        composeTestRule.onNodeWithTag("reset_button").assertIsEnabled()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertIsEnabled()
 
         // Verify all elements still exist
-        composeTestRule.onNodeWithTag("headlines_edit_screen").assertExists()
-        composeTestRule.onNodeWithTag("time_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
+        composeTestRule.onNodeWithTag("headlines_edit_screen", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_toggle_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_button", useUnmergedTree = true).assertExists()
     }
 
     @Test
@@ -190,7 +195,7 @@ class HeadlinesEditContentTest {
         }
 
         // Assert title toggle button is always disabled (title is always shown)
-        composeTestRule.onNodeWithTag("title_toggle_button").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("title_toggle_button", useUnmergedTree = true).assertIsNotEnabled()
     }
 
     @Test
@@ -212,27 +217,27 @@ class HeadlinesEditContentTest {
         }
 
         // Assert all tagged elements exist
-        composeTestRule.onNodeWithTag("headlines_edit_screen").assertExists()
-        composeTestRule.onNodeWithTag("main_content").assertExists()
-        composeTestRule.onNodeWithTag("edit_description").assertExists()
-        composeTestRule.onNodeWithTag("time_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("time_text").assertExists()
-        composeTestRule.onNodeWithTag("time_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("time_divider").assertExists()
-        composeTestRule.onNodeWithTag("title_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("title_text").assertExists()
-        composeTestRule.onNodeWithTag("title_toggle_button").assertExists()
+        composeTestRule.onNodeWithTag("headlines_edit_screen", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("main_content", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("edit_description", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_toggle_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_divider", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("title_toggle_button", useUnmergedTree = true).assertExists()
         composeTestRule.onNodeWithTag("title_toggle_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("title_divider").assertExists()
-        composeTestRule.onNodeWithTag("source_setting_row").assertExists()
-        composeTestRule.onNodeWithTag("source_label").assertExists()
-        composeTestRule.onNodeWithTag("source_text").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_button").assertExists()
-        composeTestRule.onNodeWithTag("source_toggle_icon").assertExists()
-        composeTestRule.onNodeWithTag("source_divider").assertExists()
-        composeTestRule.onNodeWithTag("buttons_row").assertExists()
-        composeTestRule.onNodeWithTag("reset_button").assertExists()
-        composeTestRule.onNodeWithTag("preview_button").assertExists()
+        composeTestRule.onNodeWithTag("title_divider", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_setting_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_label", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_toggle_icon", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("source_divider", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("buttons_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("preview_button", useUnmergedTree = true).assertExists()
     }
 
     @Test
@@ -258,7 +263,7 @@ class HeadlinesEditContentTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("reset_button").assertIsEnabled()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertIsEnabled()
     }
 
     @Test
@@ -284,7 +289,7 @@ class HeadlinesEditContentTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("reset_button").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).assertIsNotEnabled()
     }
 
     @Test
@@ -318,16 +323,16 @@ class HeadlinesEditContentTest {
         }
 
         // Test all clickable elements
-        composeTestRule.onNodeWithTag("time_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("time_toggle_button", useUnmergedTree = true).performClick()
         assert(timeClicked)
 
-        composeTestRule.onNodeWithTag("source_toggle_button").performClick()
+        composeTestRule.onNodeWithTag("source_toggle_button", useUnmergedTree = true).performClick()
         assert(sourceClicked)
 
-        composeTestRule.onNodeWithTag("reset_button").performClick()
+        composeTestRule.onNodeWithTag("reset_button", useUnmergedTree = true).performClick()
         assert(resetClicked)
 
-        composeTestRule.onNodeWithTag("preview_button").performClick()
+        composeTestRule.onNodeWithTag("preview_button", useUnmergedTree = true).performClick()
         assert(previewClicked)
     }
 }
