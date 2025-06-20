@@ -3,10 +3,12 @@ package to.bitkit.repositories
 import app.cash.turbine.test
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
+import kotlinx.datetime.Clock
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -22,13 +24,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 class CurrencyRepoTest : BaseUnitTest() {
     private val currencyService: CurrencyService = mock()
     private val settingsStore: SettingsStore = mock()
     private val cacheStore: CacheStore = mock()
     private val toastEventBus: ToastEventBus = mock()
+    private val clock: Clock = mock()
 
     private lateinit var sut: CurrencyRepo
 
@@ -71,6 +76,7 @@ class CurrencyRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             cacheStore = cacheStore,
             enablePolling = false,
+            clock = clock
         )
     }
 
@@ -170,6 +176,26 @@ class CurrencyRepoTest : BaseUnitTest() {
             assertEquals("€", updatedState.currencySymbol)
             assertEquals(BitcoinDisplayUnit.CLASSIC, updatedState.displayUnit)
             assertEquals(PrimaryDisplay.FIAT, updatedState.primaryDisplay)
+        }
+    }
+
+    @Test
+    fun `should detect stale data based on lastUpdatedAt`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = testRates)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "USD")))
+
+        sut = createSut()
+        whenever(clock.now()).thenReturn(Clock.System.now().minus(10.minutes))
+        sut.triggerRefresh()
+
+        wheneverBlocking { currencyService.fetchLatestRates() }.thenThrow(RuntimeException("API error"))
+        whenever(clock.now()).thenReturn(Clock.System.now())
+        sut.triggerRefresh()
+
+        sut.currencyState.test(timeout = 2000.milliseconds) {
+            val staleState = awaitItem()
+            assertTrue(staleState.hasStaleData)
+            assertEquals(testRates, staleState.rates)
         }
     }
 }
