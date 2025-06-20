@@ -1,7 +1,5 @@
 package to.bitkit.services
 
-import com.synonym.bitkitcore.Scanner
-import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -16,6 +14,7 @@ import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -313,36 +312,24 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         val message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE }
-        val amountSats = sat ?: 0u
 
         return ServiceQueue.LDK.background {
-            val bip21 = node.unifiedQrPayment().receive(
-                amountSats = amountSats,
-                message = message,
-                expirySec = expirySecs,
-            )
+            val bolt11Invoice: Bolt11Invoice = if (sat != null) {
+                node.bolt11Payment()
+                    .receive(
+                        amountMsat = sat * 1000u,
+                        description = Bolt11InvoiceDescription.Direct(description = message),
+                        expirySecs = expirySecs,
+                    )
+            } else {
+                node.bolt11Payment()
+                    .receiveVariableAmount(
+                        description = Bolt11InvoiceDescription.Direct(description = message),
+                        expirySecs = expirySecs,
+                    )
+            }
 
-            return@background extractBolt11String(bip21)
-
-            // TODO restore when ldk-node brings back support to get bolt11 string from 'Bolt11Invoice' model
-            // if (sat != null) {
-            //     node.bolt11Payment()
-            //         .receive(
-            //             amountMsat = sat * 1000u,
-            //             description = Bolt11InvoiceDescription.Direct(
-            //                 description = message
-            //             ),
-            //             expirySecs = expirySecs,
-            //         )
-            // } else {
-            //     node.bolt11Payment()
-            //         .receiveVariableAmount(
-            //             description = Bolt11InvoiceDescription.Direct(
-            //                 description = message
-            //             ),
-            //             expirySecs = expirySecs,
-            //         )
-            // }
+            return@background bolt11Invoice.toString()
         }
     }
 
@@ -608,11 +595,5 @@ private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
     val satPerKwu = satsPerVByte.toULong() * 250u
     // Ensure we're above the minimum relay fee
     return FeeRate.fromSatPerKwu(maxOf(satPerKwu, 253u)) // FEERATE_FLOOR_SATS_PER_KW is 253 in LDK
-}
-
-private suspend fun extractBolt11String(bip21: String): String {
-    return (decode(bip21.lowercase()) as? Scanner.OnChain)
-        ?.let { onchainScan -> onchainScan.invoice.params?.get("lightning") }
-        ?: error("Invalid bip21 string format")
 }
 // endregion
