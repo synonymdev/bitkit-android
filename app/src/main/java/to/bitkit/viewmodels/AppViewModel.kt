@@ -41,10 +41,10 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
-import to.bitkit.services.CurrencyService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
@@ -58,6 +58,7 @@ import uniffi.bitkitcore.LightningInvoice
 import uniffi.bitkitcore.OnChainInvoice
 import uniffi.bitkitcore.PaymentType
 import uniffi.bitkitcore.Scanner
+import java.math.BigDecimal
 import javax.inject.Inject
 
 private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
@@ -73,7 +74,7 @@ class AppViewModel @Inject constructor(
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
-    private val currencyService: CurrencyService,
+    private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -520,9 +521,10 @@ class AppViewModel @Inject constructor(
             return false
         }
 
-        val quickPayAmountSats = currencyService.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD")
+        val quickPayAmountSats =
+            currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull() ?: return false
 
-        if (amountSats <= quickPayAmountSats.toULong()) {
+        if (amountSats <= quickPayAmountSats) {
             Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
             if (isMainScanner) {
                 showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
@@ -560,8 +562,8 @@ class AppViewModel @Inject constructor(
         val settings = settingsStore.data.first()
         if (!settings.enableSendAmountWarning || _sendUiState.value.showAmountWarningDialog) return false
 
-        val amountInUsd = currencyService.convertSatsToFiat(amountSats.toLong(), "USD")
-        if (amountInUsd <= SEND_AMOUNT_WARNING_THRESHOLD) return false
+        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return false
+        if (amountInUsd.value <= BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD)) return false
 
         Logger.debug("Showing send amount warning for $amountSats sats = $$amountInUsd USD")
 
@@ -673,7 +675,8 @@ class AppViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        val hash = lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
+        val hash =
+            lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
 
         // Wait until matching payment event is received
         val result = ldkNodeEventBus.events.watchUntil { event ->

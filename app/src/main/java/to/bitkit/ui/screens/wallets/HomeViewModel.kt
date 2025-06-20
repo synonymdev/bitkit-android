@@ -163,7 +163,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun satsToUsd(sats: ULong): BigDecimal? {
-        val converted = currencyRepo.convertSatsToFiat(sats = sats.toLong(), currency = "USD")
+        val converted = currencyRepo.convertSatsToFiat(sats = sats.toLong(), currency = "USD").getOrNull()
         return converted?.value
     }
 

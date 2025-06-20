@@ -53,11 +53,12 @@ class CurrencyViewModel @Inject constructor(
 
     // UI Helpers
     fun convert(sats: Long, currency: String? = null): ConvertedAmount? {
-        return currencyRepo.convertSatsToFiat(sats, currency)
+        return currencyRepo.convertSatsToFiat(sats, currency).getOrNull()
     }
 
     fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long {
-        return currencyRepo.convertFiatToSats(fiatAmount, currency)
+        val uLongSats = currencyRepo.convertFiatToSats(fiatAmount, currency).getOrNull() ?: 0UL
+        return uLongSats.toLong()
     }
 }
 

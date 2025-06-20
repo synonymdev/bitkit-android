@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -26,12 +27,16 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.Toast
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.utils.Logger
-import java.util.Date
+import java.math.BigDecimal
+import java.math.RoundingMode
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
@@ -39,17 +44,18 @@ class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
-    private val cacheStore: CacheStore
+    private val cacheStore: CacheStore,
+    @Named("enablePolling") private val enablePolling: Boolean,
+    private val clock: Clock,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
-
     private val _currencyState = MutableStateFlow(CurrencyState())
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
 
-    private var lastSuccessfulRefresh: Date? = null
+    @Volatile
     private var isRefreshing = false
 
-    private val pollingFlow: Flow<Unit>
+    private val fxRatePollingFlow: Flow<Unit>
         get() = flow {
             while (currentCoroutineContext().isActive) {
                 emit(Unit)
@@ -58,14 +64,16 @@ class CurrencyRepo @Inject constructor(
         }.flowOn(bgDispatcher)
 
     init {
-        startPolling()
+        if (enablePolling) {
+            startPolling()
+        }
         observeStaleData()
         collectCachedData()
     }
 
     private fun startPolling() {
         repoScope.launch {
-            pollingFlow.collect {
+            fxRatePollingFlow.collect {
                 refresh()
             }
         }
@@ -73,29 +81,38 @@ class CurrencyRepo @Inject constructor(
 
     private fun observeStaleData() {
         repoScope.launch {
-            currencyState.map { it.hasStaleData }.distinctUntilChanged().collect { isStale ->
-                if (isStale) {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = "Rates currently unavailable",
-                        description = "An error has occurred. Please try again later."
-                    )
+            currencyState
+                .map { it.hasStaleData }
+                .distinctUntilChanged()
+                .collect { isStale ->
+                    if (isStale) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = "Rates currently unavailable",
+                            description = "An error has occurred. Please try again later."
+                        )
+                    }
                 }
-            }
         }
     }
 
     private fun collectCachedData() {
         repoScope.launch {
-            combine(settingsStore.data, cacheStore.data) { settings, cachedData ->
+            combine(
+                settingsStore.data.distinctUntilChanged(),
+                cacheStore.data.distinctUntilChanged()
+            ) { settings, cachedData ->
+                val selectedRate = cachedData.cachedRates.firstOrNull { rate ->
+                    rate.quote == settings.selectedCurrency
+                }
                 _currencyState.value.copy(
                     rates = cachedData.cachedRates,
                     selectedCurrency = settings.selectedCurrency,
                     displayUnit = settings.displayUnit,
                     primaryDisplay = settings.primaryDisplay,
-                    currencySymbol = cachedData.cachedRates.firstOrNull { rate ->
-                        rate.quote == settings.selectedCurrency
-                    }?.currencySymbol ?: "$"
+                    currencySymbol = selectedRate?.currencySymbol ?: "$",
+                    error = null,
+                    hasStaleData = false
                 )
             }.collect { newState ->
                 _currencyState.update { newState }
@@ -116,19 +133,18 @@ class CurrencyRepo @Inject constructor(
             _currencyState.update {
                 it.copy(
                     error = null,
-                    hasStaleData = false
+                    hasStaleData = false,
+                    lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
                 )
             }
-            lastSuccessfulRefresh = Date()
             Logger.debug("Currency rates refreshed successfully", context = TAG)
         } catch (e: Exception) {
-            _currencyState.update { it.copy(error = e) }
             Logger.error("Currency rates refresh failed", e, context = TAG)
+            _currencyState.update { it.copy(error = e) }
 
-            lastSuccessfulRefresh?.let { last ->
-                _currencyState.update {
-                    it.copy(hasStaleData = Date().time - last.time > Env.fxRateStaleThreshold)
-                }
+            _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+                val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
+                _currencyState.update { it.copy(hasStaleData = isStale) }
             }
         } finally {
             isRefreshing = false
@@ -136,9 +152,13 @@ class CurrencyRepo @Inject constructor(
     }
 
     suspend fun togglePrimaryDisplay() = withContext(bgDispatcher) {
-        currencyState.value.primaryDisplay.let {
-            val newDisplay = if (it == PrimaryDisplay.BITCOIN) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN
-            settingsStore.update { it.copy(primaryDisplay = newDisplay) }
+        settingsStore.update { settings ->
+            val newDisplay = if (settings.primaryDisplay == PrimaryDisplay.BITCOIN) {
+                PrimaryDisplay.FIAT
+            } else {
+                PrimaryDisplay.BITCOIN
+            }
+            settings.copy(primaryDisplay = newDisplay)
         }
     }
 
@@ -156,24 +176,74 @@ class CurrencyRepo @Inject constructor(
     }
 
     fun getCurrencySymbol(): String {
-        val currentState = currencyState.value
-        return currentState.rates.firstOrNull { it.quote == currentState.selectedCurrency }?.currencySymbol ?: ""
+        return _currencyState.value.currencySymbol
     }
 
-    // Conversion helpers
-    fun convertSatsToFiat(sats: Long, currency: String? = null): ConvertedAmount? {
-        val targetCurrency = currency ?: currencyState.value.selectedCurrency
-        val rate = currencyService.getCurrentRate(targetCurrency, currencyState.value.rates)
-        return rate?.let { currencyService.convert(sats = sats, rate = it) }
+    fun getCurrentRate(currency: String): FxRate? {
+        return _currencyState.value.rates.firstOrNull { it.quote == currency }
     }
 
-    fun convertFiatToSats(fiatAmount: Double, currency: String? = null): Long {
-        val sourceCurrency = currency ?: currencyState.value.selectedCurrency
-        return currencyService.convertFiatToSats(fiatAmount, sourceCurrency, currencyState.value.rates)
+    fun convertSatsToFiat(
+        sats: Long,
+        currency: String? = null,
+    ): Result<ConvertedAmount> = runCatching {
+        val targetCurrency = currency ?: _currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency) ?: return Result.failure(
+            IllegalStateException(
+                "Rate not found for currency: $targetCurrency. Available currencies: ${
+                    _currencyState.value.rates.joinToString { it.quote }
+                }"
+            )
+        )
+
+        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)
+        val value = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
+        val formatted = value.formatCurrency() ?: return Result.failure(
+            IllegalStateException(
+                "Failed to format value: $value for currency: $targetCurrency"
+            )
+        )
+
+        ConvertedAmount(
+            value = value,
+            formatted = formatted,
+            symbol = rate.currencySymbol,
+            currency = rate.quote,
+            flag = rate.currencyFlag,
+            sats = sats,
+        )
+    }
+
+    fun convertFiatToSats(
+        fiatValue: BigDecimal,
+        currency: String? = null,
+    ): Result<ULong> = runCatching {
+        val targetCurrency = currency ?: _currencyState.value.selectedCurrency
+        val rate = getCurrentRate(targetCurrency) ?: throw IllegalStateException(
+            "Rate not found for currency: $targetCurrency. Available currencies: ${
+                _currencyState.value.rates.joinToString { it.quote }
+            }"
+        )
+
+        val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), BTC_SCALE, RoundingMode.HALF_UP)
+        val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
+        val roundedSats = satsDecimal.setScale(0, RoundingMode.HALF_UP)
+        roundedSats.toLong().toULong()
+    }
+
+    fun convertFiatToSats(
+        fiatAmount: Double,
+        currency: String?
+    ): Result<ULong> {
+        return convertFiatToSats(
+            fiatValue = BigDecimal.valueOf(fiatAmount),
+            currency = currency
+        )
     }
 
     companion object {
         private const val TAG = "CurrencyRepo"
+        private const val BTC_SCALE = 8
     }
 }
 
@@ -185,4 +255,5 @@ data class CurrencyState(
     val currencySymbol: String = "$",
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
+    val lastSuccessfulRefresh: Long? = null
 )

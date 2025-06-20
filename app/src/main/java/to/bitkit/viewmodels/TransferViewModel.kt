@@ -20,11 +20,13 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import uniffi.bitkitcore.BtOrderState2
 import uniffi.bitkitcore.IBtInfo
 import uniffi.bitkitcore.IBtOrder
@@ -36,12 +38,13 @@ import kotlin.math.roundToLong
 
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
+private const val EUR_CURRENCY = "EUR"
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val coreService: CoreService,
-    private val currencyService: CurrencyService,
+    private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
@@ -207,21 +210,20 @@ class TransferViewModel @Inject constructor(
     }
 
     private fun getDefaultLspBalance(clientBalanceSat: ULong, maxLspBalance: ULong): ULong {
-        val rates = currencyService.loadCachedRates()
-        val eurRate = rates?.let { currencyService.getCurrentRate("EUR", it) }
-        if (eurRate == null) {
-            Logger.error("Failed to get rates for getDefaultLspBalance", context = "TransferViewModel")
-            return 0u
-        }
 
         // Calculate thresholds in sats
-        val threshold1 = currencyService.convertFiatToSats(BigDecimal("225"), eurRate)
-        val threshold2 = currencyService.convertFiatToSats(BigDecimal("495"), eurRate)
-        val defaultLspBalanceSats = currencyService.convertFiatToSats(BigDecimal("450"), eurRate)
+        val threshold1 = currencyRepo.convertFiatToSats(BigDecimal(225), EUR_CURRENCY).getOrNull()
+        val threshold2 = currencyRepo.convertFiatToSats(BigDecimal(495), EUR_CURRENCY).getOrNull()
+        val defaultLspBalanceSats = currencyRepo.convertFiatToSats(BigDecimal(450), EUR_CURRENCY).getOrNull()
 
         Logger.debug("getDefaultLspBalance - clientBalanceSat: $clientBalanceSat")
         Logger.debug("getDefaultLspBalance - maxLspBalance: $maxLspBalance")
         Logger.debug("getDefaultLspBalance - defaultLspBalanceSats: $defaultLspBalanceSats")
+
+        if (threshold1 == null || threshold2 == null || defaultLspBalanceSats == null) {
+            Logger.error("Failed to get rates for lspBalance calculation", context = "TransferViewModel")
+            throw ServiceError.CurrencyRateUnavailable
+        }
 
         // Safely calculate lspBalance to avoid arithmetic overflow
         var lspBalance: ULong = 0u
