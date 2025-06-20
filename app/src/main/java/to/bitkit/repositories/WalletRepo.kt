@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -11,11 +10,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
@@ -28,6 +29,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
@@ -48,7 +50,8 @@ class WalletRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
-    private val cacheStore: CacheStore
+    private val cacheStore: CacheStore,
+    private val network: Network,
 ) {
 
     private val _walletState = MutableStateFlow(
@@ -81,8 +84,8 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshBip21(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Refreshing bip21", context = TAG)
+    suspend fun refreshBip21(force: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Refreshing bip21 (forceNewAddress: $force)", context = TAG)
 
         if (coreService.shouldBlockLightning()) {
             _walletState.update {
@@ -90,7 +93,7 @@ class WalletRepo @Inject constructor(
             }
         }
 
-        //Reset invoice state
+        // Reset invoice state
         _walletState.update {
             it.copy(
                 selectedTags = emptyList(),
@@ -102,8 +105,8 @@ class WalletRepo @Inject constructor(
 
         // Check current address or generate new one
         val currentAddress = getOnchainAddress()
-        if (currentAddress.isEmpty()) {
-            lightningRepo.newAddress()
+        if (force || currentAddress.isEmpty()) {
+            newAddress()
                 .onSuccess { address -> setOnchainAddress(address) }
                 .onFailure { error -> Logger.error("Error generating new address", error) }
         } else {
@@ -112,7 +115,7 @@ class WalletRepo @Inject constructor(
                 .onSuccess { hasTransactions ->
                     if (hasTransactions) {
                         // Address has been used, generate a new one
-                        lightningRepo.newAddress().onSuccess { address -> setOnchainAddress(address) }
+                        newAddress().onSuccess { address -> setOnchainAddress(address) }
                     }
                 }
         }
@@ -199,11 +202,12 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
-        try { //TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
+        try {
             keychain.wipe()
             appStorage.clear()
             settingsStore.reset()
             cacheStore.reset()
+            // TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
             coreService.activity.removeAll()
             deleteAllInvoices()
             _walletState.update { WalletState() }
@@ -223,6 +227,28 @@ class WalletRepo @Inject constructor(
     fun setOnchainAddress(address: String) {
         appStorage.onchainAddress = address
         _walletState.update { it.copy(onchainAddress = address) }
+    }
+
+    suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
+        try {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+            val addressType = settingsStore.data.first().addressType
+            val derivationPath = addressType.toDerivationPath(network)
+
+            val result = coreService.onchain.deriveBitcoinAddress(
+                mnemonicPhrase = mnemonic,
+                derivationPathStr = derivationPath,
+                network = network,
+                bip39Passphrase = passphrase,
+            )
+
+            Result.success(result.address)
+        } catch (e: Throwable) {
+            Logger.error("Address generation error", e, context = TAG)
+            Result.failure(e)
+        }
     }
 
     // Bolt11 management
@@ -245,7 +271,7 @@ class WalletRepo @Inject constructor(
         bitcoinAddress: String,
         amountSats: ULong? = null,
         message: String = Env.DEFAULT_INVOICE_MESSAGE,
-        lightningInvoice: String = ""
+        lightningInvoice: String = "",
     ): String {
         return Bip21Utils.buildBip21Url(
             bitcoinAddress = bitcoinAddress,
@@ -434,7 +460,7 @@ class WalletRepo @Inject constructor(
         paymentHashOrTxId: String?,
         type: ActivityFilter,
         txType: PaymentType,
-        tags: List<String>
+        tags: List<String>,
     ): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("attachTagsToActivity $tags", context = TAG)
 
@@ -483,7 +509,7 @@ class WalletRepo @Inject constructor(
     private suspend fun findActivityWithRetry(
         paymentHashOrTxId: String,
         type: ActivityFilter,
-        txType: PaymentType
+        txType: PaymentType,
     ): Activity? {
 
         suspend fun findActivity(): Activity? = coreService.activity.get(
@@ -544,6 +570,5 @@ data class WalletState(
     val showEmptyState: Boolean = true,
     val walletExists: Boolean = false,
     val isRestoringWallet: Boolean = false,
-    val balanceDetails: BalanceDetails? = null, //TODO KEEP ONLY BalanceState IF POSSIBLE
-    val addressType: AddressType = AddressType.P2WPKH,
+    val balanceDetails: BalanceDetails? = null, // TODO KEEP ONLY BalanceState IF POSSIBLE
 )
