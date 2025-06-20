@@ -7,6 +7,8 @@ import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.CreateCjitOptions
 import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.GetAddressResponse
+import com.synonym.bitkitcore.GetAddressesResponse
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
@@ -16,6 +18,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
 import com.synonym.bitkitcore.createCjitEntry
 import com.synonym.bitkitcore.createOrder
@@ -48,6 +51,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -71,6 +75,7 @@ class CoreService @Inject constructor(
             lightningService = lightningService,
         )
     }
+    val onchain: OnchainService by lazy { OnchainService() }
 
     init {
         init()
@@ -583,6 +588,72 @@ class BlocktankService(
             vout = vout,
             forceCloseAfterS = forceCloseAfterS,
         )
+    }
+}
+
+// endregion
+
+// region Onchain
+
+class OnchainService {
+    suspend fun generateMnemonic(wordCount: WordCount = WordCount.WORDS12): String {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.generateMnemonic(wordCount = wordCount)
+        }
+    }
+
+    suspend fun deriveBitcoinAddress(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+    ): GetAddressResponse {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.deriveBitcoinAddress(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    suspend fun deriveBitcoinAddresses(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+        isChange: Boolean?,
+        startIndex: UInt?,
+        count: UInt?,
+    ): GetAddressesResponse {
+        return ServiceQueue.CORE.background {
+            return@background com.synonym.bitkitcore.deriveBitcoinAddresses(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+                isChange = isChange,
+                startIndex = startIndex,
+                count = count,
+            )
+        }
+    }
+
+    suspend fun derivePrivateKey(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+    ): String {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.derivePrivateKey(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
     }
 }
 
