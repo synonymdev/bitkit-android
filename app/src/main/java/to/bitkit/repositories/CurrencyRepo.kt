@@ -35,7 +35,6 @@ import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.Date
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
