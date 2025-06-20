@@ -33,16 +33,6 @@ sealed class ServiceError(message: String) : AppError(message) {
     data object GeoBlocked : ServiceError("Geo blocked user")
 }
 
-sealed class KeychainError(message: String) : AppError(message) {
-    class FailedToDelete(key: String) : KeychainError("Failed to delete $key from keychain.")
-    class FailedToLoad(key: String) : KeychainError("Failed to load $key from keychain.")
-    class FailedToSave(key: String) : KeychainError("Failed to save to $key keychain.")
-    class FailedToSaveAlreadyExists(key: String) :
-        KeychainError("Key $key already exists in keychain. Explicitly delete key before attempting to update value.")
-
-    class KeychainWipeNotAllowed : KeychainError("Wiping keychain is only allowed in debug mode for regtest")
-}
-
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))
