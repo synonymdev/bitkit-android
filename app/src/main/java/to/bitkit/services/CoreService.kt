@@ -1,5 +1,43 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.CJitStateEnum
+import com.synonym.bitkitcore.CreateCjitOptions
+import com.synonym.bitkitcore.CreateOrderOptions
+import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.GetAddressResponse
+import com.synonym.bitkitcore.GetAddressesResponse
+import com.synonym.bitkitcore.IBtEstimateFeeResponse2
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IcJitEntry
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.SortDirection
+import com.synonym.bitkitcore.WordCount
+import com.synonym.bitkitcore.addTags
+import com.synonym.bitkitcore.createCjitEntry
+import com.synonym.bitkitcore.createOrder
+import com.synonym.bitkitcore.deleteActivityById
+import com.synonym.bitkitcore.estimateOrderFeeFull
+import com.synonym.bitkitcore.getActivities
+import com.synonym.bitkitcore.getActivityById
+import com.synonym.bitkitcore.getAllUniqueTags
+import com.synonym.bitkitcore.getCjitEntries
+import com.synonym.bitkitcore.getInfo
+import com.synonym.bitkitcore.getOrders
+import com.synonym.bitkitcore.getTags
+import com.synonym.bitkitcore.initDb
+import com.synonym.bitkitcore.insertActivity
+import com.synonym.bitkitcore.openChannel
+import com.synonym.bitkitcore.removeTags
+import com.synonym.bitkitcore.updateActivity
+import com.synonym.bitkitcore.updateBlocktankUrl
+import com.synonym.bitkitcore.upsertActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
@@ -13,44 +51,10 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.ActivityFilter
-import uniffi.bitkitcore.BtOrderState2
-import uniffi.bitkitcore.CJitStateEnum
-import uniffi.bitkitcore.CreateCjitOptions
-import uniffi.bitkitcore.CreateOrderOptions
-import uniffi.bitkitcore.FeeRates
-import uniffi.bitkitcore.IBtEstimateFeeResponse2
-import uniffi.bitkitcore.IBtInfo
-import uniffi.bitkitcore.IBtOrder
-import uniffi.bitkitcore.IcJitEntry
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
-import uniffi.bitkitcore.SortDirection
-import uniffi.bitkitcore.addTags
-import uniffi.bitkitcore.createCjitEntry
-import uniffi.bitkitcore.createOrder
-import uniffi.bitkitcore.deleteActivityById
-import uniffi.bitkitcore.estimateOrderFeeFull
-import uniffi.bitkitcore.getActivities
-import uniffi.bitkitcore.getActivityById
-import uniffi.bitkitcore.getAllUniqueTags
-import uniffi.bitkitcore.getCjitEntries
-import uniffi.bitkitcore.getInfo
-import uniffi.bitkitcore.getOrders
-import uniffi.bitkitcore.getTags
-import uniffi.bitkitcore.initDb
-import uniffi.bitkitcore.insertActivity
-import uniffi.bitkitcore.openChannel
-import uniffi.bitkitcore.removeTags
-import uniffi.bitkitcore.updateActivity
-import uniffi.bitkitcore.updateBlocktankUrl
-import uniffi.bitkitcore.upsertActivity
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -71,6 +75,7 @@ class CoreService @Inject constructor(
             lightningService = lightningService,
         )
     }
+    val onchain: OnchainService by lazy { OnchainService() }
 
     init {
         init()
@@ -560,29 +565,95 @@ class BlocktankService(
 
     // MARK: - Regtest methods
     suspend fun regtestMine(count: UInt = 1u) {
-        uniffi.bitkitcore.regtestMine(count = count)
+        com.synonym.bitkitcore.regtestMine(count = count)
     }
 
     suspend fun regtestDeposit(address: String, amountSat: ULong = 10_000_000uL): String {
-        return uniffi.bitkitcore.regtestDeposit(
+        return com.synonym.bitkitcore.regtestDeposit(
             address = address,
             amountSat = amountSat,
         )
     }
 
     suspend fun regtestPay(invoice: String, amountSat: ULong? = null): String {
-        return uniffi.bitkitcore.regtestPay(
+        return com.synonym.bitkitcore.regtestPay(
             invoice = invoice,
             amountSat = amountSat,
         )
     }
 
     suspend fun regtestCloseChannel(fundingTxId: String, vout: UInt, forceCloseAfterS: ULong = 86_400uL): String {
-        return uniffi.bitkitcore.regtestCloseChannel(
+        return com.synonym.bitkitcore.regtestCloseChannel(
             fundingTxId = fundingTxId,
             vout = vout,
             forceCloseAfterS = forceCloseAfterS,
         )
+    }
+}
+
+// endregion
+
+// region Onchain
+
+class OnchainService {
+    suspend fun generateMnemonic(wordCount: WordCount = WordCount.WORDS12): String {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.generateMnemonic(wordCount = wordCount)
+        }
+    }
+
+    suspend fun deriveBitcoinAddress(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+    ): GetAddressResponse {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.deriveBitcoinAddress(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
+    }
+
+    suspend fun deriveBitcoinAddresses(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+        isChange: Boolean?,
+        startIndex: UInt?,
+        count: UInt?,
+    ): GetAddressesResponse {
+        return ServiceQueue.CORE.background {
+            return@background com.synonym.bitkitcore.deriveBitcoinAddresses(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+                isChange = isChange,
+                startIndex = startIndex,
+                count = count,
+            )
+        }
+    }
+
+    suspend fun derivePrivateKey(
+        mnemonicPhrase: String,
+        derivationPathStr: String?,
+        network: Network?,
+        bip39Passphrase: String?,
+    ): String {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.derivePrivateKey(
+                mnemonicPhrase = mnemonicPhrase,
+                derivationPathStr = derivationPathStr,
+                network = network?.toCoreNetwork(),
+                bip39Passphrase = bip39Passphrase,
+            )
+        }
     }
 }
 

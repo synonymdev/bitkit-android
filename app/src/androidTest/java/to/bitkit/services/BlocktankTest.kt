@@ -1,6 +1,13 @@
 package to.bitkit.services
 
 import androidx.test.platform.app.InstrumentationRegistry
+import com.synonym.bitkitcore.BtOrderState
+import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.CreateCjitOptions
+import com.synonym.bitkitcore.CreateOrderOptions
+import com.synonym.bitkitcore.IBtEstimateFeeResponse2
+import com.synonym.bitkitcore.initDb
+import com.synonym.bitkitcore.updateBlocktankUrl
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
@@ -8,13 +15,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.env.Env
-import uniffi.bitkitcore.BtOrderState
-import uniffi.bitkitcore.BtOrderState2
-import uniffi.bitkitcore.CreateCjitOptions
-import uniffi.bitkitcore.CreateOrderOptions
-import uniffi.bitkitcore.IBtEstimateFeeResponse2
-import uniffi.bitkitcore.initDb
-import uniffi.bitkitcore.updateBlocktankUrl
 import javax.inject.Inject
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

@@ -2,6 +2,7 @@ package to.bitkit.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +16,6 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.repositories.WalletRepo
-import uniffi.bitkitcore.AddressType
 import javax.inject.Inject
 
 @HiltViewModel

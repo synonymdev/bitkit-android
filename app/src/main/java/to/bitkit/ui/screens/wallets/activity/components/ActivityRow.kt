@@ -19,6 +19,9 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
@@ -32,14 +35,11 @@ import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.settingsViewModel
-import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.UiConstants
+import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

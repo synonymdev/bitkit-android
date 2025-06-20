@@ -39,8 +39,8 @@ android {
         applicationId = "to.bitkit.dev"
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.0.5"
+        versionCode = 6
+        versionName = "0.0.6"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -168,9 +168,8 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
-    implementation(libs.ldk.node.android) {
-        exclude(group = "net.java.dev.jna", module = "jna") // fix for ldk-node fork builds
-    }
+    implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
+    implementation(libs.bitkitcore) { exclude(group = "net.java.dev.jna", module = "jna") }
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

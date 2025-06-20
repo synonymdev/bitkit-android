@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.regtestMine
 import kotlinx.coroutines.delay
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
@@ -42,7 +43,6 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
-import uniffi.bitkitcore.regtestMine
 
 @Composable
 fun SettingUpScreen(

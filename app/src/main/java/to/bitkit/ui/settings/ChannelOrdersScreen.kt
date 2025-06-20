@@ -39,6 +39,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.synonym.bitkitcore.BtBolt11InvoiceState
+import com.synonym.bitkitcore.BtOrderState
+import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.BtPaymentState
+import com.synonym.bitkitcore.BtPaymentState2
+import com.synonym.bitkitcore.CJitStateEnum
+import com.synonym.bitkitcore.IBtBolt11Invoice
+import com.synonym.bitkitcore.IBtOnchainTransaction
+import com.synonym.bitkitcore.IBtOnchainTransactions
+import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IBtPayment
+import com.synonym.bitkitcore.IDiscount
+import com.synonym.bitkitcore.ILspNode
+import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.ext.formatWithDotSeparator
@@ -50,20 +64,6 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
-import uniffi.bitkitcore.BtBolt11InvoiceState
-import uniffi.bitkitcore.BtOrderState
-import uniffi.bitkitcore.BtOrderState2
-import uniffi.bitkitcore.BtPaymentState
-import uniffi.bitkitcore.BtPaymentState2
-import uniffi.bitkitcore.CJitStateEnum
-import uniffi.bitkitcore.IBtBolt11Invoice
-import uniffi.bitkitcore.IBtOnchainTransaction
-import uniffi.bitkitcore.IBtOnchainTransactions
-import uniffi.bitkitcore.IBtOrder
-import uniffi.bitkitcore.IBtPayment
-import uniffi.bitkitcore.IDiscount
-import uniffi.bitkitcore.ILspNode
-import uniffi.bitkitcore.IcJitEntry
 
 @Composable
 fun ChannelOrdersScreen(

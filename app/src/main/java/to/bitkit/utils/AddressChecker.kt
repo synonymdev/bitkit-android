@@ -6,8 +6,8 @@ import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.get
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import to.bitkit.env.Env
-import uniffi.bitkitcore.ActivityException.SerializationException
 import javax.inject.Inject
 import javax.inject.Singleton
 

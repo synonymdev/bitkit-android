@@ -1,8 +1,8 @@
 package to.bitkit.ui.utils
 
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.PaymentType
 
 fun Activity.getScreenTitleRes(): Int {
     val isSent = when (this) {

@@ -1,5 +1,7 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -43,8 +45,6 @@ import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import uniffi.bitkitcore.Scanner
-import uniffi.bitkitcore.decode
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
