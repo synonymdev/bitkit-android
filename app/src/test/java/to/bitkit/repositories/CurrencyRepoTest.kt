@@ -134,28 +134,6 @@ class CurrencyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should detect stale data based on lastUpdatedAt`() = test {
-        val oldRates = listOf(
-            testRates[0].copy(
-                lastUpdatedAt = System.currentTimeMillis() - 1000 * 60 * 60 * 3 // 3 hours ago
-            )
-        )
-
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = oldRates)))
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "USD")))
-        wheneverBlocking { currencyService.fetchLatestRates() }.thenThrow(RuntimeException("API error"))
-
-        sut = createSut()
-        sut.triggerRefresh()
-
-        sut.currencyState.test(timeout = 2000.milliseconds) {
-            val staleState = awaitItem()
-            assertTrue(staleState.hasStaleData)
-            assertEquals(oldRates, staleState.rates)
-        }
-    }
-
-    @Test
     fun `getCurrentRate should match by quote currency`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = testRates)))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -132,7 +133,8 @@ class CurrencyRepo @Inject constructor(
             _currencyState.update {
                 it.copy(
                     error = null,
-                    hasStaleData = false
+                    hasStaleData = false,
+                    lastSuccessfulRefresh = Clock.System.now().toEpochMilliseconds(),
                 )
             }
             Logger.debug("Currency rates refreshed successfully", context = TAG)
@@ -140,8 +142,8 @@ class CurrencyRepo @Inject constructor(
             Logger.error("Currency rates refresh failed", e, context = TAG)
             _currencyState.update { it.copy(error = e) }
 
-           _currencyState.value.rates.firstOrNull()?.lastUpdatedAt?.let { lastUpdatedAt ->
-                val isStale = Date().time - lastUpdatedAt > Env.fxRateStaleThreshold
+           _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+                val isStale = Clock.System.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
                 _currencyState.update { it.copy(hasStaleData = isStale) }
             }
         } finally {
@@ -253,4 +255,5 @@ data class CurrencyState(
     val currencySymbol: String = "$",
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
+    val lastSuccessfulRefresh: Long? = null
 )
