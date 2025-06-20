@@ -126,12 +126,12 @@ class WalletRepo @Inject constructor(
             .filter { lightningRepo.lightningState.value.nodeLifecycleState == NodeLifecycleState.Running }
             .collect {
                 runCatching {
-                   syncNodeAndWallet()
+                    syncNodeAndWallet()
                 }
             }
     }
 
-    suspend fun syncNodeAndWallet() : Result<Unit> = withContext(bgDispatcher) {
+    suspend fun syncNodeAndWallet(): Result<Unit> = withContext(bgDispatcher) {
         syncBalances()
         lightningRepo.sync().onSuccess {
             syncBalances()
@@ -296,6 +296,7 @@ class WalletRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
+    // Tags
     suspend fun addTagToSelected(newTag: String) {
         _walletState.update {
             it.copy(
@@ -350,14 +351,14 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun shouldRequestAdditionalLiquidity() : Result<Boolean> = withContext(bgDispatcher)  {
+    suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
         return@withContext try {
             if (_walletState.value.receiveOnSpendingBalance == false) return@withContext Result.success(false)
 
             if (coreService.checkGeoStatus() == true) return@withContext Result.success(false)
 
             val channels = lightningRepo.lightningState.value.channels
-            val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }.toULong()
+            val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }
 
             Result.success((_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats)
         } catch (e: Exception) {
