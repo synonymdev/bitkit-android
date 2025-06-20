@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.Activity
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -24,7 +25,6 @@ import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import uniffi.bitkitcore.Activity
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit

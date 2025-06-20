@@ -1,7 +1,7 @@
 package to.bitkit.ext
 
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.PaymentType
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentType
 
 fun Activity.rawId(): String = when (this) {
     is Activity.Lightning -> v1.id

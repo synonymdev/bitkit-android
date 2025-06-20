@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -23,7 +24,6 @@ import to.bitkit.ext.getClipboardText
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.settingsViewModel
-import uniffi.bitkitcore.decode
 
 @Composable
 fun AutoReadClipboardHandler() {

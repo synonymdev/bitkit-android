@@ -29,6 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -55,11 +60,6 @@ import to.bitkit.ui.utils.localizedPlural
 import to.bitkit.utils.TxDetails
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
 
 @Composable
 fun ActivityExploreScreen(

@@ -1,17 +1,17 @@
 package to.bitkit.services
 
-import uniffi.bitkitcore.OnChainInvoice
-import uniffi.bitkitcore.Scanner
-import uniffi.bitkitcore.ValidationResult
+import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.ValidationResult
 import javax.inject.Inject
 
 class ScannerService @Inject constructor() {
     suspend fun decode(input: String): Scanner {
-        return uniffi.bitkitcore.decode(input)
+        return com.synonym.bitkitcore.decode(input)
     }
 
     fun validateBitcoinAddress(input: String): ValidationResult {
-        return uniffi.bitkitcore.validateBitcoinAddress(input)
+        return com.synonym.bitkitcore.validateBitcoinAddress(input)
     }
 }
 

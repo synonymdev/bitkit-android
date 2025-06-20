@@ -33,6 +33,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.rawId
@@ -60,11 +65,6 @@ import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
-import uniffi.bitkitcore.Activity
-import uniffi.bitkitcore.LightningActivity
-import uniffi.bitkitcore.OnchainActivity
-import uniffi.bitkitcore.PaymentState
-import uniffi.bitkitcore.PaymentType
 
 @Composable
 fun ActivityDetailScreen(
