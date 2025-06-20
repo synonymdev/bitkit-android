@@ -19,11 +19,11 @@ See repo: https://github.com/synonymdev/bitkit-transifex-sync
 
 ## Build for Release
 
-Setup the signing config:
+**Prerequisite**: setup the signing config:
 - Add the keystore file to root, eg. `./release.keystore`
 - Add `keystore.properties` to root of the project (see `keystore.properties.template`)
 
-Run:
+Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
 ./gradlew assembleRelease
 ```
