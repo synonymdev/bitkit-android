@@ -4,7 +4,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import kotlinx.datetime.Clock
 import javax.inject.Named
 
 
@@ -15,9 +14,4 @@ object CurrencyModule {
     @Provides
     @Named("enablePolling")
     fun provideEnablePolling(): Boolean = true
-
-    @Provides
-    fun provideClock(): Clock {
-        return Clock.System
-    }
 }

@@ -47,7 +47,7 @@ class CurrencyRepo @Inject constructor(
     private val cacheStore: CacheStore,
     @Named("enablePolling") private val enablePolling: Boolean,
     private val clock: Clock,
-    ) {
+) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val _currencyState = MutableStateFlow(CurrencyState())
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
@@ -142,7 +142,7 @@ class CurrencyRepo @Inject constructor(
             Logger.error("Currency rates refresh failed", e, context = TAG)
             _currencyState.update { it.copy(error = e) }
 
-           _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+            _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
                 val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
                 _currencyState.update { it.copy(hasStaleData = isStale) }
             }
