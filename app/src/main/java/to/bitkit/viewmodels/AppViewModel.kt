@@ -474,6 +474,11 @@ class AppViewModel @Inject constructor(
                         handleLightningInvoice(invoice = invoice, uri = uri)
                     } else {
                         Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.other__scan_err_decoding),
+                            description = context.getString(R.string.other__scan__error__expired),
+                        )
                     }
                 }.onFailure { e ->
                     Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
