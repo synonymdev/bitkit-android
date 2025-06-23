@@ -25,7 +25,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
+import org.checkerframework.checker.units.qual.min
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -506,11 +508,34 @@ class AppViewModel @Inject constructor(
                 if (lightningBalance < minSendable) {
                     toast(
                         type = Toast.ToastType.WARNING,
-                        title = "Unable To Pay (LNURL)", //TODO get resources"other__lnurl_pay_error"
+                        title = context.getString(R.string.other__lnurl_pay_error),
                         description = "Not enough outbound/sending capacity to complete lnurl-pay request."
                     )
+                    return
+                }
+
+                if (minSendable == maxSendable) {
+                    val amount = minSendable
+
+                    lightningService.createLnurlInvoice(
+                        address = data.uri,
+                        amountSatoshis = amount
+                    ).onSuccess { invoice ->
+                        _sendUiState.update { it.copy(amount = amount, bolt11 = invoice) }
+                        setSendEffect(SendEffect.NavigateToReview)
+                    }.onFailure { e ->
+                        Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.other__scan_err_decoding),
+                            description = context.getString(R.string.other__scan__error__expired),
+                        )
+                    }
+                } else {
+                    //Navigate to send amount with with amount constraints
                 }
             }
+
             is Scanner.LnurlWithdraw -> TODO("Not implemented")
             is Scanner.LnurlAuth -> TODO("Not implemented")
             is Scanner.LnurlChannel -> TODO("Not implemented")
