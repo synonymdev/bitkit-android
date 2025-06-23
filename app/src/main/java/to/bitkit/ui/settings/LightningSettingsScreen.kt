@@ -12,21 +12,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
+import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.settings.SectionHeader
-import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsTextButtonRow
-import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
 fun LightningSettingsScreen(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
+    navController: NavController,
 ) {
     ScreenColumn {
         AppTopBar(
@@ -46,13 +41,7 @@ fun LightningSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SectionHeader("LDK")
-            SettingsButtonRow(stringResource(R.string.settings__adv__lightning_node)) { navController.navigateToNodeState() }
-
-            SectionHeader("Blocktank")
-            SettingsTextButtonRow("Register for notifications", onClick = viewModel::manualRegisterForNotifications)
-            SettingsTextButtonRow("Self test notification", onClick = viewModel::debugLspNotifications)
-            SettingsTextButtonRow("Open channel to trusted peer", onClick = viewModel::openChannel)
+            SectionHeader(stringResource(R.string.lightning__conn_open))
         }
     }
 }

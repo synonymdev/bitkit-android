@@ -370,6 +370,7 @@ fun ContentView(
                         BottomSheetType.BackupNavigation -> BackupNavigationSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
+
                         null -> Unit
                     }
                 }
@@ -423,7 +424,7 @@ private fun RootNavHost(
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
-        lightningConnections(walletViewModel, navController)
+        lightningConnections(navController)
         devSettings(walletViewModel, navController)
         regtestSettings(navController)
         activityItem(activityListViewModel, navController)
@@ -897,11 +898,10 @@ private fun NavGraphBuilder.cjitDetailSettings(
 }
 
 private fun NavGraphBuilder.lightningConnections(
-    viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
     composableWithDefaultTransitions<Routes.LightningConnections> {
-        LightningSettingsScreen(viewModel, navController)
+        LightningSettingsScreen(navController)
     }
 }
 
