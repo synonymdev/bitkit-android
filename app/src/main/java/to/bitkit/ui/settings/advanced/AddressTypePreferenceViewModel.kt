@@ -47,9 +47,10 @@ class AddressTypePreferenceViewModel @Inject constructor(
     }
 
     fun setAddressType(addressType: AddressType) {
+        if (_uiState.value.selectedAddressType == addressType) return
+
         viewModelScope.launch {
             settingsStore.update { it.copy(addressType = addressType) }
-            // Refresh wallet to generate new address with preferred type
             walletRepo.refreshBip21(force = true)
         }
     }
