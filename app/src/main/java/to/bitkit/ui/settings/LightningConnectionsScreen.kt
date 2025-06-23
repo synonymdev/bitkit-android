@@ -20,7 +20,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 
 @Composable
-fun LightningSettingsScreen(
+fun LightningConnectionsScreen(
     navController: NavController,
 ) {
     ScreenColumn {

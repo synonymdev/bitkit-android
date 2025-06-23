@@ -97,7 +97,7 @@ import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
-import to.bitkit.ui.settings.LightningSettingsScreen
+import to.bitkit.ui.settings.LightningConnectionsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
@@ -901,7 +901,7 @@ private fun NavGraphBuilder.lightningConnections(
     navController: NavHostController,
 ) {
     composableWithDefaultTransitions<Routes.LightningConnections> {
-        LightningSettingsScreen(navController)
+        LightningConnectionsScreen(navController)
     }
 }
 
