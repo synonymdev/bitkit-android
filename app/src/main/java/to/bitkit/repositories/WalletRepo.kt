@@ -2,6 +2,8 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.AddressType
+import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -85,7 +87,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun refreshBip21(force: Boolean = false): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Refreshing bip21 (forceNewAddress: $force)", context = TAG)
+        Logger.debug("Refreshing bip21 (force: $force)", context = TAG)
 
         if (coreService.shouldBlockLightning()) {
             _walletState.update {
@@ -235,14 +237,19 @@ class WalletRepo @Inject constructor(
             val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
             val addressType = settingsStore.data.first().addressType
-            val derivationPath = addressType.toDerivationPath(network)
 
-            val result = coreService.onchain.deriveBitcoinAddress(
+            // TODO: manage address index
+            val nextIndex = 0
+            val derivationPath = addressType.toDerivationPath(network, index = nextIndex)
+
+            val result: GetAddressResponse = coreService.onchain.deriveBitcoinAddress(
                 mnemonicPhrase = mnemonic,
                 derivationPathStr = derivationPath,
                 network = network,
                 bip39Passphrase = passphrase,
             )
+
+            Logger.info("Generated new receive address: ${result.address},' type: $addressType, index: $nextIndex")
 
             Result.success(result.address)
         } catch (e: Throwable) {
