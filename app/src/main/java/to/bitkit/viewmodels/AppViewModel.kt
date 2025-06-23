@@ -444,13 +444,40 @@ class AppViewModel @Inject constructor(
                 handleLightningInvoice(invoice, uri)
             }
 
-            is Scanner.LnurlAddress -> TODO("Not implemented")
+            is Scanner.LnurlAddress -> {
+                val data = scan.data
+
+                lightningService.createLnurlInvoice(
+                    address = data.uri,
+                    amountSatoshis = 0UL
+                ).onSuccess { lightningInvoice ->
+                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
+                    if (scan is Scanner.Lightning) {
+                        val invoice = scan.invoice
+                        handleLightningInvoice(invoice = invoice, uri = uri)
+                    } else {
+                        Logger.error("Error decoding LnurlAddress. scan: $scan", context = "AppViewModel")
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.other__scan_err_decoding),
+                            description = context.getString(R.string.other__scan__error__expired),
+                        )
+                    }
+                }.onFailure { e ->
+                    Logger.error("Error decoding LnurlAddress. data: $data", e = e, context = "AppViewModel")
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__expired),
+                    )
+                }
+            }
+
             is Scanner.LnurlPay -> {
                 val data = scan.data
 
-                //TODO Check if the amount is in sats or millissats
                 val minSendable = data.minSendable
-                val maxSendable = data.maxSendable
+                val maxSendable = data.maxSendable //TODO HANDLE MAX SENDABLE
 
                 if (!lightningService.canSend(minSendable)) {
                     toast(
@@ -462,7 +489,6 @@ class AppViewModel @Inject constructor(
                 }
 
                 val amount = minSendable
-                //TODO HANDLE MAX SENDABLE
 
                 lightningService.createLnurlInvoice(
                     address = data.uri,
