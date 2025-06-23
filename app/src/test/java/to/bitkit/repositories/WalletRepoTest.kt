@@ -3,7 +3,6 @@ package to.bitkit.repositories
 import app.cash.turbine.test
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -16,7 +15,6 @@ import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -28,7 +26,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
@@ -143,7 +140,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
-        // whenever(sut.getOnchainAddress()).thenReturn("")
+        whenever(sut.getOnchainAddress()).thenReturn("")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
@@ -156,7 +153,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 should set receiveOnSpendingBalance as false if shouldBlockLightning is true`() = test {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
-        // whenever(sut.getOnchainAddress()).thenReturn("")
+        whenever(sut.getOnchainAddress()).thenReturn("")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
@@ -168,7 +165,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
-        // whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+        whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(
             mockAddressInfo().let { addressInfo ->
@@ -200,7 +197,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 forced should always generate new address`() = test {
         val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        // whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
+        whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mockAddressInfo())
 
@@ -304,7 +301,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `updateBip21Invoice should build correct BIP21 URL`() = test {
         val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        // whenever(sut.getOnchainAddress()).thenReturn(testAddress)
+        whenever(sut.getOnchainAddress()).thenReturn(testAddress)
         whenever(lightningRepo.hasChannels()).thenReturn(false)
 
         sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
