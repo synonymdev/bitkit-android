@@ -440,59 +440,8 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.Lightning -> {
-                val invoice: LightningInvoice = scan.invoice
-                if (invoice.isExpired) {
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__expired),
-                    )
-                    return
-                }
-                // Check for QuickPay conditions
-                val quickPayHandled = handleQuickPayIfApplicable(
-                    invoice = uri,
-                    amountSats = invoice.amountSatoshis,
-                )
-
-                if (quickPayHandled) return
-
-                if (!lightningService.canSend(invoice.amountSatoshis)) {
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = "Insufficient Funds",
-                        description = "You do not have enough funds to send this payment."
-                    )
-                    return
-                }
-
-                _sendUiState.update {
-                    it.copy(
-                        amount = invoice.amountSatoshis,
-                        bolt11 = uri,
-                        description = invoice.description.orEmpty(),
-                        decodedInvoice = invoice,
-                        payMethod = SendMethod.LIGHTNING,
-                    )
-                }
-                if (invoice.amountSatoshis > 0uL) {
-                    Logger.info("Found amount in invoice, proceeding with payment")
-
-                    if (isMainScanner) {
-                        showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
-                    } else {
-                        setSendEffect(SendEffect.NavigateToReview)
-                    }
-                } else {
-                    Logger.info("No amount found in invoice, proceeding entering amount manually")
-                    resetAmountInput()
-
-                    if (isMainScanner) {
-                        showSheet(BottomSheetType.Send(SendRoute.Amount))
-                    } else {
-                        setSendEffect(SendEffect.NavigateToAmount)
-                    }
-                }
+                val invoice = scan.invoice
+                handleLightningInvoice(invoice, uri)
             }
 
             is Scanner.LnurlAddress -> TODO("Not implemented")
@@ -503,9 +452,7 @@ class AppViewModel @Inject constructor(
                 val minSendable = data.minSendable
                 val maxSendable = data.maxSendable
 
-                val lightningBalance = walletRepo.balanceState.value.totalLightningSats
-
-                if (lightningBalance < minSendable) {
+                if (!lightningService.canSend(minSendable)) {
                     toast(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.other__lnurl_pay_error),
@@ -514,25 +461,27 @@ class AppViewModel @Inject constructor(
                     return
                 }
 
-                if (minSendable == maxSendable) {
-                    val amount = minSendable
+                val amount = minSendable
+                //TODO HANDLE MAX SENDABLE
 
-                    lightningService.createLnurlInvoice(
-                        address = data.uri,
-                        amountSatoshis = amount
-                    ).onSuccess { invoice ->
-                        _sendUiState.update { it.copy(amount = amount, bolt11 = invoice) }
-                        setSendEffect(SendEffect.NavigateToReview)
-                    }.onFailure { e ->
-                        Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
-                        )
+                lightningService.createLnurlInvoice(
+                    address = data.uri,
+                    amountSatoshis = amount
+                ).onSuccess { lightningInvoice ->
+                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
+                    if (scan is Scanner.Lightning) {
+                        val invoice = scan.invoice
+                        handleLightningInvoice(invoice = invoice, uri = uri)
+                    } else {
+                        Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
                     }
-                } else {
-                    //Navigate to send amount with with amount constraints
+                }.onFailure { e ->
+                    Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.other__scan_err_decoding),
+                        description = context.getString(R.string.other__scan__error__expired),
+                    )
                 }
             }
 
@@ -555,6 +504,61 @@ class AppViewModel @Inject constructor(
                     title = "Unsupported",
                     description = "This type of invoice is not supported yet"
                 )
+            }
+        }
+    }
+
+    private suspend fun handleLightningInvoice(invoice: LightningInvoice, uri: String) {
+        if (invoice.isExpired) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__scan_err_decoding),
+                description = context.getString(R.string.other__scan__error__expired),
+            )
+            return
+        }
+        // Check for QuickPay conditions
+        val quickPayHandled = handleQuickPayIfApplicable(
+            invoice = uri,
+            amountSats = invoice.amountSatoshis,
+        )
+
+        if (quickPayHandled) return
+
+        if (!lightningService.canSend(invoice.amountSatoshis)) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = "Insufficient Funds",
+                description = "You do not have enough funds to send this payment."
+            )
+            return
+        }
+
+        _sendUiState.update {
+            it.copy(
+                amount = invoice.amountSatoshis,
+                bolt11 = uri,
+                description = invoice.description.orEmpty(),
+                decodedInvoice = invoice,
+                payMethod = SendMethod.LIGHTNING,
+            )
+        }
+        if (invoice.amountSatoshis > 0uL) {
+            Logger.info("Found amount in invoice, proceeding with payment")
+
+            if (isMainScanner) {
+                showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
+            } else {
+                setSendEffect(SendEffect.NavigateToReview)
+            }
+        } else {
+            Logger.info("No amount found in invoice, proceeding entering amount manually")
+            resetAmountInput()
+
+            if (isMainScanner) {
+                showSheet(BottomSheetType.Send(SendRoute.Amount))
+            } else {
+                setSendEffect(SendEffect.NavigateToAmount)
             }
         }
     }
