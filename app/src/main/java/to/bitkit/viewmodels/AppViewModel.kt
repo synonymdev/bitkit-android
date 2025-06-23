@@ -494,7 +494,23 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.LnurlAddress -> TODO("Not implemented")
-            is Scanner.LnurlPay -> TODO("Not implemented")
+            is Scanner.LnurlPay -> {
+                val data = scan.data
+
+                //TODO Check if the amount is in sats or millissats
+                val minSendable = data.minSendable
+                val maxSendable = data.maxSendable
+
+                val lightningBalance = walletRepo.balanceState.value.totalLightningSats
+
+                if (lightningBalance < minSendable) {
+                    toast(
+                        type = Toast.ToastType.WARNING,
+                        title = "Unable To Pay (LNURL)", //TODO get resources"other__lnurl_pay_error"
+                        description = "Not enough outbound/sending capacity to complete lnurl-pay request."
+                    )
+                }
+            }
             is Scanner.LnurlWithdraw -> TODO("Not implemented")
             is Scanner.LnurlAuth -> TODO("Not implemented")
             is Scanner.LnurlChannel -> TODO("Not implemented")
