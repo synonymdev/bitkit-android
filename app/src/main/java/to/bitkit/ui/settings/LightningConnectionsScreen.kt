@@ -11,6 +11,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
@@ -18,17 +19,29 @@ import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun LightningConnectionsScreen(
     navController: NavController,
 ) {
+    Content(
+        onBack = { navController.popBackStack() },
+        onClickAddConnection = { navController.navigateToTransferFunding() },
+    )
+}
+
+@Composable
+private fun Content(
+    onBack: () -> Unit = {},
+    onClickAddConnection: () -> Unit = {},
+) {
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__connections),
-            onBackClick = { navController.popBackStack() },
+            onBackClick = onBack,
             actions = {
-                IconButton(onClick = { navController.navigateToTransferFunding() }) {
+                IconButton(onClick = onClickAddConnection) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = stringResource(R.string.lightning__conn_button_add),
@@ -42,6 +55,16 @@ fun LightningConnectionsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             SectionHeader(stringResource(R.string.lightning__conn_open))
+            // TODO add content
         }
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        Content(
+        )
     }
 }
