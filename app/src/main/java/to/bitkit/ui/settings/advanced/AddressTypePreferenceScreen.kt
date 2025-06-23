@@ -87,7 +87,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = AddressTypePreferenceUiState(
-                availableAddressTypes = listOf(AddressType.P2WPKH, /* AddressType.P2SH, AddressType.P2PKH */)
+                availableAddressTypes = listOf(AddressType.P2WPKH, AddressType.P2SH, AddressType.P2PKH)
             ),
         )
     }
