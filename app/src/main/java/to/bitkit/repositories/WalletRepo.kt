@@ -232,30 +232,33 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
-            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        return@withContext lightningRepo.newAddress()
 
-            val addressType = settingsStore.data.first().addressType
-
-            // TODO: manage address index
-            val nextIndex = 0
-            val derivationPath = addressType.toDerivationPath(network, index = nextIndex)
-
-            val result: GetAddressResponse = coreService.onchain.deriveBitcoinAddress(
-                mnemonicPhrase = mnemonic,
-                derivationPathStr = derivationPath,
-                network = network,
-                bip39Passphrase = passphrase,
-            )
-
-            Logger.info("Generated new receive address: ${result.address},' type: $addressType, index: $nextIndex")
-
-            Result.success(result.address)
-        } catch (e: Throwable) {
-            Logger.error("Address generation error", e, context = TAG)
-            Result.failure(e)
-        }
+        // TODO uncomment & update when ldk-node supports different address types
+        // try {
+        //     val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        //     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        //
+        //     val addressType = settingsStore.data.first().addressType
+        //
+        //     // TODO: manage address index
+        //     val nextIndex = 0
+        //     val derivationPath = addressType.toDerivationPath(network, index = nextIndex)
+        //
+        //     val result: GetAddressResponse = coreService.onchain.deriveBitcoinAddress(
+        //         mnemonicPhrase = mnemonic,
+        //         derivationPathStr = derivationPath,
+        //         network = network,
+        //         bip39Passphrase = passphrase,
+        //     )
+        //
+        //     Logger.info("Generated new receive address: ${result.address},' type: $addressType, index: $nextIndex")
+        //
+        //     Result.success(result.address)
+        // } catch (e: Throwable) {
+        //     Logger.error("Address generation error", e, context = TAG)
+        //     Result.failure(e)
+        // }
     }
 
     // Bolt11 management

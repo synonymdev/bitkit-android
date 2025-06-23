@@ -30,10 +30,11 @@ class AddressTypePreferenceViewModel @Inject constructor(
         viewModelScope.launch {
             settingsStore.data.collect { settings ->
                 val availableAddressTypes = listOfNotNull(
-                    AddressType.P2TR.takeIf { settings.isDevModeEnabled },
+                    // TODO uncomment & update when ldk-node supports different address types
+                    // AddressType.P2TR.takeIf { settings.isDevModeEnabled },
                     AddressType.P2WPKH,
-                    AddressType.P2SH,
-                    AddressType.P2PKH,
+                    // AddressType.P2SH,
+                    // AddressType.P2PKH,
                 )
                 _uiState.update {
                     AddressTypePreferenceUiState(
