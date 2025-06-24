@@ -12,14 +12,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.AppDb
 import to.bitkit.di.IoDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.toBase64
-import to.bitkit.utils.KeychainError
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -90,8 +88,6 @@ class Keychain @Inject constructor(
     }
 
     suspend fun wipe() {
-        if (Env.network != Network.REGTEST) throw KeychainError.KeychainWipeNotAllowed()
-
         val keys = snapshot.asMap().keys
         keychain.edit { it.clear() }
 
@@ -124,4 +120,12 @@ class Keychain @Inject constructor(
         PIN,
         PIN_ATTEMPTS_REMAINING,
     }
+}
+
+sealed class KeychainError(message: String) : AppError(message) {
+    class FailedToDelete(key: String) : KeychainError("Failed to delete $key from keychain.")
+    class FailedToLoad(key: String) : KeychainError("Failed to load $key from keychain.")
+    class FailedToSave(key: String) : KeychainError("Failed to save to $key keychain.")
+    class FailedToSaveAlreadyExists(key: String) :
+        KeychainError("Key $key already exists in keychain. Explicitly delete key before attempting to update value.")
 }
