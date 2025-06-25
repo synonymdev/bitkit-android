@@ -27,9 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
-import org.checkerframework.checker.units.qual.min
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -364,8 +362,8 @@ class AppViewModel @Inject constructor(
         val lnUrlParams = _sendUiState.value.lnUrlParameters
 
         val isValidLNAmount = when (lnUrlParams) {
-            is LnUrlParameters.LnurlAddress -> lightningService.canSend(amount)
-            is LnUrlParameters.LnurlPay -> {
+            is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
+            is LnUrlParameters.LnUrlPay -> {
                 lnUrlParams.data.minSendable < amount
                     && amount < lnUrlParams.data.maxSendable
                     && lightningService.canSend(amount)
@@ -474,7 +472,7 @@ class AppViewModel @Inject constructor(
                         handleLightningInvoice(
                             invoice = invoice,
                             uri = uri,
-                            lnUrlParameters = LnUrlParameters.LnurlAddress(data)
+                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data)
                         )
                     } else {
                         Logger.error("Error decoding LnurlAddress. scan: $scan", context = "AppViewModel")
@@ -519,7 +517,7 @@ class AppViewModel @Inject constructor(
                     val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
                     if (scan is Scanner.Lightning) {
                         val invoice = scan.invoice
-                        handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnurlPay(data = data))
+                        handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data))
                     } else {
                         Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
                         toast(
@@ -1090,7 +1088,7 @@ sealed class SendEvent {
 }
 
 sealed interface LnUrlParameters {
-    data class LnurlPay(val data: LnurlPayData) : LnUrlParameters
-    data class LnurlAddress(val data: LnurlAddressData) : LnUrlParameters
+    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
+    data class LnUrlAddress(val data: LnurlAddressData) : LnUrlParameters
 }
 // endregion
