@@ -116,7 +116,7 @@ private fun Content(
         ) {
             VerticalSpacer(16.dp)
             LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
-            VerticalSpacer(32.dp)
+            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
             // Pending Channels Section
             if (uiState.pendingConnections.isNotEmpty()) {
@@ -127,7 +127,6 @@ private fun Content(
                     channels = uiState.pendingConnections.reversed(),
                     onClickChannel = onClickChannel,
                 )
-                VerticalSpacer(16.dp)
             }
 
             // Open Channels Section
@@ -144,7 +143,7 @@ private fun Content(
             // Closed & Failed Channels Section
             if (showClosed && uiState.failedOrders.isNotEmpty()) {
                 VerticalSpacer(16.dp)
-                Caption13Up(stringResource(R.string.lightning__conn_failed), modifier = Modifier.padding(top = 16.dp))
+                Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
                 ChannelList(
                     status = ChannelStatusUi.CLOSED,
                     channels = uiState.failedOrders.reversed(),
@@ -252,18 +251,18 @@ private fun Channel(
         modifier = Modifier
             .fillMaxWidth()
             .clickableAlpha { onClick() }
-            .padding(vertical = 16.dp)
     ) {
+        VerticalSpacer(16.dp)
         Row(
-            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
         ) {
             BodyMSB(
                 text = getChannelName(channel),
                 color = if (status == ChannelStatusUi.CLOSED) Colors.White64 else Colors.White,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.MiddleEllipsis,
                 modifier = Modifier.weight(1f)
             )
             Icon(
@@ -281,10 +280,8 @@ private fun Channel(
             status = status,
             showLabels = false
         )
-        HorizontalDivider(
-            color = Colors.White10,
-            modifier = Modifier.padding(top = 16.dp)
-        )
+        VerticalSpacer(16.dp)
+        HorizontalDivider()
     }
 }
 
