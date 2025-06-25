@@ -58,7 +58,6 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
-import to.bitkit.viewmodels.filterPaid
 
 @Composable
 fun LightningConnectionsScreen(
@@ -296,16 +295,18 @@ private fun getChannelName(channel: ChannelDetails): String {
     val wallet = walletViewModel ?: return default
     val mainUiState by wallet.uiState.collectAsStateWithLifecycle()
     val channels = mainUiState.channels
-    val orders = blocktank.orders
-    val paidOrders = orders.filterPaid()
+    val paidOrders by blocktank.paidOrders.collectAsStateWithLifecycle()
 
-    // TODO: sort channels to make it deterministic, because node.listChannels returns a list in random order
-    val pendingChannels = paidOrders.filter { order ->
-        // orders without a corresponding known channel are considered pending
-        channels.none { c -> c.fundingTxo?.txid == order.channel?.fundingTx?.id }
+    val paidBlocktankOrders = blocktank.orders.filter { order -> order.id in paidOrders.keys }
+
+    // orders without a corresponding known channel are considered pending
+    val pendingChannels = paidBlocktankOrders.filter { order ->
+        channels.none { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }
     }
     val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
-    val channelIndex = channels.indexOfFirst { c -> channel.channelId == c.channelId }
+
+    // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
+    val channelIndex = channels.indexOfFirst { channel.channelId == it.channelId }
 
     val connectionText = stringResource(R.string.lightning__connection)
 

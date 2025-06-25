@@ -39,7 +39,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch {
             val lightningState = lightningRepo.lightningState.value
             if (!lightningState.nodeLifecycleState.isRunning()) {
-                // TODO handle on UI
+                // TODO handle node not running UI
                 _uiState.update { it.copy(isNodeRunning = false) }
                 return@launch
             }
@@ -52,7 +52,7 @@ class LightningConnectionsViewModel @Inject constructor(
                     isNodeRunning = true,
                     openChannels = openChannels,
                     pendingConnections = getPendingConnections(channels),
-                    failedOrders = getFailedOrdersAsChannels(channels),
+                    failedOrders = getFailedOrdersAsChannels(),
                     localBalance = calculateLocalBalance(channels),
                     remoteBalance = calculateRemoteBalance(channels),
                 )
@@ -91,16 +91,11 @@ class LightningConnectionsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun getFailedOrdersAsChannels(knownChannels: List<ChannelDetails>): List<ChannelDetails> {
+    private suspend fun getFailedOrdersAsChannels(): List<ChannelDetails> {
         val paidOrders = cacheStore.data.first().paidOrders
 
         return paidOrders.keys.mapNotNull { orderId ->
             val order = orders.find { it.id == orderId } ?: return@mapNotNull null
-
-            // Only process orders that don't have a corresponding known channel
-            if (knownChannels.any { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }) {
-                return@mapNotNull null
-            }
 
             if (order.state2 != BtOrderState2.EXPIRED) return@mapNotNull null
 
