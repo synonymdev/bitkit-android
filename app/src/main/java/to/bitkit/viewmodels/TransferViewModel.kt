@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.CurrencyRepo
@@ -46,6 +47,7 @@ class TransferViewModel @Inject constructor(
     private val coreService: CoreService,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
+    private val cacheStore: CacheStore,
 ) : ViewModel() {
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
     val spendingUiState = _spendingUiState.asStateFlow()
@@ -79,7 +81,8 @@ class TransferViewModel @Inject constructor(
                     sats = order.feeSat,
                     speed = speed,
                 )
-                .onSuccess {
+                .onSuccess { txId ->
+                    cacheStore.addPaidOrder(orderId = order.id, txId = txId)
                     settingsStore.update { it.copy(lightningSetupStep = 0) }
                     watchOrder(order.id)
                 }
