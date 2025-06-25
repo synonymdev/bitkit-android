@@ -70,7 +70,7 @@ class LogsRepo @Inject constructor(
                     LogFile(
                         displayName = displayName,
                         file = file,
-                        source = getEnumValueOf<LogSource>(serviceName).getOrElse { LogSource.Unknown },
+                        source = getEnumValueOf<LogSource>(serviceName).getOrDefault(LogSource.Unknown),
                     )
                 }
                 ?.sortedByDescending { it.file.lastModified() }
