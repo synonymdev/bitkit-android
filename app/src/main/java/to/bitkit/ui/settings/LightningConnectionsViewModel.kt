@@ -37,19 +37,15 @@ class LightningConnectionsViewModel @Inject constructor(
 
     fun syncState() {
         viewModelScope.launch {
-            val lightningState = lightningRepo.lightningState.value
-            if (!lightningState.nodeLifecycleState.isRunning()) {
-                // TODO handle node not running UI
-                _uiState.update { it.copy(isNodeRunning = false) }
-                return@launch
-            }
+            // TODO handle node not running UI
+            val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
 
             val channels = lightningRepo.getChannels().orEmpty()
             val openChannels = channels.filterOpen()
 
             _uiState.update {
                 it.copy(
-                    isNodeRunning = true,
+                    isNodeRunning = isNodeRunning,
                     openChannels = openChannels,
                     pendingConnections = getPendingConnections(channels),
                     failedOrders = getFailedOrdersAsChannels(),
