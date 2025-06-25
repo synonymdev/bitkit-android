@@ -483,6 +483,7 @@ class AppViewModel @Inject constructor(
                             title = context.getString(R.string.other__scan_err_decoding),
                             description = context.getString(R.string.other__scan__error__expired),
                         )
+                        resetSendState()
                     }
                 }.onFailure { e ->
                     Logger.error("Error decoding LnurlAddress. data: $data", e = e, context = "AppViewModel")
@@ -491,6 +492,7 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.other__scan_err_decoding),
                         description = context.getString(R.string.other__scan__error__expired),
                     )
+                    resetSendState()
                 }
             }
 
@@ -506,6 +508,7 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.other__lnurl_pay_error),
                         description = context.getString(R.string.other__lnurl_pay_error_no_capacity)
                     )
+                    resetSendState()
                     return
                 }
                 val amount = if (minSendable == maxSendable) minSendable else 0UL
@@ -524,6 +527,7 @@ class AppViewModel @Inject constructor(
                             title = context.getString(R.string.other__scan_err_decoding),
                             description = context.getString(R.string.other__scan__error__expired),
                         )
+                        resetSendState()
                     }
                 }.onFailure { e ->
                     Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
@@ -532,10 +536,26 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.other__scan_err_decoding),
                         description = context.getString(R.string.other__scan__error__expired),
                     )
+                    resetSendState()
                 }
             }
 
-            is Scanner.LnurlWithdraw -> TODO("Not implemented")
+            is Scanner.LnurlWithdraw -> {
+                val data = scan.data
+
+                val minWithdrawable = data.minWithdrawable ?: 0uL
+                val maxWithdrawable = data.maxWithdrawable
+
+                if (minWithdrawable > maxWithdrawable) {
+                    toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.other__lnurl_withdr_error),
+                        description = context.getString(R.string.other__lnurl_withdr_error_minmax)
+                    )
+                    resetSendState()
+                    return
+                }
+            }
             is Scanner.LnurlAuth -> TODO("Not implemented")
             is Scanner.LnurlChannel -> TODO("Not implemented")
 
