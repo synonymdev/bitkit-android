@@ -578,6 +578,11 @@ fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
     return this.filter { it.isChannelReady }
 }
 
+/** Returns only `pending` channels. */
+fun List<ChannelDetails>.filterPending(): List<ChannelDetails> {
+    return this.filterNot { it.isChannelReady }
+}
+
 private fun generateLogFilePath(): String {
     val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")

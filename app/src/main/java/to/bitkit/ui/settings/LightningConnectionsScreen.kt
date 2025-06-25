@@ -34,7 +34,7 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
-import to.bitkit.ext.mockChannelDetails
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyMSB
@@ -46,6 +46,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -60,10 +61,12 @@ fun LightningConnectionsScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel = hiltViewModel(),
 ) {
+    val blocktank = blocktankViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        viewModel.initState()
+    LaunchedEffect(blocktank.orders) {
+        viewModel.setBlocktankOrders(blocktank.orders)
+        viewModel.syncState()
     }
 
     Content(
@@ -110,12 +113,28 @@ private fun Content(
             LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
             VerticalSpacer(32.dp)
 
-            Caption13Up(stringResource(R.string.lightning__conn_open), modifier = Modifier.padding(top = 16.dp))
-            ChannelList(
-                status = ChannelStatusUi.OPEN,
-                channels = uiState.openChannels,
-                onClickChannel = onClickChannel,
-            )
+            // Pending Channels Section
+            if (uiState.pendingChannels.isNotEmpty()) {
+                VerticalSpacer(16.dp)
+                Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
+                ChannelList(
+                    status = ChannelStatusUi.PENDING,
+                    channels = uiState.pendingChannels.reversed(),
+                    onClickChannel = onClickChannel,
+                )
+                VerticalSpacer(16.dp)
+            }
+
+            // Open Channels Section
+            if (uiState.openChannels.isNotEmpty()) {
+                VerticalSpacer(16.dp)
+                Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
+                ChannelList(
+                    status = ChannelStatusUi.OPEN,
+                    channels = uiState.openChannels.reversed(),
+                    onClickChannel = onClickChannel,
+                )
+            }
             FillHeight()
 
             // Bottom Section
@@ -244,15 +263,14 @@ private fun Channel(
 private fun getChannelName(channel: ChannelDetails): String {
     val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
     val blocktank = blocktankViewModel ?: return default
-    val paidBlocktankOrders = blocktank.orders.filterPaid()
     val wallet = walletViewModel ?: return default
     val mainUiState by wallet.uiState.collectAsStateWithLifecycle()
     val channels = mainUiState.channels
 
     // TODO: sort channels to make it deterministic, because node.listChannels returns a list in random order
-    val pendingChannels = paidBlocktankOrders.filter { order ->
+    val pendingChannels = blocktank.orders.filterPaid().filter { order ->
         // orders without a corresponding known channel are considered pending
-        !channels.any { c -> c.fundingTxo?.txid == order.channel?.fundingTx?.id }
+        channels.none { c -> c.fundingTxo?.txid == order.channel?.fundingTx?.id }
     }
     val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
     val channelIndex = channels.indexOfFirst { c -> channel.channelId == c.channelId }
@@ -273,7 +291,6 @@ private fun getChannelName(channel: ChannelDetails): String {
     }
 }
 
-@Suppress("SpellCheckingInspection")
 @Preview
 @Composable
 private fun Preview() {
@@ -283,15 +300,20 @@ private fun Preview() {
                 localBalance = 50_000u,
                 remoteBalance = 450_000u,
                 isNodeRunning = true,
+                pendingChannels = listOf(
+                    createChannelDetails().copy(
+                        channelId = "order_1",
+                        channelValueSats = 500_000u,
+                        outboundCapacityMsat = 100_000_000u,
+                        inboundCapacityMsat = 400_000_000u,
+                    ),
+                ),
                 openChannels = listOf(
-                    mockChannelDetails().copy(
+                    createChannelDetails().copy(
                         channelId = "channel_1",
-                        counterpartyNodeId = "03abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234",
                         channelValueSats = 1_000_000u,
                         outboundCapacityMsat = 300_000_000u,
                         inboundCapacityMsat = 700_000_000u,
-                        isChannelReady = true,
-                        inboundScidAlias = null,
                     ),
                 )
             )
