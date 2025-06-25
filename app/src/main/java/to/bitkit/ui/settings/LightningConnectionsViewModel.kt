@@ -55,6 +55,7 @@ class LightningConnectionsViewModel @Inject constructor(
 
             val channels = lightningRepo.getChannels().orEmpty()
             val openChannels = channels.filterOpen()
+            // TODO add closed channels list once tracked
 
             _uiState.update {
                 it.copy(
