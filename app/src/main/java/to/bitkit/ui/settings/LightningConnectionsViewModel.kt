@@ -12,9 +12,11 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
+import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.filterOpen
+import to.bitkit.services.filterPending
 import to.bitkit.viewmodels.filterPaid
 import javax.inject.Inject
 
@@ -42,20 +44,27 @@ class LightningConnectionsViewModel @Inject constructor(
 
             val balances = lightningRepo.getBalances()
             val channels = lightningRepo.getChannels().orEmpty()
-            val pendingChannels = getPendingOrdersAsChannels(channels)
+            val openChannels = channels.filterOpen()
+            val pendingChannels = getPendingConnections(channels)
 
             _uiState.update {
                 it.copy(
                     isNodeRunning = true,
                     balances = balances,
-                    allChannels = channels,
-                    openChannels = channels.filterOpen(),
+                    openChannels = openChannels,
                     pendingChannels = pendingChannels,
-                    localBalance = calculateLocalBalance(channels),
-                    remoteBalance = calculateRemoteBalance(channels),
+                    localBalance = calculateLocalBalance(openChannels),
+                    remoteBalance = calculateRemoteBalance(openChannels),
                 )
             }
         }
+    }
+
+    private fun getPendingConnections(knownChannels: List<ChannelDetails>): List<ChannelDetails> {
+        val pendingLdkChannels = knownChannels.filterPending()
+        val pendingOrderChannels = getPendingOrdersAsChannels(knownChannels)
+
+        return pendingOrderChannels + pendingLdkChannels
     }
 
     private fun getPendingOrdersAsChannels(knownChannels: List<ChannelDetails>): List<ChannelDetails> {
@@ -82,7 +91,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private fun calculateLocalBalance(channels: List<ChannelDetails>?): ULong {
         return channels
             ?.filterOpen()
-            ?.sumOf { it.outboundCapacityMsat / 1000u }
+            ?.sumOf { it.amountOnClose }
             ?: 0u
     }
 
@@ -97,7 +106,6 @@ class LightningConnectionsViewModel @Inject constructor(
 data class LightningConnectionsUiState(
     val isNodeRunning: Boolean = false,
     val balances: BalanceDetails? = null,
-    val allChannels: List<ChannelDetails> = emptyList(),
     val openChannels: List<ChannelDetails> = emptyList(),
     val pendingChannels: List<ChannelDetails> = emptyList(),
     val localBalance: ULong = 0uL,

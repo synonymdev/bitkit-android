@@ -306,6 +306,16 @@ private fun Preview() {
                         channelValueSats = 500_000u,
                         outboundCapacityMsat = 100_000_000u,
                         inboundCapacityMsat = 400_000_000u,
+                        isChannelReady = false,
+                        isUsable = false,
+                    ),
+                    createChannelDetails().copy(
+                        channelId = "pending_1",
+                        channelValueSats = 300_000u,
+                        outboundCapacityMsat = 200_000_000u,
+                        inboundCapacityMsat = 100_000_000u,
+                        isChannelReady = false,
+                        isUsable = false,
                     ),
                 ),
                 openChannels = listOf(
