@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
+import com.synonym.bitkitcore.AddressType
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.PrimaryDisplay
@@ -96,4 +97,5 @@ data class SettingsData(
     val balanceWarningTimes: Int = 0,
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
+    val addressType: AddressType = AddressType.P2WPKH,
 )

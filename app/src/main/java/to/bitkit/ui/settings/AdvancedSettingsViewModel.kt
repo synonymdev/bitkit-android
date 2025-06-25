@@ -9,18 +9,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
-import to.bitkit.repositories.WalletRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class AdvancedSettingsViewModel @Inject constructor(
-    walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
@@ -28,14 +25,13 @@ class AdvancedSettingsViewModel @Inject constructor(
 
     val uiState: StateFlow<AdvancedSettingsUiState> = combine(
         _isRescanning,
-        walletRepo.walletState.map { it.addressType },
-        settingsStore.data.map { it.isDevModeEnabled },
-    ) { isRescanning, addressType, devMode ->
+        settingsStore.data,
+    ) { isRescanning, settings ->
         AdvancedSettingsUiState(
             isRescanning = isRescanning,
-            addressType = addressType,
+            addressType = settings.addressType,
             currentNetwork = Env.network,
-            isDevModeEnabled = devMode,
+            isDevModeEnabled = settings.isDevModeEnabled,
         )
     }.stateIn(
         scope = viewModelScope,

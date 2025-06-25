@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,10 +31,16 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.settings.SectionHeader
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.InfoTextField
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.CloseNavIcon
+import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
 
@@ -45,7 +50,11 @@ fun BlocktankRegtestScreen(
     navController: NavController,
 ) {
     ScreenColumn {
-        AppTopBar("Blocktank Regtest", onBackClick = { navController.popBackStack() })
+        AppTopBar(
+            titleText = "Blocktank Regtest",
+            onBackClick = { navController.popBackStack() },
+            actions = { CloseNavIcon(onClick = { navController.navigateToHome() }) },
+        )
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
@@ -72,21 +81,18 @@ fun BlocktankRegtestScreen(
             var isDepositing by remember { mutableStateOf(false) }
             var isMining by remember { mutableStateOf(false) }
 
-            InfoTextField(
-                value = Env.blocktankBaseUrl,
-                label = stringResource(R.string.wallet__activity_address),
-            )
+            InfoTextField(value = Env.blocktankBaseUrl, label = "Service")
             Text(
                 text = "These actions are executed on the staging Blocktank server node.",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
             )
 
             // Deposit Section
-            SectionHeader(title = "DEPOSIT")
+            Caption13Up("DEPOSIT", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))
             OutlinedTextField(
                 value = depositAddress,
                 onValueChange = { depositAddress = it },
-                label = { Text("Address") },
+                label = { Text(stringResource(R.string.wallet__activity_address)) },
                 singleLine = true,
                 modifier = Modifier
                     .padding(vertical = 4.dp)
@@ -101,14 +107,16 @@ fun BlocktankRegtestScreen(
                     .padding(vertical = 4.dp)
                     .fillMaxWidth()
             )
-            Button(
+            PrimaryButton(
+                text = if (isDepositing) "Depositing..." else "Make Deposit",
+                size = ButtonSize.Small,
                 onClick = {
                     coroutineScope.launch {
                         Logger.debug("Initiating regtest deposit with address: $depositAddress, amount: $depositAmount")
                         isDepositing = true
                         try {
-                            val amount = depositAmount.toULongOrNull() ?: error("Invalid deposit amount: $depositAmount")
-                            val txId = viewModel.regtestDeposit(depositAddress, amount)
+                            val sats = depositAmount.toULongOrNull() ?: error("Invalid deposit amount: $depositAmount")
+                            val txId = viewModel.regtestDeposit(depositAddress, sats)
                             Logger.debug("Deposit successful with txId: $txId")
                             app.toast(
                                 type = Toast.ToastType.SUCCESS,
@@ -129,13 +137,10 @@ fun BlocktankRegtestScreen(
                     }
                 },
                 enabled = depositAddress.isNotEmpty() && !isDepositing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isDepositing) "Depositing..." else "Make Deposit")
-            }
+            )
 
             // Mining Section
-            SectionHeader(title = "MINING")
+            Caption13Up("MINING", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))
             Row(
                 verticalAlignment = CenterVertically,
                 modifier = Modifier
@@ -155,8 +160,8 @@ fun BlocktankRegtestScreen(
                             Logger.debug("Starting regtest mining with block count: $mineBlockCount")
                             isMining = true
                             try {
-                                val count =
-                                    mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
+                                val count = mineBlockCount.toUIntOrNull()
+                                    ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 app.toast(
@@ -184,7 +189,7 @@ fun BlocktankRegtestScreen(
             }
 
             // Lightning Payment Section
-            SectionHeader(title = "LIGHTNING PAYMENT")
+            Caption13Up("LIGHTNING PAYMENT", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))
             OutlinedTextField(
                 value = paymentInvoice,
                 onValueChange = { paymentInvoice = it },
@@ -202,7 +207,9 @@ fun BlocktankRegtestScreen(
                     .padding(vertical = 4.dp)
                     .fillMaxWidth()
             )
-            Button(
+            PrimaryButton(
+                text = "Pay Invoice",
+                size = ButtonSize.Small,
                 onClick = {
                     coroutineScope.launch {
                         Logger.debug("Initiating regtest payment with invoice: $paymentInvoice, amount: $paymentAmount")
@@ -227,13 +234,10 @@ fun BlocktankRegtestScreen(
                     }
                 },
                 enabled = paymentInvoice.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Pay Invoice")
-            }
+            )
 
             // Channel Close Section
-            SectionHeader(title = "CHANNEL CLOSE")
+            Caption13Up("CHANNEL CLOSE", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))
             OutlinedTextField(
                 value = fundingTxId,
                 onValueChange = { fundingTxId = it },
@@ -260,7 +264,9 @@ fun BlocktankRegtestScreen(
                     .padding(vertical = 4.dp)
                     .fillMaxWidth()
             )
-            Button(
+            PrimaryButton(
+                text = "Close Channel",
+                size = ButtonSize.Small,
                 onClick = {
                     coroutineScope.launch {
                         Logger.debug("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")
@@ -286,10 +292,8 @@ fun BlocktankRegtestScreen(
                     }
                 },
                 enabled = fundingTxId.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Close Channel")
-            }
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }
