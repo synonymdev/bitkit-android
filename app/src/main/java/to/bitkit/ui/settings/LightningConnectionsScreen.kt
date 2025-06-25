@@ -56,6 +56,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
@@ -139,6 +140,12 @@ private fun Content(
                 }
             }
         )
+
+        if (!uiState.isNodeRunning) {
+            SyncNodeView(modifier = Modifier.fillMaxSize())
+            return@ScreenColumn
+        }
+
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = onRefresh,
@@ -413,6 +420,20 @@ private fun Preview() {
                         isUsable = false,
                     ),
                 )
+            )
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewNodeNotRunning() {
+    AppThemeSurface {
+        Content(
+            uiState = LightningConnectionsUiState(
+                localBalance = 0u,
+                remoteBalance = 0u,
+                isNodeRunning = false,
             )
         )
     }

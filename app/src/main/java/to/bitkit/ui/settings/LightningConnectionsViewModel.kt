@@ -50,7 +50,6 @@ class LightningConnectionsViewModel @Inject constructor(
 
     fun syncState() {
         viewModelScope.launch {
-            // TODO handle node not running UI
             val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
 
             val channels = lightningRepo.getChannels().orEmpty()
