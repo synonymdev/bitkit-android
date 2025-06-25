@@ -97,15 +97,15 @@ class TransferViewModel @Inject constructor(
         var error: Throwable? = null
 
         viewModelScope.launch {
-            Logger.debug("Started to watch order order $orderId")
+            Logger.debug("Started to watch order '$orderId'", context = TAG)
 
             while (!isSettled && error == null) {
                 try {
-                    Logger.debug("Refreshing order $orderId")
+                    Logger.debug("Refreshing order '$orderId'")
                     val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).firstOrNull()
                     if (order == null) {
-                        error = Exception("Order not found $orderId")
-                        Logger.error("Order not found $orderId", context = "TransferViewModel")
+                        error = Exception("Order not found '$orderId'")
+                        Logger.error("Order not found '$orderId'", context = TAG)
                         break
                     }
 
@@ -114,23 +114,23 @@ class TransferViewModel @Inject constructor(
                     Logger.debug("LN setup step: $step")
 
                     if (order.state2 == BtOrderState2.EXPIRED) {
-                        error = Exception("Order expired $orderId")
-                        Logger.error("Order expired $orderId", context = "TransferViewModel")
+                        error = Exception("Order expired '$orderId'")
+                        Logger.error("Order expired '$orderId'", context = TAG)
                         break
                     }
                     if (step > 2) {
-                        Logger.debug("Order settled, stopping watch")
+                        Logger.debug("Order settled, stopping watch order '$orderId'", context = TAG)
                         isSettled = true
                         break
                     }
                 } catch (e: Throwable) {
-                    Logger.error("Failed to watch order", e)
+                    Logger.error("Failed to watch order '$orderId'", e, context = TAG)
                     error = e
                     break
                 }
                 delay(frequencyMs)
             }
-            Logger.debug("Stopped watching order $orderId")
+            Logger.debug("Stopped watching order '$orderId'", context = TAG)
         }
     }
 
@@ -224,7 +224,7 @@ class TransferViewModel @Inject constructor(
         Logger.debug("getDefaultLspBalance - defaultLspBalanceSats: $defaultLspBalanceSats")
 
         if (threshold1 == null || threshold2 == null || defaultLspBalanceSats == null) {
-            Logger.error("Failed to get rates for lspBalance calculation", context = "TransferViewModel")
+            Logger.error("Failed to get rates for lspBalance calculation", context = TAG)
             throw ServiceError.CurrencyRateUnavailable
         }
 
@@ -342,6 +342,10 @@ class TransferViewModel @Inject constructor(
     }
 
     // endregion
+
+    companion object {
+        private const val TAG = "TransferViewModel"
+    }
 }
 
 // region state

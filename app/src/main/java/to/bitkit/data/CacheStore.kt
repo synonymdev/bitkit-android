@@ -36,6 +36,7 @@ class CacheStore @Inject constructor(
                 updatedOrders.size > MAX_PAID_ORDERS -> updatedOrders.toList().take(MAX_PAID_ORDERS).toMap()
                 else -> updatedOrders
             }
+            Logger.debug("Cached paid order '$orderId'")
             it.copy(paidOrders = limitedOrders)
         }
     }
