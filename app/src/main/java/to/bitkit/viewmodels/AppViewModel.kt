@@ -360,9 +360,24 @@ class AppViewModel @Inject constructor(
     ): Boolean {
         if (value.isBlank()) return false
         val amount = value.toULongOrNull() ?: return false
+
+        val lnUrlParams = _sendUiState.value.lnUrlParameters
+
+        val isValidLNAmount = when (lnUrlParams) {
+            is LnUrlParameters.LnurlAddress -> lightningService.canSend(amount)
+            is LnUrlParameters.LnurlPay -> {
+                lnUrlParams.data.minSendable < amount
+                    && amount < lnUrlParams.data.maxSendable
+                    && lightningService.canSend(amount)
+            }
+
+            null -> lightningService.canSend(amount)
+        }
+
+
         return when (payMethod) {
             SendMethod.ONCHAIN -> amount > getMinOnchainTx()
-            else -> amount > 0u
+            else -> isValidLNAmount && amount > 0uL
         }
     }
 
