@@ -387,7 +387,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Logger.error("Failed to decode input data", it) }
+            .onFailure { Logger.error("Failed to decode input data $uri", it) }
             .getOrNull()
         this.scan = scan
 
