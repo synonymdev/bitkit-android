@@ -46,6 +46,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyMSB
@@ -107,7 +108,7 @@ fun LightningConnectionsScreen(
             )
         },
         onClickChannel = { channel ->
-            // TODO: Navigate to channel details
+            navController.navigate(Routes.ChannelDetail(channel.channelId))
         },
         onRefresh = { viewModel.onPullToRefresh() },
     )

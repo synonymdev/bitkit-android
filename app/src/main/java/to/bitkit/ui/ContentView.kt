@@ -96,6 +96,7 @@ import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
+import to.bitkit.ui.settings.ChannelDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
 import to.bitkit.ui.settings.LightningConnectionsScreen
 import to.bitkit.ui.settings.LogDetailScreen
@@ -903,6 +904,13 @@ private fun NavGraphBuilder.lightningConnections(
     composableWithDefaultTransitions<Routes.LightningConnections> {
         LightningConnectionsScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.ChannelDetail> { navBackEntry ->
+        val route = navBackEntry.toRoute<Routes.ChannelDetail>()
+        ChannelDetailScreen(
+            navController = navController,
+            channelId = route.channelId,
+        )
+    }
 }
 
 private fun NavGraphBuilder.devSettings(
@@ -1494,6 +1502,9 @@ object Routes {
 
     @Serializable
     data object LightningConnections
+
+    @Serializable
+    data class ChannelDetail(val channelId: String)
 
     @Serializable
     data object DevSettings
