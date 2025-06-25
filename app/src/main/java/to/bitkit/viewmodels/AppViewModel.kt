@@ -483,6 +483,7 @@ class AppViewModel @Inject constructor(
                 val data = scan.data
 
                 val minSendable = data.minSendable
+                val maxSendable = data.maxSendable
 
                 if (!lightningService.canSend(minSendable)) {
                     toast(
@@ -492,10 +493,10 @@ class AppViewModel @Inject constructor(
                     )
                     return
                 }
-
+                val amount = if (minSendable == maxSendable) minSendable else 0UL
                 lightningService.createLnurlInvoice(
                     address = data.uri,
-                    amountSatoshis = 0UL,
+                    amountSatoshis = amount,
                 ).onSuccess { lightningInvoice ->
                     val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
                     if (scan is Scanner.Lightning) {
