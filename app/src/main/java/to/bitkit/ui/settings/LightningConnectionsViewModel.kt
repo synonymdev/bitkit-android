@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -65,6 +66,15 @@ class LightningConnectionsViewModel @Inject constructor(
                     remoteBalance = calculateRemoteBalance(channels),
                 )
             }
+        }
+    }
+
+    fun onPullToRefresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            syncState()
+            delay(500)
+            _uiState.update { it.copy(isRefreshing = false) }
         }
     }
 
@@ -177,6 +187,7 @@ class LightningConnectionsViewModel @Inject constructor(
 
 data class LightningConnectionsUiState(
     val isNodeRunning: Boolean = false,
+    val isRefreshing: Boolean = false,
     val openChannels: List<ChannelDetails> = emptyList(),
     val pendingConnections: List<ChannelDetails> = emptyList(),
     val failedOrders: List<ChannelDetails> = emptyList(),

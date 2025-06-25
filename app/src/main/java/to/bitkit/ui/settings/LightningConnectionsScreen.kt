@@ -16,9 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,12 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -83,31 +85,35 @@ fun LightningConnectionsScreen(
         uiState = uiState,
         onBack = { navController.popBackStack() },
         onClickAddConnection = { navController.navigateToTransferFunding() },
-        onClickExportLogs = { viewModel.zipAndShareLogs(
-            onReady = { uri ->
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        onClickExportLogs = {
+            viewModel.zipAndShareLogs(
+                onReady = { uri ->
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(intent, context.getString(R.string.lightning__export_logs))
+                    )
+                },
+                onError = {
+                    app.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.lightning__error_logs),
+                        description = context.getString(R.string.lightning__error_logs_description),
+                    )
                 }
-                context.startActivity(
-                    Intent.createChooser(intent, context.getString(R.string.lightning__export_logs))
-                )
-            },
-            onError = {
-                app.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.lightning__error_logs),
-                    description = context.getString(R.string.lightning__error_logs_description),
-                )
-            }
-        )},
+            )
+        },
         onClickChannel = { channel ->
             // TODO: Navigate to channel details
         },
+        onRefresh = { viewModel.onPullToRefresh() },
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Content(
     uiState: LightningConnectionsUiState,
@@ -115,6 +121,7 @@ private fun Content(
     onClickAddConnection: () -> Unit = {},
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelDetails) -> Unit = {},
+    onRefresh: () -> Unit = {},
 ) {
     var showClosed by remember { mutableStateOf(false) }
 
@@ -131,82 +138,88 @@ private fun Content(
                 }
             }
         )
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
         ) {
-            VerticalSpacer(16.dp)
-            LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
-            HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
-
-            // Pending Channels Section
-            if (uiState.pendingConnections.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 VerticalSpacer(16.dp)
-                Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
-                ChannelList(
-                    status = ChannelStatusUi.PENDING,
-                    channels = uiState.pendingConnections.reversed(),
-                    onClickChannel = onClickChannel,
-                )
-            }
+                LightningBalancesSection(uiState.localBalance, uiState.remoteBalance)
+                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
-            // Open Channels Section
-            if (uiState.openChannels.isNotEmpty()) {
-                VerticalSpacer(16.dp)
-                Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
-                ChannelList(
-                    status = ChannelStatusUi.OPEN,
-                    channels = uiState.openChannels.reversed(),
-                    onClickChannel = onClickChannel,
-                )
-            }
-
-            // Closed & Failed Channels Section
-            AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
-                Column {
+                // Pending Channels Section
+                if (uiState.pendingConnections.isNotEmpty()) {
                     VerticalSpacer(16.dp)
-                    Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
+                    Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
                     ChannelList(
-                        status = ChannelStatusUi.CLOSED,
-                        channels = uiState.failedOrders.reversed(),
+                        status = ChannelStatusUi.PENDING,
+                        channels = uiState.pendingConnections.reversed(),
                         onClickChannel = onClickChannel,
                     )
                 }
-            }
 
-            // Show/Hide Closed Channels Button
-            if (uiState.failedOrders.isNotEmpty()) {
+                // Open Channels Section
+                if (uiState.openChannels.isNotEmpty()) {
+                    VerticalSpacer(16.dp)
+                    Caption13Up(stringResource(R.string.lightning__conn_open), color = Colors.White64)
+                    ChannelList(
+                        status = ChannelStatusUi.OPEN,
+                        channels = uiState.openChannels.reversed(),
+                        onClickChannel = onClickChannel,
+                    )
+                }
+
+                // Closed & Failed Channels Section
+                AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
+                    Column {
+                        VerticalSpacer(16.dp)
+                        Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
+                        ChannelList(
+                            status = ChannelStatusUi.CLOSED,
+                            channels = uiState.failedOrders.reversed(),
+                            onClickChannel = onClickChannel,
+                        )
+                    }
+                }
+
+                // Show/Hide Closed Channels Button
+                if (uiState.failedOrders.isNotEmpty()) {
+                    VerticalSpacer(16.dp)
+                    TertiaryButton(
+                        text = stringResource(
+                            if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show
+                        ),
+                        onClick = { showClosed = !showClosed },
+                        modifier = Modifier.wrapContentWidth()
+                    )
+                }
+
+                FillHeight()
+
+                // Bottom Section
                 VerticalSpacer(16.dp)
-                TertiaryButton(
-                    text = stringResource(
-                        if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show
-                    ),
-                    onClick = { showClosed = !showClosed },
-                    modifier = Modifier.wrapContentWidth()
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    SecondaryButton(
+                        text = stringResource(R.string.lightning__conn_button_export_logs),
+                        onClick = onClickExportLogs,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.lightning__conn_button_add),
+                        onClick = onClickAddConnection,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                VerticalSpacer(16.dp)
             }
-
-            FillHeight()
-
-            // Bottom Section
-            VerticalSpacer(16.dp)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.lightning__conn_button_export_logs),
-                    onClick = onClickExportLogs,
-                    modifier = Modifier.weight(1f)
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.lightning__conn_button_add),
-                    onClick = onClickAddConnection,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            VerticalSpacer(16.dp)
         }
     }
 }
