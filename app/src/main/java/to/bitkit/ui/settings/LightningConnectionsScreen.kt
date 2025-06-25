@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -141,14 +142,16 @@ private fun Content(
             }
 
             // Closed & Failed Channels Section
-            if (showClosed && uiState.failedOrders.isNotEmpty()) {
-                VerticalSpacer(16.dp)
-                Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
-                ChannelList(
-                    status = ChannelStatusUi.CLOSED,
-                    channels = uiState.failedOrders.reversed(),
-                    onClickChannel = onClickChannel,
-                )
+            AnimatedVisibility(visible = showClosed && uiState.failedOrders.isNotEmpty()) {
+                Column {
+                    VerticalSpacer(16.dp)
+                    Caption13Up(stringResource(R.string.lightning__conn_failed), color = Colors.White64)
+                    ChannelList(
+                        status = ChannelStatusUi.CLOSED,
+                        channels = uiState.failedOrders.reversed(),
+                        onClickChannel = onClickChannel,
+                    )
+                }
             }
 
             // Show/Hide Closed Channels Button
