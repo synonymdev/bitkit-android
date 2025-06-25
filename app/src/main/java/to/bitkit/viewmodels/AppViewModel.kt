@@ -483,7 +483,7 @@ class AppViewModel @Inject constructor(
                     toast(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.other__lnurl_pay_error),
-                        description = "Not enough outbound/sending capacity to complete lnurl-pay request."
+                        description = context.getString(R.string.other__lnurl_pay_error_no_capacity)
                     )
                     return
                 }
