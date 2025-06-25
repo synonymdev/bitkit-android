@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
@@ -362,14 +363,16 @@ class AppViewModel @Inject constructor(
         val lnUrlParams = _sendUiState.value.lnUrlParameters
 
         val isValidLNAmount = when (lnUrlParams) {
+            null -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlPay -> {
                 lnUrlParams.data.minSendable < amount
                     && amount < lnUrlParams.data.maxSendable
                     && lightningService.canSend(amount)
             }
-
-            null -> lightningService.canSend(amount)
+            is LnUrlParameters.LnUrlWithdraw -> {
+                amount < lnUrlParams.data.maxWithdrawable
+            }
         }
 
 
@@ -554,6 +557,7 @@ class AppViewModel @Inject constructor(
                     return
                 }
             }
+
             is Scanner.LnurlAuth -> TODO("Not implemented")
             is Scanner.LnurlChannel -> TODO("Not implemented")
 
@@ -1090,5 +1094,6 @@ sealed class SendEvent {
 sealed interface LnUrlParameters {
     data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
     data class LnUrlAddress(val data: LnurlAddressData) : LnUrlParameters
+    data class LnUrlWithdraw(val data: LnurlWithdrawData) : LnUrlParameters
 }
 // endregion
