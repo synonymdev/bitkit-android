@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CreateCjitOptions
 import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
@@ -246,3 +247,5 @@ class BlocktankViewModel @Inject constructor(
         }
     }
 }
+
+fun List<IBtOrder>.filterPaid() = filter { it.state2 == BtOrderState2.PAID }

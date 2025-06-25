@@ -21,11 +21,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
 
-    init {
-        collectState()
-    }
-
-    fun collectState() {
+    fun initState() {
         viewModelScope.launch {
             val lightningState = lightningRepo.lightningState.value
             if (!lightningState.nodeLifecycleState.isRunning()) {

@@ -16,7 +16,7 @@ val ChannelDetails.amountOnClose: ULong
     }
 
 fun mockChannelDetails(
-    channelId: String,
+    channelId: String = "channelId01",
     isChannelReady: Boolean = true,
 ): ChannelDetails {
     return ChannelDetails(
