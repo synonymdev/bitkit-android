@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +20,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,9 +48,9 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -90,6 +94,8 @@ private fun Content(
     onClickExportLogs: () -> Unit = {},
     onClickChannel: (ChannelDetails) -> Unit = {},
 ) {
+    var showClosed by remember { mutableStateOf(false) }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__connections),
@@ -114,12 +120,12 @@ private fun Content(
             VerticalSpacer(32.dp)
 
             // Pending Channels Section
-            if (uiState.pendingChannels.isNotEmpty()) {
+            if (uiState.pendingConnections.isNotEmpty()) {
                 VerticalSpacer(16.dp)
                 Caption13Up(stringResource(R.string.lightning__conn_pending), color = Colors.White64)
                 ChannelList(
                     status = ChannelStatusUi.PENDING,
-                    channels = uiState.pendingChannels.reversed(),
+                    channels = uiState.pendingConnections.reversed(),
                     onClickChannel = onClickChannel,
                 )
                 VerticalSpacer(16.dp)
@@ -135,6 +141,30 @@ private fun Content(
                     onClickChannel = onClickChannel,
                 )
             }
+
+            // Closed & Failed Channels Section
+            if (showClosed && uiState.failedOrders.isNotEmpty()) {
+                VerticalSpacer(16.dp)
+                Caption13Up(stringResource(R.string.lightning__conn_failed), modifier = Modifier.padding(top = 16.dp))
+                ChannelList(
+                    status = ChannelStatusUi.CLOSED,
+                    channels = uiState.failedOrders.reversed(),
+                    onClickChannel = onClickChannel,
+                )
+            }
+
+            // Show/Hide Closed Channels Button
+            if (uiState.failedOrders.isNotEmpty()) {
+                VerticalSpacer(16.dp)
+                TertiaryButton(
+                    text = stringResource(
+                        if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show
+                    ),
+                    onClick = { showClosed = !showClosed },
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+
             FillHeight()
 
             // Bottom Section
@@ -266,9 +296,11 @@ private fun getChannelName(channel: ChannelDetails): String {
     val wallet = walletViewModel ?: return default
     val mainUiState by wallet.uiState.collectAsStateWithLifecycle()
     val channels = mainUiState.channels
+    val orders = blocktank.orders
+    val paidOrders = orders.filterPaid()
 
     // TODO: sort channels to make it deterministic, because node.listChannels returns a list in random order
-    val pendingChannels = blocktank.orders.filterPaid().filter { order ->
+    val pendingChannels = paidOrders.filter { order ->
         // orders without a corresponding known channel are considered pending
         channels.none { c -> c.fundingTxo?.txid == order.channel?.fundingTx?.id }
     }
@@ -300,7 +332,7 @@ private fun Preview() {
                 localBalance = 50_000u,
                 remoteBalance = 450_000u,
                 isNodeRunning = true,
-                pendingChannels = listOf(
+                pendingConnections = listOf(
                     createChannelDetails().copy(
                         channelId = "order_1",
                         channelValueSats = 500_000u,
@@ -324,6 +356,24 @@ private fun Preview() {
                         channelValueSats = 1_000_000u,
                         outboundCapacityMsat = 300_000_000u,
                         inboundCapacityMsat = 700_000_000u,
+                    ),
+                ),
+                failedOrders = listOf(
+                    createChannelDetails().copy(
+                        channelId = "failed_order_1",
+                        channelValueSats = 200_000u,
+                        outboundCapacityMsat = 50_000_000u,
+                        inboundCapacityMsat = 150_000_000u,
+                        isChannelReady = false,
+                        isUsable = false,
+                    ),
+                    createChannelDetails().copy(
+                        channelId = "failed_order_2",
+                        channelValueSats = 100_000u,
+                        outboundCapacityMsat = 30_000_000u,
+                        inboundCapacityMsat = 70_000_000u,
+                        isChannelReady = false,
+                        isUsable = false,
                     ),
                 )
             )
