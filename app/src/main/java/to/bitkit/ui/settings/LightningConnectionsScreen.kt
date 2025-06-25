@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -40,7 +42,9 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
@@ -65,8 +69,10 @@ fun LightningConnectionsScreen(
     navController: NavController,
     viewModel: LightningConnectionsViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val blocktank = blocktankViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val app = appViewModel ?: return
 
     LaunchedEffect(blocktank.orders) {
         viewModel.setBlocktankOrders(blocktank.orders)
@@ -77,9 +83,25 @@ fun LightningConnectionsScreen(
         uiState = uiState,
         onBack = { navController.popBackStack() },
         onClickAddConnection = { navController.navigateToTransferFunding() },
-        onClickExportLogs = {
-            // TODO: zip & share logs
-        },
+        onClickExportLogs = { viewModel.zipAndShareLogs(
+            onReady = { uri ->
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(
+                    Intent.createChooser(intent, context.getString(R.string.lightning__export_logs))
+                )
+            },
+            onError = {
+                app.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.lightning__error_logs),
+                    description = context.getString(R.string.lightning__error_logs_description),
+                )
+            }
+        )},
         onClickChannel = { channel ->
             // TODO: Navigate to channel details
         },
