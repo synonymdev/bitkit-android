@@ -43,6 +43,9 @@ class LightningConnectionsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
 
+    private val _selectedChannel = MutableStateFlow<ChannelUi?>(null)
+    val selectedChannel = _selectedChannel.asStateFlow()
+
     private var orders: List<IBtOrder> = emptyList()
 
     fun setBlocktankOrders(orders: List<IBtOrder>) {
@@ -228,6 +231,12 @@ class LightningConnectionsViewModel @Inject constructor(
             }
         }
     }
+
+    fun setSelectedChannel(channelUi: ChannelUi) {
+        _selectedChannel.update { channelUi }
+    }
+
+    fun clearSelectedChannel() = _selectedChannel.update { null }
 }
 
 data class LightningConnectionsUiState(

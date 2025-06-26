@@ -37,7 +37,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
@@ -69,7 +68,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun LightningConnectionsScreen(
     navController: NavController,
-    viewModel: LightningConnectionsViewModel = hiltViewModel(),
+    viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
     val blocktank = blocktankViewModel ?: return
@@ -77,6 +76,7 @@ fun LightningConnectionsScreen(
     val app = appViewModel ?: return
 
     LaunchedEffect(blocktank.orders) {
+        viewModel.clearSelectedChannel()
         viewModel.setBlocktankOrders(blocktank.orders)
         viewModel.syncState()
     }
@@ -107,7 +107,8 @@ fun LightningConnectionsScreen(
             )
         },
         onClickChannel = { channelUi ->
-            navController.navigate(Routes.ChannelDetail(channelUi.details.channelId))
+            viewModel.setSelectedChannel(channelUi)
+            navController.navigate(Routes.ChannelDetail)
         },
         onRefresh = { viewModel.onPullToRefresh() },
     )
