@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
@@ -84,6 +86,7 @@ fun LightningConnectionsScreen(
     val blocktank = blocktankViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         blocktank.refreshOrders()
@@ -124,7 +127,10 @@ fun LightningConnectionsScreen(
             viewModel.setSelectedChannel(channelUi)
             navController.navigate(Routes.ChannelDetail)
         },
-        onRefresh = { viewModel.onPullToRefresh() },
+        onRefresh = {
+            scope.launch { blocktank.refreshOrders() }
+            viewModel.onPullToRefresh()
+        },
     )
 }
 
