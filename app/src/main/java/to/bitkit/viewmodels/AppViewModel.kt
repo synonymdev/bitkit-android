@@ -494,6 +494,7 @@ class AppViewModel @Inject constructor(
 
             is Scanner.LnurlPay -> {
                 val data = scan.data
+                Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
 
                 val minSendable = data.minSendable
                 val maxSendable = data.maxSendable
