@@ -191,6 +191,6 @@ data class LightningConnectionsUiState(
     val openChannels: List<ChannelDetails> = emptyList(),
     val pendingConnections: List<ChannelDetails> = emptyList(),
     val failedOrders: List<ChannelDetails> = emptyList(),
-    val localBalance: ULong = 0uL,
-    val remoteBalance: ULong = 0uL,
+    val localBalance: ULong = 0u,
+    val remoteBalance: ULong = 0u,
 )

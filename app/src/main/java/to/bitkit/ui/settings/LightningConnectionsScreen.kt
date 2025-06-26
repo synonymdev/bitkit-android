@@ -430,11 +430,7 @@ private fun Preview() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         Content(
-            uiState = LightningConnectionsUiState(
-                localBalance = 0u,
-                remoteBalance = 0u,
-                isNodeRunning = false,
-            )
+            uiState = LightningConnectionsUiState()
         )
     }
 }
