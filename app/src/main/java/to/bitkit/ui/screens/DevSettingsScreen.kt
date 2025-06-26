@@ -64,6 +64,12 @@ fun DevSettingsScreen(
             SettingsTextButtonRow("Log Blocktank Info") { viewModel.debugBlocktankInfo() }
             SettingsTextButtonRow("Fake New BG Transaction") { viewModel.debugTransactionSheet() }
             SettingsTextButtonRow("Refresh Currency Rates") { currency.triggerRefresh() }
+
+            SectionHeader("Blocktank")
+            SettingsTextButtonRow("Register for notifications", onClick = viewModel::manualRegisterForNotifications)
+            SettingsTextButtonRow("Self test notification", onClick = viewModel::debugLspNotifications)
+            SettingsTextButtonRow("Open channel to trusted peer", onClick = viewModel::openChannel)
+
         }
     }
 }

@@ -14,11 +14,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.env.Env
+import to.bitkit.repositories.LogFile
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.utils.Logger
-import java.io.BufferedReader
 import java.io.File
-import java.io.FileReader
 import javax.inject.Inject
 
 @HiltViewModel
@@ -38,7 +37,6 @@ class LogsViewModel @Inject constructor(
                 .onSuccess { logList ->
                     _logs.update { logList }
                 }.onFailure { e ->
-                    Logger.error("Failed to load logs", e)
                     _logs.update { emptyList() }
                 }
         }
@@ -98,11 +96,4 @@ class LogsViewModel @Inject constructor(
             }
         }
     }
-}
-
-data class LogFile(
-    val displayName: String,
-    val file: File,
-) {
-    val fileName: String get() = file.name
 }
