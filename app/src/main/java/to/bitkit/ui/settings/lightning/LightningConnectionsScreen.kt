@@ -85,8 +85,12 @@ fun LightningConnectionsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
 
-    LaunchedEffect(blocktank.orders) {
+    LaunchedEffect(Unit) {
+        blocktank.refreshOrders()
         viewModel.clearSelectedChannel()
+    }
+
+    LaunchedEffect(blocktank.orders) {
         viewModel.setBlocktankOrders(blocktank.orders)
         viewModel.syncState()
     }
