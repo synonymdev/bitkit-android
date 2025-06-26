@@ -341,41 +341,38 @@ private fun Preview() {
                 isNodeRunning = true,
                 pendingConnections = listOf(
                     ChannelUi(
+                        name = "Connection 1",
                         details = createChannelDetails().copy(
                             channelId = "order_1",
                             channelValueSats = 500_000u,
                             outboundCapacityMsat = 100_000_000u,
                             inboundCapacityMsat = 400_000_000u,
-                            isChannelReady = false,
-                            isUsable = false,
                         ),
-                        name = "Connection 1",
                     ),
                     ChannelUi(
+                        name = "Connection 2",
                         details = createChannelDetails().copy(
                             channelId = "pending_1",
                             channelValueSats = 300_000u,
                             outboundCapacityMsat = 200_000_000u,
                             inboundCapacityMsat = 100_000_000u,
-                            isChannelReady = false,
-                            isUsable = false,
                         ),
-                        name = "Connection 2",
                     ),
                 ),
                 openChannels = listOf(
                     ChannelUi(
+                        name = "Connection 3",
                         details = createChannelDetails().copy(
                             channelId = "channel_1",
                             channelValueSats = 1_000_000u,
                             outboundCapacityMsat = 300_000_000u,
                             inboundCapacityMsat = 700_000_000u,
                         ),
-                        name = "Connection 3",
                     ),
                 ),
                 failedOrders = listOf(
                     ChannelUi(
+                        name = "Connection 4",
                         details = createChannelDetails().copy(
                             channelId = "failed_order_1",
                             channelValueSats = 200_000u,
@@ -384,18 +381,15 @@ private fun Preview() {
                             isChannelReady = false,
                             isUsable = false,
                         ),
-                        name = "Failed Order 1",
                     ),
                     ChannelUi(
+                        name = "Connection 5",
                         details = createChannelDetails().copy(
                             channelId = "failed_order_2",
                             channelValueSats = 100_000u,
                             outboundCapacityMsat = 30_000_000u,
                             inboundCapacityMsat = 70_000_000u,
-                            isChannelReady = false,
-                            isUsable = false,
                         ),
-                        name = "Failed Order 2",
                     ),
                 )
             )

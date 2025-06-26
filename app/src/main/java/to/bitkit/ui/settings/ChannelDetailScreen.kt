@@ -14,6 +14,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -56,8 +58,8 @@ private fun Content(
                 modifier = Modifier.fillMaxSize()
             ) {
                 Column {
-                    Text("TODO: Channel Detail Screen")
-                    Text("Channel ID: $channelId")
+                    Title("TODO: Channel Detail Screen")
+                    Caption("Channel ID: $channelId")
                 }
             }
         }

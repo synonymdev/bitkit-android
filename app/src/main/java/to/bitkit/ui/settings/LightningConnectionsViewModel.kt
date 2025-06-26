@@ -70,13 +70,13 @@ class LightningConnectionsViewModel @Inject constructor(
                 it.copy(
                     isNodeRunning = isNodeRunning,
                     openChannels = openChannels.map { channel ->
-                        ChannelUi(channel, getChannelName(channel))
+                        channel.mapToUiModel()
                     },
                     pendingConnections = getPendingConnections(channels).map { channel ->
-                        ChannelUi(channel, getChannelName(channel))
+                        channel.mapToUiModel()
                     },
                     failedOrders = getFailedOrdersAsChannels().map { channel ->
-                        ChannelUi(channel, getChannelName(channel))
+                        channel.mapToUiModel()
                     },
                     localBalance = calculateLocalBalance(channels),
                     remoteBalance = calculateRemoteBalance(channels),
@@ -84,6 +84,11 @@ class LightningConnectionsViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun ChannelDetails.mapToUiModel(): ChannelUi = ChannelUi(
+        name = getChannelName(this),
+        details = this
+    )
 
     private suspend fun getChannelName(channel: ChannelDetails): String {
         val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
@@ -236,6 +241,6 @@ data class LightningConnectionsUiState(
 )
 
 data class ChannelUi(
-    val details: ChannelDetails,
     val name: String,
+    val details: ChannelDetails,
 )
