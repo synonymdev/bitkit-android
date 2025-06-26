@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
@@ -28,17 +30,21 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.services.filterOpen
 import to.bitkit.services.filterPending
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
+import to.bitkit.utils.TxDetails
 import java.io.File
 import java.util.Base64
 import javax.inject.Inject
 
 @HiltViewModel
 class LightningConnectionsViewModel @Inject constructor(
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val application: Application,
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
     private val logsRepo: LogsRepo,
+    private val addressChecker: AddressChecker,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
@@ -47,11 +53,24 @@ class LightningConnectionsViewModel @Inject constructor(
     private val _selectedChannel = MutableStateFlow<ChannelUi?>(null)
     val selectedChannel = _selectedChannel.asStateFlow()
 
+    private val _paidOrders = MutableStateFlow<List<IBtOrder>>(emptyList())
+    val paidOrders = _paidOrders.asStateFlow()
+
     private var orders: List<IBtOrder> = emptyList()
     private var cjitEntries: List<IcJitEntry> = emptyList()
 
+    private val _txDetails = MutableStateFlow<TxDetails?>(null)
+    val txDetails = _txDetails.asStateFlow()
+
     fun setBlocktankOrders(orders: List<IBtOrder>) {
         this.orders = orders
+        updatePaidOrders()
+    }
+
+    private fun updatePaidOrders() {
+        viewModelScope.launch {
+            _paidOrders.update { getPaidBlocktankOrders() }
+        }
     }
 
     fun setCjitEntries(cjitEntries: List<IcJitEntry>) {
@@ -103,9 +122,7 @@ class LightningConnectionsViewModel @Inject constructor(
         val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
 
         val channels = lightningRepo.getChannels().orEmpty()
-        val paidOrders = cacheStore.data.first().paidOrders
-
-        val paidBlocktankOrders = orders.filter { order -> order.id in paidOrders.keys }
+        val paidBlocktankOrders = getPaidBlocktankOrders()
 
         // orders without a corresponding known channel are considered pending
         val pendingChannels = paidBlocktankOrders.filter { order ->
@@ -243,6 +260,28 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     fun clearSelectedChannel() = _selectedChannel.update { null }
+
+    private suspend fun getPaidBlocktankOrders(): List<IBtOrder> {
+        val paidOrders = cacheStore.data.first().paidOrders
+        return orders.filter { order -> order.id in paidOrders.keys }
+    }
+
+    fun fetchTransactionDetails(txid: String) {
+        viewModelScope.launch(bgDispatcher) {
+            try {
+                // TODO replace with bitkit-core method when available
+                _txDetails.value = addressChecker.getTransaction(txid)
+                Logger.debug("fetchTransactionDetails success for '$txid'")
+            } catch (e: Exception) {
+                Logger.error("fetchTransactionDetails error for '$txid'", e)
+                _txDetails.value = null
+            }
+        }
+    }
+
+    fun clearTransactionDetails() {
+        _txDetails.value = null
+    }
 }
 
 data class LightningConnectionsUiState(

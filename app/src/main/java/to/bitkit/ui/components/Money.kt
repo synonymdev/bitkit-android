@@ -41,31 +41,37 @@ fun MoneySSB(
 fun MoneyCaptionB(
     sats: Long,
     color: Color = MaterialTheme.colorScheme.primary,
+    symbol: Boolean = false,
+    symbolColor: Color = Colors.White64,
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
-        CaptionB(text = sats.formatToModernDisplay(), color = color)
+        val previewText = sats.formatToModernDisplay().let { if (symbol) "<accent>₿</accent> $it" else it }
+        CaptionB(text = previewText.withAccent(accentColor = symbolColor), color = color)
         return
     }
 
     val currency = currencyViewModel ?: return
     val currencies = LocalCurrencies.current
 
-    val displayText = remember(currencies, sats) {
+    val displayText = remember(currencies, sats, symbol) {
         currency.convert(sats)?.let { converted ->
-            val btcComponents = converted.bitcoinDisplay(currencies.displayUnit)
-            btcComponents.value
+            val btc = converted.bitcoinDisplay(currencies.displayUnit)
+            if (symbol) {
+                "<accent>${btc.symbol}</accent> ${btc.value}"
+            } else {
+                btc.value
+            }
         }
     }
 
     displayText?.let { text ->
         CaptionB(
-            text = text,
+            text = text.withAccent(accentColor = symbolColor),
             color = color,
         )
     }
 }
-
 
 
 /**
@@ -92,9 +98,9 @@ fun rememberMoneyText(
     return remember(currencies, sats, reversed) {
         val converted = currency.convert(sats) ?: return@remember null
 
-        val secondaryDisplay = when(currencies.primaryDisplay) {
-            PrimaryDisplay.BITCOIN ->  PrimaryDisplay.FIAT
-            PrimaryDisplay.FIAT ->  PrimaryDisplay.BITCOIN
+        val secondaryDisplay = when (currencies.primaryDisplay) {
+            PrimaryDisplay.BITCOIN -> PrimaryDisplay.FIAT
+            PrimaryDisplay.FIAT -> PrimaryDisplay.BITCOIN
         }
 
         val primary = if (reversed) secondaryDisplay else currencies.primaryDisplay

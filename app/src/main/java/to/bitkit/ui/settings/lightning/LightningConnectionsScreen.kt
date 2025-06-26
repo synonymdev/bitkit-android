@@ -235,9 +235,8 @@ private fun Content(
                     )
                 }
 
-                FillHeight()
-
                 // Bottom Section
+                FillHeight()
                 VerticalSpacer(16.dp)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),

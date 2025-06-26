@@ -15,11 +15,10 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
-    const val PLATFORM = "Android"
-    val defaultWalletWordCount = 12
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
-    val androidSDKVersion = android.os.Build.VERSION.SDK_INT
+    val platform = "Android ${android.os.Build.VERSION.SDK_INT}"
+    const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
@@ -134,6 +133,7 @@ internal object Env {
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BIT_REFILL_URL = "https://www.bitrefill.com/br/en/gift-cards/"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
+     const val SYNONYM_CONTACT = "https://synonym.to/contact"
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
     const val SYNONYM_X = "https://twitter.com/bitkitwallet/"
     const val BITKIT_DISCORD = "https://discord.gg/DxTBJXvJxn"
@@ -142,4 +142,5 @@ internal object Env {
     const val BITKIT_HELP_CENTER = "https://help.bitkit.to"
     const val TERMS_OF_USE_URL = "https://bitkit.to/terms-of-use"
     const val STORING_BITCOINS_URL = "https://en.bitcoin.it/wiki/Storing_bitcoins"
+    const val SUPPORT_EMAIL = "support@synonym.to"
 }
