@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.lightning
 
 import android.app.Application
 import android.net.Uri

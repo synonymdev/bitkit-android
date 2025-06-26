@@ -96,10 +96,7 @@ import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
-import to.bitkit.ui.settings.ChannelDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
-import to.bitkit.ui.settings.LightningConnectionsScreen
-import to.bitkit.ui.settings.LightningConnectionsViewModel
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
@@ -122,6 +119,9 @@ import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
+import to.bitkit.ui.settings.lightning.ChannelDetailScreen
+import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
+import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
 import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
@@ -1678,7 +1678,6 @@ object Routes {
 
     @Serializable
     data object PriceEdit
-
 
     @Serializable
     data object CalculatorPreview

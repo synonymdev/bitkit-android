@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings
+package to.bitkit.ui.settings.lightning
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
