@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
@@ -66,7 +65,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.walletViewModel
 
 @Composable
 fun LightningConnectionsScreen(
@@ -108,8 +106,8 @@ fun LightningConnectionsScreen(
                 }
             )
         },
-        onClickChannel = { channel ->
-            navController.navigate(Routes.ChannelDetail(channel.channelId))
+        onClickChannel = { channelUi ->
+            navController.navigate(Routes.ChannelDetail(channelUi.details.channelId))
         },
         onRefresh = { viewModel.onPullToRefresh() },
     )
@@ -122,7 +120,7 @@ private fun Content(
     onBack: () -> Unit = {},
     onClickAddConnection: () -> Unit = {},
     onClickExportLogs: () -> Unit = {},
-    onClickChannel: (ChannelDetails) -> Unit = {},
+    onClickChannel: (ChannelUi) -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     var showClosed by remember { mutableStateOf(false) }
@@ -274,22 +272,22 @@ private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, colo
 
 @Composable
 private fun ChannelList(
-    channels: List<ChannelDetails>,
+    channels: List<ChannelUi>,
     status: ChannelStatusUi = ChannelStatusUi.OPEN,
-    onClickChannel: (ChannelDetails) -> Unit,
+    onClickChannel: (ChannelUi) -> Unit,
 ) {
-    channels.map { channel ->
+    channels.map { channelUi ->
         Channel(
-            channel = channel,
+            channelUi = channelUi,
             status = status,
-            onClick = { onClickChannel(channel) }
+            onClick = { onClickChannel(channelUi) }
         )
     }
 }
 
 @Composable
 private fun Channel(
-    channel: ChannelDetails,
+    channelUi: ChannelUi,
     status: ChannelStatusUi,
     onClick: () -> Unit,
 ) {
@@ -305,7 +303,7 @@ private fun Channel(
             modifier = Modifier.fillMaxWidth()
         ) {
             BodyMSB(
-                text = getChannelName(channel),
+                text = channelUi.name,
                 color = if (status == ChannelStatusUi.CLOSED) Colors.White64 else Colors.White,
                 maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,
@@ -320,52 +318,17 @@ private fun Channel(
         }
         VerticalSpacer(8.dp)
         LightningChannel(
-            capacity = channel.channelValueSats.toLong(),
-            localBalance = channel.amountOnClose.toLong(),
-            remoteBalance = (channel.inboundCapacityMsat / 1000u).toLong(),
+            capacity = channelUi.details.channelValueSats.toLong(),
+            localBalance = channelUi.details.amountOnClose.toLong(),
+            remoteBalance = (channelUi.details.inboundCapacityMsat / 1000u).toLong(),
             status = status,
-            showLabels = false
         )
         VerticalSpacer(16.dp)
         HorizontalDivider()
     }
 }
 
-@Composable
-private fun getChannelName(channel: ChannelDetails): String {
-    val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
-    val blocktank = blocktankViewModel ?: return default
-    val wallet = walletViewModel ?: return default
-    val mainUiState by wallet.uiState.collectAsStateWithLifecycle()
-    val channels = mainUiState.channels
-    val paidOrders by blocktank.paidOrders.collectAsStateWithLifecycle()
 
-    val paidBlocktankOrders = blocktank.orders.filter { order -> order.id in paidOrders.keys }
-
-    // orders without a corresponding known channel are considered pending
-    val pendingChannels = paidBlocktankOrders.filter { order ->
-        channels.none { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }
-    }
-    val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
-
-    // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
-    val channelIndex = channels.indexOfFirst { channel.channelId == it.channelId }
-
-    val connectionText = stringResource(R.string.lightning__connection)
-
-    return when {
-        channelIndex == -1 -> {
-            if (pendingIndex == -1) {
-                default
-            } else {
-                val index = channels.size + pendingIndex
-                "$connectionText ${index + 1}"
-            }
-        }
-
-        else -> "$connectionText ${channelIndex + 1}"
-    }
-}
 
 @Preview
 @Composable
@@ -377,47 +340,62 @@ private fun Preview() {
                 remoteBalance = 450_000u,
                 isNodeRunning = true,
                 pendingConnections = listOf(
-                    createChannelDetails().copy(
-                        channelId = "order_1",
-                        channelValueSats = 500_000u,
-                        outboundCapacityMsat = 100_000_000u,
-                        inboundCapacityMsat = 400_000_000u,
-                        isChannelReady = false,
-                        isUsable = false,
+                    ChannelUi(
+                        details = createChannelDetails().copy(
+                            channelId = "order_1",
+                            channelValueSats = 500_000u,
+                            outboundCapacityMsat = 100_000_000u,
+                            inboundCapacityMsat = 400_000_000u,
+                            isChannelReady = false,
+                            isUsable = false,
+                        ),
+                        name = "Connection 1",
                     ),
-                    createChannelDetails().copy(
-                        channelId = "pending_1",
-                        channelValueSats = 300_000u,
-                        outboundCapacityMsat = 200_000_000u,
-                        inboundCapacityMsat = 100_000_000u,
-                        isChannelReady = false,
-                        isUsable = false,
+                    ChannelUi(
+                        details = createChannelDetails().copy(
+                            channelId = "pending_1",
+                            channelValueSats = 300_000u,
+                            outboundCapacityMsat = 200_000_000u,
+                            inboundCapacityMsat = 100_000_000u,
+                            isChannelReady = false,
+                            isUsable = false,
+                        ),
+                        name = "Connection 2",
                     ),
                 ),
                 openChannels = listOf(
-                    createChannelDetails().copy(
-                        channelId = "channel_1",
-                        channelValueSats = 1_000_000u,
-                        outboundCapacityMsat = 300_000_000u,
-                        inboundCapacityMsat = 700_000_000u,
+                    ChannelUi(
+                        details = createChannelDetails().copy(
+                            channelId = "channel_1",
+                            channelValueSats = 1_000_000u,
+                            outboundCapacityMsat = 300_000_000u,
+                            inboundCapacityMsat = 700_000_000u,
+                        ),
+                        name = "Connection 3",
                     ),
                 ),
                 failedOrders = listOf(
-                    createChannelDetails().copy(
-                        channelId = "failed_order_1",
-                        channelValueSats = 200_000u,
-                        outboundCapacityMsat = 50_000_000u,
-                        inboundCapacityMsat = 150_000_000u,
-                        isChannelReady = false,
-                        isUsable = false,
+                    ChannelUi(
+                        details = createChannelDetails().copy(
+                            channelId = "failed_order_1",
+                            channelValueSats = 200_000u,
+                            outboundCapacityMsat = 50_000_000u,
+                            inboundCapacityMsat = 150_000_000u,
+                            isChannelReady = false,
+                            isUsable = false,
+                        ),
+                        name = "Failed Order 1",
                     ),
-                    createChannelDetails().copy(
-                        channelId = "failed_order_2",
-                        channelValueSats = 100_000u,
-                        outboundCapacityMsat = 30_000_000u,
-                        inboundCapacityMsat = 70_000_000u,
-                        isChannelReady = false,
-                        isUsable = false,
+                    ChannelUi(
+                        details = createChannelDetails().copy(
+                            channelId = "failed_order_2",
+                            channelValueSats = 100_000u,
+                            outboundCapacityMsat = 30_000_000u,
+                            inboundCapacityMsat = 70_000_000u,
+                            isChannelReady = false,
+                            isUsable = false,
+                        ),
+                        name = "Failed Order 2",
                     ),
                 )
             )

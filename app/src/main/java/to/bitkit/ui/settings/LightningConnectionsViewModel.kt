@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
@@ -48,6 +49,15 @@ class LightningConnectionsViewModel @Inject constructor(
         this.orders = orders
     }
 
+    fun onPullToRefresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            syncState()
+            delay(500)
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
     fun syncState() {
         viewModelScope.launch {
             val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
@@ -59,9 +69,15 @@ class LightningConnectionsViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isNodeRunning = isNodeRunning,
-                    openChannels = openChannels,
-                    pendingConnections = getPendingConnections(channels),
-                    failedOrders = getFailedOrdersAsChannels(),
+                    openChannels = openChannels.map { channel ->
+                        ChannelUi(channel, getChannelName(channel))
+                    },
+                    pendingConnections = getPendingConnections(channels).map { channel ->
+                        ChannelUi(channel, getChannelName(channel))
+                    },
+                    failedOrders = getFailedOrdersAsChannels().map { channel ->
+                        ChannelUi(channel, getChannelName(channel))
+                    },
                     localBalance = calculateLocalBalance(channels),
                     remoteBalance = calculateRemoteBalance(channels),
                 )
@@ -69,12 +85,36 @@ class LightningConnectionsViewModel @Inject constructor(
         }
     }
 
-    fun onPullToRefresh() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
-            syncState()
-            delay(500)
-            _uiState.update { it.copy(isRefreshing = false) }
+    private suspend fun getChannelName(channel: ChannelDetails): String {
+        val default = channel.inboundScidAlias?.toString() ?: "${channel.channelId.take(10)}…"
+
+        val channels = lightningRepo.getChannels().orEmpty()
+        val paidOrders = cacheStore.data.first().paidOrders
+
+        val paidBlocktankOrders = orders.filter { order -> order.id in paidOrders.keys }
+
+        // orders without a corresponding known channel are considered pending
+        val pendingChannels = paidBlocktankOrders.filter { order ->
+            channels.none { channel -> channel.fundingTxo?.txid == order.channel?.fundingTx?.id }
+        }
+        val pendingIndex = pendingChannels.indexOfFirst { order -> channel.channelId == order.id }
+
+        // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
+        val channelIndex = channels.indexOfFirst { channel.channelId == it.channelId }
+
+        val connectionText = application.getString(R.string.lightning__connection)
+
+        return when {
+            channelIndex == -1 -> {
+                if (pendingIndex == -1) {
+                    default
+                } else {
+                    val index = channels.size + pendingIndex
+                    "$connectionText ${index + 1}"
+                }
+            }
+
+            else -> "$connectionText ${channelIndex + 1}"
         }
     }
 
@@ -188,9 +228,14 @@ class LightningConnectionsViewModel @Inject constructor(
 data class LightningConnectionsUiState(
     val isNodeRunning: Boolean = false,
     val isRefreshing: Boolean = false,
-    val openChannels: List<ChannelDetails> = emptyList(),
-    val pendingConnections: List<ChannelDetails> = emptyList(),
-    val failedOrders: List<ChannelDetails> = emptyList(),
+    val openChannels: List<ChannelUi> = emptyList(),
+    val pendingConnections: List<ChannelUi> = emptyList(),
+    val failedOrders: List<ChannelUi> = emptyList(),
     val localBalance: ULong = 0u,
     val remoteBalance: ULong = 0u,
+)
+
+data class ChannelUi(
+    val details: ChannelDetails,
+    val name: String,
 )
