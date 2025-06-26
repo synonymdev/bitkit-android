@@ -240,7 +240,7 @@ class LightningConnectionsViewModel @Inject constructor(
 }
 
 data class LightningConnectionsUiState(
-    val isNodeRunning: Boolean = false,
+    val isNodeRunning: Boolean = true,
     val isRefreshing: Boolean = false,
     val openChannels: List<ChannelUi> = emptyList(),
     val pendingConnections: List<ChannelUi> = emptyList(),
