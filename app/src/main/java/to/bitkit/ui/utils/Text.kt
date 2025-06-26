@@ -15,7 +15,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.formatPlural
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -152,6 +154,22 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = 2): String? {
 
     return runCatching { formatter.format(this) }.getOrNull()
 }
+
+fun getBlockExplorerUrl(
+    id: String,
+    type: BlockExplorerType = BlockExplorerType.TX,
+    network: Network = Env.network,
+): String {
+    val service = "https://mempool.space"
+    val type = type.name.lowercase()
+
+    return when (network) {
+        Network.TESTNET -> "$service/testnet/$type/$id"
+        else -> "$service/$type/$id"
+    }
+}
+
+enum class BlockExplorerType { ADDRESS, TX }
 
 /**
  * Pluralizes a string by resId using the ICU MessageFormat with the provided arguments map.

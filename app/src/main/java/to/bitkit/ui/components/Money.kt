@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -39,7 +40,7 @@ fun MoneySSB(
 @Composable
 fun MoneyCaptionB(
     sats: Long,
-    color: Color,
+    color: Color = MaterialTheme.colorScheme.primary,
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
