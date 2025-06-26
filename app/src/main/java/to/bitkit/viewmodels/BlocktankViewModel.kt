@@ -1,8 +1,10 @@
 package to.bitkit.viewmodels
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.CreateCjitOptions
@@ -16,14 +18,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
@@ -45,17 +43,10 @@ class BlocktankViewModel @Inject constructor(
     private val coreService: CoreService,
     private val lightningService: LightningService,
     private val currencyRepo: CurrencyRepo,
-    cacheStore: CacheStore,
 ) : ViewModel() {
-    var orders = mutableListOf<IBtOrder>()
+    var orders = mutableStateListOf<IBtOrder>()
         private set
-    var paidOrders = cacheStore.data.map { it.paidOrders }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyMap()
-        )
-    var cJitEntries = mutableListOf<IcJitEntry>()
+    var cJitEntries = mutableStateListOf<IcJitEntry>()
         private set
     var info by mutableStateOf<IBtInfo?>(null)
         private set
@@ -113,11 +104,12 @@ class BlocktankViewModel @Inject constructor(
             Logger.debug("Refreshing orders...")
 
             // Sync instantly from cache
-            orders = coreService.blocktank.orders(refresh = false).toMutableList()
-            cJitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableList()
+            orders = coreService.blocktank.orders(refresh = false).toMutableStateList()
+            cJitEntries = coreService.blocktank.cjitOrders(refresh = false).toMutableStateList()
+
             // Update from server
-            orders = coreService.blocktank.orders(refresh = true).toMutableList()
-            cJitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableList()
+            orders = coreService.blocktank.orders(refresh = true).toMutableStateList()
+            cJitEntries = coreService.blocktank.cjitOrders(refresh = true).toMutableStateList()
 
             Logger.debug("Orders refreshed")
         } catch (e: Throwable) {
