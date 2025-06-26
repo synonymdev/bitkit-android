@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IcJitEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -47,9 +48,14 @@ class LightningConnectionsViewModel @Inject constructor(
     val selectedChannel = _selectedChannel.asStateFlow()
 
     private var orders: List<IBtOrder> = emptyList()
+    private var cjitEntries: List<IcJitEntry> = emptyList()
 
     fun setBlocktankOrders(orders: List<IBtOrder>) {
         this.orders = orders
+    }
+
+    fun setCjitEntries(cjitEntries: List<IcJitEntry>) {
+        this.cjitEntries = cjitEntries
     }
 
     fun onPullToRefresh() {

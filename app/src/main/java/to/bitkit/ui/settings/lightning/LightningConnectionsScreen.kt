@@ -93,8 +93,9 @@ fun LightningConnectionsScreen(
         viewModel.clearSelectedChannel()
     }
 
-    LaunchedEffect(blocktank.orders) {
+    LaunchedEffect(blocktank.orders.toList(), blocktank.cJitEntries.toList()) {
         viewModel.setBlocktankOrders(blocktank.orders)
+        viewModel.setCjitEntries(blocktank.cJitEntries)
         viewModel.syncState()
     }
 
