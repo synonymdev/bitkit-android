@@ -266,14 +266,14 @@ class WalletViewModel @Inject constructor(
 
             if (peer == null) {
                 ToastEventBus.send(
-                    type = Toast.ToastType.INFO,
-                    title = "Channel Pending",
-                    description = "No peer connected to open channel"
+                    type = Toast.ToastType.WARNING,
+                    title = "Error",
+                    description = "No connected peer available for opening a channel"
                 )
                 return@launch
             }
 
-            lightningRepo.openChannel(peer, 50000u, 10000u)
+            lightningRepo.openChannel(peer, 50_000u, 25_000u)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
