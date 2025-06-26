@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +65,15 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+
+object LightningConnectionsTestTags {
+    const val SCREEN = "lightning_connections_screen"
+    const val ADD_CONNECTION_ICON = "add_connection_icon"
+    const val ADD_CONNECTION_BUTTON = "add_connection_button"
+    const val EXPORT_LOGS_BUTTON = "export_logs_button"
+    const val SHOW_CLOSED_BUTTON = "show_closed_button"
+    const val CHANNEL_ITEM_PREFIX = "channel_item"
+}
 
 @Composable
 fun LightningConnectionsScreen(
@@ -126,12 +136,17 @@ private fun Content(
 ) {
     var showClosed by remember { mutableStateOf(false) }
 
-    ScreenColumn {
+    ScreenColumn(
+        modifier = Modifier.testTag(LightningConnectionsTestTags.SCREEN)
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.lightning__connections),
             onBackClick = onBack,
             actions = {
-                IconButton(onClick = onClickAddConnection) {
+                IconButton(
+                    onClick = onClickAddConnection,
+                    modifier = Modifier.testTag(LightningConnectionsTestTags.ADD_CONNECTION_ICON)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = stringResource(R.string.lightning__conn_button_add),
@@ -203,7 +218,9 @@ private fun Content(
                             if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show
                         ),
                         onClick = { showClosed = !showClosed },
-                        modifier = Modifier.wrapContentWidth()
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .testTag(LightningConnectionsTestTags.SHOW_CLOSED_BUTTON)
                     )
                 }
 
@@ -217,12 +234,16 @@ private fun Content(
                     SecondaryButton(
                         text = stringResource(R.string.lightning__conn_button_export_logs),
                         onClick = onClickExportLogs,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(LightningConnectionsTestTags.EXPORT_LOGS_BUTTON)
                     )
                     PrimaryButton(
                         text = stringResource(R.string.lightning__conn_button_add),
                         onClick = onClickAddConnection,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(LightningConnectionsTestTags.ADD_CONNECTION_BUTTON)
                     )
                 }
                 VerticalSpacer(16.dp)
@@ -278,7 +299,7 @@ private fun ChannelList(
     onClickChannel: (ChannelUi) -> Unit,
 ) {
     channels.map { channelUi ->
-        Channel(
+        ChannelItem(
             channelUi = channelUi,
             status = status,
             onClick = { onClickChannel(channelUi) }
@@ -287,7 +308,7 @@ private fun ChannelList(
 }
 
 @Composable
-private fun Channel(
+private fun ChannelItem(
     channelUi: ChannelUi,
     status: ChannelStatusUi,
     onClick: () -> Unit,
@@ -296,6 +317,7 @@ private fun Channel(
         modifier = Modifier
             .fillMaxWidth()
             .clickableAlpha { onClick() }
+            .testTag("${LightningConnectionsTestTags.CHANNEL_ITEM_PREFIX}_${channelUi.details.channelId}")
     ) {
         VerticalSpacer(16.dp)
         Row(
@@ -328,8 +350,6 @@ private fun Channel(
         HorizontalDivider()
     }
 }
-
-
 
 @Preview
 @Composable
