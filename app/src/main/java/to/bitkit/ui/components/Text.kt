@@ -185,6 +185,8 @@ fun BodyMSB(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -197,6 +199,8 @@ fun BodyMSB(
             color = color,
             textAlign = TextAlign.Start,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }

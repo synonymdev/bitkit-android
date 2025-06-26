@@ -16,16 +16,19 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.services.CoreService
-import to.bitkit.services.CurrencyService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -35,15 +38,23 @@ import kotlin.math.ceil
 import kotlin.math.min
 
 private const val EUR_CURRENCY = "EUR"
+
 @HiltViewModel
 class BlocktankViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningService: LightningService,
     private val currencyRepo: CurrencyRepo,
+    cacheStore: CacheStore,
 ) : ViewModel() {
     var orders = mutableListOf<IBtOrder>()
         private set
+    var paidOrders = cacheStore.data.map { it.paidOrders }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
+        )
     var cJitEntries = mutableListOf<IcJitEntry>()
         private set
     var info by mutableStateOf<IBtInfo?>(null)

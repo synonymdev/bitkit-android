@@ -172,9 +172,9 @@ private fun PreviewChannelPending() {
 private fun PreviewChannelClosed() {
     AppThemeSurface {
         LightningChannel(
-            capacity = 1_000_000,
-            localBalance = 0,
-            remoteBalance = 0,
+            capacity = 500_000,
+            localBalance = 400_000,
+            remoteBalance = 100_000,
             status = ChannelStatusUi.CLOSED,
             showLabels = true,
             modifier = Modifier.padding(16.dp)

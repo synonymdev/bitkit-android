@@ -13,7 +13,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import to.bitkit.data.AppDb
 import to.bitkit.data.entities.ConfigEntity
-import to.bitkit.utils.KeychainError
 import to.bitkit.test.BaseAndroidTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

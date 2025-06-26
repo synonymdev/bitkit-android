@@ -31,10 +31,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -397,7 +394,7 @@ private fun DrawerContent(
     walletNavController: NavController,
     rootNavController: NavController,
     drawerState: DrawerState,
-    onClickAddWidget: () -> Unit
+    onClickAddWidget: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val drawerWidth = 200.dp
@@ -478,11 +475,11 @@ private fun DrawerContent(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-        //TODO NAVIGATE TO APP STATE
+        // TODO NAVIGATE TO APP STATE
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeContentView(
     mainUiState: MainUiState,
@@ -528,12 +525,11 @@ private fun HomeContentView(
                 showEmptyStateSetting && balances.totalSats == 0uL
             }
         }
-        val pullRefreshState = rememberPullRefreshState(refreshing = mainUiState.isRefreshing, onRefresh = onRefresh)
-
-        Box(
+        PullToRefreshBox(
+            isRefreshing = mainUiState.isRefreshing,
+            onRefresh = onRefresh,
             modifier = Modifier
                 .fillMaxSize()
-                .pullRefresh(pullRefreshState)
         ) {
             Column(
                 modifier = Modifier
@@ -785,12 +781,6 @@ private fun HomeContentView(
                         .align(Alignment.BottomCenter)
                 )
             }
-
-            PullRefreshIndicator(
-                refreshing = mainUiState.isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
 
             if (homeUiState.highBalanceSheetVisible) {
                 val context = LocalContext.current

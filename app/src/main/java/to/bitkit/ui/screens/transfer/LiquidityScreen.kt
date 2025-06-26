@@ -39,7 +39,7 @@ fun LiquidityScreen(
 
     val channelSize = (order.clientBalanceSat + order.lspBalanceSat).toLong()
     val localBalance = order.clientBalanceSat.toLong()
-    val remoteBalance = channelSize - localBalance
+    val remoteBalance = order.lspBalanceSat.toLong()
 
     LiquidityScreen(
         channelSize = channelSize,
