@@ -150,9 +150,11 @@ private fun SendAmountNodeRunning(
         uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
             uiState.lnUrlParameters.data.maxWithdrawable.toLong()
         }
+
         uiState.payMethod == SendMethod.ONCHAIN -> {
             balances.totalOnchainSats.toLong()
         }
+
         else -> {
             balances.totalLightningSats.toLong()
         }
@@ -347,7 +349,15 @@ private fun PreviewWithdraw() {
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
                 lnUrlParameters = LnUrlParameters.LnUrlWithdraw(
-                    data = LnurlWithdrawData(uri = "", callback = "", k1 = "", defaultDescription = "Test", minWithdrawable = 1UL, maxWithdrawable = 130UL, tag = "")
+                    data = LnurlWithdrawData(
+                        uri = "",
+                        callback = "",
+                        k1 = "",
+                        defaultDescription = "Test",
+                        minWithdrawable = 1UL,
+                        maxWithdrawable = 130UL,
+                        tag = ""
+                    )
                 )
             ),
             walletUiState = MainUiState(
