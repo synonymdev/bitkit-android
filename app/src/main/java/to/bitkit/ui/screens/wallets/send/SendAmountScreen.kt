@@ -104,7 +104,13 @@ fun SendAmountContent(
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
-        SheetTopBar(stringResource(R.string.wallet__send_amount)) {
+        val titleRes = if (uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+            R.string.wallet__lnurl_w_title
+        } else {
+            R.string.wallet__send_amount
+        }
+
+        SheetTopBar(stringResource(titleRes)) {
             onEvent(SendEvent.AmountReset)
             onBack()
         }
