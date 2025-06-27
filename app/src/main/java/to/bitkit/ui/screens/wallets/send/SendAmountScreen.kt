@@ -145,9 +145,16 @@ private fun SendAmountNodeRunning(
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
-    val availableAmount = when (uiState.payMethod) {
-        SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
-        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong()
+    val availableAmount = when {
+        uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
+            uiState.lnUrlParameters.data.maxWithdrawable.toLong()
+        }
+        uiState.payMethod == SendMethod.ONCHAIN -> {
+            balances.totalOnchainSats.toLong()
+        }
+        else -> {
+            balances.totalLightningSats.toLong()
+        }
     }
 
     Column(
