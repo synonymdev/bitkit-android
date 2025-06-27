@@ -38,6 +38,8 @@ import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.wallets.send.SendRoute.*
+import to.bitkit.ui.screens.wallets.withdraw.WithdrawConfirmScreen
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -84,8 +86,10 @@ fun SendOptionsView(
                     }
 
                     is SendEffect.NavigateToQuickPay -> {
-                        navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
+                        navController.navigate(QuickPay(it.invoice, it.amount))
                     }
+
+                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithDrawConfirm)
                 }
             }
         }
@@ -141,6 +145,14 @@ fun SendOptionsView(
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.WithDrawConfirm> { backStackEntry ->
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                WithdrawConfirmScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onConfirm = { } // TODO IMPLEMENT
                 )
             }
             composableWithDefaultTransitions<SendRoute.AddTag> {
@@ -314,6 +326,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object ReviewAndSend : SendRoute
+
+    @Serializable
+    data object WithDrawConfirm : SendRoute
 
     @Serializable
     data object AddTag : SendRoute

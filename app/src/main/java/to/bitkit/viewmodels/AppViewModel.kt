@@ -343,6 +343,12 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
         }
+
+        if (_sendUiState.value.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+            //TODO NAVIGATE TO SCREEN CONFIRM
+            return
+        }
+
         setSendEffect(SendEffect.NavigateToReview)
     }
 
@@ -1057,6 +1063,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
+    data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToCoinSelection : SendEffect()
     data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
