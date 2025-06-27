@@ -39,8 +39,8 @@ val screenScaleOut = scaleOut(animationSpec = tween(), targetScale = 0.95f) + fa
 // endregion
 
 /**
-//  * Adds the [androidx.compose.runtime.Composable] to the [androidx.navigation.NavGraphBuilder] with the default screen transitions.
-//  */
+ * Adds the [androidx.compose.runtime.Composable] to the [androidx.navigation.NavGraphBuilder] with the default screen transitions.
+ */
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = emptyList(),

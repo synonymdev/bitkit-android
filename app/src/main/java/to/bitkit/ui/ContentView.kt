@@ -97,7 +97,6 @@ import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
-import to.bitkit.ui.settings.LightningSettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
@@ -120,6 +119,9 @@ import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
+import to.bitkit.ui.settings.lightning.ChannelDetailScreen
+import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
+import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
 import to.bitkit.ui.settings.pin.ChangePinNewScreen
 import to.bitkit.ui.settings.pin.ChangePinResultScreen
@@ -370,6 +372,7 @@ fun ContentView(
                         BottomSheetType.BackupNavigation -> BackupNavigationSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
+
                         null -> Unit
                     }
                 }
@@ -423,7 +426,7 @@ private fun RootNavHost(
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
-        lightningConnections(walletViewModel, navController)
+        lightningConnections(navController)
         devSettings(walletViewModel, navController)
         regtestSettings(navController)
         activityItem(activityListViewModel, navController)
@@ -897,11 +900,24 @@ private fun NavGraphBuilder.cjitDetailSettings(
 }
 
 private fun NavGraphBuilder.lightningConnections(
-    viewModel: WalletViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.LightningConnections> {
-        LightningSettingsScreen(viewModel, navController)
+    navigation<Routes.ConnectionsNav>(
+        startDestination = Routes.LightningConnections,
+    ) {
+        composableWithDefaultTransitions<Routes.LightningConnections> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            LightningConnectionsScreen(navController, viewModel)
+        }
+        composableWithDefaultTransitions<Routes.ChannelDetail> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            ChannelDetailScreen(
+                navController = navController,
+                viewModel = viewModel,
+            )
+        }
     }
 }
 
@@ -1493,7 +1509,13 @@ object Routes {
     data class CjitDetail(val id: String)
 
     @Serializable
+    data object ConnectionsNav
+
+    @Serializable
     data object LightningConnections
+
+    @Serializable
+    data object ChannelDetail
 
     @Serializable
     data object DevSettings
@@ -1656,7 +1678,6 @@ object Routes {
 
     @Serializable
     data object PriceEdit
-
 
     @Serializable
     data object CalculatorPreview
