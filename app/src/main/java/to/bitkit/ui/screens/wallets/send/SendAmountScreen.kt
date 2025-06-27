@@ -43,6 +43,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.LnUrlParameters
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -166,8 +167,16 @@ private fun SendAmountNodeRunning(
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
 
+        val textAvailable = when {
+            uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> R.string.wallet__lnurl_w_max
+            uiState.isUnified -> R.string.wallet__send_available
+            uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
+            uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
+            else -> R.string.wallet__send_available
+        }
+
         Text13Up(
-            text = stringResource(R.string.wallet__send_available),
+            text = stringResource(textAvailable),
             color = Colors.White64,
             modifier = Modifier.testTag("available_balance")
         )
