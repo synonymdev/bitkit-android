@@ -345,7 +345,7 @@ class AppViewModel @Inject constructor(
         }
 
         if (_sendUiState.value.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
-            //TODO NAVIGATE TO SCREEN CONFIRM
+            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
 
