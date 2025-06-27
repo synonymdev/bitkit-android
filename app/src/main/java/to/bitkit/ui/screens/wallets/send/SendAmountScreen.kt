@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.LnurlWithdrawData
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
@@ -196,7 +197,9 @@ private fun SendAmountNodeRunning(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            PaymentMethodButton(uiState = uiState, onEvent = onEvent)
+            if (uiState.lnUrlParameters !is LnUrlParameters.LnUrlWithdraw) {
+                PaymentMethodButton(uiState = uiState, onEvent = onEvent)
+            }
             Spacer(modifier = Modifier.width(8.dp))
             UnitButton(modifier = Modifier.height(28.dp))
         }
@@ -267,8 +270,9 @@ private fun PreviewRunningLightning() {
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
                 isAmountInputValid = true,
-                isUnified = true
+                isUnified = false
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -292,11 +296,12 @@ private fun PreviewRunningOnchain() {
                 payMethod = SendMethod.ONCHAIN,
                 amountInput = "5000",
                 isAmountInputValid = true,
-                isUnified = true
+                isUnified = false
             ),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             input = "5000",
@@ -320,6 +325,35 @@ private fun PreviewInitializing() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Initializing
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            onBack = {},
+            onEvent = {},
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            input = "100",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
+        )
+    }
+}
+
+
+@Preview(showSystemUi = true, name = "Withdraw")
+@Composable
+private fun PreviewWithdraw() {
+    AppThemeSurface {
+        SendAmountContent(
+            uiState = SendUiState(
+                payMethod = SendMethod.LIGHTNING,
+                amountInput = "100",
+                lnUrlParameters = LnUrlParameters.LnUrlWithdraw(
+                    data = LnurlWithdrawData(uri = "", callback = "", k1 = "", defaultDescription = "Test", minWithdrawable = 1UL, maxWithdrawable = 130UL, tag = "")
+                )
+            ),
+            walletUiState = MainUiState(
+                nodeLifecycleState = NodeLifecycleState.Running
+            ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,
