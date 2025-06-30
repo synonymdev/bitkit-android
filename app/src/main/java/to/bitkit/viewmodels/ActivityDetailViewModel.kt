@@ -93,6 +93,10 @@ class ActivityDetailViewModel @Inject constructor(
         _txDetails.value = null
     }
 
+    fun onClickBoost() {
+
+    }
+
     private companion object {
         const val TAG = "ActivityDetailViewModel"
     }

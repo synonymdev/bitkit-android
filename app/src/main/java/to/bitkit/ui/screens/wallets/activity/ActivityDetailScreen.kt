@@ -110,6 +110,7 @@ fun ActivityDetailScreen(
                     description = text.ellipsisMiddle(40)
                 )
             },
+            onClickBoost = detailViewModel::onClickBoost
         )
         if (showAddTagSheet) {
             ActivityAddTagSheet(
@@ -128,6 +129,7 @@ private fun ActivityDetailContent(
     tags: List<String>,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
+    onClickBoost: () -> Unit,
     onExploreClick: (String) -> Unit,
     onCopy: (String) -> Unit,
 ) {
@@ -382,7 +384,7 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                val canBeBoosted = when(item) {
+                val canBeBoosted = when (item) {
                     is Activity.Onchain -> !item.v1.confirmed && !item.v1.doesExist && !item.v1.isBoosted && !item.v1.isTransfer
                     else -> false
                 }
@@ -390,7 +392,7 @@ private fun ActivityDetailContent(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_boost),
                     size = ButtonSize.Small,
-                    onClick = { /* TODO: Implement boost functionality */ },
+                    onClick = onClickBoost,
                     enabled = canBeBoosted,
                     icon = {
                         Icon(
@@ -564,6 +566,7 @@ private fun PreviewLightningSent() {
             onAddTagClick = {},
             onExploreClick = {},
             onCopy = {},
+            onClickBoost = {}
         )
     }
 }
@@ -599,6 +602,7 @@ private fun PreviewOnchain() {
             onAddTagClick = {},
             onExploreClick = {},
             onCopy = {},
+            onClickBoost = {},
         )
     }
 }
