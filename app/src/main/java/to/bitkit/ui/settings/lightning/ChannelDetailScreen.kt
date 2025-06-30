@@ -19,7 +19,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +88,6 @@ fun ChannelDetailScreen(
     val context = LocalContext.current
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
-    val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
         onDispose {

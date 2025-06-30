@@ -67,7 +67,7 @@ class LightningConnectionsViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             combine(
                 lightningRepo.lightningState,
-                blocktankRepo.blocktankState
+                blocktankRepo.blocktankState,
             ) { lightningState, blocktankState ->
                 val channels = lightningState.channels
                 val isNodeRunning = lightningState.nodeLifecycleState.isRunning()
@@ -76,7 +76,7 @@ class LightningConnectionsViewModel @Inject constructor(
                 _uiState.value.copy(
                     isNodeRunning = isNodeRunning,
                     openChannels = openChannels.map { channel -> channel.mapToUiModel() },
-                    pendingConnections = getPendingConnections(channels, blocktankState.orders)
+                    pendingConnections = getPendingConnections(channels, blocktankState.paidOrders)
                         .map { it.mapToUiModel() },
                     failedOrders = getFailedOrdersAsChannels(blocktankState.paidOrders).map { it.mapToUiModel() },
                     localBalance = calculateLocalBalance(channels),
@@ -94,7 +94,7 @@ class LightningConnectionsViewModel @Inject constructor(
             ldkNodeEventBus.events.collect { event ->
                 if (event is Event.ChannelPending || event is Event.ChannelReady || event is Event.ChannelClosed) {
                     Logger.debug("Channel event received: ${event::class.simpleName}, triggering refresh")
-                    refreshLightningState()
+                    refreshObservedState()
                 }
             }
         }
@@ -156,14 +156,15 @@ class LightningConnectionsViewModel @Inject constructor(
     fun onPullToRefresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
-            refreshLightningState()
+            refreshObservedState()
             delay(500)
             _uiState.update { it.copy(isRefreshing = false) }
         }
     }
 
-    suspend fun refreshLightningState() {
+    suspend fun refreshObservedState() {
         lightningRepo.sync()
+        blocktankRepo.refreshOrders()
     }
 
     private fun ChannelDetails.mapToUiModel(): ChannelUi = ChannelUi(
@@ -204,10 +205,10 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private fun getPendingConnections(
         knownChannels: List<ChannelDetails>,
-        orders: List<IBtOrder>,
+        paidOrders: List<IBtOrder>,
     ): List<ChannelDetails> {
         val pendingLdkChannels = knownChannels.filterPending()
-        val pendingOrderChannels = getPendingOrdersAsChannels(knownChannels, orders)
+        val pendingOrderChannels = getPendingOrdersAsChannels(knownChannels, paidOrders)
 
         return pendingOrderChannels + pendingLdkChannels
     }
@@ -222,7 +223,7 @@ class LightningConnectionsViewModel @Inject constructor(
                 return@mapNotNull null
             }
 
-            if (order.state2 != BtOrderState2.CREATED && order.state2 != BtOrderState2.PAID) return@mapNotNull null
+            if (order.state2 !in listOf(BtOrderState2.CREATED, BtOrderState2.PAID)) return@mapNotNull null
 
             createChannelDetails().copy(
                 channelId = order.id,
