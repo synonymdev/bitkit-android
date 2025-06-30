@@ -34,6 +34,8 @@ import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
 import com.synonym.bitkitcore.openChannel
+import com.synonym.bitkitcore.refreshActiveCjitEntries
+import com.synonym.bitkitcore.refreshActiveOrders
 import com.synonym.bitkitcore.removeTags
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.updateBlocktankUrl
@@ -141,7 +143,7 @@ class CoreService @Inject constructor(
 
     suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
 
-    //TODO this is business logic, should be moved to the domain layer in the future
+    // TODO this is business logic, should be moved to the domain layer in the future
     suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalNode()
 }
 
@@ -464,11 +466,11 @@ class BlocktankService(
         }
     }
 
-    private suspend fun fees(refresh: Boolean = true) : FeeRates? {
+    private suspend fun fees(refresh: Boolean = true): FeeRates? {
         return info(refresh)?.onchain?.feeRates
     }
 
-    suspend fun getFees() : Result<FeeRates> {
+    suspend fun getFees(): Result<FeeRates> {
         var fees = fees(refresh = true)
         if (fees == null) {
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
@@ -507,6 +509,9 @@ class BlocktankService(
         refresh: Boolean = true,
     ): List<IcJitEntry> {
         return ServiceQueue.CORE.background {
+            if (refresh) {
+                refreshActiveCjitEntries()
+            }
             getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
         }
     }
@@ -541,6 +546,9 @@ class BlocktankService(
         refresh: Boolean = true,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
+            if (refresh) {
+                refreshActiveOrders()
+            }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)
         }
     }
