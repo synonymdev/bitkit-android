@@ -483,8 +483,8 @@ private fun RootNavHost(
             }
             composable<Routes.SavingsProgress> {
                 SavingsProgressScreen(
-                    onContinueClick = { navController.navigateToHome() },
-                    onCloseClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.SpendingIntro> {
@@ -533,8 +533,8 @@ private fun RootNavHost(
             composable<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
-                    onCloseClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateToHome() },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.Funding> {
@@ -610,8 +610,8 @@ private fun RootNavHost(
                 }
                 composable<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
-                        onContinue = { navController.navigateToHome() },
-                        onClose = { navController.navigateToHome() },
+                        onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onClose = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     )
                 }
                 composable<Routes.ExternalFeeCustom> {
