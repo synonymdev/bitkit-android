@@ -80,8 +80,8 @@ fun SpendingAdvancedScreen(
 
             val transferValues by viewModel.transferValues.collectAsState()
 
-            LaunchedEffect(order.clientBalanceSat) {
-                viewModel.updateTransferValues(clientBalance, blocktank.info)
+            LaunchedEffect(clientBalance) {
+                viewModel.updateTransferValues(clientBalance)
             }
 
             val isValid = transferValues.let {

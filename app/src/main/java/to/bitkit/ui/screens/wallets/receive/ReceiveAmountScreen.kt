@@ -94,7 +94,8 @@ fun ReceiveAmountScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // Min amount view
-                blocktank.minCjitSats?.let { minCjitSats ->
+                val minCjitSats by blocktank.minCjitSats.collectAsStateWithLifecycle()
+                minCjitSats?.let { minCjitSats ->
                     Column(
                         modifier = Modifier.clickableAlpha { overrideSats = minCjitSats.toLong() }
                     ) {
@@ -130,7 +131,7 @@ fun ReceiveAmountScreen(
 
                         if (walletState.nodeLifecycleState == NodeLifecycleState.Running) {
                             try {
-                                val entry = blocktank.createCjit(amountSats = sats, description = "Bitkit")
+                                val entry = blocktank.createCjit(amountSats = sats)
                                 onCjitCreated(
                                     CjitEntryDetails(
                                         networkFeeSat = entry.networkFeeSat.toLong(),
