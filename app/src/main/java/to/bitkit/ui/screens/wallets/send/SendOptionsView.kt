@@ -32,14 +32,18 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.SendRoute.*
+import to.bitkit.ui.screens.wallets.withdraw.WithDrawErrorScreen
 import to.bitkit.ui.screens.wallets.withdraw.WithdrawConfirmScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -75,11 +79,11 @@ fun SendOptionsView(
         LaunchedEffect(appViewModel, navController) {
             appViewModel.sendEffect.collect {
                 when (it) {
-                    is SendEffect.NavigateToAmount -> navController.navigate(SendRoute.Amount)
-                    is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
-                    is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
-                    is SendEffect.NavigateToCoinSelection -> navController.navigate(SendRoute.CoinSelection)
-                    is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
+                    is SendEffect.NavigateToAmount -> navController.navigate(Amount)
+                    is SendEffect.NavigateToAddress -> navController.navigate(Address)
+                    is SendEffect.NavigateToScan -> navController.navigate(QrScanner)
+                    is SendEffect.NavigateToCoinSelection -> navController.navigate(CoinSelection)
+                    is SendEffect.NavigateToReview -> navController.navigate(ReviewAndSend)
                     is SendEffect.PaymentSuccess -> {
                         onComplete(it.sheet)
                         context.setClipboardText(text = "")
@@ -89,7 +93,8 @@ fun SendOptionsView(
                         navController.navigate(QuickPay(it.invoice, it.amount))
                     }
 
-                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithDrawConfirm)
+                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(WithdrawConfirm)
+                    SendEffect.NavigateToWithdrawError -> navController.navigate(WithdrawError)
                 }
             }
         }
@@ -147,12 +152,28 @@ fun SendOptionsView(
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.WithDrawConfirm> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.WithdrawConfirm> { backStackEntry ->
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 WithdrawConfirmScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onConfirm = { } // TODO IMPLEMENT
+                    onConfirm = { appViewModel.onConfirmWithdraw() },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.WithdrawError> { backStackEntry ->
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                WithDrawErrorScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onClickScan = { navController.navigate(SendRoute.QrScanner) },
+                    onClickSupport = { navController.navigate(SendRoute.Support) },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.Support> { backStackEntry ->
+                SupportScreen(
+                    onBack = { navController.popBackStack() },
+                    onClose = { navController.navigateToHome() },
+                    navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
                 )
             }
             composableWithDefaultTransitions<SendRoute.AddTag> {
@@ -328,7 +349,13 @@ sealed interface SendRoute {
     data object ReviewAndSend : SendRoute
 
     @Serializable
-    data object WithDrawConfirm : SendRoute
+    data object WithdrawConfirm : SendRoute
+
+    @Serializable
+    data object WithdrawError : SendRoute
+
+    @Serializable
+    data object Support : SendRoute
 
     @Serializable
     data object AddTag : SendRoute

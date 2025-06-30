@@ -376,6 +376,7 @@ class AppViewModel @Inject constructor(
                     && amount < lnUrlParams.data.maxSendable
                     && lightningService.canSend(amount)
             }
+
             is LnUrlParameters.LnUrlWithdraw -> {
                 amount < lnUrlParams.data.maxWithdrawable
             }
@@ -775,6 +776,21 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun onConfirmWithdraw() {
+        val success = true //TODO IMPLEMENT REQUEST
+        if (success) {
+            toast(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.other__lnurl_withdr_success_title),
+                description = context.getString(R.string.other__lnurl_withdr_success_title),
+            )
+            //TODO NAVIGATE HOME
+        } else {
+            setSendEffect(SendEffect.NavigateToWithdrawError)
+        }
+
+    }
+
     fun onClickActivityDetail() {
         val filter = newTransaction.type.toActivityFilter()
         val paymentType = newTransaction.direction.toTxType()
@@ -1064,6 +1080,8 @@ sealed class SendEffect {
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
+
+    data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()
     data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
