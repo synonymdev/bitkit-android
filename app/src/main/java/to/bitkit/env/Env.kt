@@ -17,7 +17,7 @@ internal object Env {
     val network = Network.REGTEST
     val walletSyncIntervalSecs = 10_uL // TODO review
     val ldkNodeSyncIntervalSecs = 60_uL // TODO review
-    val platform = "Android ${android.os.Build.VERSION.SDK_INT}"
+    val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     // TODO: remove this to load from BT API instead

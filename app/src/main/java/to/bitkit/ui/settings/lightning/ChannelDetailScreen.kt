@@ -1,6 +1,8 @@
 package to.bitkit.ui.settings.lightning
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +77,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.TxDetails
+import to.bitkit.viewmodels.MainUiState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -127,21 +130,7 @@ fun ChannelDetailScreen(
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             context.startActivity(intent)
         },
-        onSupport = { order ->
-            val intent = createSupportEmailIntent(
-                order = order,
-                channel = channel,
-                nodeId = walletState.nodeId,
-            )
-            // Try to open email intent, fallback to browser if no email app
-            try {
-                context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
-            } catch (_: Throwable) {
-                // Fallback to opening support website
-                val fallbackIntent = Intent(Intent.ACTION_VIEW, Env.SYNONYM_CONTACT.toUri())
-                context.startActivity(fallbackIntent)
-            }
-        },
+        onSupport = { order -> contactSupport(order, channel, walletState.nodeId, context) },
         onCloseConnection = { navController.navigate(Routes.CloseConnection) },
     )
 }
@@ -576,6 +565,25 @@ private fun formatUnixTimestamp(timestamp: Long): String {
     }.getOrDefault(timestamp.toString())
 }
 
+private fun contactSupport(
+    order: Any,
+    channel: ChannelUi,
+    nodeId: String,
+    context: Context,
+) {
+    val intent = createSupportEmailIntent(
+        order = order,
+        channel = channel,
+        nodeId = nodeId,
+    )
+    runCatching {
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
+    }.onFailure {
+        // Fallback to opening support website
+        context.startActivity(Intent(Intent.ACTION_VIEW, Env.SYNONYM_CONTACT.toUri()))
+    }
+}
+
 private fun createSupportEmailIntent(
     order: Any, // IBtOrder or IcJitEntry
     channel: ChannelUi,
@@ -586,7 +594,7 @@ private fun createSupportEmailIntent(
     val orderId = when (order) {
         is IBtOrder -> order.id
         is IcJitEntry -> order.id
-        else -> "Unknown"
+        else -> ""
     }
 
     val fundingTxId = when (order) {
@@ -599,19 +607,16 @@ private fun createSupportEmailIntent(
         if (orderId.isNotEmpty()) {
             appendLine("Blocktank order ID: $orderId")
         }
-
         appendLine("Transaction ID: $fundingTxId")
+        appendLine()
         appendLine("Platform: ${Env.platform}")
         appendLine("Version: ${Env.version}")
         appendLine("LDK node ID: $nodeId")
     }.trim()
 
-    return Intent(Intent.ACTION_SENDTO).apply {
-        data = "mailto:${Env.SUPPORT_EMAIL}".toUri()
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(Env.SUPPORT_EMAIL))
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, body)
-    }
+    val uri = "mailto:${Env.SUPPORT_EMAIL}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}".toUri()
+
+    return Intent(Intent.ACTION_SENDTO, uri)
 }
 
 @Preview
