@@ -382,11 +382,16 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                val canBeBoosted = when(item) {
+                    is Activity.Onchain -> !item.v1.confirmed && !item.v1.doesExist && !item.v1.isBoosted && !item.v1.isTransfer
+                    else -> false
+                }
+
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_boost),
                     size = ButtonSize.Small,
                     onClick = { /* TODO: Implement boost functionality */ },
-                    enabled = !isLightning, // TODO add logic to enable/disable boost for onchain activities
+                    enabled = canBeBoosted,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_timer_alt),
