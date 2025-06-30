@@ -188,7 +188,7 @@ fun ContentView(
                     }
 
                     currencyViewModel.triggerRefresh()
-                    blocktankViewModel.triggerRefreshOrders()
+                    blocktankViewModel.refreshOrders()
                 }
 
                 else -> Unit
