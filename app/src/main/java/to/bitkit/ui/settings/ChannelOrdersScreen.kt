@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -72,8 +73,8 @@ fun ChannelOrdersScreen(
     onCjitItemClick: (String) -> Unit,
 ) {
     val blocktank = blocktankViewModel ?: return
-    val orders: MutableList<IBtOrder> = blocktank.orders
-    val cJitEntries: MutableList<IcJitEntry> = blocktank.cJitEntries
+    val orders by blocktank.orders.collectAsStateWithLifecycle()
+    val cJitEntries by blocktank.cJitEntries.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         blocktank.refreshOrders()
@@ -90,8 +91,8 @@ fun ChannelOrdersScreen(
 
 @Composable
 private fun ChannelOrdersView(
-    orders: MutableList<IBtOrder>,
-    cJitEntries: MutableList<IcJitEntry>,
+    orders: List<IBtOrder>,
+    cJitEntries: List<IcJitEntry>,
     onBackClick: () -> Unit,
     onOrderItemClick: (String) -> Unit,
     onCjitItemClick: (String) -> Unit,
@@ -180,7 +181,8 @@ fun OrderDetailScreen(
     onBackClick: () -> Unit,
 ) {
     val blocktank = blocktankViewModel ?: return
-    val order = blocktank.orders.find { it.id == orderItem.id } ?: return
+    val orders by blocktank.orders.collectAsStateWithLifecycle()
+    val order = orders.find { it.id == orderItem.id } ?: return
     OrderDetailView(
         order = order,
         onBackClick = onBackClick,
@@ -356,7 +358,8 @@ fun CJitDetailScreen(
     onBackClick: () -> Unit,
 ) {
     val blocktank = blocktankViewModel ?: return
-    val entry = blocktank.cJitEntries.find { it.id == cjitItem.id } ?: return
+    val cJitEntries by blocktank.cJitEntries.collectAsStateWithLifecycle()
+    val entry = cJitEntries.find { it.id == cjitItem.id } ?: return
     CJitDetailView(
         entry = entry,
         onBackClick = onBackClick,

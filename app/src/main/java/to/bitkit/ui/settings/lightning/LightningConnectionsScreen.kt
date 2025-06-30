@@ -84,6 +84,7 @@ fun LightningConnectionsScreen(
 ) {
     val context = LocalContext.current
     val blocktank = blocktankViewModel ?: return
+    val blocktankOrders by blocktank.orders.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
     val scope = rememberCoroutineScope()
@@ -94,7 +95,7 @@ fun LightningConnectionsScreen(
     }
 
     LaunchedEffect(blocktank.orders) {
-        viewModel.setBlocktankOrders(blocktank.orders)
+        viewModel.setBlocktankOrders(blocktankOrders)
         viewModel.syncState()
     }
 

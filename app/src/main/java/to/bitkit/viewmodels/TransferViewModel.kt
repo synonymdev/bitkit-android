@@ -24,10 +24,9 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.services.CoreService
-import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -44,7 +43,7 @@ private const val EUR_CURRENCY = "EUR"
 @HiltViewModel
 class TransferViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
-    private val coreService: CoreService,
+    private val blocktankRepo: BlocktankRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
@@ -102,7 +101,7 @@ class TransferViewModel @Inject constructor(
             while (!isSettled && error == null) {
                 try {
                     Logger.debug("Refreshing order '$orderId'")
-                    val order = coreService.blocktank.orders(orderIds = listOf(orderId), refresh = true).firstOrNull()
+                    val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
                     if (order == null) {
                         error = Exception("Order not found '$orderId'")
                         Logger.error("Order not found '$orderId'", context = TAG)
@@ -147,12 +146,7 @@ class TransferViewModel @Inject constructor(
 
             BtOrderState2.PAID -> {
                 currentStep = 1
-
-                try {
-                    coreService.blocktank.open(order.id)
-                } catch (e: Throwable) {
-                    Logger.error("Error opening channel: ${e.message}", e)
-                }
+                blocktankRepo.openChannel(order.id)
             }
 
             BtOrderState2.EXECUTED -> {
@@ -178,11 +172,14 @@ class TransferViewModel @Inject constructor(
 
     // region Balance Calc
 
-    fun updateTransferValues(clientBalanceSat: ULong, blocktankInfo: IBtInfo?) {
-        _transferValues.value = calculateTransferValues(clientBalanceSat, blocktankInfo)
+    fun updateTransferValues(clientBalanceSat: ULong) {
+        viewModelScope.launch {
+            _transferValues.value = calculateTransferValues(clientBalanceSat)
+        }
     }
 
-    fun calculateTransferValues(clientBalanceSat: ULong, blocktankInfo: IBtInfo?): TransferValues {
+    fun calculateTransferValues(clientBalanceSat: ULong): TransferValues {
+        val blocktankInfo = blocktankRepo.blocktankState.value.info
         if (blocktankInfo == null) return TransferValues()
 
         // Calculate the total value of existing Blocktank channels

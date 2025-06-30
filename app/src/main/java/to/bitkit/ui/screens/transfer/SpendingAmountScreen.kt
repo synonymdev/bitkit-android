@@ -88,14 +88,14 @@ fun SpendingAmountScreen(
 
             // Update maxClientBalance Effect
             LaunchedEffect(satsAmount) {
-                val transferValues = viewModel.calculateTransferValues(satsAmount.toULong(), blocktank.info)
+                val transferValues = viewModel.calculateTransferValues(satsAmount.toULong())
                 maxClientBalance = transferValues.maxClientBalance
                 Logger.debug("maxClientBalance: $maxClientBalance", context = "SpendingAmountScreen")
             }
 
             // Update maxLspBalance Effect
             LaunchedEffect(availableAmount) {
-                val transferValues = viewModel.calculateTransferValues(availableAmount, blocktank.info)
+                val transferValues = viewModel.calculateTransferValues(availableAmount)
                 maxLspBalance = transferValues.defaultLspBalance
                 Logger.debug("maxLspBalance: $maxLspBalance", context = "SpendingAmountScreen")
             }
