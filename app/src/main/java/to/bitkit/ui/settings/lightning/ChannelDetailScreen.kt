@@ -47,9 +47,7 @@ import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.IDiscount
 import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
-import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.OutPoint
-import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
@@ -58,7 +56,6 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.ChannelStatusUi
@@ -92,7 +89,6 @@ fun ChannelDetailScreen(
     val context = LocalContext.current
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
-    val blocktank = blocktankViewModel ?: return
     val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
@@ -106,21 +102,9 @@ fun ChannelDetailScreen(
     val channel = selectedChannel ?: return
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-    val paidOrders by viewModel.paidOrders.collectAsStateWithLifecycle()
+    val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
     val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
     val walletState by wallet.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        blocktank.refreshOrders()
-    }
-
-    // Update viewmodel with blocktank orders and cjit entries after refresh
-    LaunchedEffect(blocktank.orders.toList(), blocktank.cJitEntries.toList()) {
-        viewModel.setBlocktankOrders(blocktank.orders)
-        viewModel.setCjitEntries(blocktank.cJitEntries)
-        viewModel.syncState()
-    }
 
     // Fetch transaction details for funding transaction if available
     LaunchedEffect(channel.details.fundingTxo?.txid) {
@@ -131,14 +115,13 @@ fun ChannelDetailScreen(
 
     Content(
         channel = channel,
-        blocktankOrders = paidOrders,
-        cjitEntries = blocktank.cJitEntries,
+        blocktankOrders = paidOrders.paidOrders,
+        cjitEntries = paidOrders.cjitEntries,
         txDetails = txDetails,
         isRefreshing = uiState.isRefreshing,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
         onRefresh = {
-            scope.launch { blocktank.refreshOrders() }
             viewModel.onPullToRefresh()
         },
         onCopyText = { text ->
