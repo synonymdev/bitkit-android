@@ -10,19 +10,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.totalValue
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun BoostTransactionSheet(
     modifier: Modifier = Modifier,
-    item: Activity,
+    item: Activity.Onchain,
 ) {
     Column(
         modifier = modifier
@@ -34,6 +45,8 @@ fun BoostTransactionSheet(
 
         BodyS(text = stringResource(R.string.wallet__boost_fee_recomended), color = Colors.White64)
 
+        VerticalSpacer(24.dp)
+
         Row(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -42,16 +55,60 @@ fun BoostTransactionSheet(
                 contentDescription = null
             )
 
+            HorizontalSpacer(16.dp)
+
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White64)
+                BodySSB(text = "±10-20 minutes", color = Colors.White64) //TODO IMPLEMENT CALC
             }
 
             Column(horizontalAlignment = Alignment.End) {
-                BodyMSB(text = "4 250", color = Colors.White)
-                BodyMSB(text = "0.85", color = Colors.White64)
+
+                BodyMSB(
+                    text = rememberMoneyText(sats = item.totalValue().toLong()).orEmpty().withAccent(defaultColor = Colors.White).toString(),
+                    color = Colors.White
+                ) //TODO ICON
+
+                BodySSB(
+                    text = rememberMoneyText(
+                        sats = item.totalValue().toLong(),
+                        reversed = true
+                    ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
+                    color = Colors.White64
+                )
             }
         }
 
+        VerticalSpacer(68.dp)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BoostTransactionSheet(
+            item = Activity.Onchain(
+                v1 = OnchainActivity(
+                    id = "test-onchain-1",
+                    txType = PaymentType.RECEIVED,
+                    txId = "abc123",
+                    value = 100000UL,
+                    fee = 500UL,
+                    feeRate = 8UL,
+                    address = "bc1...",
+                    confirmed = true,
+                    timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                    isBoosted = false,
+                    isTransfer = false,
+                    doesExist = true,
+                    confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    channelId = null,
+                    transferTxId = null,
+                    createdAt = null,
+                    updatedAt = null,
+                )
+            ),
+        )
     }
 }
