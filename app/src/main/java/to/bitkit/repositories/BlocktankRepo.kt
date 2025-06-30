@@ -35,6 +35,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.ceil
 import kotlin.math.min
@@ -46,6 +47,7 @@ class BlocktankRepo @Inject constructor(
     private val lightningService: LightningService,
     private val currencyRepo: CurrencyRepo,
     private val cacheStore: CacheStore,
+    @Named("enablePolling") private val enablePolling: Boolean,
 ) {
     private val repoScope = CoroutineScope(SupervisorJob() + bgDispatcher)
 
@@ -66,6 +68,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     private fun startPolling() {
+        if (!enablePolling) return
         flow {
             while (currentCoroutineContext().isActive) {
                 emit(Unit)
@@ -139,7 +142,10 @@ class BlocktankRepo @Inject constructor(
                 )
             }
 
-            Logger.debug("Orders refreshed: ${orders.size} orders, ${cjitEntries.size} cjit entries", context = TAG)
+            Logger.debug(
+                "Orders refreshed: ${orders.size} orders, ${cjitEntries.size} cjit entries",
+                context = TAG
+            )
         } catch (e: Throwable) {
             Logger.error("Failed to refresh orders", e, context = TAG)
         } finally {
@@ -150,7 +156,10 @@ class BlocktankRepo @Inject constructor(
     suspend fun refreshMinCjitSats() = withContext(bgDispatcher) {
         try {
             val lspBalance = getDefaultLspBalance(clientBalance = 0u)
-            val fees = estimateOrderFee(spendingBalanceSats = 0u, receivingBalanceSats = lspBalance).getOrThrow()
+            val fees = estimateOrderFee(
+                spendingBalanceSats = 0u,
+                receivingBalanceSats = lspBalance,
+            ).getOrThrow()
 
             val minimum = (ceil(fees.feeSat.toDouble() * 1.1 / 1000) * 1000).toInt()
             _blocktankState.update { it.copy(minCjitSats = minimum) }
@@ -258,7 +267,10 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
-    suspend fun getOrder(orderId: String, refresh: Boolean = false): Result<IBtOrder?> = withContext(bgDispatcher) {
+    suspend fun getOrder(
+        orderId: String,
+        refresh: Boolean = false,
+    ): Result<IBtOrder?> = withContext(bgDispatcher) {
         try {
             if (refresh) {
                 refreshOrders()
@@ -307,7 +319,10 @@ class BlocktankRepo @Inject constructor(
 
         Logger.debug("getDefaultLspBalance - clientBalance: $clientBalance", context = TAG)
         Logger.debug("getDefaultLspBalance - maxLspBalance: $maxLspBalance", context = TAG)
-        Logger.debug("getDefaultLspBalance - defaultLspBalance: $defaultLspBalanceSats", context = TAG)
+        Logger.debug(
+            "getDefaultLspBalance - defaultLspBalance: $defaultLspBalanceSats",
+            context = TAG
+        )
 
         if (threshold1 == null || threshold2 == null || defaultLspBalanceSats == null) {
             Logger.error("Failed to get rates for lspBalance calculation", context = TAG)
