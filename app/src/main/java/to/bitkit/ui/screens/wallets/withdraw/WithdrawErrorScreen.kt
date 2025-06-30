@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.withdraw
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -64,16 +65,21 @@ fun WithDrawErrorScreen(
                 contentDescription = null
             )
 
-            Row {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__support),
                     onClick = onClickSupport,
-                    modifier = Modifier.testTag("support_button")
+                    fullWidth = false,
+                    modifier = Modifier.weight(1f).testTag("support_button"),
                 )
+
                 PrimaryButton(
                     text = stringResource(R.string.wallet__recipient_scan),
                     onClick = onClickScan,
-                    modifier = Modifier.testTag("scan_button")
+                    fullWidth = false,
+                    modifier = Modifier.weight(1f).testTag("scan_button")
                 )
             }
 
