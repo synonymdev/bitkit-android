@@ -326,9 +326,7 @@ class LightningConnectionsViewModel @Inject constructor(
         }
     }
 
-    fun clearTransactionDetails() {
-        _txDetails.value = null
-    }
+    fun clearTransactionDetails() = _txDetails.update { null }
 }
 
 data class LightningConnectionsUiState(

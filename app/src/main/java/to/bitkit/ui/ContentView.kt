@@ -120,6 +120,7 @@ import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.lightning.ChannelDetailScreen
+import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -918,6 +919,14 @@ private fun NavGraphBuilder.lightningConnections(
                 viewModel = viewModel,
             )
         }
+        composableWithDefaultTransitions<Routes.CloseConnection> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            CloseConnectionScreen(
+                navController = navController,
+                viewModel = viewModel,
+            )
+        }
     }
 }
 
@@ -1516,6 +1525,9 @@ object Routes {
 
     @Serializable
     data object ChannelDetail
+
+    @Serializable
+    data object CloseConnection
 
     @Serializable
     data object DevSettings

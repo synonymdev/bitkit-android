@@ -16,7 +16,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -54,6 +53,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
+import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
@@ -88,13 +88,6 @@ fun ChannelDetailScreen(
     val context = LocalContext.current
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
-
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.clearSelectedChannel()
-            viewModel.clearTransactionDetails()
-        }
-    }
 
     val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
     val channel = selectedChannel ?: return
@@ -149,9 +142,7 @@ fun ChannelDetailScreen(
                 context.startActivity(fallbackIntent)
             }
         },
-        onCloseConnection = {
-            // TODO: Implement close connection screen
-        },
+        onCloseConnection = { navController.navigate(Routes.CloseConnection) },
     )
 }
 

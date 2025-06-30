@@ -85,6 +85,7 @@ fun LightningConnectionsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.clearSelectedChannel()
+        viewModel.clearTransactionDetails()
     }
 
     Content(
