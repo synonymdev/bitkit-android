@@ -43,8 +43,8 @@ fun BoostTransactionSheet(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
             .gradientBackground()
+            .padding(horizontal = 16.dp)
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
