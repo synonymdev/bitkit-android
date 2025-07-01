@@ -327,6 +327,10 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     fun clearTransactionDetails() = _txDetails.update { null }
+
+    fun closeChannel() {
+        TODO("Not yet implemented")
+    }
 }
 
 data class LightningConnectionsUiState(
