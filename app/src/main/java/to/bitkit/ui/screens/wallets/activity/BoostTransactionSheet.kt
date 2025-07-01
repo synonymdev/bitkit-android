@@ -79,6 +79,7 @@ fun BoostTransactionSheet(
         BoostTransactionContent(
             modifier = modifier,
             feeSats = fee,
+            currentFee = item.v1.fee.toLong(),
             estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
             isEditMode = isEditMode,
             onClickEdit = {
@@ -106,6 +107,7 @@ fun BoostTransactionSheet(
 fun BoostTransactionContent(
     modifier: Modifier = Modifier,
     feeSats: Long,
+    currentFee: Long,
     estimateTime: String,
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
@@ -188,7 +190,7 @@ fun BoostTransactionContent(
                     icon = painterResource(R.drawable.ic_minus),
                     iconColor = Colors.Red,
                     backgroundColor = Colors.Red16,
-                    enable = feeSats > 0,
+                    enable = feeSats >= currentFee,
                     onClick = { onChangeAmount(false) },
                     contentDescription = "Reduce fee",
                 )
@@ -301,6 +303,7 @@ private fun Preview() {
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
             isEditMode = true,
+            currentFee = 4250,
             onConfirm = {},
         )
     }
@@ -312,6 +315,7 @@ private fun Preview2() {
     AppThemeSurface {
         BoostTransactionContent(
             feeSats = 4250L,
+            currentFee = 4250L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
@@ -327,7 +331,8 @@ private fun Preview2() {
 private fun Preview3() {
     AppThemeSurface {
         BoostTransactionContent(
-            feeSats = 0L,
+            feeSats = 3250L,
+            currentFee = 4250L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
