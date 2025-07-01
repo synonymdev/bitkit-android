@@ -295,11 +295,20 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String) {
+    suspend fun closeChannel(
+        userChannelId: String,
+        counterpartyNodeId: String,
+        force: Boolean = false,
+        forceCloseReason: String? = null,
+    ) {
         val node = this.node ?: throw ServiceError.NodeNotStarted
         try {
             ServiceQueue.LDK.background {
-                node.closeChannel(userChannelId, counterpartyNodeId)
+                if (force) {
+                    node.forceCloseChannel(userChannelId, counterpartyNodeId, reason = forceCloseReason.orEmpty())
+                } else {
+                    node.closeChannel(userChannelId, counterpartyNodeId)
+                }
             }
         } catch (e: NodeException) {
             throw LdkError(e)

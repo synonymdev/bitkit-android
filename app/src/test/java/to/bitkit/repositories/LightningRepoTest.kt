@@ -217,7 +217,7 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `closeChannel should succeed when node is running`() = test {
         startNodeForTesting()
-        whenever(lightningService.closeChannel(any(), any())).thenReturn(Unit)
+        whenever(lightningService.closeChannel(any(), any(), any(), anyOrNull())).thenReturn(Unit)
 
         val result = sut.closeChannel("channelId", "nodeId")
         assertTrue(result.isSuccess)
