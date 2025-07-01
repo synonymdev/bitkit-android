@@ -101,6 +101,13 @@ class ActivityDetailViewModel @Inject constructor(
         _boostSheetVisible.update { true }
     }
 
+    fun onDismissBoostSheet() {
+        _boostSheetVisible.update { false }
+    }
+    fun onConfirmBoost(feeSats: Long) {
+        _boostSheetVisible.update { false }
+    }
+
     private companion object {
         const val TAG = "ActivityDetailViewModel"
     }

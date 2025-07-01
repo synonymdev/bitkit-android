@@ -130,8 +130,8 @@ fun ActivityDetailScreen(
             (item as? Activity.Onchain)?.let {
                 BoostTransactionSheet(
                     modifier = Modifier.fillMaxWidth(),
-                    onConfirm = {},
-                    onDismiss = {},
+                    onConfirm = detailViewModel::onConfirmBoost,
+                    onDismiss = detailViewModel::onDismissBoostSheet,
                     item = it
                 )
             }
