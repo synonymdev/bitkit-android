@@ -60,6 +60,8 @@ fun SwipeToConfirm(
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Green,
     icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
+    endIcon: ImageVector = Icons.Default.Check,
+    endIconTint: Color = Colors.Black,
     loading: Boolean = false,
     confirmed: Boolean = false,
     onConfirm: () -> Unit,
@@ -178,9 +180,9 @@ fun SwipeToConfirm(
                             .alpha((panX.value - maxPanX / 2) / (maxPanX / 2) - loadingOpacity.value)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Check,
+                            imageVector = endIcon,
                             contentDescription = null,
-                            tint = Color.Black,
+                            tint = endIconTint,
                             modifier = Modifier.align(Alignment.Center)
                         )
                     }
