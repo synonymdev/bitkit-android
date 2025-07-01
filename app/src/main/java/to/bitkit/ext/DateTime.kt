@@ -44,4 +44,5 @@ object DatePattern {
     const val ACTIVITY_ROW_DATE_YEAR = "MMMM d yyyy, HH:mm"
     const val ACTIVITY_TIME = "h:mm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
+    const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
 }

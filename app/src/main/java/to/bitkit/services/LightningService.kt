@@ -188,7 +188,7 @@ class LightningService @Inject constructor(
     //     runCatching {
     //         for (channel in node.listChannels()) {
     //             val config = channel.config
-    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
+    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL * 1000u)
     //             node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
     //             Logger.info("Updated channel config for: ${channel.userChannelId}")
     //         }

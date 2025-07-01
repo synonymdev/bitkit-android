@@ -34,9 +34,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.rawId
 import to.bitkit.ext.totalValue
@@ -55,6 +53,7 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
+import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
 import to.bitkit.utils.TxDetails
@@ -275,11 +274,7 @@ private fun handleExploreClick(
     onchain: Activity.Onchain,
 ): () -> Unit {
     val context = LocalContext.current
-    val baseUrl = when (Env.network) {
-        Network.TESTNET -> "https://mempool.space/testnet"
-        else -> "https://mempool.space"
-    }
-    val url = "$baseUrl/tx/${onchain.v1.txId}"
+    val url = getBlockExplorerUrl(onchain.v1.txId)
     val intent = Intent(Intent.ACTION_VIEW, url.toUri())
 
     return { context.startActivity(intent) }

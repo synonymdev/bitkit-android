@@ -34,8 +34,8 @@ class LogsRepo @Inject constructor(
                 message = ChatwootMessage(
                     email = email,
                     message = message,
-                    platform = "${Env.PLATFORM} ${Env.androidSDKVersion}",
-                    version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
+                    platform = Env.platform,
+                    version = Env.version,
                     logs = logsBase64,
                     logsFileName = logsFileName,
                 )

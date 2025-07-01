@@ -96,11 +96,21 @@ data class TxOutput(
     val n: Int? = null,
 )
 
+@Suppress("PropertyName")
+@Serializable
+data class TxStatus(
+    val confirmed: Boolean,
+    val block_height: Int? = null,
+    val block_hash: String? = null,
+    val block_time: Long? = null,
+)
+
 @Serializable
 data class TxDetails(
     val txid: String,
     val vin: List<TxInput>,
     val vout: List<TxOutput>,
+    val status: TxStatus,
 )
 
 sealed class AddressCheckerError(message: String? = null) : AppError(message) {
