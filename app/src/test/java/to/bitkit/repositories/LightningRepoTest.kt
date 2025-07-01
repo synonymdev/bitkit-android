@@ -17,6 +17,7 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
@@ -210,7 +211,7 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `closeChannel should fail when node is not running`() = test {
-        val result = sut.closeChannel("channelId", "nodeId")
+        val result = sut.closeChannel(createChannelDetails())
         assertTrue(result.isFailure)
     }
 
@@ -219,7 +220,7 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         whenever(lightningService.closeChannel(any(), any(), any(), anyOrNull())).thenReturn(Unit)
 
-        val result = sut.closeChannel("channelId", "nodeId")
+        val result = sut.closeChannel(createChannelDetails())
         assertTrue(result.isSuccess)
     }
 

@@ -287,12 +287,8 @@ class WalletViewModel @Inject constructor(
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.closeChannel(
-                channel.userChannelId,
-                channel.counterpartyNodeId
-            ).onFailure {
-                ToastEventBus.send(it)
-            }
+            lightningRepo.closeChannel(channel)
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
