@@ -1,10 +1,14 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -13,7 +17,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
@@ -61,15 +64,31 @@ fun BoostTransactionSheet(
 
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                BodySSB(text = "±10-20 minutes", color = Colors.White64) //TODO IMPLEMENT CALC
+                BodySSB(text = "±10-20 minutes", color = Colors.White64) //TODO IMPLEMENT TIME CONFIRMATION CALC
             }
 
-            Column(horizontalAlignment = Alignment.End) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.clickable {}, //TODO IMPLEMENT
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    BodyMSB(
+                        text = rememberMoneyText(sats = item.totalValue().toLong())
+                            .orEmpty()
+                            .withAccent(defaultColor = Colors.White).toString(),
+                        color = Colors.White
+                    )
 
-                BodyMSB(
-                    text = rememberMoneyText(sats = item.totalValue().toLong()).orEmpty().withAccent(defaultColor = Colors.White).toString(),
-                    color = Colors.White
-                ) //TODO ICON
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pencil_simple),
+                        tint = Colors.White,
+                        contentDescription = stringResource(R.string.common__edit),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
 
                 BodySSB(
                     text = rememberMoneyText(
