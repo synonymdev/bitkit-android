@@ -77,7 +77,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.TxDetails
-import to.bitkit.viewmodels.MainUiState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -194,121 +193,109 @@ private fun Content(
                     .navigationBarsPadding()
             ) {
                 // Channel Display Section
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 32.dp)
-                ) {
-                    VerticalSpacer(16.dp)
-                    LightningChannel(
-                        capacity = capacity,
-                        localBalance = localBalance,
-                        remoteBalance = remoteBalance,
-                        status = getChannelStatus(channel, blocktankOrder),
-                    )
-                }
+                VerticalSpacer(16.dp)
+                LightningChannel(
+                    capacity = capacity,
+                    localBalance = localBalance,
+                    remoteBalance = remoteBalance,
+                    status = getChannelStatus(channel, blocktankOrder),
+                )
+                VerticalSpacer(32.dp)
                 HorizontalDivider()
 
                 // Status Section
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    SectionTitle(stringResource(R.string.lightning__status))
-                    ChannelStatusView(
-                        channel = channel,
-                        blocktankOrder = blocktankOrder,
-                    )
-                }
+                SectionTitle(stringResource(R.string.lightning__status))
+                ChannelStatusView(
+                    channel = channel,
+                    blocktankOrder = blocktankOrder,
+                )
+                VerticalSpacer(16.dp)
                 HorizontalDivider()
 
                 // Order Details Section
                 if (order != null) {
-                    Column {
-                        SectionTitle(stringResource(R.string.lightning__order_details))
+                    SectionTitle(stringResource(R.string.lightning__order_details))
 
-                        val orderId = when (order) {
-                            is IBtOrder -> order.id
-                            is IcJitEntry -> order.id
-                            else -> ""
-                        }
-                        val createdAt = when (order) {
-                            is IBtOrder -> order.createdAt
-                            is IcJitEntry -> order.createdAt
-                            else -> ""
-                        }
+                    val orderId = when (order) {
+                        is IBtOrder -> order.id
+                        is IcJitEntry -> order.id
+                        else -> ""
+                    }
+                    val createdAt = when (order) {
+                        is IBtOrder -> order.createdAt
+                        is IcJitEntry -> order.createdAt
+                        else -> ""
+                    }
 
+                    SectionRow(
+                        name = stringResource(R.string.lightning__order),
+                        valueContent = {
+                            CaptionB(
+                                text = orderId,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                textAlign = TextAlign.End,
+                            )
+                        },
+                        onClick = { onCopyText(orderId) }
+                    )
+
+                    SectionRow(
+                        name = stringResource(R.string.lightning__created_on),
+                        valueContent = {
+                            CaptionB(text = formatDate(createdAt))
+                        }
+                    )
+
+                    // Order expiry for pending blocktank orders only
+                    if (blocktankOrder != null &&
+                        (blocktankOrder.state2 == BtOrderState2.CREATED || blocktankOrder.state2 == BtOrderState2.PAID)
+                    ) {
                         SectionRow(
-                            name = stringResource(R.string.lightning__order),
+                            name = stringResource(R.string.lightning__order_expiry),
+                            valueContent = {
+                                CaptionB(text = formatDate(blocktankOrder.orderExpiresAt))
+                            }
+                        )
+                    }
+
+                    // Transaction details if available
+                    val fundingTxId = when (order) {
+                        is IBtOrder -> order.channel?.fundingTx?.id
+                        is IcJitEntry -> order.channel?.fundingTx?.id
+                        else -> null
+                    }
+                    fundingTxId?.let { txId ->
+                        SectionRow(
+                            name = stringResource(R.string.lightning__transaction),
                             valueContent = {
                                 CaptionB(
-                                    text = orderId,
+                                    text = txId,
                                     maxLines = 1,
                                     overflow = TextOverflow.MiddleEllipsis,
                                     textAlign = TextAlign.End,
                                 )
                             },
-                            onClick = { onCopyText(orderId) }
-                        )
-
-                        SectionRow(
-                            name = stringResource(R.string.lightning__created_on),
-                            valueContent = {
-                                CaptionB(text = formatDate(createdAt))
+                            onClick = {
+                                onCopyText(txId)
+                                onOpenUrl(getBlockExplorerUrl(txId))
                             }
                         )
+                    }
 
-                        // Order expiry for pending blocktank orders only
-                        if (blocktankOrder != null &&
-                            (blocktankOrder.state2 == BtOrderState2.CREATED || blocktankOrder.state2 == BtOrderState2.PAID)
-                        ) {
-                            SectionRow(
-                                name = stringResource(R.string.lightning__order_expiry),
-                                valueContent = {
-                                    CaptionB(text = formatDate(blocktankOrder.orderExpiresAt))
-                                }
-                            )
-                        }
-
-                        // Transaction details if available
-                        val fundingTxId = when (order) {
-                            is IBtOrder -> order.channel?.fundingTx?.id
-                            is IcJitEntry -> order.channel?.fundingTx?.id
-                            else -> null
-                        }
-                        fundingTxId?.let { txId ->
-                            SectionRow(
-                                name = stringResource(R.string.lightning__transaction),
-                                valueContent = {
-                                    CaptionB(
-                                        text = txId,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.MiddleEllipsis,
-                                        textAlign = TextAlign.End,
-                                    )
-                                },
-                                onClick = {
-                                    onCopyText(txId)
-                                    onOpenUrl(getBlockExplorerUrl(txId))
-                                }
-                            )
-                        }
-
-                        // Order fee
-                        val orderFee = when (order) {
-                            is IBtOrder -> order.feeSat - order.clientBalanceSat
-                            is IcJitEntry -> order.feeSat
-                            else -> 0u
-                        }
-                        if (orderFee > 0u) {
-                            SectionRow(
-                                name = stringResource(R.string.lightning__order_fee),
-                                valueContent = {
-                                    MoneyCaptionB(sats = orderFee.toLong(), symbol = true)
-                                }
-                            )
-                        }
+                    // Order fee
+                    val orderFee = when (order) {
+                        is IBtOrder -> order.feeSat - order.clientBalanceSat
+                        is IcJitEntry -> order.feeSat
+                        else -> 0u
+                    }
+                    if (orderFee > 0u) {
+                        SectionRow(
+                            name = stringResource(R.string.lightning__order_fee),
+                            valueContent = {
+                                MoneyCaptionB(sats = orderFee.toLong(), symbol = true)
+                            }
+                        )
                     }
                 }
 
