@@ -56,9 +56,9 @@ import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatted
 import to.bitkit.models.LnPeer
+import to.bitkit.ui.components.InfoTextField
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.components.InfoTextField
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.WalletViewModel
 import java.text.NumberFormat
@@ -70,6 +70,7 @@ fun NodeStateScreen(
     navController: NavController,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     ScreenColumn {
         AppTopBar(
             stringResource(R.string.settings__adv__lightning_node),
@@ -104,7 +105,7 @@ fun NodeStateScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    uiState.nodeStatus?.let {
+                    uiState.nodeStatus?.let { status ->
                         Row {
                             Text(
                                 text = "Ready:",
@@ -112,7 +113,7 @@ fun NodeStateScreen(
                             )
                             Spacer(modifier = Modifier.weight(1f))
                             Text(
-                                text = if (it.isRunning) "✅" else "⏳",
+                                text = if (status.isRunning) "✅" else "⏳",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -122,7 +123,7 @@ fun NodeStateScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Spacer(modifier = Modifier.weight(1f))
-                            val lastSyncTime = it.latestLightningWalletSyncTimestamp
+                            val lastSyncTime = status.latestLightningWalletSyncTimestamp
                                 ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
                                 ?: "Never"
                             Text(
@@ -136,7 +137,7 @@ fun NodeStateScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Spacer(modifier = Modifier.weight(1f))
-                            val lastSyncTime = it.latestOnchainWalletSyncTimestamp
+                            val lastSyncTime = status.latestOnchainWalletSyncTimestamp
                                 ?.let { Instant.ofEpochSecond(it.toLong()).formatted() }
                                 ?: "Never"
                             Text(
@@ -151,7 +152,7 @@ fun NodeStateScreen(
                             )
                             Spacer(modifier = Modifier.weight(1f))
                             Text(
-                                text = "${it.currentBestBlock.height}",
+                                text = "${status.currentBestBlock.height}",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -335,11 +336,11 @@ private fun Peers(
         peers.forEach {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Companion.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(16.dp)
             ) {
                 Box(
-                    modifier = Modifier.Companion
+                    modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
                         .background(color = Colors.Green)
@@ -347,7 +348,7 @@ private fun Peers(
                 Text(
                     text = "${it.nodeId.ellipsisMiddle(25)}@${it.address}",
                     style = MaterialTheme.typography.labelSmall,
-                    overflow = TextOverflow.Companion.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                     maxLines = 1,
                     modifier = Modifier.weight(1f)
                 )
@@ -514,7 +515,7 @@ private fun CopyToClipboardButton(text: String) {
         Icon(
             imageVector = Icons.Default.ContentCopy,
             contentDescription = null,
-            modifier = Modifier.Companion.size(16.dp),
+            modifier = Modifier.size(16.dp),
         )
     }
 }

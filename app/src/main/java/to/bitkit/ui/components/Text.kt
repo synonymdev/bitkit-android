@@ -274,8 +274,7 @@ fun BodySSB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
-
-    ) {
+) {
     BodySSB(
         text = AnnotatedString(text),
         color = color,
@@ -378,6 +377,25 @@ fun Caption(
 @Composable
 fun CaptionB(
     text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+) {
+    CaptionB(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        color = color,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+    )
+}
+
+@Composable
+fun CaptionB(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,

@@ -120,6 +120,7 @@ import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.lightning.ChannelDetailScreen
+import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -483,8 +484,8 @@ private fun RootNavHost(
             }
             composable<Routes.SavingsProgress> {
                 SavingsProgressScreen(
-                    onContinueClick = { navController.navigateToHome() },
-                    onCloseClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.SpendingIntro> {
@@ -533,8 +534,8 @@ private fun RootNavHost(
             composable<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
-                    onCloseClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateToHome() },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.Funding> {
@@ -610,8 +611,8 @@ private fun RootNavHost(
                 }
                 composable<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
-                        onContinue = { navController.navigateToHome() },
-                        onClose = { navController.navigateToHome() },
+                        onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onClose = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     )
                 }
                 composable<Routes.ExternalFeeCustom> {
@@ -914,6 +915,14 @@ private fun NavGraphBuilder.lightningConnections(
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
             val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
             ChannelDetailScreen(
+                navController = navController,
+                viewModel = viewModel,
+            )
+        }
+        composableWithDefaultTransitions<Routes.CloseConnection> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            CloseConnectionScreen(
                 navController = navController,
                 viewModel = viewModel,
             )
@@ -1516,6 +1525,9 @@ object Routes {
 
     @Serializable
     data object ChannelDetail
+
+    @Serializable
+    data object CloseConnection
 
     @Serializable
     data object DevSettings
