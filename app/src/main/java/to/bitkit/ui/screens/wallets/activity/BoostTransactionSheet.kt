@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,20 +51,25 @@ fun BoostTransactionSheet(
 ) {
 
     var isDefaultFee by remember { mutableStateOf(false) }
+    var fee by remember { mutableLongStateOf(item.v1.fee.toLong()) }
 
     BoostTransactionContent(
         modifier = modifier,
-        sats = item.v1.fee.toLong(),
+        sats = fee,
         estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-        isDefaultFee = isDefaultFee,
+        isDefaultFee = item.v1.fee.toLong() == fee,
         onClickEdit = {
             isDefaultFee = !isDefaultFee
         },
         onClickUseSuggestedFee = {
-
+            fee = item.v1.fee.toLong()
         },
         onChangeAmount = { increase ->
-
+            if (increase) {
+                fee++
+            } else {
+                fee--
+            }
         },
     )
 }
@@ -139,10 +150,20 @@ fun BoostTransactionContent(
 
             VerticalSpacer(68.dp)
         } else {
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+
+                QuantityIcon(
+                    icon = painterResource(R.drawable.ic_minus),
+                    iconColor = Colors.Red,
+                    backgroundColor = Colors.Red16,
+                    enable = sats > 0,
+                    onClick = { onChangeAmount(false) },
+                    contentDescription = "Reduce fee",
+                )
+
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -172,6 +193,15 @@ fun BoostTransactionContent(
                         )
                     }
                 }
+
+                QuantityIcon(
+                    icon = painterResource(R.drawable.ic_plus),
+                    iconColor = Colors.Green,
+                    backgroundColor = Colors.Green16,
+                    enable = true,
+                    onClick = { onChangeAmount(true) },
+                    contentDescription = "Increase fee",
+                )
             }
 
             VerticalSpacer(16.dp)
@@ -201,6 +231,38 @@ fun BoostTransactionContent(
     }
 }
 
+@Composable
+fun QuantityIcon(
+    icon: Painter,
+    iconColor: Color,
+    backgroundColor: Color,
+    enable: Boolean = true,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enable,
+        colors = IconButtonDefaults.iconButtonColors().copy(
+            containerColor = backgroundColor,
+            contentColor = iconColor,
+            disabledContainerColor = Colors.Gray3,
+            disabledContentColor = Colors.Gray1
+        ),
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+    ) {
+        Icon(
+            painter = icon,
+            contentDescription = contentDescription,
+            tint = if (enable) iconColor else Colors.Gray1,
+            modifier = Modifier.size(12.dp),
+        )
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun Preview() {
@@ -222,6 +284,21 @@ private fun Preview2() {
     AppThemeSurface {
         BoostTransactionContent(
             sats = 4250L,
+            estimateTime = "±10-20 minutes",
+            onClickEdit = {},
+            onClickUseSuggestedFee = {},
+            onChangeAmount = {},
+            isDefaultFee = false
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview3() {
+    AppThemeSurface {
+        BoostTransactionContent(
+            sats = 0L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
