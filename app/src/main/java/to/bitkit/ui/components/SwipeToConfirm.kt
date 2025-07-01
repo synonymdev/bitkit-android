@@ -1,5 +1,6 @@
  package to.bitkit.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,7 +62,7 @@ fun SwipeToConfirm(
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Green,
     icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
-    endIcon: ImageVector = Icons.Default.Check,
+    @DrawableRes endIcon: Int = R.drawable.ic_check,
     endIconTint: Color = Colors.Black,
     loading: Boolean = false,
     confirmed: Boolean = false,
@@ -180,7 +182,7 @@ fun SwipeToConfirm(
                             .alpha((panX.value - maxPanX / 2) / (maxPanX / 2) - loadingOpacity.value)
                     ) {
                         Icon(
-                            imageVector = endIcon,
+                            painter = painterResource(endIcon),
                             contentDescription = null,
                             tint = endIconTint,
                             modifier = Modifier.align(Alignment.Center)
