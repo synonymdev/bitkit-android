@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -22,6 +23,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -80,6 +82,19 @@ fun BoostTransactionSheet(
         }
 
         VerticalSpacer(68.dp)
+
+        SwipeToConfirm(
+            text = stringResource(R.string.wallet__boost_swipe),
+            color = Colors.Yellow,
+            endIcon = R.drawable.ic_timer_alt_yellow,
+            endIconTint = Color.Unspecified,
+            onConfirm = {
+
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        VerticalSpacer(8.dp)
     }
 }
 
