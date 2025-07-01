@@ -55,7 +55,7 @@ fun BoostTransactionSheet(
 
     BoostTransactionContent(
         modifier = modifier,
-        sats = fee,
+        feeSats = fee,
         estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
         isDefaultFee = item.v1.fee.toLong() == fee,
         onClickEdit = {
@@ -77,7 +77,7 @@ fun BoostTransactionSheet(
 @Composable
 fun BoostTransactionContent(
     modifier: Modifier = Modifier,
-    sats: Long,
+    feeSats: Long,
     estimateTime: String,
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
@@ -124,7 +124,7 @@ fun BoostTransactionContent(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         BodyMSB(
-                            text = rememberMoneyText(sats = sats)
+                            text = rememberMoneyText(sats = feeSats)
                                 .orEmpty()
                                 .withAccent(defaultColor = Colors.White).toString(),
                             color = Colors.White
@@ -140,7 +140,7 @@ fun BoostTransactionContent(
 
                     BodySSB(
                         text = rememberMoneyText(
-                            sats = sats,
+                            sats = feeSats,
                             reversed = true
                         ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                         color = Colors.White64
@@ -159,7 +159,7 @@ fun BoostTransactionContent(
                     icon = painterResource(R.drawable.ic_minus),
                     iconColor = Colors.Red,
                     backgroundColor = Colors.Red16,
-                    enable = sats > 0,
+                    enable = feeSats > 0,
                     onClick = { onChangeAmount(false) },
                     contentDescription = "Reduce fee",
                 )
@@ -170,7 +170,7 @@ fun BoostTransactionContent(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     BodyMSB(
-                        text = rememberMoneyText(sats = sats)
+                        text = rememberMoneyText(sats = feeSats)
                             .orEmpty()
                             .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
                         color = Colors.White
@@ -181,7 +181,7 @@ fun BoostTransactionContent(
                     ) {
                         BodySSB(
                             text = rememberMoneyText(
-                                sats = sats,
+                                sats = feeSats,
                                 reversed = true
                             ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                             color = Colors.White64
@@ -268,7 +268,7 @@ fun QuantityIcon(
 private fun Preview() {
     AppThemeSurface {
         BoostTransactionContent(
-            sats = 4250L,
+            feeSats = 4250L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
@@ -283,7 +283,7 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         BoostTransactionContent(
-            sats = 4250L,
+            feeSats = 4250L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
@@ -298,7 +298,7 @@ private fun Preview2() {
 private fun Preview3() {
     AppThemeSurface {
         BoostTransactionContent(
-            sats = 0L,
+            feeSats = 0L,
             estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
