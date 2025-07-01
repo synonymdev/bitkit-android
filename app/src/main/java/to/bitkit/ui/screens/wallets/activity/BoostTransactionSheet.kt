@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -18,10 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.OnchainActivity
-import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.totalValue
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -39,6 +40,36 @@ import to.bitkit.ui.utils.withAccent
 fun BoostTransactionSheet(
     modifier: Modifier = Modifier,
     item: Activity.Onchain,
+) {
+
+    var isCustomFee by remember { mutableStateOf(false) }
+
+    BoostTransactionContent(
+        modifier = modifier,
+        sats = item.v1.fee.toLong(),
+        estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
+        isCustomFee = isCustomFee,
+        onClickEdit = {
+            isCustomFee = !isCustomFee
+        },
+        onClickUseSuggestedFee = {
+
+        },
+        onChangeAmount = { increase ->
+
+        },
+    )
+}
+
+@Composable
+fun BoostTransactionContent(
+    modifier: Modifier = Modifier,
+    sats: Long,
+    estimateTime: String,
+    onClickEdit: () -> Unit,
+    onClickUseSuggestedFee: () -> Unit,
+    onChangeAmount: (Boolean) -> Unit,
+    isCustomFee: Boolean,
 ) {
     Column(
         modifier = modifier
@@ -64,19 +95,19 @@ fun BoostTransactionSheet(
 
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                BodySSB(text = "±10-20 minutes", color = Colors.White64) //TODO IMPLEMENT TIME CONFIRMATION CALC
+                BodySSB(text = estimateTime, color = Colors.White64)
             }
 
             Column(
                 horizontalAlignment = Alignment.End,
-                modifier = Modifier.clickable {}, //TODO IMPLEMENT
+                modifier = Modifier.clickable { onClickEdit() },
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     BodyMSB(
-                        text = rememberMoneyText(sats = item.totalValue().toLong())
+                        text = rememberMoneyText(sats = sats)
                             .orEmpty()
                             .withAccent(defaultColor = Colors.White).toString(),
                         color = Colors.White
@@ -92,7 +123,7 @@ fun BoostTransactionSheet(
 
                 BodySSB(
                     text = rememberMoneyText(
-                        sats = item.totalValue().toLong(),
+                        sats = sats,
                         reversed = true
                     ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                     color = Colors.White64
@@ -121,28 +152,28 @@ fun BoostTransactionSheet(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        BoostTransactionSheet(
-            item = Activity.Onchain(
-                v1 = OnchainActivity(
-                    id = "test-onchain-1",
-                    txType = PaymentType.RECEIVED,
-                    txId = "abc123",
-                    value = 100000UL,
-                    fee = 500UL,
-                    feeRate = 8UL,
-                    address = "bc1...",
-                    confirmed = true,
-                    timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
-                    isBoosted = false,
-                    isTransfer = false,
-                    doesExist = true,
-                    confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    channelId = null,
-                    transferTxId = null,
-                    createdAt = null,
-                    updatedAt = null,
-                )
-            ),
+        BoostTransactionContent(
+            sats = 4250L,
+            estimateTime = "±10-20 minutes",
+            onClickEdit = {},
+            onClickUseSuggestedFee = {},
+            onChangeAmount = {},
+            isCustomFee = false
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        BoostTransactionContent(
+            sats = 4250L,
+            estimateTime = "±10-20 minutes",
+            onClickEdit = {},
+            onClickUseSuggestedFee = {},
+            onChangeAmount = {},
+            isCustomFee = true
         )
     }
 }
