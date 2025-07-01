@@ -305,7 +305,7 @@ class LightningService @Inject constructor(
         try {
             ServiceQueue.LDK.background {
                 if (force) {
-                    node.forceCloseChannel(userChannelId, counterpartyNodeId, reason = forceCloseReason.orEmpty())
+                    node.forceCloseChannel(userChannelId, counterpartyNodeId, forceCloseReason.orEmpty())
                 } else {
                     node.closeChannel(userChannelId, counterpartyNodeId)
                 }

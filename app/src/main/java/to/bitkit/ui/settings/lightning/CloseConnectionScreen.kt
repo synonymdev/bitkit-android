@@ -22,7 +22,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.Routes
@@ -41,7 +40,7 @@ import to.bitkit.ui.utils.withAccentBoldBright
 @Composable
 fun CloseConnectionScreen(
     navController: NavController,
-    viewModel: LightningConnectionsViewModel = hiltViewModel(),
+    viewModel: LightningConnectionsViewModel,
 ) {
     val uiState by viewModel.closeConnectionUiState.collectAsState()
 
@@ -110,7 +109,7 @@ private fun Content(
                     onClick = onBack,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("cancel_button"),
+                        .testTag("cancel_button")
                 )
 
                 PrimaryButton(

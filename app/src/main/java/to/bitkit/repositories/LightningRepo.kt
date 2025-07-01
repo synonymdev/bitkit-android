@@ -423,7 +423,7 @@ class LightningRepo @Inject constructor(
             userChannelId = channel.userChannelId,
             counterpartyNodeId = channel.counterpartyNodeId,
             force = force,
-            forceCloseReason = forceCloseReason
+            forceCloseReason = forceCloseReason,
         )
         syncState()
         Result.success(Unit)
