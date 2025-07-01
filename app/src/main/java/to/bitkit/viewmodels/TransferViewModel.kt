@@ -293,8 +293,7 @@ class TransferViewModel @Inject constructor(
             channels.map { channel ->
                 async {
                     try {
-                        Logger.info("Closing channel: ${channel.channelId}")
-                        lightningRepo.closeChannel(channel.userChannelId, channel.counterpartyNodeId)
+                        lightningRepo.closeChannel(channel).getOrThrow()
                         null
                     } catch (e: Throwable) {
                         Logger.error("Error closing channel: ${channel.channelId}", e)

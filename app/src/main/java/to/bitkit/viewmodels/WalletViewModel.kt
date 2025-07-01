@@ -176,9 +176,9 @@ class WalletViewModel @Inject constructor(
 
     fun refreshState() {
         viewModelScope.launch {
-            lightningRepo.sync()
+            walletRepo.syncNodeAndWallet()
                 .onFailure { error ->
-                    Logger.error("Failed to sync: ${error.message}", error)
+                    Logger.error("Failed to refresh state: ${error.message}", error)
                     ToastEventBus.send(error)
                 }
         }
@@ -188,13 +188,11 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             walletRepo.syncNodeAndWallet()
-                .onSuccess {
-                    _uiState.update { it.copy(isRefreshing = false) }
-                }
                 .onFailure { error ->
+                    Logger.error("Failed to refresh state: ${error.message}", error)
                     ToastEventBus.send(error)
-                    _uiState.update { it.copy(isRefreshing = false) }
                 }
+            _uiState.update { it.copy(isRefreshing = false) }
         }
     }
 
@@ -287,12 +285,8 @@ class WalletViewModel @Inject constructor(
 
     fun closeChannel(channel: ChannelDetails) {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.closeChannel(
-                channel.userChannelId,
-                channel.counterpartyNodeId
-            ).onFailure {
-                ToastEventBus.send(it)
-            }
+            lightningRepo.closeChannel(channel)
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 

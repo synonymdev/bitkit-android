@@ -25,12 +25,15 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.Toast
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.filterOpen
 import to.bitkit.services.filterPending
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TxDetails
@@ -47,6 +50,7 @@ class LightningConnectionsViewModel @Inject constructor(
     private val logsRepo: LogsRepo,
     private val addressChecker: AddressChecker,
     private val ldkNodeEventBus: LdkNodeEventBus,
+    private val walletRepo: WalletRepo,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
@@ -57,6 +61,9 @@ class LightningConnectionsViewModel @Inject constructor(
 
     private val _txDetails = MutableStateFlow<TxDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
+
+    private val _closeConnectionUiState = MutableStateFlow(CloseConnectionUiState())
+    val closeConnectionUiState = _closeConnectionUiState.asStateFlow()
 
     init {
         observeState()
@@ -327,6 +334,56 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     fun clearTransactionDetails() = _txDetails.update { null }
+
+    fun clearCloseConnectionState() {
+        _closeConnectionUiState.update { CloseConnectionUiState() }
+    }
+
+    fun closeChannel() {
+        val channel = _selectedChannel.value?.details ?: run {
+            val error = IllegalStateException("No channel selected for closing")
+            Logger.error(error.message, e = error, context = TAG)
+            throw error
+        }
+
+        viewModelScope.launch {
+            _closeConnectionUiState.update { it.copy(isLoading = true) }
+
+            lightningRepo.closeChannel(channel).fold(
+                onSuccess = {
+                    walletRepo.syncNodeAndWallet()
+
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = application.getString(R.string.lightning__close_success_title),
+                        description = application.getString(R.string.lightning__close_success_msg),
+                    )
+
+                    _closeConnectionUiState.update {
+                        it.copy(
+                            isLoading = false,
+                            closeSuccess = true,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    Logger.error("Failed to close channel", e = error, context = TAG)
+
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = application.getString(R.string.lightning__close_error),
+                        description = application.getString(R.string.lightning__close_error_msg),
+                    )
+
+                    _closeConnectionUiState.update { it.copy(isLoading = false) }
+                }
+            )
+        }
+    }
+
+    companion object {
+        private const val TAG = "LightningConnectionsViewModel"
+    }
 }
 
 data class LightningConnectionsUiState(
@@ -342,4 +399,9 @@ data class LightningConnectionsUiState(
 data class ChannelUi(
     val name: String,
     val details: ChannelDetails,
+)
+
+data class CloseConnectionUiState(
+    val isLoading: Boolean = false,
+    val closeSuccess: Boolean = false,
 )
