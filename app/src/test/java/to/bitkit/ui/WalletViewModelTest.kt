@@ -193,13 +193,6 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `stopIfNeeded should call lightningRepo stop`() = test {
-        sut.stopIfNeeded()
-
-        verify(lightningRepo).stop()
-    }
-
-    @Test
     fun `addTagToSelected should call walletRepo addTagToSelected`() = test {
         sut.addTagToSelected("test_tag")
 

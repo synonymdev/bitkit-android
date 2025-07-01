@@ -144,6 +144,7 @@ class CoreService @Inject constructor(
     suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
 
     // TODO this is business logic, should be moved to the domain layer in the future
+    // TODO this spams network calls too often, it needs a caching mechanism
     suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalNode()
 }
 

@@ -365,12 +365,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun stopIfNeeded() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.stop()
-        }
-    }
-
     fun addTagToSelected(newTag: String) {
         viewModelScope.launch(bgDispatcher) {
             walletRepo.addTagToSelected(newTag)

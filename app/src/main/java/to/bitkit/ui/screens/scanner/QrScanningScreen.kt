@@ -4,7 +4,6 @@ package to.bitkit.ui.screens.scanner
 
 import android.Manifest
 import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -71,12 +70,29 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
 
+const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
+const val SCAN_RESULT_KEY = "SCAN_RESULT"
+
 @Composable
 fun QrScanningScreen(
     navController: NavController,
     onScanSuccess: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
+
+    // Check if this scanner was opened for result
+    val backStackEntry = navController.previousBackStackEntry
+    val isCalledForResult = backStackEntry?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
+
+    val onScan: (String) -> Unit = if (isCalledForResult) {
+        { qrCode ->
+            backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
+            backStackEntry.savedStateHandle[SCAN_RESULT_KEY] = qrCode
+            navController.popBackStack()
+        }
+    } else {
+        onScanSuccess
+    }
 
     // TODO maybe replace & drop accompanist permissions
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
@@ -111,12 +127,12 @@ fun QrScanningScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
+            uri?.let { processImageFromGallery(context, it, onScan, onError = { e -> app.toast(e) }) }
         }
     )
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { processImageFromGallery(context, it, onScanSuccess, onError = { e -> app.toast(e) }) }
+        uri?.let { processImageFromGallery(context, it, onScan, onError = { e -> app.toast(e) }) }
     }
 
     LaunchedEffect(lensFacing) {
@@ -126,7 +142,7 @@ fun QrScanningScreen(
                 if (result.isSuccess) {
                     val qrCode = requireNotNull(result.getOrNull())
                     Logger.debug("Scan success: $qrCode")
-                    onScanSuccess(qrCode)
+                    onScan(qrCode)
                 } else {
                     val error = requireNotNull(result.exceptionOrNull())
                     Logger.error("Failed to scan QR code", error)
@@ -188,7 +204,7 @@ fun QrScanningScreen(
                             if (clipData.itemCount > 0) {
                                 val text = clipData.getItemAt(0).text.toString()
                                 if (text.isNotBlank()) {
-                                    onScanSuccess(text)
+                                    onScan(text)
                                 } else {
                                     app.toast(Exception("Clipboard is empty or doesn't contain text"))
                                 }
