@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -83,41 +84,57 @@ fun ActivityDetailScreen(
     val copyToastTitle = stringResource(R.string.common__copied)
 
     val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+    val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
         detailViewModel.setActivity(item)
     }
 
-    Column(
-        modifier = Modifier.background(Colors.Black)
+    Box(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        AppTopBar(
-            titleText = stringResource(item.getScreenTitleRes()),
-            onBackClick = onBackClick,
-            actions = { CloseNavIcon(onClick = onCloseClick) },
-        )
-        ActivityDetailContent(
-            item = item,
-            tags = tags,
-            onRemoveTag = { detailViewModel.removeTag(it) },
-            onAddTagClick = { showAddTagSheet = true },
-            onExploreClick = onExploreClick,
-            onCopy = { text ->
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = copyToastTitle,
-                    description = text.ellipsisMiddle(40)
-                )
-            },
-            onClickBoost = detailViewModel::onClickBoost
-        )
-        if (showAddTagSheet) {
-            ActivityAddTagSheet(
-                listViewModel = listViewModel,
-                activityViewModel = detailViewModel,
-                onDismiss = { showAddTagSheet = false },
+        Column(
+            modifier = Modifier.background(Colors.Black)
+        ) {
+            AppTopBar(
+                titleText = stringResource(item.getScreenTitleRes()),
+                onBackClick = onBackClick,
+                actions = { CloseNavIcon(onClick = onCloseClick) },
             )
+            ActivityDetailContent(
+                item = item,
+                tags = tags,
+                onRemoveTag = { detailViewModel.removeTag(it) },
+                onAddTagClick = { showAddTagSheet = true },
+                onExploreClick = onExploreClick,
+                onCopy = { text ->
+                    app.toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = copyToastTitle,
+                        description = text.ellipsisMiddle(40)
+                    )
+                },
+                onClickBoost = detailViewModel::onClickBoost
+            )
+            if (showAddTagSheet) {
+                ActivityAddTagSheet(
+                    listViewModel = listViewModel,
+                    activityViewModel = detailViewModel,
+                    onDismiss = { showAddTagSheet = false },
+                )
+            }
+        }
+
+        if (boostSheetVisible) {
+            (item as? Activity.Onchain)?.let {
+                BoostTransactionSheet(
+                    modifier = Modifier.fillMaxWidth(),
+                    onConfirm = {},
+                    onDismiss = {},
+                    item = it
+                )
+            }
         }
     }
 }

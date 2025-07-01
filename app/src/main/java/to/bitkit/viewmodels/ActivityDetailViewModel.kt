@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -29,6 +30,9 @@ class ActivityDetailViewModel @Inject constructor(
 
     private val _tags = MutableStateFlow<List<String>>(emptyList())
     val tags = _tags.asStateFlow()
+
+    private val _boostSheetVisible = MutableStateFlow(false)
+    val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
 
@@ -94,7 +98,7 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun onClickBoost() {
-
+        _boostSheetVisible.update { true }
     }
 
     private companion object {

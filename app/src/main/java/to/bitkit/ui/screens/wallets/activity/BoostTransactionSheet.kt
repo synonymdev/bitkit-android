@@ -5,13 +5,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -34,49 +39,67 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.ModalBottomSheetHandle
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.ModalSheetTopPadding
 import to.bitkit.ui.utils.withAccent
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BoostTransactionSheet(
     modifier: Modifier = Modifier,
     onConfirm: (Long) -> Unit,
+    onDismiss: () -> Unit,
     item: Activity.Onchain,
 ) {
 
     var isEditMode by remember { mutableStateOf(false) }
     var fee by remember { mutableLongStateOf(item.v1.fee.toLong()) }
 
-    BoostTransactionContent(
-        modifier = modifier,
-        feeSats = fee,
-        estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-        isEditMode = isEditMode,
-        onClickEdit = {
-            isEditMode = !isEditMode
-        },
-        onClickUseSuggestedFee = {
-            fee = item.v1.fee.toLong()
-            isEditMode = false
-        },
-        onChangeAmount = { increase ->
-            if (increase) {
-                fee++
-            } else {
-                fee--
+    val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = AppShapes.sheet,
+        containerColor = Colors.Black,
+        dragHandle = { ModalBottomSheetHandle() },
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = ModalSheetTopPadding)
+    ) {
+        BoostTransactionContent(
+            modifier = modifier,
+            feeSats = fee,
+            estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
+            isEditMode = isEditMode,
+            onClickEdit = {
+                isEditMode = !isEditMode
+            },
+            onClickUseSuggestedFee = {
+                fee = item.v1.fee.toLong()
+                isEditMode = false
+            },
+            onChangeAmount = { increase ->
+                if (increase) {
+                    fee++
+                } else {
+                    fee--
+                }
+            },
+            onConfirm = {
+                onConfirm(fee)
             }
-        },
-        onConfirm = {
-            onConfirm(fee)
-        }
-    )
+        )
+    }
 }
 
 @Composable
