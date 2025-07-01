@@ -151,11 +151,17 @@ fun BodyM(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     BodyM(
         text = AnnotatedString(text),
         color = color,
         modifier = modifier,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
     )
 }
 
@@ -164,6 +170,9 @@ fun BodyM(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -174,8 +183,10 @@ fun BodyM(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
@@ -358,6 +369,8 @@ fun Caption(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -370,6 +383,8 @@ fun Caption(
             color = color,
             textAlign = TextAlign.Start,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
@@ -446,6 +461,9 @@ fun Footnote(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Colors.White32,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -456,8 +474,10 @@ fun Footnote(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
