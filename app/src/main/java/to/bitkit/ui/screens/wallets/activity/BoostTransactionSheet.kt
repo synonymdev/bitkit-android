@@ -47,22 +47,24 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun BoostTransactionSheet(
     modifier: Modifier = Modifier,
+    onConfirm: (Long) -> Unit,
     item: Activity.Onchain,
 ) {
 
-    var isDefaultFee by remember { mutableStateOf(false) }
+    var isEditMode by remember { mutableStateOf(false) }
     var fee by remember { mutableLongStateOf(item.v1.fee.toLong()) }
 
     BoostTransactionContent(
         modifier = modifier,
         feeSats = fee,
         estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-        isDefaultFee = item.v1.fee.toLong() == fee,
+        isEditMode = isEditMode,
         onClickEdit = {
-            isDefaultFee = !isDefaultFee
+            isEditMode = !isEditMode
         },
         onClickUseSuggestedFee = {
             fee = item.v1.fee.toLong()
+            isEditMode = false
         },
         onChangeAmount = { increase ->
             if (increase) {
@@ -71,6 +73,9 @@ fun BoostTransactionSheet(
                 fee--
             }
         },
+        onConfirm = {
+            onConfirm(fee)
+        }
     )
 }
 
@@ -82,7 +87,8 @@ fun BoostTransactionContent(
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
     onChangeAmount: (Boolean) -> Unit,
-    isDefaultFee: Boolean,
+    isEditMode: Boolean,
+    onConfirm: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -93,13 +99,13 @@ fun BoostTransactionContent(
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
-        val bodyText = if (isDefaultFee) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
+        val bodyText = if (isEditMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
 
         BodyS(text = stringResource(bodyText), color = Colors.White64)
 
         VerticalSpacer(24.dp)
 
-        if (isDefaultFee) {
+        if (isEditMode) {
             Row(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -221,9 +227,7 @@ fun BoostTransactionContent(
             color = Colors.Yellow,
             endIcon = R.drawable.ic_timer_alt_yellow,
             endIconTint = Color.Unspecified,
-            onConfirm = {
-
-            },
+            onConfirm = onConfirm,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -273,7 +277,8 @@ private fun Preview() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultFee = true
+            isEditMode = true,
+            onConfirm = {},
         )
     }
 }
@@ -288,7 +293,8 @@ private fun Preview2() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultFee = false
+            isEditMode = false,
+            onConfirm = {},
         )
     }
 }
@@ -303,7 +309,8 @@ private fun Preview3() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultFee = false
+            isEditMode = false,
+            onConfirm = {},
         )
     }
 }
