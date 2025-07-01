@@ -26,7 +26,9 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
@@ -42,15 +44,15 @@ fun BoostTransactionSheet(
     item: Activity.Onchain,
 ) {
 
-    var isCustomFee by remember { mutableStateOf(false) }
+    var isDefaultFee by remember { mutableStateOf(false) }
 
     BoostTransactionContent(
         modifier = modifier,
         sats = item.v1.fee.toLong(),
         estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-        isCustomFee = isCustomFee,
+        isDefaultFee = isDefaultFee,
         onClickEdit = {
-            isCustomFee = !isCustomFee
+            isDefaultFee = !isDefaultFee
         },
         onClickUseSuggestedFee = {
 
@@ -69,69 +71,120 @@ fun BoostTransactionContent(
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
     onChangeAmount: (Boolean) -> Unit,
-    isCustomFee: Boolean,
+    isDefaultFee: Boolean,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .gradientBackground()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
-        BodyS(text = stringResource(R.string.wallet__boost_fee_recomended), color = Colors.White64)
+        val bodyText = if (isDefaultFee) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
+
+        BodyS(text = stringResource(bodyText), color = Colors.White64)
 
         VerticalSpacer(24.dp)
 
-        Row(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_timer_alt_yellow),
-                contentDescription = null
-            )
+        if (isDefaultFee) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_timer_alt_yellow),
+                    contentDescription = null
+                )
 
-            HorizontalSpacer(16.dp)
+                HorizontalSpacer(16.dp)
 
-            Column(modifier = Modifier.weight(1f)) {
-                BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                BodySSB(text = estimateTime, color = Colors.White64)
+                Column(modifier = Modifier.weight(1f)) {
+                    BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
+                    BodySSB(text = estimateTime, color = Colors.White64)
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.clickable { onClickEdit() },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        BodyMSB(
+                            text = rememberMoneyText(sats = sats)
+                                .orEmpty()
+                                .withAccent(defaultColor = Colors.White).toString(),
+                            color = Colors.White
+                        )
+
+                        Icon(
+                            painter = painterResource(R.drawable.ic_pencil_simple),
+                            tint = Colors.White,
+                            contentDescription = stringResource(R.string.common__edit),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    BodySSB(
+                        text = rememberMoneyText(
+                            sats = sats,
+                            reversed = true
+                        ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
+                        color = Colors.White64
+                    )
+                }
             }
 
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.clickable { onClickEdit() },
+            VerticalSpacer(68.dp)
+        } else {
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     BodyMSB(
                         text = rememberMoneyText(sats = sats)
                             .orEmpty()
-                            .withAccent(defaultColor = Colors.White).toString(),
+                            .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
                         color = Colors.White
                     )
 
-                    Icon(
-                        painter = painterResource(R.drawable.ic_pencil_simple),
-                        tint = Colors.White,
-                        contentDescription = stringResource(R.string.common__edit),
-                        modifier = Modifier.size(16.dp)
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        BodySSB(
+                            text = rememberMoneyText(
+                                sats = sats,
+                                reversed = true
+                            ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
+                            color = Colors.White64
+                        )
+
+                        BodySSB(
+                            text = estimateTime,
+                            color = Colors.White64
+                        )
+                    }
                 }
-
-                BodySSB(
-                    text = rememberMoneyText(
-                        sats = sats,
-                        reversed = true
-                    ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
-                    color = Colors.White64
-                )
             }
-        }
 
-        VerticalSpacer(68.dp)
+            VerticalSpacer(16.dp)
+
+            PrimaryButton(
+                text = stringResource(R.string.wallet__boost_recomended_button),
+                fullWidth = false,
+                onClick = onClickUseSuggestedFee,
+                size = ButtonSize.Small
+            )
+
+            VerticalSpacer(16.dp)
+        }
 
         SwipeToConfirm(
             text = stringResource(R.string.wallet__boost_swipe),
@@ -158,7 +211,7 @@ private fun Preview() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isCustomFee = false
+            isDefaultFee = true
         )
     }
 }
@@ -173,7 +226,7 @@ private fun Preview2() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isCustomFee = true
+            isDefaultFee = false
         )
     }
 }
