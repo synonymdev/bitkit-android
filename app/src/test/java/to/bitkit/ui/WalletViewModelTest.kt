@@ -68,16 +68,14 @@ class WalletViewModelTest : BaseUnitTest() {
 
 
     @Test
-    fun `refreshState should call lightningRepo sync`() = test {
-        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
-
+    fun `refreshState should sync wallet`() = test {
         sut.refreshState()
 
-        verify(lightningRepo).sync()
+        verify(walletRepo).syncNodeAndWallet()
     }
 
     @Test
-    fun `onPullToRefresh should call lightningRepo sync`() = test {
+    fun `onPullToRefresh should sync wallet`() = test {
         sut.onPullToRefresh()
 
         verify(walletRepo).syncNodeAndWallet()

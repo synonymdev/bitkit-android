@@ -3,10 +3,8 @@ package to.bitkit.ui.settings.lightning.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -25,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mockOrder
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.settings.lightning.ChannelUi
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -54,7 +53,7 @@ fun ChannelStatusView(
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        HorizontalSpacer(16.dp)
 
         BodyMSB(text = statusInfo.statusText, color = statusInfo.statusColor)
     }

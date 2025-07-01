@@ -412,12 +412,22 @@ class LightningRepo @Inject constructor(
         result
     }
 
-    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String): Result<Unit> =
-        executeWhenNodeRunning("Close channel") {
-            lightningService.closeChannel(userChannelId, counterpartyNodeId)
-            syncState()
-            Result.success(Unit)
-        }
+    suspend fun closeChannel(
+        channel: ChannelDetails,
+        force: Boolean = false,
+        forceCloseReason: String? = null,
+    ): Result<Unit> = executeWhenNodeRunning("Close channel") {
+        Logger.info("Closing channel (force=$force): ${channel.channelId}")
+
+        lightningService.closeChannel(
+            userChannelId = channel.userChannelId,
+            counterpartyNodeId = channel.counterpartyNodeId,
+            force = force,
+            forceCloseReason = forceCloseReason,
+        )
+        syncState()
+        Result.success(Unit)
+    }
 
     suspend fun syncState() {
         _lightningState.update {
