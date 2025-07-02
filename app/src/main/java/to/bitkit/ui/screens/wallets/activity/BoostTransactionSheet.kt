@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,7 +61,7 @@ fun BoostTransactionSheet(
 ) {
     val currentFee = item.v1.fee.toLong()
     var isDefaultMode by remember { mutableStateOf(true) }
-    var fee by remember { mutableLongStateOf(currentFee + 1000) } //TODO IMPLEMENT PROPPER CALC
+    var fee by remember { mutableLongStateOf(currentFee + 100) } //TODO IMPLEMENT PROPPER CALC
 
     val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -84,14 +83,14 @@ fun BoostTransactionSheet(
                 isDefaultMode = !isDefaultMode
             },
             onClickUseSuggestedFee = {
-                fee = currentFee + 1000  //TODO IMPLEMENT PROPPER CALC
+                fee = currentFee + 100  //TODO IMPLEMENT PROPPER CALC
                 isDefaultMode = true
             },
             onChangeAmount = { increase ->
                 if (increase) { //TODO DON'T ALLOW IF IT IS BIGGER THAN HALF OF THE VALUE
-                    fee+=10
+                    fee += 10
                 } else {
-                    fee-=10
+                    fee -= 10
                 }
             },
             onConfirm = {

@@ -112,7 +112,7 @@ class ActivityDetailViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.bumpFeeByRbf(
                 satsPerVByte = feeSats.toUInt(),
-                originalTxId = _txDetails.value?.txid.orEmpty()
+                originalTxId = (activity as? Activity.Onchain)?.v1?.txId.orEmpty()
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
             }.onFailure { e ->
