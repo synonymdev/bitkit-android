@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,6 +39,10 @@ class ActivityDetailViewModel @Inject constructor(
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
+
+    private val _activityDetailEffect = MutableSharedFlow<ActivityDetailEffects>(extraBufferCapacity = 1)
+    val activityDetailEffect = _activityDetailEffect.asSharedFlow()
+    private fun setActivityDetailEffect(effect: ActivityDetailEffects) = viewModelScope.launch { _activityDetailEffect.emit(effect) }
 
     fun setActivity(activity: Activity) {
         this.activity = activity
@@ -108,17 +114,25 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun onConfirmBoost(feeSats: Long) {
-        _boostSheetVisible.update { false }
         viewModelScope.launch {
             lightningRepo.bumpFeeByRbf(
                 satsPerVByte = feeSats.toUInt(),
                 originalTxId = (activity as? Activity.Onchain)?.v1?.txId.orEmpty()
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
+                setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
+                _boostSheetVisible.update { false }
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
+                setActivityDetailEffect(ActivityDetailEffects.OnBoostFailed)
+                _boostSheetVisible.update { false }
             }
         }
+    }
+
+    sealed interface ActivityDetailEffects {
+        data object OnBoostSuccess: ActivityDetailEffects
+        data object OnBoostFailed: ActivityDetailEffects
     }
 
     private companion object {

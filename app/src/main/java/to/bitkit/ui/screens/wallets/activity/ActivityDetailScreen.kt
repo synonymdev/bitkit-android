@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -91,6 +92,29 @@ fun ActivityDetailScreen(
 
     LaunchedEffect(item) {
         detailViewModel.setActivity(item)
+    }
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        detailViewModel.activityDetailEffect.collect { event ->
+            when (event) {
+                ActivityDetailViewModel.ActivityDetailEffects.OnBoostFailed -> {
+                    app.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.wallet__boost_error_title),
+                        description = context.getString(R.string.wallet__boost_error_msg)
+                    )
+                }
+                ActivityDetailViewModel.ActivityDetailEffects.OnBoostSuccess -> {
+                    app.toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.wallet__boost_success_title),
+                        description = context.getString(R.string.wallet__boost_error_msg)
+                    )
+                    onCloseClick()
+                }
+            }
+        }
     }
 
     Box(
