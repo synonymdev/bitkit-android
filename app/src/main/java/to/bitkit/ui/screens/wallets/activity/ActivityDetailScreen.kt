@@ -109,7 +109,7 @@ fun ActivityDetailScreen(
                     app.toast(
                         type = Toast.ToastType.SUCCESS,
                         title = context.getString(R.string.wallet__boost_success_title),
-                        description = context.getString(R.string.wallet__boost_error_msg)
+                        description = context.getString(R.string.wallet__boost_success_msg)
                     )
                     onCloseClick()
                 }
