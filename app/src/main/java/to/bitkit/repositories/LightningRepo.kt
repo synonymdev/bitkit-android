@@ -543,7 +543,7 @@ class LightningRepo @Inject constructor(
             )
             Result.success(replacementTxId)
         } catch (e: Throwable) {
-            Logger.error("bumpFeeByRbf error", e, context = TAG)
+            Logger.error("bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte", e, context = TAG)
             Result.failure(e)
         }
     }
