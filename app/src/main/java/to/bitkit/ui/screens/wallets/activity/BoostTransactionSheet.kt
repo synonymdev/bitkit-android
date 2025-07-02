@@ -200,7 +200,7 @@ fun BoostTransactionContent(
                     BodyMSB(
                         text = rememberMoneyText(sats = feeSats)
                             .orEmpty()
-                            .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
+                            .withAccent(defaultColor = Colors.White).toString() /*+ "/vbyte"*/, //TODO DISPLAY FEE RATE INSTEAD OF FEE
                         color = Colors.White
                     )
 
