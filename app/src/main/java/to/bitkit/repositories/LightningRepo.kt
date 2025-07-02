@@ -516,35 +516,37 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun bumpFeeByRbf(originalTxId: Txid, satsPerVByte: UInt): Result<Txid> =
-        executeWhenNodeRunning("Bump by RBF") {
-            try {
-                if (originalTxId.isBlank()) {
-                    return@executeWhenNodeRunning Result.failure(
-                        IllegalArgumentException(
-                            "originalTxId is null or empty: $originalTxId"
-                        )
+    suspend fun bumpFeeByRbf(
+        originalTxId: Txid,
+        satsPerVByte: UInt
+    ): Result<Txid> = executeWhenNodeRunning("Bump by RBF") {
+        try {
+            if (originalTxId.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "originalTxId is null or empty: $originalTxId"
                     )
-                }
-
-                if (satsPerVByte <= 0u) {
-                    return@executeWhenNodeRunning Result.failure(
-                        IllegalArgumentException(
-                            "satsPerVByte invalid: $satsPerVByte"
-                        )
-                    )
-                }
-
-                val replacementTxId = lightningService.bumpFeeByRbf(
-                    txid = originalTxId,
-                    satsPerVByte = satsPerVByte,
                 )
-                Result.success(replacementTxId)
-            } catch (e: Throwable) {
-                Logger.error("bumpFeeByRbf", e, context = TAG)
-                Result.failure(e)
             }
+
+            if (satsPerVByte <= 0u) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "satsPerVByte invalid: $satsPerVByte"
+                    )
+                )
+            }
+
+            val replacementTxId = lightningService.bumpFeeByRbf(
+                txid = originalTxId,
+                satsPerVByte = satsPerVByte,
+            )
+            Result.success(replacementTxId)
+        } catch (e: Throwable) {
+            Logger.error("bumpFeeByRbf", e, context = TAG)
+            Result.failure(e)
         }
+    }
 
     private companion object {
         const val TAG = "LightningRepo"
