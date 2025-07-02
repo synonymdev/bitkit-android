@@ -38,6 +38,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.lang.IllegalArgumentException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
@@ -514,6 +515,36 @@ class LightningRepo @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun bumpFeeByRbf(originalTxId: Txid, satsPerVByte: UInt): Result<Txid> =
+        executeWhenNodeRunning("Bump by RBF") {
+            try {
+                if (originalTxId.isBlank()) {
+                    return@executeWhenNodeRunning Result.failure(
+                        IllegalArgumentException(
+                            "originalTxId is null or empty: $originalTxId"
+                        )
+                    )
+                }
+
+                if (satsPerVByte <= 0u) {
+                    return@executeWhenNodeRunning Result.failure(
+                        IllegalArgumentException(
+                            "satsPerVByte invalid: $satsPerVByte"
+                        )
+                    )
+                }
+
+                val replacementTxId = lightningService.bumpFeeByRbf(
+                    txid = originalTxId,
+                    satsPerVByte = satsPerVByte,
+                )
+                Result.success(replacementTxId)
+            } catch (e: Throwable) {
+                Logger.error("bumpFeeByRbf", e, context = TAG)
+                Result.failure(e)
+            }
+        }
 
     private companion object {
         const val TAG = "LightningRepo"
