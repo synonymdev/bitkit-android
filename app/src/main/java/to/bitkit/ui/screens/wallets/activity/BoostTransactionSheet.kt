@@ -60,9 +60,9 @@ fun BoostTransactionSheet(
     onDismiss: () -> Unit,
     item: Activity.Onchain,
 ) {
-
-    var isEditMode by remember { mutableStateOf(false) }
-    var fee by remember { mutableLongStateOf(item.v1.fee.toLong()) }
+    val currentFee = item.v1.fee.toLong()
+    var isDefaultMode by remember { mutableStateOf(true) }
+    var fee by remember { mutableLongStateOf(currentFee + 1000) } //TODO IMPLEMENT PROPPER CALC
 
     val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -79,21 +79,21 @@ fun BoostTransactionSheet(
         BoostTransactionContent(
             modifier = modifier,
             feeSats = fee,
-            currentFee = item.v1.fee.toLong(),
+            currentFee = currentFee,
             estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-            isEditMode = isEditMode,
+            isDefaultMode = isDefaultMode,
             onClickEdit = {
-                isEditMode = !isEditMode
+                isDefaultMode = !isDefaultMode
             },
             onClickUseSuggestedFee = {
-                fee = item.v1.fee.toLong()
-                isEditMode = false
+                fee = currentFee + 1000  //TODO IMPLEMENT PROPPER CALC
+                isDefaultMode = true
             },
             onChangeAmount = { increase ->
                 if (increase) {
-                    fee++
+                    fee+=10
                 } else {
-                    fee--
+                    fee-=10
                 }
             },
             onConfirm = {
@@ -112,7 +112,7 @@ fun BoostTransactionContent(
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
     onChangeAmount: (Boolean) -> Unit,
-    isEditMode: Boolean,
+    isDefaultMode: Boolean,
     onConfirm: () -> Unit,
 ) {
     Column(
@@ -124,13 +124,13 @@ fun BoostTransactionContent(
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
-        val bodyText = if (isEditMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
+        val bodyText = if (isDefaultMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
 
         BodyS(text = stringResource(bodyText), color = Colors.White64)
 
         VerticalSpacer(24.dp)
 
-        if (isEditMode) {
+        if (isDefaultMode) {
             Row(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -190,7 +190,7 @@ fun BoostTransactionContent(
                     icon = painterResource(R.drawable.ic_minus),
                     iconColor = Colors.Red,
                     backgroundColor = Colors.Red16,
-                    enable = feeSats >= currentFee,
+                    enable = feeSats > currentFee,
                     onClick = { onChangeAmount(false) },
                     contentDescription = "Reduce fee",
                 )
@@ -292,7 +292,7 @@ fun QuantityIcon(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Edit mode")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -302,7 +302,7 @@ private fun Preview() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isEditMode = true,
+            isDefaultMode = true,
             currentFee = 4250,
             onConfirm = {},
         )
@@ -320,7 +320,7 @@ private fun Preview2() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isEditMode = false,
+            isDefaultMode = false,
             onConfirm = {},
         )
     }
@@ -337,7 +337,7 @@ private fun Preview3() {
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isEditMode = false,
+            isDefaultMode = false,
             onConfirm = {},
         )
     }
