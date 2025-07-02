@@ -72,9 +72,7 @@ fun BoostTransactionSheet(
         shape = AppShapes.sheet,
         containerColor = Colors.Black,
         dragHandle = { ModalBottomSheetHandle() },
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = ModalSheetTopPadding)
+        modifier = Modifier.padding(top = ModalSheetTopPadding)
     ) {
         BoostTransactionContent(
             modifier = modifier,
