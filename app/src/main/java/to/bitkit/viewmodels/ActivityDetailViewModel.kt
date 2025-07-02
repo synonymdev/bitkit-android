@@ -115,8 +115,8 @@ class ActivityDetailViewModel @Inject constructor(
                 originalTxId = _txDetails.value?.txid.orEmpty()
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
-            }.onFailure {
-                Logger.debug("Failure boosting transaction", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
             }
         }
     }
