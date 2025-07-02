@@ -28,7 +28,6 @@ import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.navigateToHome
-import to.bitkit.ui.navigateToNodeState
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -82,7 +81,7 @@ fun AdvancedSettingsScreen(
             navController.navigate(Routes.LightningConnections)
         },
         onLightningNodeClick = {
-            navController.navigateToNodeState()
+            navController.navigate(Routes.NodeInfo)
         },
         onElectrumServerClick = {
             navController.navigate(Routes.ElectrumConfig)
