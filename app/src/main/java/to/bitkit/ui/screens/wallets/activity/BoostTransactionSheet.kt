@@ -88,7 +88,7 @@ fun BoostTransactionSheet(
                 isDefaultMode = true
             },
             onChangeAmount = { increase ->
-                if (increase) {
+                if (increase) { //TODO DON'T ALLOW IF IT IS BIGGER THAN HALF OF THE VALUE
                     fee+=10
                 } else {
                     fee-=10

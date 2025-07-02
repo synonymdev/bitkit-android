@@ -40,7 +40,9 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.canBeBoosted
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.isBoosted
 import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
@@ -401,16 +403,11 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                val canBeBoosted = when (item) {
-                    is Activity.Onchain -> !item.v1.confirmed && item.v1.doesExist && !item.v1.isBoosted && !item.v1.isTransfer
-                    else -> false
-                }
-
                 PrimaryButton(
-                    text = stringResource(R.string.wallet__activity_boost),
+                    text = stringResource(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost),
                     size = ButtonSize.Small,
                     onClick = onClickBoost,
-                    enabled = canBeBoosted,
+                    enabled = item.canBeBoosted(),
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_timer_alt),
