@@ -38,6 +38,9 @@ class ActivityDetailViewModel @Inject constructor(
     private val _boostSheetVisible = MutableStateFlow(false)
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
+    private val _boosting = MutableStateFlow(false)
+    val boosting = _boosting.asStateFlow()
+
     private var activity: Activity? = null
 
     private val _activityDetailEffect = MutableSharedFlow<ActivityDetailEffects>(extraBufferCapacity = 1)
@@ -114,6 +117,7 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun onConfirmBoost(feeSats: Long) {
+        _boosting.update { true }
         viewModelScope.launch {
             lightningRepo.bumpFeeByRbf(
                 satsPerVByte = feeSats.toUInt(),
@@ -121,10 +125,12 @@ class ActivityDetailViewModel @Inject constructor(
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
                 setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
+                _boosting.update { false }
                 _boostSheetVisible.update { false }
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
                 setActivityDetailEffect(ActivityDetailEffects.OnBoostFailed)
+                _boosting.update { false }
                 _boostSheetVisible.update { false }
             }
         }

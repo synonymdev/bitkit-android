@@ -57,6 +57,7 @@ fun BoostTransactionSheet(
     modifier: Modifier = Modifier,
     onConfirm: (Long) -> Unit,
     onDismiss: () -> Unit,
+    loading: Boolean,
     item: Activity.Onchain,
 ) {
     val currentFee = item.v1.fee.toLong()
@@ -95,7 +96,8 @@ fun BoostTransactionSheet(
             },
             onConfirm = {
                 onConfirm(fee)
-            }
+            },
+            loading = loading
         )
     }
 }
@@ -110,6 +112,7 @@ fun BoostTransactionContent(
     onClickUseSuggestedFee: () -> Unit,
     onChangeAmount: (Boolean) -> Unit,
     isDefaultMode: Boolean,
+    loading: Boolean,
     onConfirm: () -> Unit,
 ) {
     Column(
@@ -248,8 +251,8 @@ fun BoostTransactionContent(
             text = stringResource(R.string.wallet__boost_swipe),
             color = Colors.Yellow,
             endIcon = R.drawable.ic_timer_alt_yellow,
-            endIconTint = Color.Unspecified,
             onConfirm = onConfirm,
+            loading = loading,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -302,6 +305,7 @@ private fun Preview() {
             isDefaultMode = true,
             currentFee = 4250,
             onConfirm = {},
+            loading = true,
         )
     }
 }
@@ -319,6 +323,7 @@ private fun Preview2() {
             onChangeAmount = {},
             isDefaultMode = false,
             onConfirm = {},
+            loading = false,
         )
     }
 }
@@ -336,6 +341,7 @@ private fun Preview3() {
             onChangeAmount = {},
             isDefaultMode = false,
             onConfirm = {},
+            loading = false,
         )
     }
 }

@@ -87,6 +87,7 @@ fun ActivityDetailScreen(
     val copyToastTitle = stringResource(R.string.common__copied)
 
     val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+    val boosting by detailViewModel.boosting.collectAsStateWithLifecycle()
     val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
@@ -158,7 +159,8 @@ fun ActivityDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     onConfirm = detailViewModel::onConfirmBoost,
                     onDismiss = detailViewModel::onDismissBoostSheet,
-                    item = it
+                    item = it,
+                    loading = boosting
                 )
             }
         }
