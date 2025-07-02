@@ -402,7 +402,7 @@ private fun ActivityDetailContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 val canBeBoosted = when (item) {
-                    is Activity.Onchain -> !item.v1.confirmed && !item.v1.doesExist && !item.v1.isBoosted && !item.v1.isTransfer
+                    is Activity.Onchain -> !item.v1.confirmed && item.v1.doesExist && !item.v1.isBoosted && !item.v1.isTransfer
                     else -> false
                 }
 
