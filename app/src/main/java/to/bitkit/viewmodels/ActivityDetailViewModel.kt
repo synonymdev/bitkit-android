@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
@@ -23,6 +24,7 @@ class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val addressChecker: AddressChecker,
     private val coreService: CoreService,
+    private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TxDetails?>(null)
@@ -104,8 +106,19 @@ class ActivityDetailViewModel @Inject constructor(
     fun onDismissBoostSheet() {
         _boostSheetVisible.update { false }
     }
+
     fun onConfirmBoost(feeSats: Long) {
         _boostSheetVisible.update { false }
+        viewModelScope.launch {
+            lightningRepo.bumpFeeByRbf(
+                satsPerVByte = feeSats.toUInt(),
+                originalTxId = _txDetails.value?.txid.orEmpty()
+            ).onSuccess {
+                Logger.debug("Success boosting transaction", context = TAG)
+            }.onFailure {
+                Logger.debug("Failure boosting transaction", context = TAG)
+            }
+        }
     }
 
     private companion object {
