@@ -283,13 +283,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun closeChannel(channel: ChannelDetails) {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.closeChannel(channel)
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
     fun wipeWallet() {
         viewModelScope.launch(bgDispatcher) {
             walletRepo.wipeWallet().onFailure { error ->

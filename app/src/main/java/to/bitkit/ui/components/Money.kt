@@ -43,6 +43,7 @@ fun MoneyCaptionB(
     color: Color = MaterialTheme.colorScheme.primary,
     symbol: Boolean = false,
     symbolColor: Color = Colors.White64,
+    modifier: Modifier = Modifier,
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
@@ -69,6 +70,7 @@ fun MoneyCaptionB(
         CaptionB(
             text = text.withAccent(accentColor = symbolColor),
             color = color,
+            modifier = modifier,
         )
     }
 }

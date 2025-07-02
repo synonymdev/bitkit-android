@@ -409,7 +409,6 @@ private fun RootNavHost(
         settings(navController, settingsViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel)
-        nodeState(walletViewModel, navController)
         generalSettings(navController)
         advancedSettings(navController)
         aboutSettings(navController)
@@ -711,18 +710,6 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.nodeState(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
-) {
-    composable<Routes.NodeState>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        NodeStateScreen(viewModel, navController)
-    }
-}
-
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
@@ -767,6 +754,9 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.NodeInfo> {
+        NodeInfoScreen(navController)
     }
 }
 
@@ -1253,10 +1243,6 @@ fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
 )
 
-fun NavController.navigateToNodeState() = navigate(
-    route = Routes.NodeState,
-)
-
 fun NavController.navigateToGeneralSettings() = navigate(
     route = Routes.GeneralSettings,
 )
@@ -1414,7 +1400,7 @@ object Routes {
     data object Settings
 
     @Serializable
-    data object NodeState
+    data object NodeInfo
 
     @Serializable
     data object GeneralSettings

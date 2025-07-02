@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -35,7 +36,9 @@ fun SettingsTextButtonRow(
     iconRes: Int? = null,
     iconTint: Color = Color.Unspecified,
     enabled: Boolean = true,
-    onClick: () -> Unit,
+    height: Dp = 52.dp,
+    showDivider: Boolean = true,
+    onClick: (() -> Unit)? = null,
 ) {
     Column {
         Column(
@@ -45,7 +48,7 @@ fun SettingsTextButtonRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(height)
                     .clickableAlpha(onClick = if (enabled) onClick else null)
             ) {
                 if (iconRes != null) {
@@ -71,7 +74,9 @@ fun SettingsTextButtonRow(
                 BodyM(text = value, color = Colors.White64)
             }
         }
-        HorizontalDivider()
+        if (showDivider) {
+            HorizontalDivider()
+        }
     }
 }
 
@@ -82,6 +87,11 @@ private fun Preview() {
         Column {
             SettingsTextButtonRow(
                 title = "Simple Title Only",
+                onClick = {},
+            )
+            SettingsTextButtonRow(
+                title = "Title",
+                value = "Value",
                 onClick = {},
             )
             SettingsTextButtonRow(
