@@ -53,7 +53,7 @@ import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoostTransactionSheet(
+fun BoostTransactionSheet( //TODO Handle CPFP too
     modifier: Modifier = Modifier,
     onConfirm: (Long) -> Unit,
     onDismiss: () -> Unit,
@@ -95,7 +95,7 @@ fun BoostTransactionSheet(
                 }
             },
             onConfirm = {
-                onConfirm(fee)
+                onConfirm(fee) //TODO RETURN FeeRate INSTEAD OF FEE
             },
             loading = loading
         )

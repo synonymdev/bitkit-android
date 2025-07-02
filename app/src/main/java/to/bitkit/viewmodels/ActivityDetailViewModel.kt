@@ -125,6 +125,7 @@ class ActivityDetailViewModel @Inject constructor(
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
                 setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
+                //TODO REGISTER ACTIVITY
                 _boosting.update { false }
                 _boostSheetVisible.update { false }
             }.onFailure { e ->
