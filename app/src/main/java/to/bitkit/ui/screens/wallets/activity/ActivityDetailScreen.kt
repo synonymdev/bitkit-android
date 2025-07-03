@@ -154,10 +154,18 @@ fun ActivityDetailScreen(
                         detailViewModel.onDismissBoostSheet()
                     },
                     onMaxFee = {
-                        // TODO IMPLEMENT
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__send_fee_error),
+                            description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance" //TODO CREATE STRING RESOURCE
+                        )
                     },
                     onMinFee = {
-                        // TODO IMPLEMENT
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__send_fee_error),
+                            description = context.getString(R.string.wallet__send_fee_error_min)
+                        )
                     }
                 )
             }

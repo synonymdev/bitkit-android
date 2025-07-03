@@ -16,6 +16,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
+import java.math.BigDecimal
 import java.math.BigInteger
 import javax.inject.Inject
 
@@ -49,12 +50,11 @@ class BoostTransactionViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.estimateTotalFee(speed = speed).onSuccess { totalFee ->
                 totalFeeSatsRecommended = totalFee
-                maxTotalFee = BigInteger.valueOf(
-                    activity.v1.fee.toLong()
+                maxTotalFee = BigDecimal.valueOf(
+                    activity.v1.value.toLong()
                 ).times(
-                    BigInteger.valueOf(0.5.toLong())
-                )
-                    .toLong().toULong()
+                    BigDecimal.valueOf(0.5)
+                ).toLong().toULong()
 
                 lightningRepo.getFeeRateForSpeed(speed).onSuccess { feeRate ->
                     feeRateRecommended = feeRate
@@ -62,6 +62,7 @@ class BoostTransactionViewModel @Inject constructor(
                         it.copy(
                             totalFeeSats = totalFee,
                             feeRate = feeRate,
+                            increaseEnabled = totalFee <= maxTotalFee,
                             loading = false
                         )
                     }
@@ -127,25 +128,29 @@ class BoostTransactionViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     feeRate = newFeeRate,
-                    isDefaultMode = newFeeRate == feeRateRecommended
                 )
             }
 
             lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
                 .onSuccess { newTotalFee ->
                     val maxFeeReached = newTotalFee >= maxTotalFee
-                    val minFeeReached = newTotalFee <= (activity?.v1?.fee ?: newTotalFee)
+                    val minFeeReached = newTotalFee <= (activity?.v1?.fee ?: 0u)
 
                     _uiState.update {
                         it.copy(
                             totalFeeSats = newTotalFee,
-                            increaseEnabled = maxFeeReached,
-                            decreaseEnabled = minFeeReached
+                            increaseEnabled = !maxFeeReached,
+                            decreaseEnabled = !minFeeReached
                         )
                     }
 
-                    if (maxFeeReached) setBoostTransactionEffect(BoostTransactionEffects.onMaxFee)
-                    if (minFeeReached) setBoostTransactionEffect(BoostTransactionEffects.onMinFee)
+                    if (maxFeeReached && increase) {
+                        setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
+                    }
+
+                    if (minFeeReached && !increase) {
+                        setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
+                    }
                 }
         }
 
@@ -187,8 +192,8 @@ class BoostTransactionViewModel @Inject constructor(
 sealed interface BoostTransactionEffects {
     data object OnBoostSuccess : BoostTransactionEffects
     data object OnBoostFailed : BoostTransactionEffects
-    data object onMaxFee : BoostTransactionEffects
-    data object onMinFee : BoostTransactionEffects
+    data object OnMaxFee : BoostTransactionEffects
+    data object OnMinFee : BoostTransactionEffects
 }
 
 data class BoostTransactionUiState(

@@ -74,8 +74,8 @@ fun BoostTransactionSheet(
             when (event) {
                 BoostTransactionEffects.OnBoostFailed -> onFailure()
                 BoostTransactionEffects.OnBoostSuccess -> onSuccess()
-                BoostTransactionEffects.onMaxFee -> onMaxFee()
-                BoostTransactionEffects.onMinFee -> onMinFee()
+                BoostTransactionEffects.OnMaxFee -> onMaxFee()
+                BoostTransactionEffects.OnMinFee -> onMinFee()
             }
         }
     }
@@ -217,7 +217,8 @@ fun BoostTransactionContent(
                         BodyMSB(
                             text = rememberMoneyText(sats = uiState.feeRate.toLong())
                                 .orEmpty()
-                                .withAccent(defaultColor = Colors.White).toString() + "/vbyte ($BITCOIN_SYMBOL ${uiState.totalFeeSats})" ,
+                                .withAccent(defaultColor = Colors.White)
+                                .toString() + "/vbyte ($BITCOIN_SYMBOL ${uiState.totalFeeSats})",
                             color = Colors.White
                         )
 
