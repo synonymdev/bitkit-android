@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import jakarta.inject.Inject
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -20,6 +22,11 @@ class BoostTransactionViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
     val uiState = _uiState.asStateFlow()
+
+    private val _boostTransactionEffect = MutableSharedFlow<BoostTransactionEffects>(extraBufferCapacity = 1)
+    val boostTransactionEffect = _boostTransactionEffect.asSharedFlow()
+    private fun setBoostTransactionEffect(effect: BoostTransactionEffects) = viewModelScope.launch { _boostTransactionEffect.emit(effect) }
+
 
     private var totalFeeSatsRecommended: ULong = 0U
     private var feeRateRecommended: ULong = 0U
@@ -41,15 +48,16 @@ class BoostTransactionViewModel @Inject constructor(
                         it.copy(
                             totalFeeSats = totalFee,
                             feeRate = feeRate,
+                            loading = false
                         )
                     }
                 }.onFailure { e ->
                     Logger.error("error getting fee rate", e, context = TAG)
-                    //TODO Dismiss
+                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
                 }
             }.onFailure { e ->
                 Logger.error("error getting total fee ", e, context = TAG)
-                //TODO Dismiss
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
             }
         }
     }
@@ -76,12 +84,12 @@ class BoostTransactionViewModel @Inject constructor(
                 originalTxId = activity?.v1?.txId.orEmpty()
             ).onSuccess {
                 Logger.debug("Success boosting transaction", context = TAG)
-//                setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
                 //TODO REGISTER ACTIVITY
                 _uiState.update { it.copy(boosting = false) }
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
-//                setActivityDetailEffect(ActivityDetailEffects.OnBoostFailed)
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
                 _uiState.update { it.copy(boosting = false) }
             }
         }
@@ -122,6 +130,12 @@ class BoostTransactionViewModel @Inject constructor(
     }
 }
 
+sealed interface BoostTransactionEffects {
+    data object OnBoostSuccess: BoostTransactionEffects
+    data object OnBoostFailed: BoostTransactionEffects
+    data object onMaxFee: BoostTransactionEffects
+    data object onMinFee: BoostTransactionEffects
+}
 data class BoostTransactionUiState(
     val totalFeeSats: ULong = 0U,
     val feeRate: ULong = 0U,

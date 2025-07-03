@@ -38,14 +38,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val _boostSheetVisible = MutableStateFlow(false)
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
-    private val _boosting = MutableStateFlow(false)
-    val boosting = _boosting.asStateFlow()
-
     private var activity: Activity? = null
-
-    private val _activityDetailEffect = MutableSharedFlow<ActivityDetailEffects>(extraBufferCapacity = 1)
-    val activityDetailEffect = _activityDetailEffect.asSharedFlow()
-    private fun setActivityDetailEffect(effect: ActivityDetailEffects) = viewModelScope.launch { _activityDetailEffect.emit(effect) }
 
     fun setActivity(activity: Activity) {
         this.activity = activity
@@ -114,11 +107,6 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun onDismissBoostSheet() {
         _boostSheetVisible.update { false }
-    }
-
-    sealed interface ActivityDetailEffects {
-        data object OnBoostSuccess: ActivityDetailEffects
-        data object OnBoostFailed: ActivityDetailEffects
     }
 
     private companion object {

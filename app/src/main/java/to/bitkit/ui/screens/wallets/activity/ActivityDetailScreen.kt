@@ -87,7 +87,6 @@ fun ActivityDetailScreen(
     val copyToastTitle = stringResource(R.string.common__copied)
 
     val tags by detailViewModel.tags.collectAsStateWithLifecycle()
-    val boosting by detailViewModel.boosting.collectAsStateWithLifecycle()
     val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
@@ -96,27 +95,6 @@ fun ActivityDetailScreen(
     }
 
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        detailViewModel.activityDetailEffect.collect { event ->
-            when (event) {
-                ActivityDetailViewModel.ActivityDetailEffects.OnBoostFailed -> {
-                    app.toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.wallet__boost_error_title),
-                        description = context.getString(R.string.wallet__boost_error_msg)
-                    )
-                }
-                ActivityDetailViewModel.ActivityDetailEffects.OnBoostSuccess -> {
-                    app.toast(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.wallet__boost_success_title),
-                        description = context.getString(R.string.wallet__boost_success_msg)
-                    )
-                    onCloseClick()
-                }
-            }
-        }
-    }
 
     Box(
         modifier = Modifier.fillMaxWidth()
@@ -157,10 +135,29 @@ fun ActivityDetailScreen(
             (item as? Activity.Onchain)?.let {
                 BoostTransactionSheet(
                     modifier = Modifier.fillMaxWidth(),
-                    onConfirm = detailViewModel::onConfirmBoost,
                     onDismiss = detailViewModel::onDismissBoostSheet,
                     item = it,
-                    loading = boosting
+                    onSuccess = {
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = context.getString(R.string.wallet__boost_success_title),
+                            description = context.getString(R.string.wallet__boost_success_msg)
+                        )
+                        onCloseClick()
+                    },
+                    onFailure = {
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__boost_error_title),
+                            description = context.getString(R.string.wallet__boost_error_msg)
+                        )
+                    },
+                    onMaxFee = {
+                        // TODO IMPLEMENT
+                    },
+                    onMinFee = {
+                        // TODO IMPLEMENT
+                    }
                 )
             }
         }

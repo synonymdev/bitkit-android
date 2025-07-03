@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,16 +53,30 @@ import to.bitkit.ui.utils.withAccent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoostTransactionSheet( //TODO Handle CPFP too
+fun BoostTransactionSheet(
+    //TODO Handle CPFP too
     modifier: Modifier = Modifier,
     viewModel: BoostTransactionViewModel = hiltViewModel(),
     onSuccess: () -> Unit,
     onFailure: () -> Unit,
+    onMaxFee: () -> Unit,
+    onMinFee: () -> Unit,
     onDismiss: () -> Unit,
     item: Activity.Onchain,
 ) {
     LaunchedEffect(Unit) {
         viewModel.setupActivity(item)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.boostTransactionEffect.collect { event ->
+            when (event) {
+                BoostTransactionEffects.OnBoostFailed -> onFailure()
+                BoostTransactionEffects.OnBoostSuccess -> onSuccess()
+                BoostTransactionEffects.onMaxFee -> onMaxFee()
+                BoostTransactionEffects.onMinFee -> onMinFee()
+            }
+        }
     }
 
     val uiState by viewModel.uiState.collectAsState()
@@ -100,96 +115,62 @@ fun BoostTransactionContent(
             .fillMaxWidth()
             .gradientBackground()
             .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
-        val bodyText = if (uiState.isDefaultMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
+        val bodyText =
+            if (uiState.isDefaultMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
 
         BodyS(text = stringResource(bodyText), color = Colors.White64)
 
         VerticalSpacer(24.dp)
 
-        if (uiState.isDefaultMode) {
-            Row(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_timer_alt_yellow),
-                    contentDescription = null
-                )
-
-                HorizontalSpacer(16.dp)
-
-                Column(modifier = Modifier.weight(1f)) {
-                    BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                    BodySSB(text = uiState.estimateTime, color = Colors.White64)
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.clickable { onClickEdit() },
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        BodyMSB(
-                            text = rememberMoneyText(sats = uiState.totalFeeSats.toLong())
-                                .orEmpty()
-                                .withAccent(defaultColor = Colors.White).toString(),
-                            color = Colors.White
-                        )
-
-                        Icon(
-                            painter = painterResource(R.drawable.ic_pencil_simple),
-                            tint = Colors.White,
-                            contentDescription = stringResource(R.string.common__edit),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    BodySSB(
-                        text = rememberMoneyText(
-                            sats = uiState.totalFeeSats.toLong(),
-                            reversed = true
-                        ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
-                        color = Colors.White64
-                    )
-                }
+        when {
+            uiState.loading -> {
+                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
             }
 
-            VerticalSpacer(68.dp)
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
-                QuantityIcon(
-                    icon = painterResource(R.drawable.ic_minus),
-                    iconColor = Colors.Red,
-                    backgroundColor = Colors.Red16,
-                    enable = uiState.decreaseEnabled,
-                    onClick = { onChangeAmount(false) },
-                    contentDescription = "Reduce fee",
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+            uiState.isDefaultMode -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    BodyMSB(
-                        text = rememberMoneyText(sats = uiState.feeRate.toLong())
-                            .orEmpty()
-                            .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
-                        color = Colors.White
+                    Image(
+                        painter = painterResource(R.drawable.ic_timer_alt_yellow),
+                        contentDescription = null
                     )
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    HorizontalSpacer(16.dp)
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
+                        BodySSB(text = uiState.estimateTime, color = Colors.White64)
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.clickable { onClickEdit() },
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            BodyMSB(
+                                text = rememberMoneyText(sats = uiState.totalFeeSats.toLong())
+                                    .orEmpty()
+                                    .withAccent(defaultColor = Colors.White).toString(),
+                                color = Colors.White
+                            )
+
+                            Icon(
+                                painter = painterResource(R.drawable.ic_pencil_simple),
+                                tint = Colors.White,
+                                contentDescription = stringResource(R.string.common__edit),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
                         BodySSB(
                             text = rememberMoneyText(
                                 sats = uiState.totalFeeSats.toLong(),
@@ -197,44 +178,97 @@ fun BoostTransactionContent(
                             ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                             color = Colors.White64
                         )
-
-                        BodySSB(
-                            text = uiState.estimateTime,
-                            color = Colors.White64
-                        )
                     }
                 }
 
-                QuantityIcon(
-                    icon = painterResource(R.drawable.ic_plus),
-                    iconColor = Colors.Green,
-                    backgroundColor = Colors.Green16,
-                    enable = uiState.increaseEnabled,
-                    onClick = { onChangeAmount(true) },
-                    contentDescription = "Increase fee",
+                VerticalSpacer(68.dp)
+
+                SwipeToConfirm(
+                    text = stringResource(R.string.wallet__boost_swipe),
+                    color = Colors.Yellow,
+                    endIcon = R.drawable.ic_timer_alt_yellow,
+                    onConfirm = onSwipe,
+                    loading = uiState.boosting,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            VerticalSpacer(16.dp)
+            else -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
 
-            PrimaryButton(
-                text = stringResource(R.string.wallet__boost_recomended_button),
-                fullWidth = false,
-                onClick = onClickUseSuggestedFee,
-                size = ButtonSize.Small
-            )
+                    QuantityIcon(
+                        icon = painterResource(R.drawable.ic_minus),
+                        iconColor = Colors.Red,
+                        backgroundColor = Colors.Red16,
+                        enable = uiState.decreaseEnabled,
+                        onClick = { onChangeAmount(false) },
+                        contentDescription = "Reduce fee",
+                    )
 
-            VerticalSpacer(16.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        BodyMSB(
+                            text = rememberMoneyText(sats = uiState.feeRate.toLong())
+                                .orEmpty()
+                                .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
+                            color = Colors.White
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            BodySSB(
+                                text = rememberMoneyText(
+                                    sats = uiState.totalFeeSats.toLong(),
+                                    reversed = true
+                                ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
+                                color = Colors.White64
+                            )
+
+                            BodySSB(
+                                text = uiState.estimateTime,
+                                color = Colors.White64
+                            )
+                        }
+                    }
+
+                    QuantityIcon(
+                        icon = painterResource(R.drawable.ic_plus),
+                        iconColor = Colors.Green,
+                        backgroundColor = Colors.Green16,
+                        enable = uiState.increaseEnabled,
+                        onClick = { onChangeAmount(true) },
+                        contentDescription = "Increase fee",
+                    )
+                }
+
+                VerticalSpacer(16.dp)
+
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__boost_recomended_button),
+                    fullWidth = false,
+                    onClick = onClickUseSuggestedFee,
+                    size = ButtonSize.Small
+                )
+
+                VerticalSpacer(16.dp)
+
+                SwipeToConfirm(
+                    text = stringResource(R.string.wallet__boost_swipe),
+                    color = Colors.Yellow,
+                    endIcon = R.drawable.ic_timer_alt_yellow,
+                    onConfirm = onSwipe,
+                    loading = uiState.boosting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
-
-        SwipeToConfirm(
-            text = stringResource(R.string.wallet__boost_swipe),
-            color = Colors.Yellow,
-            endIcon = R.drawable.ic_timer_alt_yellow,
-            onConfirm = onSwipe,
-            loading = uiState.boosting,
-            modifier = Modifier.fillMaxWidth()
-        )
 
         VerticalSpacer(8.dp)
     }
