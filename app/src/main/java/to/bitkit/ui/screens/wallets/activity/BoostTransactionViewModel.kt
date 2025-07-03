@@ -17,7 +17,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
-import java.math.BigInteger
 import javax.inject.Inject
 
 @HiltViewModel

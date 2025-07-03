@@ -38,7 +38,6 @@ import to.bitkit.services.LightningService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import java.lang.IllegalArgumentException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
