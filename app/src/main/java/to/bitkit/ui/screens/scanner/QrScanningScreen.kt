@@ -17,6 +17,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.clipboardManager
@@ -69,6 +71,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
+import kotlin.time.Duration.Companion.milliseconds
 
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
@@ -84,14 +87,24 @@ fun QrScanningScreen(
     val backStackEntry = navController.previousBackStackEntry
     val isCalledForResult = backStackEntry?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
 
-    val onScan: (String) -> Unit = if (isCalledForResult) {
-        { qrCode ->
-            backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
-            backStackEntry.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-            navController.popBackStack()
+    val (scanResult, setScanResult) = remember { mutableStateOf<String?>(null) }
+
+    // Handle scan result
+    LaunchedEffect(scanResult) {
+        scanResult?.let { qrCode ->
+            delay(100) // wait to prevent navigation result race conditions
+
+            if (isCalledForResult) {
+                backStackEntry.savedStateHandle[SCAN_RESULT_KEY] = qrCode
+                navController.popBackStack()
+                backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
+            } else {
+                onScanSuccess(qrCode)
+            }
+
+            // Reset scan result to allow new scans
+            setScanResult(null)
         }
-    } else {
-        onScanSuccess
     }
 
     // TODO maybe replace & drop accompanist permissions
@@ -115,41 +128,39 @@ fun QrScanningScreen(
 
     val context = LocalContext.current
     val previewView = remember { PreviewView(context) }
-    val preview by remember { mutableStateOf(Preview.Builder().build()) }
-    val imageAnalysis by remember {
-        mutableStateOf(
-            ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-        )
+    val preview = remember { Preview.Builder().build() }
+    val analyzer = remember {
+        QrCodeAnalyzer { result ->
+            if (result.isSuccess) {
+                val qrCode = requireNotNull(result.getOrNull())
+                Logger.debug("QR code scanned: $qrCode")
+                setScanResult(qrCode)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull())
+                Logger.error("Failed to scan QR code", error)
+                app.toast(error)
+            }
+        }
+    }
+    val imageAnalysis = remember {
+        ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
     }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { processImageFromGallery(context, it, onScan, onError = { e -> app.toast(e) }) }
+            uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
         }
     )
 
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { processImageFromGallery(context, it, onScan, onError = { e -> app.toast(e) }) }
+        uri?.let { processImageFromGallery(context, it, setScanResult, onError = { e -> app.toast(e) }) }
     }
 
     LaunchedEffect(lensFacing) {
-        imageAnalysis.setAnalyzer(
-            Executors.newSingleThreadExecutor(),
-            QrCodeAnalyzer { result ->
-                if (result.isSuccess) {
-                    val qrCode = requireNotNull(result.getOrNull())
-                    Logger.debug("Scan success: $qrCode")
-                    onScan(qrCode)
-                } else {
-                    val error = requireNotNull(result.exceptionOrNull())
-                    Logger.error("Failed to scan QR code", error)
-                    app.toast(error)
-                }
-            }
-        )
+        imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), analyzer)
     }
 
     val cameraSelector = remember(lensFacing) {
@@ -204,7 +215,7 @@ fun QrScanningScreen(
                             if (clipData.itemCount > 0) {
                                 val text = clipData.getItemAt(0).text.toString()
                                 if (text.isNotBlank()) {
-                                    onScan(text)
+                                    setScanResult(text)
                                 } else {
                                     app.toast(Exception("Clipboard is empty or doesn't contain text"))
                                 }
