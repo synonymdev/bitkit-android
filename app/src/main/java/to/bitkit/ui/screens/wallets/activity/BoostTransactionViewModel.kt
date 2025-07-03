@@ -16,6 +16,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
+import java.math.BigInteger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,6 +35,7 @@ class BoostTransactionViewModel @Inject constructor(
 
 
     private var totalFeeSatsRecommended: ULong = 0U
+    private var maxTotalFee: ULong = 0U
     private var feeRateRecommended: ULong = 0U
 
     private var activity: Activity.Onchain? = null
@@ -47,6 +49,12 @@ class BoostTransactionViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.estimateTotalFee(speed = speed).onSuccess { totalFee ->
                 totalFeeSatsRecommended = totalFee
+                maxTotalFee = BigInteger.valueOf(
+                    activity.v1.fee.toLong()
+                ).times(
+                    BigInteger.valueOf(0.5.toLong())
+                )
+                    .toLong().toULong()
 
                 lightningRepo.getFeeRateForSpeed(speed).onSuccess { feeRate ->
                     feeRateRecommended = feeRate
@@ -111,10 +119,8 @@ class BoostTransactionViewModel @Inject constructor(
         viewModelScope.launch {
 
             val newFeeRate = if (increase) {
-                //TODO CHECK MAX FEE
                 _uiState.value.feeRate + 1U
             } else {
-                //TODO CHECK MIN FEE
                 _uiState.value.feeRate - 1U
             }
 
@@ -130,6 +136,8 @@ class BoostTransactionViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             totalFeeSats = newTotalFee,
+                            increaseEnabled = newTotalFee >= maxTotalFee,
+                            decreaseEnabled = newTotalFee <= (activity?.v1?.fee ?: newTotalFee)
                         )
                     }
                 }
