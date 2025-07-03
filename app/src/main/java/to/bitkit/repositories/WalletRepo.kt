@@ -485,8 +485,8 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun updateActivity(id: String, activity: Activity) {
-        runCatching {
+    suspend fun updateActivity(id: String, activity: Activity) : Result<Unit>{
+        return runCatching {
             coreService.activity.update(id, activity)
         }.onFailure {
             Logger.error("Error updating activity", context = TAG)
@@ -557,7 +557,7 @@ class WalletRepo @Inject constructor(
 
         var activity = findActivity()
         if (activity == null) {
-            Logger.warn("activity not found, trying again after delay", context = TAG)
+            Logger.warn("activity $paymentHashOrTxId not found, trying again after delay", context = TAG)
             delay(5.seconds)
             activity = findActivity()
         }

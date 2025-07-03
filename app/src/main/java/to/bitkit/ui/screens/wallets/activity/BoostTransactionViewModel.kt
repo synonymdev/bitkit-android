@@ -90,9 +90,15 @@ class BoostTransactionViewModel @Inject constructor(
                 originalTxId = activity?.v1?.txId.orEmpty()
             ).onSuccess { newTxId ->
                 Logger.debug("Success boosting transaction", context = TAG)
-                updateActivity(newTxId = newTxId, isRBF = true)
-                _uiState.update { it.copy(boosting = false) }
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                updateActivity(newTxId = newTxId, isRBF = true).onSuccess {
+                    _uiState.update { it.copy(boosting = false) }
+                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                }.onFailure { e ->
+                    _uiState.update { it.copy(boosting = false) }
+                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                    Logger.warn("Boos successful but there was a failure updating the activity", e = e, context = TAG)
+                }
+
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
                 setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
@@ -131,12 +137,12 @@ class BoostTransactionViewModel @Inject constructor(
 
     }
 
-    private fun updateActivity(newTxId: Txid, isRBF: Boolean) {
-        viewModelScope.launch {
-            Logger.debug("Searching activity $newTxId", context = TAG)
-            walletRepo.getOnChainActivityByTxId(txId = newTxId, txType = PaymentType.SENT).onSuccess { newActivity ->
+    private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
+        Logger.debug("Searching activity $newTxId", context = TAG)
+        return walletRepo.getOnChainActivityByTxId(txId = newTxId, txType = PaymentType.SENT).fold(
+            onSuccess = { newActivity ->
                 Logger.debug("Activity found $newActivity", context = TAG)
-                (newActivity as? Activity.Onchain)?.let { newOnChainActivity: Activity.Onchain ->
+                (newActivity as? Activity.Onchain)?.let { newOnChainActivity ->
                     val updatedActivity = Activity.Onchain(
                         v1 = newOnChainActivity.v1.copy(
                             isBoosted = true,
@@ -145,16 +151,19 @@ class BoostTransactionViewModel @Inject constructor(
                     )
 
                     if (isRBF) {
-                        updatedActivity.let { walletRepo.updateActivity(id = it.v1.id, it) }
+                        walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
                     } else {
                         // TODO HANDLE CPFP
+                        Result.failure(Exception("Not implemented"))
                     }
-                } ?: Logger.debug("Activity not onChAin type", context = TAG)
-            }.onFailure { e ->
+                } ?: Result.failure(Exception("Activity not onChain type"))
+            },
+            onFailure = { e ->
                 Logger.error("Activity $newTxId not found", e = e, context = TAG)
+                Result.failure(e)
             }
-        }
-    } //TODO ADD A CALLBACK
+        )
+    }
 
     companion object {
         private const val TAG = "BoostTransactionViewModel"
