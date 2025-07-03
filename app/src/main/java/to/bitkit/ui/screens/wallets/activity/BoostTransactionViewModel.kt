@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import dagger.hilt.android.lifecycle.HiltViewModel
-import jakarta.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -14,6 +13,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
+import javax.inject.Inject
 
 @HiltViewModel
 class BoostTransactionViewModel @Inject constructor(
@@ -25,7 +25,8 @@ class BoostTransactionViewModel @Inject constructor(
 
     private val _boostTransactionEffect = MutableSharedFlow<BoostTransactionEffects>(extraBufferCapacity = 1)
     val boostTransactionEffect = _boostTransactionEffect.asSharedFlow()
-    private fun setBoostTransactionEffect(effect: BoostTransactionEffects) = viewModelScope.launch { _boostTransactionEffect.emit(effect) }
+    private fun setBoostTransactionEffect(effect: BoostTransactionEffects) =
+        viewModelScope.launch { _boostTransactionEffect.emit(effect) }
 
 
     private var totalFeeSatsRecommended: ULong = 0U
@@ -131,11 +132,12 @@ class BoostTransactionViewModel @Inject constructor(
 }
 
 sealed interface BoostTransactionEffects {
-    data object OnBoostSuccess: BoostTransactionEffects
-    data object OnBoostFailed: BoostTransactionEffects
-    data object onMaxFee: BoostTransactionEffects
-    data object onMinFee: BoostTransactionEffects
+    data object OnBoostSuccess : BoostTransactionEffects
+    data object OnBoostFailed : BoostTransactionEffects
+    data object onMaxFee : BoostTransactionEffects
+    data object onMinFee : BoostTransactionEffects
 }
+
 data class BoostTransactionUiState(
     val totalFeeSats: ULong = 0U,
     val feeRate: ULong = 0U,
