@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.synonym.bitkitcore.Activity
 import to.bitkit.R
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -216,7 +217,7 @@ fun BoostTransactionContent(
                         BodyMSB(
                             text = rememberMoneyText(sats = uiState.feeRate.toLong())
                                 .orEmpty()
-                                .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
+                                .withAccent(defaultColor = Colors.White).toString() + "/vbyte ($BITCOIN_SYMBOL ${uiState.totalFeeSats})" ,
                             color = Colors.White
                         )
 
