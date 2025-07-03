@@ -151,6 +151,7 @@ fun ActivityDetailScreen(
                             title = context.getString(R.string.wallet__boost_error_title),
                             description = context.getString(R.string.wallet__boost_error_msg)
                         )
+                        detailViewModel.onDismissBoostSheet()
                     },
                     onMaxFee = {
                         // TODO IMPLEMENT
