@@ -140,10 +140,7 @@ private fun Content(
             VerticalSpacer(32.dp)
 
             // Host Input
-            Caption13Up(
-                text = stringResource(R.string.settings__es__host),
-                color = Colors.White64,
-            )
+            Caption13Up(stringResource(R.string.settings__es__host), color = Colors.White64)
             VerticalSpacer(8.dp)
             TextInput(
                 value = uiState.host,
@@ -155,10 +152,7 @@ private fun Content(
             VerticalSpacer(16.dp)
 
             // Port Input
-            Caption13Up(
-                text = stringResource(R.string.settings__es__port),
-                color = Colors.White64,
-            )
+            Caption13Up(stringResource(R.string.settings__es__port), color = Colors.White64)
             VerticalSpacer(8.dp)
             TextInput(
                 value = uiState.port,
@@ -171,10 +165,7 @@ private fun Content(
             VerticalSpacer(28.dp)
 
             // Protocol Selection
-            Caption13Up(
-                text = stringResource(R.string.settings__es__protocol),
-                color = Colors.White64,
-            )
+            Caption13Up(stringResource(R.string.settings__es__protocol), color = Colors.White64)
             VerticalSpacer(4.dp)
             SettingsButtonRow(
                 title = "TCP",
