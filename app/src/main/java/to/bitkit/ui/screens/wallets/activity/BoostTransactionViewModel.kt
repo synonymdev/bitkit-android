@@ -133,13 +133,19 @@ class BoostTransactionViewModel @Inject constructor(
 
             lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
                 .onSuccess { newTotalFee ->
+                    val maxFeeReached = newTotalFee >= maxTotalFee
+                    val minFeeReached = newTotalFee <= (activity?.v1?.fee ?: newTotalFee)
+
                     _uiState.update {
                         it.copy(
                             totalFeeSats = newTotalFee,
-                            increaseEnabled = newTotalFee >= maxTotalFee,
-                            decreaseEnabled = newTotalFee <= (activity?.v1?.fee ?: newTotalFee)
+                            increaseEnabled = maxFeeReached,
+                            decreaseEnabled = minFeeReached
                         )
                     }
+
+                    if (maxFeeReached) setBoostTransactionEffect(BoostTransactionEffects.onMaxFee)
+                    if (minFeeReached) setBoostTransactionEffect(BoostTransactionEffects.onMinFee)
                 }
         }
 
