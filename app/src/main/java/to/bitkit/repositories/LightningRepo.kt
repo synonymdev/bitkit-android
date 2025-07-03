@@ -403,6 +403,17 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun getFeeRateForSpeed(speed: TransactionSpeed): Result<ULong> = withContext(bgDispatcher) {
+        return@withContext try {
+            val fees = coreService.blocktank.getFees().getOrThrow()
+            val satsPerVByte = fees.getSatsPerVByteFor(speed)
+            Result.success(satsPerVByte.toULong())
+        } catch (e: Throwable) {
+            Logger.error("Estimate fee", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
     suspend fun openChannel(
         peer: LnPeer,
         channelAmountSats: ULong,
