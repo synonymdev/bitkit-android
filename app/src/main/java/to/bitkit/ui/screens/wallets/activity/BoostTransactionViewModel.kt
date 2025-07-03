@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.deleteActivityById
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,14 +11,18 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Txid
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
+import java.time.Instant
 import javax.inject.Inject
 
 @HiltViewModel
 class BoostTransactionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
+    private val walletRepo: WalletRepo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -83,10 +88,10 @@ class BoostTransactionViewModel @Inject constructor(
             lightningRepo.bumpFeeByRbf(
                 satsPerVByte = _uiState.value.feeRate.toUInt(),
                 originalTxId = activity?.v1?.txId.orEmpty()
-            ).onSuccess {
+            ).onSuccess { newTxId ->
                 Logger.debug("Success boosting transaction", context = TAG)
                 setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                //TODO REGISTER ACTIVITY
+                updateActivity(newTxId = newTxId, isRBF = true)
                 _uiState.update { it.copy(boosting = false) }
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
@@ -122,6 +127,28 @@ class BoostTransactionViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+
+    }
+
+    private fun updateActivity(newTxId: Txid, isRBF: Boolean) {
+        viewModelScope.launch {
+            walletRepo.getActivityById(id = newTxId).onSuccess { newActivity ->
+                (newActivity as? Activity.Onchain)?.let { newOnChainActivity: Activity.Onchain ->
+                    val updatedActivity = Activity.Onchain(
+                        v1 = newOnChainActivity.v1.copy(
+                            isBoosted = true,
+                            txId = newTxId,
+                        )
+                    )
+
+                    if (isRBF) {
+                        updatedActivity.let { walletRepo.updateActivity(id = it.v1.id, it) }
+                    } else {
+                        // TODO HANDLE CPFP
+                    }
+                }
+            }
         }
 
     }

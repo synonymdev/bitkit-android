@@ -466,6 +466,34 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    suspend fun deleteActivityById(id: String) = withContext(bgDispatcher) {
+        runCatching {
+            coreService.activity.delete(id)
+        }.onFailure {
+            Logger.error("Error deleting activity", context = TAG)
+        }
+    }
+
+
+    suspend fun getActivityById(id: String): Result<Activity> {
+        return runCatching {
+            val activity =
+                coreService.activity.getActivity(id) ?: return Result.failure(Exception("Activity not found"))
+            return Result.success(activity)
+        }.onFailure { e ->
+            Logger.error("Error updating activity", context = TAG)
+            return Result.failure(e)
+        }
+    }
+
+    suspend fun updateActivity(id: String, activity: Activity) {
+        runCatching {
+            coreService.activity.update(id, activity)
+        }.onFailure {
+            Logger.error("Error updating activity", context = TAG)
+        }
+    }
+
     suspend fun attachTagsToActivity(
         paymentHashOrTxId: String?,
         type: ActivityFilter,
