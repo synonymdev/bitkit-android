@@ -24,7 +24,6 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.Toast
 import to.bitkit.models.defaultElectrumPorts
-import to.bitkit.models.defaultElectrumServers
 import to.bitkit.models.getDefaultPort
 import to.bitkit.models.getProtocolForPort
 import to.bitkit.repositories.LightningRepo
@@ -115,7 +114,7 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun resetToDefault() {
-        val defaultServer = defaultElectrumServers[network]
+        val defaultServer = Env.defaultElectrumServers[network]
         if (defaultServer != null) {
             _uiState.update { currentState ->
                 val newState = currentState.copy(

@@ -167,6 +167,12 @@ internal object Env {
         )
     }
 
+    val defaultElectrumServers = mapOf(
+        Network.BITCOIN to ElectrumServers.BITCOIN,
+        Network.TESTNET to ElectrumServers.TESTNET_1,
+        Network.REGTEST to ElectrumServers.REGTEST,
+    )
+
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
     const val DEFAULT_INVOICE_MESSAGE = "Bitkit"

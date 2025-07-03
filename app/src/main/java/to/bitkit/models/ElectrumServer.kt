@@ -2,7 +2,6 @@ package to.bitkit.models
 
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Network
-import to.bitkit.env.Env
 
 @Serializable
 data class ElectrumServer(
@@ -91,9 +90,3 @@ fun getProtocolForPort(port: String, network: Network? = null): ElectrumProtocol
         else -> ElectrumProtocol.TCP // Default to TCP
     }
 }
-
-val defaultElectrumServers = mapOf(
-    Network.BITCOIN to Env.ElectrumServers.BITCOIN,
-    Network.TESTNET to Env.ElectrumServers.TESTNET_1,
-    Network.REGTEST to Env.ElectrumServers.REGTEST,
-)

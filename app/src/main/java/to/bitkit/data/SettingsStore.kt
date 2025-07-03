@@ -4,17 +4,17 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.dataStoreFile
+import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.serializers.SettingsSerializer
-import com.synonym.bitkitcore.AddressType
+import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.PrimaryDisplay
-import to.bitkit.models.defaultElectrumServers
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
@@ -114,5 +114,5 @@ data class SettingsData(
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
     val addressType: AddressType = AddressType.P2WPKH,
-    val customElectrumServers: Map<Network, ElectrumServer> = defaultElectrumServers,
+    val customElectrumServers: Map<Network, ElectrumServer> = Env.defaultElectrumServers,
 )
