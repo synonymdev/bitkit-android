@@ -21,6 +21,9 @@ class BoostTransactionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var totalFeeSatsRecommended: ULong = 0U
+    private var feeRateRecommended: ULong = 0U
+
     private var activity: Activity.Onchain? = null
 
     fun setupActivity(activity: Activity.Onchain) {
@@ -30,11 +33,14 @@ class BoostTransactionViewModel @Inject constructor(
 
         viewModelScope.launch {
             lightningRepo.estimateTotalFee(speed = speed).onSuccess { totalFee ->
+                totalFeeSatsRecommended = totalFee
+
                 lightningRepo.getFeeRateForSpeed(speed).onSuccess { feeRate ->
+                    feeRateRecommended = feeRate
                     _uiState.update {
                         it.copy(
                             totalFeeSats = totalFee,
-                            feeRate = feeRate
+                            feeRate = feeRate,
                         )
                     }
                 }.onFailure { e ->
@@ -42,10 +48,73 @@ class BoostTransactionViewModel @Inject constructor(
                     //TODO Dismiss
                 }
             }.onFailure { e ->
-                Logger.error("error getting total fee ",e, context = TAG)
+                Logger.error("error getting total fee ", e, context = TAG)
                 //TODO Dismiss
             }
         }
+    }
+
+    fun onClickEdit() {
+        _uiState.update { it.copy(isDefaultMode = false) }
+    }
+
+    fun onClickUseSuggestedFee() {
+        _uiState.update {
+            it.copy(
+                totalFeeSats = totalFeeSatsRecommended,
+                feeRate = feeRateRecommended,
+                isDefaultMode = true
+            )
+        }
+    }
+
+    fun onConfirmBoost() {
+        _uiState.update { it.copy(boosting = true) }
+        viewModelScope.launch {
+            lightningRepo.bumpFeeByRbf(
+                satsPerVByte = _uiState.value.feeRate.toUInt(),
+                originalTxId = activity?.v1?.txId.orEmpty()
+            ).onSuccess {
+                Logger.debug("Success boosting transaction", context = TAG)
+//                setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
+                //TODO REGISTER ACTIVITY
+                _uiState.update { it.copy(boosting = false) }
+            }.onFailure { e ->
+                Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
+//                setActivityDetailEffect(ActivityDetailEffects.OnBoostFailed)
+                _uiState.update { it.copy(boosting = false) }
+            }
+        }
+    }
+
+    fun onChangeAmount(increase: Boolean) {
+        viewModelScope.launch {
+
+            val newFeeRate = if (increase) {
+                //TODO CHECK MAX FEE
+                _uiState.value.feeRate + 1U
+            } else {
+                //TODO CHECK MIN FEE
+                _uiState.value.feeRate - 1U
+            }
+
+            _uiState.update {
+                it.copy(
+                    feeRate = newFeeRate,
+                    isDefaultMode = newFeeRate == feeRateRecommended
+                )
+            }
+
+            lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
+                .onSuccess { newTotalFee ->
+                    _uiState.update {
+                        it.copy(
+                            totalFeeSats = newTotalFee,
+                        )
+                    }
+                }
+        }
+
     }
 
     companion object {
@@ -56,4 +125,10 @@ class BoostTransactionViewModel @Inject constructor(
 data class BoostTransactionUiState(
     val totalFeeSats: ULong = 0U,
     val feeRate: ULong = 0U,
+    val isDefaultMode: Boolean = true,
+    val decreaseEnabled: Boolean = true,
+    val increaseEnabled: Boolean = true,
+    val boosting: Boolean = false,
+    val loading: Boolean = false,
+    val estimateTime: String = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
 )

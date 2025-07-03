@@ -116,27 +116,6 @@ class ActivityDetailViewModel @Inject constructor(
         _boostSheetVisible.update { false }
     }
 
-    fun onConfirmBoost(feeSats: Long) {
-        _boosting.update { true }
-        viewModelScope.launch {
-            lightningRepo.bumpFeeByRbf(
-                satsPerVByte = feeSats.toUInt(),
-                originalTxId = (activity as? Activity.Onchain)?.v1?.txId.orEmpty()
-            ).onSuccess {
-                Logger.debug("Success boosting transaction", context = TAG)
-                setActivityDetailEffect(ActivityDetailEffects.OnBoostSuccess)
-                //TODO REGISTER ACTIVITY
-                _boosting.update { false }
-                _boostSheetVisible.update { false }
-            }.onFailure { e ->
-                Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
-                setActivityDetailEffect(ActivityDetailEffects.OnBoostFailed)
-                _boosting.update { false }
-                _boostSheetVisible.update { false }
-            }
-        }
-    }
-
     sealed interface ActivityDetailEffects {
         data object OnBoostSuccess: ActivityDetailEffects
         data object OnBoostFailed: ActivityDetailEffects

@@ -17,11 +17,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.synonym.bitkitcore.Activity
 import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
@@ -55,15 +54,17 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun BoostTransactionSheet( //TODO Handle CPFP too
     modifier: Modifier = Modifier,
-    onConfirm: (Long) -> Unit,
+    viewModel: BoostTransactionViewModel = hiltViewModel(),
+    onSuccess: () -> Unit,
+    onFailure: () -> Unit,
     onDismiss: () -> Unit,
-    loading: Boolean,
     item: Activity.Onchain,
 ) {
-    val currentFee = item.v1.fee.toLong()
-    var isDefaultMode by remember { mutableStateOf(true) }
-    var fee by remember { mutableLongStateOf(currentFee + 100) } //TODO IMPLEMENT PROPPER CALC
+    LaunchedEffect(Unit) {
+        viewModel.setupActivity(item)
+    }
 
+    val uiState by viewModel.uiState.collectAsState()
     val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -76,28 +77,11 @@ fun BoostTransactionSheet( //TODO Handle CPFP too
     ) {
         BoostTransactionContent(
             modifier = modifier,
-            feeSats = fee,
-            currentFee = currentFee,
-            estimateTime = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
-            isDefaultMode = isDefaultMode,
-            onClickEdit = {
-                isDefaultMode = !isDefaultMode
-            },
-            onClickUseSuggestedFee = {
-                fee = currentFee + 100  //TODO IMPLEMENT PROPPER CALC
-                isDefaultMode = true
-            },
-            onChangeAmount = { increase ->
-                if (increase) { //TODO DON'T ALLOW IF IT IS BIGGER THAN HALF OF THE VALUE
-                    fee += 10
-                } else {
-                    fee -= 10
-                }
-            },
-            onConfirm = {
-                onConfirm(fee) //TODO RETURN FeeRate INSTEAD OF FEE
-            },
-            loading = loading
+            onClickEdit = viewModel::onClickEdit,
+            onClickUseSuggestedFee = viewModel::onClickUseSuggestedFee,
+            onChangeAmount = viewModel::onChangeAmount,
+            onSwipe = viewModel::onConfirmBoost,
+            uiState = uiState
         )
     }
 }
@@ -105,15 +89,11 @@ fun BoostTransactionSheet( //TODO Handle CPFP too
 @Composable
 fun BoostTransactionContent(
     modifier: Modifier = Modifier,
-    feeSats: Long,
-    currentFee: Long,
-    estimateTime: String,
+    uiState: BoostTransactionUiState,
     onClickEdit: () -> Unit,
     onClickUseSuggestedFee: () -> Unit,
     onChangeAmount: (Boolean) -> Unit,
-    isDefaultMode: Boolean,
-    loading: Boolean,
-    onConfirm: () -> Unit,
+    onSwipe: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -124,13 +104,13 @@ fun BoostTransactionContent(
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__boost_title))
 
-        val bodyText = if (isDefaultMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
+        val bodyText = if (uiState.isDefaultMode) R.string.wallet__boost_fee_recomended else R.string.wallet__boost_fee_custom
 
         BodyS(text = stringResource(bodyText), color = Colors.White64)
 
         VerticalSpacer(24.dp)
 
-        if (isDefaultMode) {
+        if (uiState.isDefaultMode) {
             Row(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -143,7 +123,7 @@ fun BoostTransactionContent(
 
                 Column(modifier = Modifier.weight(1f)) {
                     BodyMSB(text = stringResource(R.string.wallet__boost), color = Colors.White)
-                    BodySSB(text = estimateTime, color = Colors.White64)
+                    BodySSB(text = uiState.estimateTime, color = Colors.White64)
                 }
 
                 Column(
@@ -155,7 +135,7 @@ fun BoostTransactionContent(
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         BodyMSB(
-                            text = rememberMoneyText(sats = feeSats)
+                            text = rememberMoneyText(sats = uiState.totalFeeSats.toLong())
                                 .orEmpty()
                                 .withAccent(defaultColor = Colors.White).toString(),
                             color = Colors.White
@@ -171,7 +151,7 @@ fun BoostTransactionContent(
 
                     BodySSB(
                         text = rememberMoneyText(
-                            sats = feeSats,
+                            sats = uiState.totalFeeSats.toLong(),
                             reversed = true
                         ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                         color = Colors.White64
@@ -190,7 +170,7 @@ fun BoostTransactionContent(
                     icon = painterResource(R.drawable.ic_minus),
                     iconColor = Colors.Red,
                     backgroundColor = Colors.Red16,
-                    enable = feeSats > currentFee,
+                    enable = uiState.decreaseEnabled,
                     onClick = { onChangeAmount(false) },
                     contentDescription = "Reduce fee",
                 )
@@ -201,9 +181,9 @@ fun BoostTransactionContent(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     BodyMSB(
-                        text = rememberMoneyText(sats = feeSats)
+                        text = rememberMoneyText(sats = uiState.feeRate.toLong())
                             .orEmpty()
-                            .withAccent(defaultColor = Colors.White).toString() /*+ "/vbyte"*/, //TODO DISPLAY FEE RATE INSTEAD OF FEE
+                            .withAccent(defaultColor = Colors.White).toString() + "/vbyte",
                         color = Colors.White
                     )
 
@@ -212,14 +192,14 @@ fun BoostTransactionContent(
                     ) {
                         BodySSB(
                             text = rememberMoneyText(
-                                sats = feeSats,
+                                sats = uiState.totalFeeSats.toLong(),
                                 reversed = true
                             ).orEmpty().withAccent(defaultColor = Colors.White64).toString(),
                             color = Colors.White64
                         )
 
                         BodySSB(
-                            text = estimateTime,
+                            text = uiState.estimateTime,
                             color = Colors.White64
                         )
                     }
@@ -229,7 +209,7 @@ fun BoostTransactionContent(
                     icon = painterResource(R.drawable.ic_plus),
                     iconColor = Colors.Green,
                     backgroundColor = Colors.Green16,
-                    enable = true,
+                    enable = uiState.increaseEnabled,
                     onClick = { onChangeAmount(true) },
                     contentDescription = "Increase fee",
                 )
@@ -251,8 +231,8 @@ fun BoostTransactionContent(
             text = stringResource(R.string.wallet__boost_swipe),
             color = Colors.Yellow,
             endIcon = R.drawable.ic_timer_alt_yellow,
-            onConfirm = onConfirm,
-            loading = loading,
+            onConfirm = onSwipe,
+            loading = uiState.boosting,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -297,15 +277,18 @@ fun QuantityIcon(
 private fun Preview() {
     AppThemeSurface {
         BoostTransactionContent(
-            feeSats = 4250L,
-            estimateTime = "±10-20 minutes",
+
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultMode = true,
-            currentFee = 4250,
-            onConfirm = {},
-            loading = true,
+            onSwipe = {},
+            uiState = BoostTransactionUiState(
+                totalFeeSats = 4250UL,
+                estimateTime = "±10-20 minutes",
+                loading = false,
+                isDefaultMode = true,
+                feeRate = 4UL,
+            )
         )
     }
 }
@@ -315,15 +298,17 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         BoostTransactionContent(
-            feeSats = 4250L,
-            currentFee = 4250L,
-            estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultMode = false,
-            onConfirm = {},
-            loading = false,
+            onSwipe = {},
+            uiState = BoostTransactionUiState(
+                totalFeeSats = 4250UL,
+                estimateTime = "±10-20 minutes",
+                loading = false,
+                isDefaultMode = false,
+                feeRate = 4UL,
+            )
         )
     }
 }
@@ -333,15 +318,17 @@ private fun Preview2() {
 private fun Preview3() {
     AppThemeSurface {
         BoostTransactionContent(
-            feeSats = 3250L,
-            currentFee = 4250L,
-            estimateTime = "±10-20 minutes",
             onClickEdit = {},
             onClickUseSuggestedFee = {},
             onChangeAmount = {},
-            isDefaultMode = false,
-            onConfirm = {},
-            loading = false,
+            onSwipe = {},
+            uiState = BoostTransactionUiState(
+                totalFeeSats = 4250UL,
+                estimateTime = "±10-20 minutes",
+                loading = true,
+                isDefaultMode = false,
+                feeRate = 4UL,
+            )
         )
     }
 }
