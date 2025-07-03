@@ -3,7 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.deleteActivityById
+import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +16,6 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
-import java.time.Instant
 import javax.inject.Inject
 
 @HiltViewModel
@@ -40,6 +39,7 @@ class BoostTransactionViewModel @Inject constructor(
     private var activity: Activity.Onchain? = null
 
     fun setupActivity(activity: Activity.Onchain) {
+        Logger.debug("Setup activity $activity", context = TAG)
         this.activity = activity
 
         val speed = TransactionSpeed.Fast
@@ -90,9 +90,9 @@ class BoostTransactionViewModel @Inject constructor(
                 originalTxId = activity?.v1?.txId.orEmpty()
             ).onSuccess { newTxId ->
                 Logger.debug("Success boosting transaction", context = TAG)
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
                 updateActivity(newTxId = newTxId, isRBF = true)
                 _uiState.update { it.copy(boosting = false) }
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
             }.onFailure { e ->
                 Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
                 setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
@@ -133,7 +133,9 @@ class BoostTransactionViewModel @Inject constructor(
 
     private fun updateActivity(newTxId: Txid, isRBF: Boolean) {
         viewModelScope.launch {
-            walletRepo.getActivityById(id = newTxId).onSuccess { newActivity ->
+            Logger.debug("Searching activity $newTxId", context = TAG)
+            walletRepo.getOnChainActivityByTxId(txId = newTxId, txType = PaymentType.SENT).onSuccess { newActivity ->
+                Logger.debug("Activity found $newActivity", context = TAG)
                 (newActivity as? Activity.Onchain)?.let { newOnChainActivity: Activity.Onchain ->
                     val updatedActivity = Activity.Onchain(
                         v1 = newOnChainActivity.v1.copy(
@@ -147,11 +149,12 @@ class BoostTransactionViewModel @Inject constructor(
                     } else {
                         // TODO HANDLE CPFP
                     }
-                }
+                } ?: Logger.debug("Activity not onChAin type", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Activity $newTxId not found", e = e, context = TAG)
             }
         }
-
-    }
+    } //TODO ADD A CALLBACK
 
     companion object {
         private const val TAG = "BoostTransactionViewModel"

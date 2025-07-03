@@ -2,8 +2,6 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -12,7 +10,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -31,7 +28,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
@@ -475,10 +471,13 @@ class WalletRepo @Inject constructor(
     }
 
 
-    suspend fun getActivityById(id: String): Result<Activity> {
+    suspend fun getOnChainActivityByTxId(txId: String, txType: PaymentType): Result<Activity> {
         return runCatching {
             val activity =
-                coreService.activity.getActivity(id) ?: return Result.failure(Exception("Activity not found"))
+                findActivityWithRetry(
+                    paymentHashOrTxId = txId,
+                    txType = txType,
+                    type = ActivityFilter.ONCHAIN) ?: return Result.failure(Exception("Activity not found"))
             return Result.success(activity)
         }.onFailure { e ->
             Logger.error("Error updating activity", context = TAG)
