@@ -475,6 +475,17 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun getFeeRateForSpeed(speed: TransactionSpeed): Result<ULong> = withContext(bgDispatcher) {
+        return@withContext try {
+            val fees = coreService.blocktank.getFees().getOrThrow()
+            val satsPerVByte = fees.getSatsPerVByteFor(speed)
+            Result.success(satsPerVByte.toULong())
+        } catch (e: Throwable) {
+            Logger.error("Estimate fee", e, context = TAG)
+            Result.failure(e)
+        }
+    }
+
     suspend fun openChannel(
         peer: LnPeer,
         channelAmountSats: ULong,
@@ -584,6 +595,42 @@ class LightningRepo @Inject constructor(
             Result.success(info)
         } catch (e: Throwable) {
             Logger.error("Blocktank info error", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun bumpFeeByRbf(
+        originalTxId: Txid,
+        satsPerVByte: UInt
+    ): Result<Txid> = executeWhenNodeRunning("Bump by RBF") {
+        try {
+            if (originalTxId.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "originalTxId is null or empty: $originalTxId"
+                    )
+                )
+            }
+
+            if (satsPerVByte <= 0u) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "satsPerVByte invalid: $satsPerVByte"
+                    )
+                )
+            }
+
+            val replacementTxId = lightningService.bumpFeeByRbf(
+                txid = originalTxId,
+                satsPerVByte = satsPerVByte,
+            )
+            Result.success(replacementTxId)
+        } catch (e: Throwable) {
+            Logger.error(
+                "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte",
+                e,
+                context = TAG
+            )
             Result.failure(e)
         }
     }

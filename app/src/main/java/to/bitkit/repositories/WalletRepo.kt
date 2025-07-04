@@ -2,8 +2,6 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.GetAddressResponse
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -12,7 +10,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -31,7 +28,6 @@ import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
@@ -467,6 +463,38 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    suspend fun deleteActivityById(id: String) = withContext(bgDispatcher) {
+        runCatching {
+            coreService.activity.delete(id)
+        }.onFailure {
+            Logger.error("Error deleting activity", context = TAG)
+        }
+    }
+
+
+    suspend fun getOnChainActivityByTxId(txId: String, txType: PaymentType): Result<Activity> {
+        return runCatching {
+            val activity =
+                findActivityWithRetry(
+                    paymentHashOrTxId = txId,
+                    txType = txType,
+                    type = ActivityFilter.ONCHAIN
+                ) ?: return Result.failure(Exception("Activity not found"))
+            return Result.success(activity)
+        }.onFailure { e ->
+            Logger.error("Error updating activity", context = TAG)
+            return Result.failure(e)
+        }
+    }
+
+    suspend fun updateActivity(id: String, activity: Activity): Result<Unit> {
+        return runCatching {
+            coreService.activity.update(id, activity)
+        }.onFailure {
+            Logger.error("Error updating activity", context = TAG)
+        }
+    }
+
     suspend fun attachTagsToActivity(
         paymentHashOrTxId: String?,
         type: ActivityFilter,
@@ -531,7 +559,8 @@ class WalletRepo @Inject constructor(
 
         var activity = findActivity()
         if (activity == null) {
-            Logger.warn("activity not found, trying again after delay", context = TAG)
+            Logger.warn("activity $paymentHashOrTxId not found, trying again after delay", context = TAG)
+            //TODO REFRESH ACTIVITIES
             delay(5.seconds)
             activity = findActivity()
         }

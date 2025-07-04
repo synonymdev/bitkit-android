@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -39,7 +41,9 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.canBeBoosted
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.isBoosted
 import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
@@ -83,40 +87,88 @@ fun ActivityDetailScreen(
     val copyToastTitle = stringResource(R.string.common__copied)
 
     val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+    val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
         detailViewModel.setActivity(item)
     }
 
-    Column(
-        modifier = Modifier.background(Colors.Black)
+    val context = LocalContext.current
+
+    Box(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        AppTopBar(
-            titleText = stringResource(item.getScreenTitleRes()),
-            onBackClick = onBackClick,
-            actions = { CloseNavIcon(onClick = onCloseClick) },
-        )
-        ActivityDetailContent(
-            item = item,
-            tags = tags,
-            onRemoveTag = { detailViewModel.removeTag(it) },
-            onAddTagClick = { showAddTagSheet = true },
-            onExploreClick = onExploreClick,
-            onCopy = { text ->
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = copyToastTitle,
-                    description = text.ellipsisMiddle(40)
-                )
-            },
-        )
-        if (showAddTagSheet) {
-            ActivityAddTagSheet(
-                listViewModel = listViewModel,
-                activityViewModel = detailViewModel,
-                onDismiss = { showAddTagSheet = false },
+        Column(
+            modifier = Modifier.background(Colors.Black)
+        ) {
+            AppTopBar(
+                titleText = stringResource(item.getScreenTitleRes()),
+                onBackClick = onBackClick,
+                actions = { CloseNavIcon(onClick = onCloseClick) },
             )
+            ActivityDetailContent(
+                item = item,
+                tags = tags,
+                onRemoveTag = { detailViewModel.removeTag(it) },
+                onAddTagClick = { showAddTagSheet = true },
+                onExploreClick = onExploreClick,
+                onCopy = { text ->
+                    app.toast(
+                        type = Toast.ToastType.SUCCESS,
+                        title = copyToastTitle,
+                        description = text.ellipsisMiddle(40)
+                    )
+                },
+                onClickBoost = detailViewModel::onClickBoost
+            )
+            if (showAddTagSheet) {
+                ActivityAddTagSheet(
+                    listViewModel = listViewModel,
+                    activityViewModel = detailViewModel,
+                    onDismiss = { showAddTagSheet = false },
+                )
+            }
+        }
+
+        if (boostSheetVisible) {
+            (item as? Activity.Onchain)?.let {
+                BoostTransactionSheet(
+                    modifier = Modifier.fillMaxWidth(),
+                    onDismiss = detailViewModel::onDismissBoostSheet,
+                    item = it,
+                    onSuccess = {
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = context.getString(R.string.wallet__boost_success_title),
+                            description = context.getString(R.string.wallet__boost_success_msg)
+                        )
+                        onCloseClick()
+                    },
+                    onFailure = {
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__boost_error_title),
+                            description = context.getString(R.string.wallet__boost_error_msg)
+                        )
+                        detailViewModel.onDismissBoostSheet()
+                    },
+                    onMaxFee = {
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__send_fee_error),
+                            description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance" //TODO CREATE STRING RESOURCE
+                        )
+                    },
+                    onMinFee = {
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.wallet__send_fee_error),
+                            description = context.getString(R.string.wallet__send_fee_error_min)
+                        )
+                    }
+                )
+            }
         }
     }
 }
@@ -128,6 +180,7 @@ private fun ActivityDetailContent(
     tags: List<String>,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
+    onClickBoost: () -> Unit,
     onExploreClick: (String) -> Unit,
     onCopy: (String) -> Unit,
 ) {
@@ -383,10 +436,10 @@ private fun ActivityDetailContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 PrimaryButton(
-                    text = stringResource(R.string.wallet__activity_boost),
+                    text = stringResource(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost),
                     size = ButtonSize.Small,
-                    onClick = { /* TODO: Implement boost functionality */ },
-                    enabled = !isLightning, // TODO add logic to enable/disable boost for onchain activities
+                    onClick = onClickBoost,
+                    enabled = item.canBeBoosted(),
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_timer_alt),
@@ -559,6 +612,7 @@ private fun PreviewLightningSent() {
             onAddTagClick = {},
             onExploreClick = {},
             onCopy = {},
+            onClickBoost = {}
         )
     }
 }
@@ -594,6 +648,7 @@ private fun PreviewOnchain() {
             onAddTagClick = {},
             onExploreClick = {},
             onCopy = {},
+            onClickBoost = {},
         )
     }
 }
