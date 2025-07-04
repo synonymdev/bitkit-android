@@ -466,32 +466,29 @@ class WalletRepo @Inject constructor(
     suspend fun deleteActivityById(id: String) = withContext(bgDispatcher) {
         runCatching {
             coreService.activity.delete(id)
-        }.onFailure {
-            Logger.error("Error deleting activity", context = TAG)
+        }.onFailure { e ->
+            Logger.error(msg = "Error deleteActivityById. id:$id", e = e, context = TAG)
         }
     }
 
 
     suspend fun getOnChainActivityByTxId(txId: String, txType: PaymentType): Result<Activity> {
         return runCatching {
-            val activity =
-                findActivityWithRetry(
-                    paymentHashOrTxId = txId,
-                    txType = txType,
-                    type = ActivityFilter.ONCHAIN
-                ) ?: return Result.failure(Exception("Activity not found"))
-            return Result.success(activity)
+            findActivityWithRetry(
+                paymentHashOrTxId = txId,
+                txType = txType,
+                type = ActivityFilter.ONCHAIN
+            ) ?: return Result.failure(Exception("Activity not found"))
         }.onFailure { e ->
-            Logger.error("Error updating activity", context = TAG)
-            return Result.failure(e)
+            Logger.error(msg = "Error getOnChainActivityByTxId. txId:$txId, txType:$txType", e = e, context = TAG)
         }
     }
 
-    suspend fun updateActivity(id: String, activity: Activity): Result<Unit> {
+    suspend fun updateActivity(id: String, updatedActivity: Activity): Result<Unit> {
         return runCatching {
-            coreService.activity.update(id, activity)
-        }.onFailure {
-            Logger.error("Error updating activity", context = TAG)
+            coreService.activity.update(id, updatedActivity)
+        }.onFailure { e ->
+            Logger.error(msg = "Error updateActivity. id:$id, updatedActivity:$updatedActivity", e = e, context = TAG)
         }
     }
 
@@ -559,7 +556,7 @@ class WalletRepo @Inject constructor(
 
         var activity = findActivity()
         if (activity == null) {
-            Logger.warn("activity $paymentHashOrTxId not found, trying again after delay", context = TAG)
+            Logger.warn("activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after delay", context = TAG)
             //TODO REFRESH ACTIVITIES
             delay(5.seconds)
             activity = findActivity()

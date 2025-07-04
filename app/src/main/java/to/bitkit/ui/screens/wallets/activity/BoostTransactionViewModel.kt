@@ -30,54 +30,93 @@ class BoostTransactionViewModel @Inject constructor(
 
     private val _boostTransactionEffect = MutableSharedFlow<BoostTransactionEffects>(extraBufferCapacity = 1)
     val boostTransactionEffect = _boostTransactionEffect.asSharedFlow()
-    private fun setBoostTransactionEffect(effect: BoostTransactionEffects) =
-        viewModelScope.launch { _boostTransactionEffect.emit(effect) }
 
+    // Configuration constants
+    private companion object {
+        const val TAG = "BoostTransactionViewModel"
+        const val MAX_FEE_PERCENTAGE = 0.5
+        const val MIN_FEE_RATE = 1UL
+        const val MAX_FEE_RATE = 100UL
+        const val FEE_RATE_STEP = 1UL
+    }
 
+    // State variables
     private var totalFeeSatsRecommended: ULong = 0U
     private var maxTotalFee: ULong = 0U
     private var feeRateRecommended: ULong = 0U
-
     private var activity: Activity.Onchain? = null
 
     fun setupActivity(activity: Activity.Onchain) {
         Logger.debug("Setup activity $activity", context = TAG)
         this.activity = activity
 
-        if (activity.v1.txType == PaymentType.RECEIVED) { //TODO REMOVE WHEN IMPLEMENT CPFP
-            setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
-            return
-        }
+        _uiState.update { it.copy(loading = true) }
 
-        val speed = TransactionSpeed.Fast
+        initializeFeeEstimates()
+    }
 
+    private fun initializeFeeEstimates() {
         viewModelScope.launch {
-            lightningRepo.estimateTotalFee(speed = speed).onSuccess { totalFee ->
-                totalFeeSatsRecommended = totalFee
-                maxTotalFee = BigDecimal.valueOf(
-                    activity.v1.value.toLong()
-                ).times(
-                    BigDecimal.valueOf(0.5)
-                ).toLong().toULong()
+            try {
+                val speed = TransactionSpeed.Fast
+                val activityContent = activity?.v1 ?: run {
+                    handleError("Activity value is null")
+                    return@launch
+                }
 
-                lightningRepo.getFeeRateForSpeed(speed).onSuccess { feeRate ->
-                    feeRateRecommended = feeRate
-                    _uiState.update {
-                        it.copy(
-                            totalFeeSats = totalFee,
-                            feeRate = feeRate,
-                            increaseEnabled = totalFee <= maxTotalFee,
-                            loading = false
+                // Calculate max fee (50% of transaction value)
+                maxTotalFee = BigDecimal.valueOf(activityContent.value.toLong())
+                    .multiply(BigDecimal.valueOf(MAX_FEE_PERCENTAGE))
+                    .toLong()
+                    .toULong()
+
+                // Get recommended fee estimates
+                val feeRateResult = when (activityContent.txType) {
+                    PaymentType.SENT -> lightningRepo.getFeeRateForSpeed(speed = speed)
+                    PaymentType.RECEIVED -> lightningRepo.calculateCpfpFeeRate(activityContent.txId)
+                }
+
+                val totalFeeResult = lightningRepo.estimateTotalFee(
+                    speed = TransactionSpeed.Custom(
+                        satsPerVByte = feeRateResult.getOrNull()?.toUInt() ?: 0u
+                    )
+                )
+
+                when {
+                    totalFeeResult.isSuccess && feeRateResult.isSuccess -> {
+                        totalFeeSatsRecommended = totalFeeResult.getOrThrow()
+                        feeRateRecommended = feeRateResult.getOrThrow()
+
+                        updateUiStateWithFeeData(
+                            totalFee = totalFeeSatsRecommended,
+                            feeRate = feeRateRecommended
                         )
                     }
-                }.onFailure { e ->
-                    Logger.error("error getting fee rate", e, context = TAG)
-                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+
+                    else -> {
+                        val error = totalFeeResult.exceptionOrNull() ?: feeRateResult.exceptionOrNull()
+                        handleError("Failed to get fee estimates: ${error?.message}", error)
+                    }
                 }
-            }.onFailure { e ->
-                Logger.error("error getting total fee ", e, context = TAG)
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+            } catch (e: Exception) {
+                handleError("Unexpected error during fee estimation", e)
             }
+        }
+    }
+
+    private fun updateUiStateWithFeeData(totalFee: ULong, feeRate: ULong) {
+        val currentFee = activity?.v1?.fee ?: 0u
+        val isIncreaseEnabled = totalFee < maxTotalFee && feeRate < MAX_FEE_RATE
+        val isDecreaseEnabled = totalFee > currentFee && feeRate > MIN_FEE_RATE
+
+        _uiState.update {
+            it.copy(
+                totalFeeSats = totalFee,
+                feeRate = feeRate,
+                increaseEnabled = isIncreaseEnabled,
+                decreaseEnabled = isDecreaseEnabled,
+                loading = false,
+            )
         }
     }
 
@@ -86,110 +125,193 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     fun onClickUseSuggestedFee() {
-        _uiState.update {
-            it.copy(
-                totalFeeSats = totalFeeSatsRecommended,
-                feeRate = feeRateRecommended,
-                isDefaultMode = true
-            )
-        }
+        updateUiStateWithFeeData(
+            totalFee = totalFeeSatsRecommended,
+            feeRate = feeRateRecommended
+        )
+        _uiState.update { it.copy(isDefaultMode = true) }
     }
 
     fun onConfirmBoost() {
+        val currentActivity = activity
+        if (currentActivity == null) {
+            handleError("Cannot boost: activity is null")
+            return
+        }
+
         _uiState.update { it.copy(boosting = true) }
-        viewModelScope.launch {
-            lightningRepo.bumpFeeByRbf(
-                satsPerVByte = _uiState.value.feeRate.toUInt(),
-                originalTxId = activity?.v1?.txId.orEmpty()
-            ).onSuccess { newTxId ->
-                Logger.debug("Success boosting transaction. newTxId:$newTxId", context = TAG)
-                updateActivity(newTxId = newTxId, isRBF = activity?.v1?.txType == PaymentType.SENT).onSuccess {
-                    _uiState.update { it.copy(boosting = false) }
-                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                }.onFailure { e ->
-                    _uiState.update { it.copy(boosting = false) }
-                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                    Logger.warn("Boost successful but there was a failure updating the activity", e = e, context = TAG)
-                }
 
-            }.onFailure { e ->
-                Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
-                _uiState.update { it.copy(boosting = false) }
+        viewModelScope.launch {
+            try {
+                when (currentActivity.v1.txType) {
+                    PaymentType.SENT -> handleRbfBoost(currentActivity)
+                    PaymentType.RECEIVED -> handleCpfpBoost(currentActivity)
+                }
+            } catch (e: Exception) {
+                handleError("Unexpected error during boost", e)
             }
         }
     }
 
-    fun onChangeAmount(increase: Boolean) {
-        viewModelScope.launch {
-
-            val newFeeRate = if (increase) {
-                _uiState.value.feeRate + 1U
-            } else {
-                _uiState.value.feeRate - 1U
-            }
-
-            _uiState.update {
-                it.copy(
-                    feeRate = newFeeRate,
-                )
-            }
-
-            lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
-                .onSuccess { newTotalFee ->
-                    val maxFeeReached = newTotalFee >= maxTotalFee
-                    val minFeeReached = newTotalFee <= (activity?.v1?.fee ?: 0u)
-
-                    _uiState.update {
-                        it.copy(
-                            totalFeeSats = newTotalFee,
-                            increaseEnabled = !maxFeeReached,
-                            decreaseEnabled = !minFeeReached
-                        )
-                    }
-
-                    if (maxFeeReached && increase) {
-                        setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
-                    }
-
-                    if (minFeeReached && !increase) {
-                        setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
-                    }
-                }
-        }
-
-    }
-
-    private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
-        Logger.debug("Searching activity $newTxId", context = TAG)
-        return walletRepo.getOnChainActivityByTxId(txId = newTxId, txType = PaymentType.SENT).fold(
-            onSuccess = { newActivity ->
-                Logger.debug("Activity found $newActivity", context = TAG)
-                (newActivity as? Activity.Onchain)?.let { newOnChainActivity ->
-                    val updatedActivity = Activity.Onchain(
-                        v1 = newOnChainActivity.v1.copy(
-                            isBoosted = true,
-                            txId = newTxId,
-                        )
-                    )
-
-                    if (isRBF) {
-                        walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
-                    } else {
-                        // TODO HANDLE CPFP
-                        Result.failure(Exception("Not implemented"))
-                    }
-                } ?: Result.failure(Exception("Activity not onChain type"))
+    private suspend fun handleRbfBoost(activity: Activity.Onchain) {
+        lightningRepo.bumpFeeByRbf(
+            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            originalTxId = activity.v1.txId
+        ).fold(
+            onSuccess = { newTxId ->
+                handleBoostSuccess(newTxId, isRBF = true)
             },
-            onFailure = { e ->
-                Logger.error("Activity $newTxId not found", e = e, context = TAG)
-                Result.failure(e)
+            onFailure = { error ->
+                handleError("RBF boost failed: ${error.message}", error)
             }
         )
     }
 
-    companion object {
-        private const val TAG = "BoostTransactionViewModel"
+    private suspend fun handleCpfpBoost(activity: Activity.Onchain) {
+        lightningRepo.accelerateByCpfp(
+            satsPerVByte = _uiState.value.feeRate.toUInt(),
+            originalTxId = activity.v1.txId,
+            destinationAddress = walletRepo.getOnchainAddress()
+        ).fold(
+            onSuccess = { newTxId ->
+                handleBoostSuccess(newTxId, isRBF = false)
+            },
+            onFailure = { error ->
+                handleError("CPFP boost failed: ${error.message}", error)
+            }
+        )
+    }
+
+    private suspend fun handleBoostSuccess(newTxId: Txid, isRBF: Boolean) {
+        Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
+
+        updateActivity(newTxId = newTxId, isRBF = isRBF).fold(
+            onSuccess = {
+                _uiState.update { it.copy(boosting = false) }
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+            },
+            onFailure = { error ->
+                // Boost succeeded but activity update failed - still consider it successful
+                Logger.warn("Boost successful but activity update failed", e = error, context = TAG)
+                _uiState.update { it.copy(boosting = false) }
+                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+            }
+        )
+    }
+
+    fun onChangeAmount(increase: Boolean) {
+        val currentFeeRate = _uiState.value.feeRate
+        val newFeeRate = if (increase) {
+            (currentFeeRate + FEE_RATE_STEP).coerceAtMost(MAX_FEE_RATE)
+        } else {
+            (currentFeeRate - FEE_RATE_STEP).coerceAtLeast(MIN_FEE_RATE)
+        }
+
+        if (newFeeRate == currentFeeRate) {
+            // Rate didn't change, we're at the limit
+            val effect = if (increase) {
+                BoostTransactionEffects.OnMaxFee
+            } else {
+                BoostTransactionEffects.OnMinFee
+            }
+            setBoostTransactionEffect(effect)
+            return
+        }
+
+        _uiState.update { it.copy(feeRate = newFeeRate) }
+
+        viewModelScope.launch {
+            lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
+                .fold(
+                    onSuccess = { newTotalFee ->
+                        val currentFee = activity?.v1?.fee ?: 0u
+                        val maxFeeReached = newTotalFee >= maxTotalFee
+                        val minFeeReached = newTotalFee <= currentFee
+
+                        updateUiStateWithFeeData(newTotalFee, newFeeRate)
+
+                        // Send appropriate effect if we hit a limit
+                        when {
+                            maxFeeReached && increase -> {
+                                setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
+                            }
+
+                            minFeeReached && !increase -> {
+                                setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
+                            }
+                        }
+                    },
+                    onFailure = { error ->
+                        handleError("Failed to estimate fee for rate $newFeeRate", error)
+                    }
+                )
+        }
+    }
+
+    private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
+        Logger.debug("Updating activity for txId: $newTxId", context = TAG)
+
+        return walletRepo.getOnChainActivityByTxId(
+            txId = newTxId,
+            txType = PaymentType.SENT
+        ).fold(
+            onSuccess = { newActivity ->
+                Logger.debug("Activity found: $newActivity", context = TAG)
+
+                val newOnChainActivity = newActivity as? Activity.Onchain
+                    ?: return Result.failure(Exception("Activity is not onchain type"))
+
+                val updatedActivity = Activity.Onchain(
+                    v1 = newOnChainActivity.v1.copy(
+                        isBoosted = true,
+                        txId = newTxId,
+                    )
+                )
+
+                if (isRBF) {
+                    // For RBF, update new activity and delete old one
+                    walletRepo.updateActivity(
+                        id = updatedActivity.v1.id,
+                        updatedActivity = updatedActivity
+                    ).fold(
+                        onSuccess = {
+                            // Delete the old activity
+                            activity?.v1?.id?.let { oldId ->
+                                walletRepo.deleteActivityById(oldId).map { Unit }
+                            } ?: Result.success(Unit)
+                        },
+                        onFailure = { Result.failure(it) }
+                    )
+                } else {
+                    // For CPFP, just update the activity
+                    walletRepo.updateActivity(
+                        id = updatedActivity.v1.id,
+                        updatedActivity = updatedActivity
+                    )
+                }
+            },
+            onFailure = { error ->
+                Logger.error("Activity $newTxId not found", e = error, context = TAG)
+                Result.failure(error)
+            }
+        )
+    }
+
+    private fun handleError(message: String, error: Throwable? = null) {
+        Logger.error(message, error, context = TAG)
+        _uiState.update {
+            it.copy(
+                boosting = false,
+                loading = false,
+            )
+        }
+        setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+    }
+
+    private fun setBoostTransactionEffect(effect: BoostTransactionEffects) {
+        viewModelScope.launch {
+            _boostTransactionEffect.emit(effect)
+        }
     }
 }
 
@@ -208,5 +330,5 @@ data class BoostTransactionUiState(
     val increaseEnabled: Boolean = true,
     val boosting: Boolean = false,
     val loading: Boolean = false,
-    val estimateTime: String = "±10-20 minutes", //TODO IMPLEMENT TIME CONFIRMATION CALC
+    val estimateTime: String = "±10-20 minutes", // TODO: Implement dynamic time estimation
 )

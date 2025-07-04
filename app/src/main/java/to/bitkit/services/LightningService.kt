@@ -501,6 +501,23 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun calculateCpfpFeeRate(parentTxid: Txid): FeeRate {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Calculating CPFP fee for parentTxid $parentTxid")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().calculateCpfpFeeRate(
+                    parentTxid = parentTxid,
+                    urgent = true
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
     suspend fun accelerateByCpfp(
         txid: Txid,
         satsPerVByte: UInt,

@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -476,14 +477,19 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun getFeeRateForSpeed(speed: TransactionSpeed): Result<ULong> = withContext(bgDispatcher) {
-        return@withContext try {
+        return@withContext runCatching {
             val fees = coreService.blocktank.getFees().getOrThrow()
             val satsPerVByte = fees.getSatsPerVByteFor(speed)
-            Result.success(satsPerVByte.toULong())
-        } catch (e: Throwable) {
-            Logger.error("Estimate fee", e, context = TAG)
-            Result.failure(e)
+            satsPerVByte.toULong()
+        }.onFailure { e ->
+            Logger.error("Error getFeeRateForSpeed. speed:$speed", e, context = TAG)
         }
+    }
+
+    suspend fun calculateCpfpFeeRate(
+        parentTxId: Txid
+    ): Result<ULong> = executeWhenNodeRunning("Calculate CPFP fee rate") {
+        Result.success(lightningService.calculateCpfpFeeRate(parentTxid = parentTxId).toSatPerVbCeil())
     }
 
     suspend fun openChannel(
@@ -624,10 +630,57 @@ class LightningRepo @Inject constructor(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
             )
+            Logger.debug("bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte")
             Result.success(replacementTxId)
         } catch (e: Throwable) {
             Logger.error(
                 "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte",
+                e,
+                context = TAG
+            )
+            Result.failure(e)
+        }
+    }
+    suspend fun accelerateByCpfp(
+        originalTxId: Txid,
+        satsPerVByte: UInt,
+        destinationAddress: Address,
+        ): Result<Txid> = executeWhenNodeRunning("Accelerate by CPFP") {
+        try {
+            if (originalTxId.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "originalTxId is null or empty: $originalTxId"
+                    )
+                )
+            }
+
+            if (destinationAddress.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "destinationAddress is null or empty: $destinationAddress"
+                    )
+                )
+            }
+
+            if (satsPerVByte <= 0u) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "satsPerVByte invalid: $satsPerVByte"
+                    )
+                )
+            }
+
+            val newDestinationTxId = lightningService.accelerateByCpfp(
+                txid = originalTxId,
+                satsPerVByte = satsPerVByte,
+                destinationAddress = destinationAddress,
+            )
+            Logger.debug("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress")
+            Result.success(newDestinationTxId)
+        } catch (e: Throwable) {
+            Logger.error(
+                "accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
                 e,
                 context = TAG
             )
