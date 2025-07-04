@@ -103,7 +103,7 @@ class BoostTransactionViewModel @Inject constructor(
                 originalTxId = activity?.v1?.txId.orEmpty()
             ).onSuccess { newTxId ->
                 Logger.debug("Success boosting transaction", context = TAG)
-                updateActivity(newTxId = newTxId, isRBF = true).onSuccess {
+                updateActivity(newTxId = newTxId, isRBF = activity?.v1?.txType == PaymentType.SENT).onSuccess {
                     _uiState.update { it.copy(boosting = false) }
                     setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
                 }.onFailure { e ->
