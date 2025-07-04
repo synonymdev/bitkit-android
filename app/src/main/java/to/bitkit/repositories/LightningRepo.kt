@@ -624,7 +624,7 @@ class LightningRepo @Inject constructor(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
             )
-            Logger.debug("bumpFeeByRbf success, replacementTxId: $replacementTxId ")
+            Logger.debug("bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte")
             Result.success(replacementTxId)
         } catch (e: Throwable) {
             Logger.error(
@@ -670,7 +670,7 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
                 destinationAddress = destinationAddress,
             )
-            Logger.debug("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId ")
+            Logger.debug("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress")
             Result.success(newDestinationTxId)
         } catch (e: Throwable) {
             Logger.error(
