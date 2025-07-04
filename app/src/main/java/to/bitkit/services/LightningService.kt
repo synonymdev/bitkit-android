@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
@@ -19,6 +20,7 @@ import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -33,12 +35,14 @@ import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.uByteList
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
@@ -62,11 +66,12 @@ class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
+    private val settingsStore: SettingsStore,
 ) : BaseCoroutineScope(bgDispatcher) {
 
     var node: Node? = null
 
-    suspend fun setup(walletIndex: Int) {
+    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
@@ -87,16 +92,8 @@ class LightningService @Inject constructor(
             .apply {
                 setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
 
-                setChainSourceEsplora(
-                    serverUrl = Env.esploraServerUrl,
-                    config = EsploraSyncConfig(
-                        BackgroundSyncConfig(
-                            onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                            lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                            feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                        ),
-                    ),
-                )
+                configureChainSource(customServer)
+
                 if (Env.ldkRgsServerUrl != null) {
                     setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
                 } else {
@@ -124,13 +121,58 @@ class LightningService @Inject constructor(
         Logger.info("LDK node setup")
     }
 
+    private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
+        val electrumServer = customServer
+            ?: settingsStore.data.first().customElectrumServers[Env.network]
+
+        if (electrumServer != null) {
+            val serverUrl = electrumServer.toString()
+            Logger.info("Using onchain source Electrum url: $serverUrl")
+            setChainSourceElectrum(
+                serverUrl = serverUrl,
+                config = ElectrumSyncConfig(
+                    BackgroundSyncConfig(
+                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                    ),
+                ),
+            )
+        } else {
+            val serverUrl = Env.esploraServerUrl
+            Logger.info("Using onchain source Esplora url: $serverUrl")
+            setChainSourceEsplora(
+                serverUrl = serverUrl,
+                config = EsploraSyncConfig(
+                    BackgroundSyncConfig(
+                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                    ),
+                ),
+            )
+        }
+    }
+
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
+        Logger.debug("Starting node…")
+
+        ServiceQueue.LDK.background {
+            try {
+                node.start()
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+
+        // start event listener after node started
         onEvent?.let { eventHandler ->
             shouldListenForEvents = true
             launch {
                 try {
+                    Logger.debug("LDK event listener started")
                     if (timeout != null) {
                         withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
@@ -142,10 +184,6 @@ class LightningService @Inject constructor(
             }
         }
 
-        Logger.debug("Starting node…")
-        ServiceQueue.LDK.background {
-            node.start()
-        }
         Logger.info("Node started")
     }
 
@@ -155,8 +193,13 @@ class LightningService @Inject constructor(
 
         Logger.debug("Stopping node…")
         ServiceQueue.LDK.background {
-            node.stop()
-            this@LightningService.node = null
+            try {
+                node.stop()
+                this@LightningService.node = null
+            } catch (_: NodeException.NotRunning) {
+                // Node is not running, clear the reference
+                this@LightningService.node = null
+            }
         }
         Logger.info("Node stopped")
     }
@@ -574,7 +617,7 @@ class LightningService @Inject constructor(
     fun syncFlow(): Flow<Unit> = flow {
         while (currentCoroutineContext().isActive) {
             emit(Unit)
-            delay(Env.ldkNodeSyncIntervalSecs.toLong().seconds)
+            delay(Env.walletSyncIntervalSecs.toLong().seconds)
         }
     }.flowOn(bgDispatcher)
     // endregion

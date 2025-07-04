@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -80,6 +81,17 @@ fun CloseNavIcon(onClick: () -> Unit) {
         Icon(
             imageVector = Icons.Default.Close,
             contentDescription = stringResource(R.string.common__close),
+        )
+    }
+}
+
+@Composable
+fun ScanNavIcon(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_scan),
+            contentDescription = stringResource(R.string.other__qr_scan),
+            modifier = Modifier.size(24.dp)
         )
     }
 }
