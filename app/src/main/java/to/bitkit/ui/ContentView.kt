@@ -43,6 +43,7 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.shop.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
@@ -741,7 +742,7 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
         GapLimitScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ElectrumConfig> {
-        ElectrumConfigScreen(navController)
+        ElectrumConfigScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
         RgsServerScreen(navController)
@@ -973,7 +974,7 @@ private fun NavGraphBuilder.qrScanner(
             navController.popBackStack()
             appViewModel.onScanSuccess(
                 data = qrCode,
-                onResultDelay = 650 // slight delay to for home navigation before showing send sheet
+                onResultDelay = 650 // slight delay for nav transition before showing send sheet
             )
         }
     }
@@ -1351,9 +1352,12 @@ fun NavController.navigateToActivityExplore(id: String) = navigate(
     route = Routes.ActivityExplore(id),
 )
 
-fun NavController.navigateToQrScanner() = navigate(
-    route = Routes.QrScanner,
-)
+fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
+    if (isCalledForResult) {
+        currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
+    }
+    navigate(Routes.QrScanner)
+}
 
 fun NavController.navigateToLogs() = navigate(
     route = Routes.Logs,

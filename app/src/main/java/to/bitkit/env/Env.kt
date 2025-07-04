@@ -5,18 +5,19 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.ext.ensureDir
 import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.models.ElectrumProtocol
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
 
-@Suppress("ConstPropertyName")
+@Suppress("ConstPropertyName", "SpellCheckingInspection")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
     val network = Network.REGTEST
     val walletSyncIntervalSecs = 10_uL // TODO review
-    val ldkNodeSyncIntervalSecs = 60_uL // TODO review
     val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
@@ -32,6 +33,7 @@ internal object Env {
     val ldkRgsServerUrl
         get() = when (network) {
             Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+            Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
             else -> null
         }
     val vssServerUrl
@@ -81,6 +83,7 @@ internal object Env {
     object TransactionDefaults {
         /** Total recommended tx base fee in sats */
         val recommendedBaseFee = 256u
+
         /**
          * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
          * required to include them in a block would be greater than the value of the transaction itself.
@@ -124,6 +127,52 @@ internal object Env {
         )
     }
 
+    @Suppress("unused")
+    object ElectrumServers {
+        val REGTEST = ElectrumServer(
+            host = "34.65.252.32",
+            tcp = 18483,
+            ssl = 18484,
+            protocol = ElectrumProtocol.TCP,
+        )
+        val BITCOIN = ElectrumServer(
+            host = "35.187.18.233",
+            tcp = 8911,
+            ssl = 8900,
+            protocol = ElectrumProtocol.SSL,
+        )
+        val TESTNET_1 = ElectrumServer(
+            host = "testnet.hsmiths.com",
+            tcp = 53012,
+            ssl = 53012,
+            protocol = ElectrumProtocol.SSL,
+        )
+        val TESTNET_2 = ElectrumServer(
+            host = "tn.not.fyi",
+            tcp = 55002,
+            ssl = 55002,
+            protocol = ElectrumProtocol.SSL,
+        )
+        val TESTNET_3 = ElectrumServer(
+            host = "testnet.aranguren.org",
+            tcp = 51001,
+            ssl = 51002,
+            protocol = ElectrumProtocol.SSL,
+        )
+        val TESTNET_4 = ElectrumServer(
+            host = "blackie.c3-soft.com",
+            tcp = 57006,
+            ssl = 57006,
+            protocol = ElectrumProtocol.SSL,
+        )
+    }
+
+    val defaultElectrumServers = mapOf(
+        Network.BITCOIN to ElectrumServers.BITCOIN,
+        Network.TESTNET to ElectrumServers.TESTNET_1,
+        Network.REGTEST to ElectrumServers.REGTEST,
+    )
+
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8
     const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
@@ -133,7 +182,7 @@ internal object Env {
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BIT_REFILL_URL = "https://www.bitrefill.com/br/en/gift-cards/"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
-     const val SYNONYM_CONTACT = "https://synonym.to/contact"
+    const val SYNONYM_CONTACT = "https://synonym.to/contact"
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
     const val SYNONYM_X = "https://twitter.com/bitkitwallet/"
     const val BITKIT_DISCORD = "https://discord.gg/DxTBJXvJxn"

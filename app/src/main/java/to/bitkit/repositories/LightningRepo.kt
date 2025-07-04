@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -27,6 +28,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
@@ -54,9 +56,12 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
+    private val network: Network,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
+
+    private var cachedEventHandler: NodeEventHandler? = null
 
     /**
      * Executes the provided operation only if the node is running.
@@ -118,9 +123,9 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun setup(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) = withContext(bgDispatcher) {
         return@withContext try {
-            lightningService.setup(walletIndex)
+            lightningService.setup(walletIndex, customServer)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
@@ -133,8 +138,11 @@ class LightningRepo @Inject constructor(
         timeout: Duration? = null,
         shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null,
+        customServer: ElectrumServer? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
-        if (_lightningState.value.nodeLifecycleState.isRunningOrStarting()) {
+        val initialLifecycleState = _lightningState.value.nodeLifecycleState
+        if (initialLifecycleState.isRunningOrStarting()) {
+            Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
             return@withContext Result.success(Unit)
         }
 
@@ -143,7 +151,7 @@ class LightningRepo @Inject constructor(
 
             // Setup if not already setup
             if (lightningService.node == null) {
-                val setupResult = setup(walletIndex)
+                val setupResult = setup(walletIndex, customServer)
                 if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
@@ -169,6 +177,8 @@ class LightningRepo @Inject constructor(
                 ldkNodeEventBus.emit(event)
             }
 
+            this@LightningRepo.cachedEventHandler = eventHandler
+
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
 
             // Initial state sync
@@ -185,12 +195,15 @@ class LightningRepo @Inject constructor(
         } catch (e: Throwable) {
             if (shouldRetry) {
                 Logger.warn("Start error, retrying after two seconds...", e = e, context = TAG)
+                _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+
                 delay(2.seconds)
                 return@withContext start(
                     walletIndex = walletIndex,
                     timeout = timeout,
                     shouldRetry = false,
-                    eventHandler = eventHandler
+                    eventHandler = eventHandler,
+                    customServer = customServer,
                 )
             } else {
                 Logger.error("Node start error", e, context = TAG)
@@ -214,8 +227,7 @@ class LightningRepo @Inject constructor(
         try {
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
             lightningService.stop()
-            _lightningState.update { LightningState() }
-            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node stop error", e, context = TAG)
@@ -258,6 +270,67 @@ class LightningRepo @Inject constructor(
         }.onFailure { e ->
             return@withContext Result.failure(e)
         }
+    }
+
+    suspend fun restartWithElectrumServer(newServer: ElectrumServer): Result<Unit> = withContext(bgDispatcher) {
+        Logger.info("Changing ldk-node electrum server to: $newServer")
+
+        // If node is stopping wait for it
+        if (_lightningState.value.nodeLifecycleState == NodeLifecycleState.Stopping) {
+            Logger.debug("Waiting for node stop before changing electrum server")
+            val stopped = withTimeoutOrNull(30.seconds) {
+                _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
+            }
+            if (stopped == null) {
+                Logger.warn("Timeout while waiting for node to stop")
+                return@withContext Result.failure(Exception("Timeout waiting for node to stop"))
+            }
+        }
+
+        Logger.debug("Stopping node to change electrum server")
+        stop().onFailure { error ->
+            Logger.error("Failed to stop node during electrum server change", error)
+            return@withContext Result.failure(error)
+        }
+
+        // Start node with new electrum server and cached event handler
+        Logger.debug("Starting node with new electrum server")
+        val newServerResult = start(
+            eventHandler = cachedEventHandler,
+            customServer = newServer,
+            shouldRetry = false,
+        )
+
+        if (newServerResult.isSuccess) {
+            settingsStore.setElectrumServer(newServer, network)
+            Logger.info("Successfully changed electrum server connection")
+            return@withContext Result.success(Unit)
+        }
+
+        // Connection to new server failed, try recovering previous server connection
+        val originalError = newServerResult.exceptionOrNull()
+        Logger.warn("Failed to change electrum server, attempting recovery…", originalError)
+
+        Logger.debug("Stopping node before recovery attempt")
+        stop().onFailure { stopError ->
+            Logger.error("Failed to stop node during recovery", stopError)
+            return@withContext Result.failure(stopError)
+        }
+
+        Logger.debug("Starting node with previous electrum server for recovery")
+        val recoveryResult = start(
+            eventHandler = cachedEventHandler,
+            shouldRetry = false,
+        )
+
+        if (recoveryResult.isSuccess) {
+            Logger.info("Successfully restored electrum server connection")
+            // Return failure because changing the electrum server failed
+            return@withContext Result.failure(Exception(originalError))
+        }
+
+        Logger.error("Failed restoring electrum server connection", recoveryResult.exceptionOrNull())
+        return@withContext Result.failure(Exception(originalError))
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {
