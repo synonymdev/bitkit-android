@@ -59,20 +59,28 @@ class BoostTransactionViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val speed = TransactionSpeed.Fast
-                val activityValue = activity?.v1?.value ?: run {
+                val activityContent = activity?.v1 ?: run {
                     handleError("Activity value is null")
                     return@launch
                 }
 
                 // Calculate max fee (50% of transaction value)
-                maxTotalFee = BigDecimal.valueOf(activityValue.toLong())
+                maxTotalFee = BigDecimal.valueOf(activityContent.value.toLong())
                     .multiply(BigDecimal.valueOf(MAX_FEE_PERCENTAGE))
                     .toLong()
                     .toULong()
 
                 // Get recommended fee estimates
-                val totalFeeResult = lightningRepo.estimateTotalFee(speed = speed)
-                val feeRateResult = lightningRepo.getFeeRateForSpeed(speed = speed)
+                val feeRateResult = when (activityContent.txType) {
+                    PaymentType.SENT -> lightningRepo.getFeeRateForSpeed(speed = speed)
+                    PaymentType.RECEIVED -> lightningRepo.calculateCpfpFeeRate(activityContent.txId)
+                }
+
+                val totalFeeResult = lightningRepo.estimateTotalFee(
+                    speed = TransactionSpeed.Custom(
+                        satsPerVByte = feeRateResult.getOrNull()?.toUInt() ?: 0u
+                    )
+                )
 
                 when {
                     totalFeeResult.isSuccess && feeRateResult.isSuccess -> {
@@ -84,6 +92,7 @@ class BoostTransactionViewModel @Inject constructor(
                             feeRate = feeRateRecommended
                         )
                     }
+
                     else -> {
                         val error = totalFeeResult.exceptionOrNull() ?: feeRateResult.exceptionOrNull()
                         handleError("Failed to get fee estimates: ${error?.message}", error)
@@ -226,6 +235,7 @@ class BoostTransactionViewModel @Inject constructor(
                             maxFeeReached && increase -> {
                                 setBoostTransactionEffect(BoostTransactionEffects.OnMaxFee)
                             }
+
                             minFeeReached && !increase -> {
                                 setBoostTransactionEffect(BoostTransactionEffects.OnMinFee)
                             }
