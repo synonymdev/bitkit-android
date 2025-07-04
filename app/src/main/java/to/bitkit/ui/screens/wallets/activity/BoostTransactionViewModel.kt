@@ -44,6 +44,11 @@ class BoostTransactionViewModel @Inject constructor(
         Logger.debug("Setup activity $activity", context = TAG)
         this.activity = activity
 
+        if (activity.v1.txType == PaymentType.RECEIVED) { //TODO REMOVE WHEN IMPLEMENT CPFP
+            setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+            return
+        }
+
         val speed = TransactionSpeed.Fast
 
         viewModelScope.launch {
