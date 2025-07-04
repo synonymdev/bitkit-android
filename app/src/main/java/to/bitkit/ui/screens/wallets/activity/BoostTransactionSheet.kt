@@ -55,7 +55,6 @@ import to.bitkit.ui.utils.withAccent
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BoostTransactionSheet(
-    //TODO Handle CPFP too
     modifier: Modifier = Modifier,
     viewModel: BoostTransactionViewModel = hiltViewModel(),
     onSuccess: () -> Unit,

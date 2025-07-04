@@ -44,11 +44,6 @@ class BoostTransactionViewModel @Inject constructor(
         Logger.debug("Setup activity $activity", context = TAG)
         this.activity = activity
 
-        if (activity.v1.txType == PaymentType.RECEIVED) { //TODO REMOVE WHEN IMPLEMENT CPFP
-            setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
-            return
-        }
-
         val speed = TransactionSpeed.Fast
 
         viewModelScope.launch {
@@ -98,24 +93,55 @@ class BoostTransactionViewModel @Inject constructor(
     fun onConfirmBoost() {
         _uiState.update { it.copy(boosting = true) }
         viewModelScope.launch {
-            lightningRepo.bumpFeeByRbf(
-                satsPerVByte = _uiState.value.feeRate.toUInt(),
-                originalTxId = activity?.v1?.txId.orEmpty()
-            ).onSuccess { newTxId ->
-                Logger.debug("Success boosting transaction. newTxId:$newTxId", context = TAG)
-                updateActivity(newTxId = newTxId, isRBF = activity?.v1?.txType == PaymentType.SENT).onSuccess {
-                    _uiState.update { it.copy(boosting = false) }
-                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                }.onFailure { e ->
-                    _uiState.update { it.copy(boosting = false) }
-                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                    Logger.warn("Boost successful but there was a failure updating the activity", e = e, context = TAG)
+
+            when(activity?.v1?.txType) {
+                PaymentType.SENT -> {
+                    lightningRepo.bumpFeeByRbf(
+                        satsPerVByte = _uiState.value.feeRate.toUInt(),
+                        originalTxId = activity?.v1?.txId.orEmpty()
+                    ).onSuccess { newTxId ->
+                        Logger.debug("Success boosting transaction. newTxId:$newTxId", context = TAG)
+                        updateActivity(newTxId = newTxId, isRBF = true).onSuccess {
+                            _uiState.update { it.copy(boosting = false) }
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                        }.onFailure { e ->
+                            _uiState.update { it.copy(boosting = false) }
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                            Logger.warn("Boost successful but there was a failure updating the activity", e = e, context = TAG)
+                        }
+                    }.onFailure { e ->
+                        Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
+                        setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+                        _uiState.update { it.copy(boosting = false) }
+                    }
                 }
 
-            }.onFailure { e ->
-                Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
-                _uiState.update { it.copy(boosting = false) }
+                PaymentType.RECEIVED -> {
+                    lightningRepo.accelerateByCpfp(
+                        satsPerVByte = _uiState.value.feeRate.toUInt(),
+                        originalTxId = activity?.v1?.txId.orEmpty(),
+                        destinationAddress = walletRepo.getOnchainAddress()
+                    ).onSuccess { newTxId ->
+                        Logger.debug("Success boosting transaction. newTxId:$newTxId", context = TAG)
+                        updateActivity(newTxId = newTxId, isRBF = true).onSuccess {
+                            _uiState.update { it.copy(boosting = false) }
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                        }.onFailure { e ->
+                            _uiState.update { it.copy(boosting = false) }
+                            setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+                            Logger.warn("Boost successful but there was a failure updating the activity", e = e, context = TAG)
+                        }
+                    }.onFailure { e ->
+                        Logger.error("Failure boosting transaction: ${e.message}", e, context = TAG)
+                        setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+                        _uiState.update { it.copy(boosting = false) }
+                    }
+                }
+                null -> {
+                    Logger.error("Failure boosting transaction: null activity", context = TAG)
+                    setBoostTransactionEffect(BoostTransactionEffects.OnBoostFailed)
+                    _uiState.update { it.copy(boosting = false) }
+                }
             }
         }
     }
