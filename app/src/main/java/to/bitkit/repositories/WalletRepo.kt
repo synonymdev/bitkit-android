@@ -478,7 +478,8 @@ class WalletRepo @Inject constructor(
                 findActivityWithRetry(
                     paymentHashOrTxId = txId,
                     txType = txType,
-                    type = ActivityFilter.ONCHAIN) ?: return Result.failure(Exception("Activity not found"))
+                    type = ActivityFilter.ONCHAIN
+                ) ?: return Result.failure(Exception("Activity not found"))
             return Result.success(activity)
         }.onFailure { e ->
             Logger.error("Error updating activity", context = TAG)
@@ -486,7 +487,7 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun updateActivity(id: String, activity: Activity) : Result<Unit>{
+    suspend fun updateActivity(id: String, activity: Activity): Result<Unit> {
         return runCatching {
             coreService.activity.update(id, activity)
         }.onFailure {
