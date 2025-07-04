@@ -624,10 +624,57 @@ class LightningRepo @Inject constructor(
                 txid = originalTxId,
                 satsPerVByte = satsPerVByte,
             )
+            Logger.debug("bumpFeeByRbf success, replacementTxId: $replacementTxId ")
             Result.success(replacementTxId)
         } catch (e: Throwable) {
             Logger.error(
                 "bumpFeeByRbf error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte",
+                e,
+                context = TAG
+            )
+            Result.failure(e)
+        }
+    }
+    suspend fun accelerateByCpfp(
+        originalTxId: Txid,
+        satsPerVByte: UInt,
+        destinationAddress: Address,
+        ): Result<Txid> = executeWhenNodeRunning("Accelerate by CPFP") {
+        try {
+            if (originalTxId.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "originalTxId is null or empty: $originalTxId"
+                    )
+                )
+            }
+
+            if (destinationAddress.isBlank()) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "destinationAddress is null or empty: $destinationAddress"
+                    )
+                )
+            }
+
+            if (satsPerVByte <= 0u) {
+                return@executeWhenNodeRunning Result.failure(
+                    IllegalArgumentException(
+                        "satsPerVByte invalid: $satsPerVByte"
+                    )
+                )
+            }
+
+            val newDestinationTxId = lightningService.accelerateByCpfp(
+                txid = originalTxId,
+                satsPerVByte = satsPerVByte,
+                destinationAddress = destinationAddress,
+            )
+            Logger.debug("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId ")
+            Result.success(newDestinationTxId)
+        } catch (e: Throwable) {
+            Logger.error(
+                "accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
                 e,
                 context = TAG
             )
