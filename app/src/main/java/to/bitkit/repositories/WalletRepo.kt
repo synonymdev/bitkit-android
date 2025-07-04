@@ -556,7 +556,7 @@ class WalletRepo @Inject constructor(
 
         var activity = findActivity()
         if (activity == null) {
-            Logger.warn("activity $paymentHashOrTxId not found, trying again after delay", context = TAG)
+            Logger.warn("activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after delay", context = TAG)
             //TODO REFRESH ACTIVITIES
             delay(5.seconds)
             activity = findActivity()
