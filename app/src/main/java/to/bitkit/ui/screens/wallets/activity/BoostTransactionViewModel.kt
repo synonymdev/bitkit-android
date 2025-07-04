@@ -102,14 +102,14 @@ class BoostTransactionViewModel @Inject constructor(
                 satsPerVByte = _uiState.value.feeRate.toUInt(),
                 originalTxId = activity?.v1?.txId.orEmpty()
             ).onSuccess { newTxId ->
-                Logger.debug("Success boosting transaction", context = TAG)
+                Logger.debug("Success boosting transaction. newTxId:$newTxId", context = TAG)
                 updateActivity(newTxId = newTxId, isRBF = activity?.v1?.txType == PaymentType.SENT).onSuccess {
                     _uiState.update { it.copy(boosting = false) }
                     setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
                 }.onFailure { e ->
                     _uiState.update { it.copy(boosting = false) }
                     setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-                    Logger.warn("Boos successful but there was a failure updating the activity", e = e, context = TAG)
+                    Logger.warn("Boost successful but there was a failure updating the activity", e = e, context = TAG)
                 }
 
             }.onFailure { e ->
