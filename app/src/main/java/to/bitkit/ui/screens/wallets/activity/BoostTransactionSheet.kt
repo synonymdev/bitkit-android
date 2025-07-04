@@ -134,7 +134,7 @@ fun BoostTransactionContent(
 
             uiState.isDefaultMode -> {
                 Row(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().clickable { onClickEdit() }
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_timer_alt_yellow),
@@ -150,7 +150,6 @@ fun BoostTransactionContent(
 
                     Column(
                         horizontalAlignment = Alignment.End,
-                        modifier = Modifier.clickable { onClickEdit() },
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
