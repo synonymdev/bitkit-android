@@ -177,7 +177,7 @@ private fun getStatusInfo(
 
     // fallback for pending channels without order
     if (!channel.details.isChannelReady) {
-        StatusInfo(
+        return StatusInfo(
             iconRes = R.drawable.ic_hourglass_simple,
             backgroundColor = Colors.Purple16,
             iconColor = Colors.Purple,
