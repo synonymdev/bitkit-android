@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -483,6 +484,12 @@ class LightningRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("Error getFeeRateForSpeed. speed:$speed", e, context = TAG)
         }
+    }
+
+    suspend fun calculateCpfpFeeRate(
+        parentTxId: Txid
+    ): Result<ULong> = executeWhenNodeRunning("Calculate CPFP fee rate") {
+        Result.success(lightningService.calculateCpfpFeeRate(parentTxid = parentTxId).toSatPerVbCeil())
     }
 
     suspend fun openChannel(
