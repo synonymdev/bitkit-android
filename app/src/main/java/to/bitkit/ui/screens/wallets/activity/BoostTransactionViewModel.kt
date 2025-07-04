@@ -198,13 +198,7 @@ class BoostTransactionViewModel @Inject constructor(
                             txId = newTxId,
                         )
                     )
-
-                    if (isRBF) {
-                        walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
-                    } else {
-                        // TODO HANDLE CPFP
-                        Result.failure(Exception("Not implemented"))
-                    }
+                    walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
                 } ?: Result.failure(Exception("Activity not onChain type"))
             },
             onFailure = { e ->
