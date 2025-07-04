@@ -200,7 +200,7 @@ class BoostTransactionViewModel @Inject constructor(
                     )
 
                     if (isRBF) {
-                        val result = walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
+                        val result = walletRepo.updateActivity(id = updatedActivity.v1.id, updatedActivity = updatedActivity)
 
                         if(result.isSuccess) {
                             val deleteResult = walletRepo.deleteActivityById(activity?.v1?.id.orEmpty())
@@ -208,7 +208,7 @@ class BoostTransactionViewModel @Inject constructor(
                             if (deleteResult.isSuccess) Result.success(Unit) else Result.failure(deleteResult.exceptionOrNull() ?: Exception())
                         } else result
                     } else {
-                        walletRepo.updateActivity(id = updatedActivity.v1.id, activity = updatedActivity)
+                        walletRepo.updateActivity(id = updatedActivity.v1.id, updatedActivity = updatedActivity)
                     }
                 } ?: Result.failure(Exception("Activity not onChain type"))
             },
