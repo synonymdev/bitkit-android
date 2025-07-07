@@ -59,6 +59,7 @@ object CoinSelectionTestTags {
 @Composable
 fun CoinSelectionScreen(
     requiredAmount: ULong,
+    address: String,
     onBack: () -> Unit,
     onContinue: (List<SpendableUtxo>) -> Unit,
     viewModel: CoinSelectionViewModel = hiltViewModel(),
@@ -71,7 +72,7 @@ fun CoinSelectionScreen(
 
     LaunchedEffect(requiredAmount, onchainActivities) {
         viewModel.setOnchainActivities(onchainActivities.orEmpty())
-        viewModel.loadUtxos(requiredAmount)
+        viewModel.loadUtxos(requiredAmount, address)
     }
 
     Content(

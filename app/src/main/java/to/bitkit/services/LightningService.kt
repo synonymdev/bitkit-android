@@ -554,12 +554,14 @@ class LightningService @Inject constructor(
 
         return ServiceQueue.LDK.background {
             return@background try {
-                node.onchainPayment().calculateTotalFee(
+                val fee = node.onchainPayment().calculateTotalFee(
                     address = address,
                     amountSats = amountSats,
                     feeRate = convertVByteToKwu(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 )
+                Logger.debug("Calculated fee=$fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
+                fee
             } catch (e: NodeException) {
                 throw LdkError(e)
             }

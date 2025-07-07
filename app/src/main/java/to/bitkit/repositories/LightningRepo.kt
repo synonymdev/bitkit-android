@@ -453,11 +453,11 @@ class LightningRepo @Inject constructor(
         lightningService.listSpendableOutputs()
     }
 
+    /** TODO replace with calculateTotalFee when we have correct address in onchain activities. */
     suspend fun estimateTotalFee(speed: TransactionSpeed? = null): Result<ULong> = withContext(bgDispatcher) {
         return@withContext try {
             val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
-            val fees = coreService.blocktank.getFees().getOrThrow()
-            val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
 
             // TODO: Add proper fee estimation
             // Conservative estimate for a typical transaction:
@@ -470,9 +470,33 @@ class LightningRepo @Inject constructor(
             val fee = transactionSizeInVBytes * satsPerVByte
             Result.success(fee.toULong())
         } catch (e: Throwable) {
-            val rawFee = 1000uL
-            Logger.error("Estimate fee error, using conservative fallback of $rawFee", e, context = TAG)
-            Result.success(rawFee)
+            val fallbackFee = 1000uL
+            Logger.error("Estimate fee error, using conservative fallback of $fallbackFee", e, context = TAG)
+            Result.success(fallbackFee)
+        }
+    }
+
+    suspend fun calculateTotalFee(
+        address: Address,
+        amountSats: ULong,
+        speed: TransactionSpeed? = null,
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        return@withContext try {
+            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
+
+            val fee = lightningService.calculateTotalFee(
+                address = address,
+                amountSats = amountSats,
+                satsPerVByte = satsPerVByte,
+                utxosToSpend = utxosToSpend,
+            )
+            Result.success(fee)
+        } catch (e: Throwable) {
+            val fallbackFee = 1000uL
+            Logger.error("Estimate fee error, using conservative fallback of $fallbackFee", e, context = TAG)
+            Result.success(fallbackFee)
         }
     }
 
@@ -487,7 +511,7 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun calculateCpfpFeeRate(
-        parentTxId: Txid
+        parentTxId: Txid,
     ): Result<ULong> = executeWhenNodeRunning("Calculate CPFP fee rate") {
         Result.success(lightningService.calculateCpfpFeeRate(parentTxid = parentTxId).toSatPerVbCeil())
     }
@@ -607,7 +631,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
-        satsPerVByte: UInt
+        satsPerVByte: UInt,
     ): Result<Txid> = executeWhenNodeRunning("Bump by RBF") {
         try {
             if (originalTxId.isBlank()) {
@@ -641,11 +665,12 @@ class LightningRepo @Inject constructor(
             Result.failure(e)
         }
     }
+
     suspend fun accelerateByCpfp(
         originalTxId: Txid,
         satsPerVByte: UInt,
         destinationAddress: Address,
-        ): Result<Txid> = executeWhenNodeRunning("Accelerate by CPFP") {
+    ): Result<Txid> = executeWhenNodeRunning("Accelerate by CPFP") {
         try {
             if (originalTxId.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
