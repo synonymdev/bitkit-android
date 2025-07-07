@@ -27,15 +27,10 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
-    private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
 
     val activityState = activityRepo.activityState
-    val lightningActivities = activityState.map { it.lightningActivities }
-    val onchainActivities = activityState.map { it.onchainActivities }
-    val latestActivities = activityState.map { it.latestActivities }
-    val availableTags = activityState.map { it.availableTags }
 
     // ViewModel-specific filter states
     private val _searchText = MutableStateFlow("")
@@ -120,15 +115,9 @@ class ActivityListViewModel @Inject constructor(
 
     fun syncLdkNodePayments() {
         viewModelScope.launch(bgDispatcher) {
-            lightningRepo.getPayments()
-                .onSuccess { payments ->
-                    activityRepo.syncActivities().onFailure { e ->
-                        Logger.error("Failed to sync LDK-node payments", e)
-                    }
-                }
-                .onFailure { e ->
-                    Logger.error("Failed to get LDK-node payments", e)
-                }
+            activityRepo.syncActivities().onFailure { e ->
+                Logger.error("Failed to sync LDK-node payments", e)
+            }
         }
     }
 

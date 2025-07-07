@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.idValue
 import to.bitkit.ext.matchesPaymentId
@@ -18,6 +19,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -67,7 +69,6 @@ class ActivityRepo @Inject constructor(
             )
         }
 
-        // Initial sync complete
     }
 
     /**
@@ -192,10 +193,10 @@ class ActivityRepo @Inject constructor(
     /**
      * Syncs LDK node payments and refreshes state
      */
-    suspend fun syncActivities(): Result<Unit> = executeOperation("Sync LDK payments") {
+    suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
         if (_activityState.value.isSyncingLdkNodePayments) {
-            Logger.warn("LDK-node payments are already being synced, skipping")
-            return@executeOperation
+            Logger.warn("LDK-node payments are already being synced, skipping", context = TAG)
+            return@withContext Result.failure(Exception("LDK-node payments are already being synced, skipping"))
         }
 
         _activityState.update { it.copy(isSyncingLdkNodePayments = true) }
@@ -203,15 +204,19 @@ class ActivityRepo @Inject constructor(
         val payments = lightningService.payments
 
         if (payments.isNullOrEmpty()) {
-            Logger.error("Payments not found, skipping")
-            return@executeOperation
+            Logger.error("Payments not found, skipping", context = TAG)
+            return@withContext Result.failure(Exception("Payments not found"))
         }
 
-        try {
-            coreService.activity.syncLdkNodePayments(payments)
-            syncAllData().getOrThrow()
-        } finally {
+        return@withContext try {
+            withTimeout(5.seconds) { coreService.activity.syncLdkNodePayments(payments) }
+            syncAllData().onFailure { e ->
+                Logger.error("Error syncing data", e, context = TAG)
+            }
+        } catch (e: Exception) {
+            Logger.error("Error syncing activities", e, context = TAG)
             _activityState.update { it.copy(isSyncingLdkNodePayments = false) }
+            Result.failure(e)
         }
     }
 
