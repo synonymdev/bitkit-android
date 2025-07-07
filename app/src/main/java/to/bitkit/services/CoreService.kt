@@ -188,6 +188,12 @@ class ActivityService(
         }
     }
 
+    suspend fun upsert(activity: Activity) {
+        ServiceQueue.CORE.background {
+            upsertActivity(activity)
+        }
+    }
+
     suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
         ServiceQueue.CORE.background {
             var addedCount = 0
@@ -359,6 +365,53 @@ class ActivityService(
             getAllUniqueTags()
         }
     }
+
+    suspend fun getLatestActivities(limit: UInt = 3u): List<Activity> {
+        return ServiceQueue.CORE.background {
+            getActivities(
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = limit,
+                sortDirection = SortDirection.DESC
+            )
+        }
+    }
+
+    suspend fun getLightningActivities(): List<Activity> {
+        return ServiceQueue.CORE.background {
+            getActivities(
+                filter = ActivityFilter.LIGHTNING,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null
+            )
+        }
+    }
+
+    suspend fun getOnchainActivities(): List<Activity> {
+        return ServiceQueue.CORE.background {
+            getActivities(
+                filter = ActivityFilter.ONCHAIN,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null
+            )
+        }
+    }
+
+    // MARK: - Test Methods (Regtest only)
 
     suspend fun generateRandomTestData(count: Int = 100) {
         if (Env.network != Network.REGTEST) {
