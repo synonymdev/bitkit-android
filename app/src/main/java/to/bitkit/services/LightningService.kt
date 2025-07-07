@@ -501,6 +501,30 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun accelerateByCpfp(
+        txid: Txid,
+        satsPerVByte: UInt,
+        destinationAddress: Address,
+    ): Txid {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Accelerating tx $txid by CPFP, satsPerVByte=$satsPerVByte, destinationAddress=$destinationAddress")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().accelerateByCpfp(
+                    txid = txid,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    destinationAddress = destinationAddress,
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+    // endregion
+
+    // region fee
     suspend fun calculateCpfpFeeRate(parentTxid: Txid): FeeRate {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -518,21 +542,23 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun accelerateByCpfp(
-        txid: Txid,
+    suspend fun calculateTotalFee(
+        address: Address,
+        amountSats: ULong,
         satsPerVByte: UInt,
-        destinationAddress: Address,
-    ): Txid {
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.info("Accelerating tx $txid by CPFP, satsPerVByte=$satsPerVByte, destinationAddress=$destinationAddress")
+        Logger.info("Calculating fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
 
         return ServiceQueue.LDK.background {
             return@background try {
-                node.onchainPayment().accelerateByCpfp(
-                    txid = txid,
+                node.onchainPayment().calculateTotalFee(
+                    address = address,
+                    amountSats = amountSats,
                     feeRate = convertVByteToKwu(satsPerVByte),
-                    destinationAddress = destinationAddress,
+                    utxosToSpend = utxosToSpend,
                 )
             } catch (e: NodeException) {
                 throw LdkError(e)
