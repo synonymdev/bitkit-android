@@ -453,29 +453,6 @@ class LightningRepo @Inject constructor(
         lightningService.listSpendableOutputs()
     }
 
-    /** TODO replace with calculateTotalFee when we have correct address in onchain activities. */
-    suspend fun estimateTotalFee(speed: TransactionSpeed? = null): Result<ULong> = withContext(bgDispatcher) {
-        return@withContext try {
-            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
-            val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
-
-            // TODO: Add proper fee estimation
-            // Conservative estimate for a typical transaction:
-            // - 2-3 P2WPKH inputs (~68 vBytes each)
-            // - 2 P2WPKH outputs (~31 vBytes each) - recipient + change
-            // - Transaction overhead (~10-15 vBytes)
-            // Total: ~220-250 vBytes for a typical transaction
-            val transactionSizeInVBytes = 250u // Conservative estimate
-
-            val fee = transactionSizeInVBytes * satsPerVByte
-            Result.success(fee.toULong())
-        } catch (e: Throwable) {
-            val fallbackFee = 1000uL
-            Logger.error("Estimate fee error, using conservative fallback of $fallbackFee", e, context = TAG)
-            Result.success(fallbackFee)
-        }
-    }
-
     suspend fun calculateTotalFee(
         address: Address,
         amountSats: ULong,
