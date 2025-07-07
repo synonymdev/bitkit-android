@@ -16,7 +16,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -57,7 +56,6 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
-    private val network: Network,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -124,9 +122,13 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) = withContext(bgDispatcher) {
+    private suspend fun setup(
+        walletIndex: Int,
+        customServer: ElectrumServer? = null,
+        customNetwork: Network? = null,
+    ) = withContext(bgDispatcher) {
         return@withContext try {
-            lightningService.setup(walletIndex, customServer)
+            lightningService.setup(walletIndex, customServer, customNetwork)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
@@ -140,6 +142,7 @@ class LightningRepo @Inject constructor(
         shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null,
         customServer: ElectrumServer? = null,
+        customNetwork: Network? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
@@ -152,7 +155,7 @@ class LightningRepo @Inject constructor(
 
             // Setup if not already setup
             if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServer)
+                val setupResult = setup(walletIndex, customServer, customNetwork)
                 if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
@@ -273,22 +276,63 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    suspend fun restartWithNetworkChange(newNetwork: Network): Result<Unit> = withContext(bgDispatcher) {
+        Logger.info("Changing ldk-node network")
+
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+
+        Logger.debug("Stopping node…")
+        stop().onFailure { error ->
+            Logger.error("Failed to stop node during network change", error)
+            return@withContext Result.failure(error)
+        }
+
+        // Start node with new network and cached event handler
+        Logger.debug("Starting node with new network")
+        val startResult = start(
+            eventHandler = cachedEventHandler,
+            customNetwork = newNetwork,
+            shouldRetry = false,
+        )
+
+        if (startResult.isSuccess) {
+            settingsStore.update { it.copy(selectedNetwork = newNetwork) }
+            Logger.info("Successfully restarted node with new network")
+            return@withContext Result.success(Unit)
+        }
+
+        // Network change failed, try recovering previous setup
+        val originalError = startResult.exceptionOrNull()
+        Logger.warn("Failed to change network, attempting recovery…", originalError)
+
+        Logger.debug("Stopping node for recovery attempt")
+        stop().onFailure { stopError ->
+            Logger.error("Failed to stop node during recovery", stopError)
+            return@withContext Result.failure(stopError)
+        }
+
+        Logger.debug("Starting node with previous config for recovery")
+        val recoveryResult = start(
+            eventHandler = cachedEventHandler,
+            shouldRetry = false,
+        )
+
+        if (recoveryResult.isSuccess) {
+            Logger.debug("Successfully restarted node for recovery")
+            // Return failure because the initial operation failed
+            return@withContext Result.failure(Exception(originalError))
+        }
+
+        Logger.error("Failed to restart node with new network", startResult.exceptionOrNull())
+        return@withContext startResult
+    }
+
     suspend fun restartWithElectrumServer(newServer: ElectrumServer): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: $newServer")
 
-        // If node is stopping wait for it
-        if (_lightningState.value.nodeLifecycleState == NodeLifecycleState.Stopping) {
-            Logger.debug("Waiting for node stop before changing electrum server")
-            val stopped = withTimeoutOrNull(30.seconds) {
-                _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
-            }
-            if (stopped == null) {
-                Logger.warn("Timeout while waiting for node to stop")
-                return@withContext Result.failure(Exception("Timeout waiting for node to stop"))
-            }
-        }
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
-        Logger.debug("Stopping node to change electrum server")
+        Logger.debug("Stopping node…")
         stop().onFailure { error ->
             Logger.error("Failed to stop node during electrum server change", error)
             return@withContext Result.failure(error)
@@ -296,42 +340,58 @@ class LightningRepo @Inject constructor(
 
         // Start node with new electrum server and cached event handler
         Logger.debug("Starting node with new electrum server")
-        val newServerResult = start(
+        val startResult = start(
             eventHandler = cachedEventHandler,
             customServer = newServer,
             shouldRetry = false,
         )
 
-        if (newServerResult.isSuccess) {
-            settingsStore.setElectrumServer(newServer, network)
+        if (startResult.isSuccess) {
+            val currentNetwork = settingsStore.data.first().selectedNetwork
+            settingsStore.setElectrumServer(newServer, currentNetwork)
             Logger.info("Successfully changed electrum server connection")
             return@withContext Result.success(Unit)
         }
 
-        // Connection to new server failed, try recovering previous server connection
-        val originalError = newServerResult.exceptionOrNull()
+        // Connection to new server failed, try recovering previous setup
+        val originalError = startResult.exceptionOrNull()
         Logger.warn("Failed to change electrum server, attempting recovery…", originalError)
 
-        Logger.debug("Stopping node before recovery attempt")
+        Logger.debug("Stopping node for recovery attempt")
         stop().onFailure { stopError ->
             Logger.error("Failed to stop node during recovery", stopError)
             return@withContext Result.failure(stopError)
         }
 
-        Logger.debug("Starting node with previous electrum server for recovery")
+        Logger.debug("Starting node with previous config for recovery")
         val recoveryResult = start(
             eventHandler = cachedEventHandler,
             shouldRetry = false,
         )
 
         if (recoveryResult.isSuccess) {
-            Logger.info("Successfully restored electrum server connection")
-            // Return failure because changing the electrum server failed
+            Logger.info("Successfully restarted node for recovery")
+            // Return failure because the initial operation failed
             return@withContext Result.failure(Exception(originalError))
         }
 
         Logger.error("Failed restoring electrum server connection", recoveryResult.exceptionOrNull())
         return@withContext Result.failure(Exception(originalError))
+    }
+
+    private suspend fun waitForNodeToStop(): Result<Unit> = withContext(bgDispatcher) {
+        if (_lightningState.value.nodeLifecycleState == NodeLifecycleState.Stopping) {
+            Logger.debug("Waiting for node to stop…")
+            val stopped = withTimeoutOrNull(30.seconds) {
+                _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
+            }
+            if (stopped == null) {
+                val error = Exception("Timeout waiting for node to stop")
+                Logger.warn(error.message)
+                return@withContext Result.failure(error)
+            }
+        }
+        return@withContext Result.success(Unit)
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {

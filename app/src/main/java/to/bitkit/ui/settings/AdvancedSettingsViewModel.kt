@@ -30,7 +30,7 @@ class AdvancedSettingsViewModel @Inject constructor(
         AdvancedSettingsUiState(
             isRescanning = isRescanning,
             addressType = settings.addressType,
-            currentNetwork = Env.network,
+            currentNetwork = settings.selectedNetwork,
             isDevModeEnabled = settings.isDevModeEnabled,
         )
     }.stateIn(

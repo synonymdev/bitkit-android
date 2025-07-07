@@ -1,6 +1,7 @@
 package to.bitkit.data
 
 import android.content.Context
+import androidx.hilt.work.HiltWorker
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Query
@@ -13,19 +14,23 @@ import androidx.work.CoroutineWorker
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.data.dao.InvoiceTagDao
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.typeConverters.StringListConverter
-import to.bitkit.env.Env
 
 @Database(
     entities = [
         ConfigEntity::class,
-        InvoiceTagEntity::class
+        InvoiceTagEntity::class,
     ],
     version = 2,
 )
@@ -36,21 +41,35 @@ abstract class AppDb : RoomDatabase() {
     abstract fun invoiceTagDao(): InvoiceTagDao
 
     companion object {
-        private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.name.lowercase()}.sqlite"
-
         @Volatile
         private var instance: AppDb? = null
 
-        fun getInstance(context: Context): AppDb {
+        @Volatile
+        private var currentNetwork: Network? = null
+
+        fun getInstance(context: Context, settingsStore: SettingsStore): AppDb {
+            val selectedNetwork = runBlocking { settingsStore.data.first() }.selectedNetwork
+
+            // If network changed, clear the instance to force recreation
+            if (currentNetwork != selectedNetwork) {
+                synchronized(this) {
+                    instance?.close()
+                    instance = null
+                    currentNetwork = selectedNetwork
+                }
+            }
+
             return instance ?: synchronized(this) {
-                instance ?: buildDatabase(context).also {
-                    instance = it
+                instance ?: buildDatabase(context, selectedNetwork).also { newInstance ->
+                    instance = newInstance
                 }
             }
         }
 
-        private fun buildDatabase(context: Context): AppDb {
-            return Room.databaseBuilder(context, AppDb::class.java, DB_NAME)
+        private fun buildDatabase(context: Context, network: Network): AppDb {
+            val dbName = "${BuildConfig.APPLICATION_ID}.${network.name.lowercase()}.sqlite"
+
+            return Room.databaseBuilder(context, AppDb::class.java, dbName)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .fallbackToDestructiveMigration() // TODO remove in prod
                 .addCallback(object : Callback() {
@@ -69,17 +88,23 @@ abstract class AppDb : RoomDatabase() {
     }
 }
 
-internal class SeedDbWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+@HiltWorker
+class SeedDbWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted workerParams: WorkerParameters,
+    private val settingsStore: SettingsStore,
+) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result = coroutineScope {
         try {
-            val db = AppDb.getInstance(applicationContext)
+            // Note: This worker doesn't have access to DI
+            val db = AppDb.getInstance(applicationContext, settingsStore)
             db.configDao().upsert(
                 ConfigEntity(
                     walletIndex = 0L,
                 ),
             )
             Result.success()
-        } catch (ex: Exception) {
+        } catch (_: Exception) {
             Result.failure()
         }
     }

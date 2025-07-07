@@ -6,12 +6,17 @@ import io.ktor.client.plugins.logging.EMPTY
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import kotlinx.coroutines.flow.flowOf
 import org.junit.After
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
+import org.mockito.Mockito.mock
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.models.BackupCategory
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -34,12 +39,17 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
         }
 
         val vssStoreIdProvider = mock<VssStoreIdProvider> {
-            on { getVssStoreId() } doReturn "test_vss_storeId"
+            on { getVssStoreId(any()) } doReturn "test_vss_storeId"
+        }
+
+        val settingsStore = mock<SettingsStore> {
+            on { data } doReturn flowOf(SettingsData())
         }
 
         vssClient = VssBackupsClient(
             httpClient = httpClient,
-            vssStoreIdProvider = vssStoreIdProvider
+            vssStoreIdProvider = vssStoreIdProvider,
+            settingsStore = settingsStore,
         )
     }
 

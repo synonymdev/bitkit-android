@@ -21,6 +21,8 @@ internal object Env {
     val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
+    val availableNetworks = listOf(Network.BITCOIN, Network.TESTNET, Network.REGTEST)
+
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
@@ -39,21 +41,25 @@ internal object Env {
     val vssServerUrl
         get() = when (network) {
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
+            Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
             else -> TODO("${network.name} network not implemented")
         }
-    val vssStoreId
-        get() = when (network) {
-            Network.REGTEST -> "bitkit_regtest"
-            else -> TODO("${network.name} network not implemented")
-        }
+
+    fun getVssStoreId(network: Network) = when (network) {
+        Network.REGTEST -> "bitkit_regtest"
+        Network.TESTNET -> "bitkit_testnet"
+        else -> TODO("${network.name} network not implemented")
+    }
     val esploraServerUrl
         get() = when (network) {
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
+            Network.TESTNET -> "https://blockstream.info/testnet/api"
             else -> TODO("${network.name} network not implemented")
         }
     val blocktankBaseUrl
         get() = when (network) {
             Network.REGTEST -> "https://api.stag0.blocktank.to"
+            Network.TESTNET -> "https://api.stag0.blocktank.to"
             else -> TODO("${network.name} network not implemented")
         }
 
@@ -127,49 +133,30 @@ internal object Env {
         )
     }
 
-    @Suppress("unused")
     object ElectrumServers {
-        val REGTEST = ElectrumServer(
-            host = "34.65.252.32",
-            tcp = 18483,
-            ssl = 18484,
-            protocol = ElectrumProtocol.TCP,
-        )
         val BITCOIN = ElectrumServer(
             host = "35.187.18.233",
             tcp = 8911,
             ssl = 8900,
             protocol = ElectrumProtocol.SSL,
         )
-        val TESTNET_1 = ElectrumServer(
-            host = "testnet.hsmiths.com",
-            tcp = 53012,
-            ssl = 53012,
-            protocol = ElectrumProtocol.SSL,
+        val TESTNET = ElectrumServer(
+            host = "electrum.blockstream.info",
+            tcp = 60001,
+            ssl = 60002,
+            protocol = ElectrumProtocol.TCP,
         )
-        val TESTNET_2 = ElectrumServer(
-            host = "tn.not.fyi",
-            tcp = 55002,
-            ssl = 55002,
-            protocol = ElectrumProtocol.SSL,
-        )
-        val TESTNET_3 = ElectrumServer(
-            host = "testnet.aranguren.org",
-            tcp = 51001,
-            ssl = 51002,
-            protocol = ElectrumProtocol.SSL,
-        )
-        val TESTNET_4 = ElectrumServer(
-            host = "blackie.c3-soft.com",
-            tcp = 57006,
-            ssl = 57006,
-            protocol = ElectrumProtocol.SSL,
+        val REGTEST = ElectrumServer(
+            host = "34.65.252.32",
+            tcp = 18483,
+            ssl = 18484,
+            protocol = ElectrumProtocol.TCP,
         )
     }
 
     val defaultElectrumServers = mapOf(
         Network.BITCOIN to ElectrumServers.BITCOIN,
-        Network.TESTNET to ElectrumServers.TESTNET_1,
+        Network.TESTNET to ElectrumServers.TESTNET,
         Network.REGTEST to ElectrumServers.REGTEST,
     )
 

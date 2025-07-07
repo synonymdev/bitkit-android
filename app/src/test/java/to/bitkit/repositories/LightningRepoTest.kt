@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.mockito.kotlin.any
@@ -24,7 +23,6 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -46,7 +44,6 @@ class LightningRepoTest : BaseUnitTest() {
     private val blocktankNotificationsService: BlocktankNotificationsService = mock()
     private val firebaseMessaging: FirebaseMessaging = mock()
     private val keychain: Keychain = mock()
-    private val network: Network = mock()
 
     @Before
     fun setUp() {
@@ -60,7 +57,6 @@ class LightningRepoTest : BaseUnitTest() {
             blocktankNotificationsService = blocktankNotificationsService,
             firebaseMessaging = firebaseMessaging,
             keychain = keychain,
-            network = network,
         )
     }
 
@@ -69,18 +65,8 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(mock())
         whenever(lightningService.setup(any(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(defaultTransactionSpeed = TransactionSpeed.Medium)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         sut.start().let { assertTrue(it.isSuccess) }
-    }
-
-    @Test
-    fun `setup should call service setup and return success`() = test {
-        whenever(lightningService.setup(any(), anyOrNull())).thenReturn(Unit)
-
-        val result = sut.setup(0)
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(0, null)
     }
 
     @Test

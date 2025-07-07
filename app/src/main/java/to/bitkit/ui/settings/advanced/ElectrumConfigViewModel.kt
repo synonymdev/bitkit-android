@@ -11,10 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -36,7 +35,6 @@ class ElectrumConfigViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
-    private val network: Network,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ElectrumConfigUiState())
@@ -58,9 +56,14 @@ class ElectrumConfigViewModel @Inject constructor(
         }
 
         viewModelScope.launch(bgDispatcher) {
-            settingsStore.data.map { it.customElectrumServers }.distinctUntilChanged()
-                .collect { customElectrumServers ->
-                    val savedServer = customElectrumServers[network]
+            settingsStore.data
+                .distinctUntilChanged { old, new ->
+                    old.customElectrumServers == new.customElectrumServers &&
+                        old.selectedNetwork == new.selectedNetwork
+                }
+                .collect { settings ->
+                    val currentNetwork = settings.selectedNetwork
+                    val savedServer = settings.customElectrumServers[currentNetwork]
                     val connectedPeer = savedServer?.let { server ->
                         ElectrumServerPeer(
                             host = server.host,
@@ -69,12 +72,12 @@ class ElectrumConfigViewModel @Inject constructor(
                         )
                     }
 
-                    _uiState.update { currentState ->
-                        val newState = currentState.copy(
+                    _uiState.update {
+                        val newState = it.copy(
                             connectedPeer = connectedPeer,
                             host = connectedPeer?.host ?: "",
                             port = connectedPeer?.port ?: "",
-                            protocol = connectedPeer?.protocol ?: currentState.protocol,
+                            protocol = connectedPeer?.protocol ?: it.protocol,
                         )
                         newState.copy(hasEdited = computeHasEdited(newState))
                     }
@@ -83,46 +86,52 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun setHost(host: String) {
-        _uiState.update { currentState ->
-            val newState = currentState.copy(host = host.trim())
+        _uiState.update {
+            val newState = it.copy(host = host.trim())
             newState.copy(hasEdited = computeHasEdited(newState))
         }
     }
 
     fun setPort(port: String) {
-        _uiState.update { currentState ->
-            val newState = currentState.copy(port = port.trim())
+        _uiState.update {
+            val newState = it.copy(port = port.trim())
             newState.copy(hasEdited = computeHasEdited(newState))
         }
     }
 
     fun setProtocol(protocol: ElectrumProtocol) {
-        _uiState.update { currentState ->
-            // Toggle the port if the protocol changes and the default ports are still used
-            val newPort = if (currentState.port.isEmpty() || currentState.port in defaultElectrumPorts) {
-                protocol.getDefaultPort(network).toString()
-            } else {
-                currentState.port
-            }
+        viewModelScope.launch(bgDispatcher) {
+            val currentNetwork = settingsStore.data.first().selectedNetwork
+            _uiState.update {
+                // Toggle the port if the protocol changes and the default ports are still used
+                val newPort = if (it.port.isEmpty() || it.port in defaultElectrumPorts) {
+                    protocol.getDefaultPort(currentNetwork).toString()
+                } else {
+                    it.port
+                }
 
-            val newState = currentState.copy(
-                protocol = protocol,
-                port = newPort,
-            )
-            newState.copy(hasEdited = computeHasEdited(newState))
+                val newState = it.copy(
+                    protocol = protocol,
+                    port = newPort,
+                )
+                newState.copy(hasEdited = computeHasEdited(newState))
+            }
         }
     }
 
     fun resetToDefault() {
-        val defaultServer = Env.defaultElectrumServers[network]
-        if (defaultServer != null) {
-            _uiState.update { currentState ->
-                val newState = currentState.copy(
-                    host = defaultServer.host,
-                    port = defaultServer.getPort().toString(),
-                    protocol = defaultServer.protocol,
-                )
-                newState.copy(hasEdited = computeHasEdited(newState))
+        viewModelScope.launch(bgDispatcher) {
+            val currentNetwork = settingsStore.data.first().selectedNetwork
+            val defaultServer = Env.defaultElectrumServers[currentNetwork]
+            if (defaultServer != null) {
+                _uiState.update {
+                    val newState = it.copy(
+                        host = defaultServer.host,
+                        port = defaultServer.getPort().toString(),
+                        protocol = defaultServer.protocol,
+                    )
+                    newState.copy(hasEdited = computeHasEdited(newState))
+                }
             }
         }
     }
@@ -140,11 +149,12 @@ class ElectrumConfigViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             try {
+                val currentNetwork = settingsStore.data.first().selectedNetwork
                 val electrumServer = ElectrumServer.fromUserInput(
                     host = currentState.host,
                     port = port,
                     protocol = protocol,
-                    network = network,
+                    network = currentNetwork,
                 )
 
                 lightningRepo.restartWithElectrumServer(electrumServer)
@@ -296,7 +306,7 @@ class ElectrumConfigViewModel @Inject constructor(
         }
     }
 
-    private fun parseElectrumScanData(data: String): Result<ElectrumServerPeer> {
+    private suspend fun parseElectrumScanData(data: String): Result<ElectrumServerPeer> {
         return when {
             // Handle plain format: host:port or host:port:s (Umbrel format)
             !data.startsWith("http://") && !data.startsWith("https://") -> {
@@ -311,6 +321,7 @@ class ElectrumConfigViewModel @Inject constructor(
                         if (shortProtocol == "s") ElectrumProtocol.SSL else ElectrumProtocol.TCP
                     } else {
                         // Prefix protocol for common ports if missing
+                        val network = settingsStore.data.first().selectedNetwork
                         getProtocolForPort(port, network)
                     }
 

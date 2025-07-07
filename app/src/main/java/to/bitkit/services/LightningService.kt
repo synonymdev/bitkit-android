@@ -24,6 +24,7 @@ import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -69,33 +70,42 @@ class LightningService @Inject constructor(
     private val settingsStore: SettingsStore,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    @Volatile
     var node: Node? = null
 
-    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) {
+    private lateinit var selectedNetwork: Network
+
+    suspend fun setup(
+        walletIndex: Int,
+        customServer: ElectrumServer? = null,
+        customNetwork: Network? = null,
+    ) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
         val dirPath = Env.ldkStoragePath(walletIndex)
+        this.selectedNetwork = customNetwork ?: settingsStore.data.first().selectedNetwork
 
-        val builder = Builder
-            .fromConfig(
-                defaultConfig().apply {
-                    storageDirPath = dirPath
-                    network = Env.network
+        val config = defaultConfig().apply {
+            storageDirPath = dirPath
+            this@apply.network = selectedNetwork
 
-                    trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
-                    anchorChannelsConfig = AnchorChannelsConfig(
-                        trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 1u,
-                    )
-                })
+            trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
+            anchorChannelsConfig = AnchorChannelsConfig(
+                trustedPeersNoReserve = trustedPeers0conf,
+                perChannelReserveSats = 1u,
+            )
+        }
+
+        val builder = Builder.fromConfig(config)
             .apply {
                 setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
 
-                configureChainSource(customServer)
+                configureChainSource(customServer = customServer, network = selectedNetwork)
 
-                if (Env.ldkRgsServerUrl != null) {
-                    setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
+                val rgsServerUrl = Env.ldkRgsServerUrl
+                if (rgsServerUrl != null) {
+                    setGossipSourceRgs(rgsServerUrl)
                 } else {
                     setGossipSourceP2p()
                 }
@@ -104,7 +114,7 @@ class LightningService @Inject constructor(
 
         Logger.debug("Building node…")
 
-        val vssStoreId = vssStoreIdProvider.getVssStoreId()
+        val vssStoreId = vssStoreIdProvider.getVssStoreId(selectedNetwork)
 
         ServiceQueue.LDK.background {
             node = try {
@@ -121,9 +131,11 @@ class LightningService @Inject constructor(
         Logger.info("LDK node setup")
     }
 
-    private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
-        val electrumServer = customServer
-            ?: settingsStore.data.first().customElectrumServers[Env.network]
+    private suspend fun Builder.configureChainSource(
+        customServer: ElectrumServer? = null,
+        network: Network,
+    ) {
+        val electrumServer = customServer ?: settingsStore.data.first().customElectrumServers[network]
 
         if (electrumServer != null) {
             val serverUrl = electrumServer.toString()
@@ -223,7 +235,7 @@ class LightningService @Inject constructor(
     }
 
     // private fun setMaxDustHtlcExposureForCurrentChannels() {
-    //     if (Env.network != Network.REGTEST) {
+    //     if (selectedNetwork != Network.REGTEST) {
     //         Logger.debug("Not updating channel config for non-regtest network")
     //         return
     //     }

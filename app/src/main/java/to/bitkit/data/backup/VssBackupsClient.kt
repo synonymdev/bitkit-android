@@ -9,6 +9,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.flow.first
 import org.vss.DeleteObjectRequest
 import org.vss.ErrorResponse
 import org.vss.GetObjectRequest
@@ -17,6 +18,7 @@ import org.vss.KeyValue
 import org.vss.ListKeyVersionsRequest
 import org.vss.ListKeyVersionsResponse
 import org.vss.PutObjectRequest
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.ProtoClient
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
@@ -29,8 +31,12 @@ import javax.inject.Singleton
 class VssBackupsClient @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
+    private val settingsStore: SettingsStore,
 ) {
-    private val vssStoreId: String get() = vssStoreIdProvider.getVssStoreId()
+    private suspend fun getVssStoreId(): String {
+        val selectedNetwork = settingsStore.data.first().selectedNetwork
+        return vssStoreIdProvider.getVssStoreId(selectedNetwork)
+    }
 
     suspend fun putObject(
         category: BackupCategory,
@@ -51,7 +57,7 @@ class VssBackupsClient @Inject constructor(
                 .build()
 
             val request = PutObjectRequest.newBuilder()
-                .setStoreId(vssStoreId)
+                .setStoreId(getVssStoreId())
                 .addTransactionItems(keyValue)
                 .build()
 
@@ -72,7 +78,7 @@ class VssBackupsClient @Inject constructor(
 
         val key = category.name.lowercase()
         val request = GetObjectRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
             .setKey(key)
             .build()
 
@@ -98,7 +104,7 @@ class VssBackupsClient @Inject constructor(
             .build()
 
         val request = DeleteObjectRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
             .setKeyValue(keyValue)
             .build()
 
@@ -117,7 +123,7 @@ class VssBackupsClient @Inject constructor(
         Logger.debug("Listing objects with prefix: $keyPrefix", context = TAG)
 
         val requestBuilder = ListKeyVersionsRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
 
         keyPrefix?.let { requestBuilder.setKeyPrefix(it) }
         pageSize?.let { requestBuilder.setPageSize(it) }

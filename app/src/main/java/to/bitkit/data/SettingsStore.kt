@@ -115,4 +115,5 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
     val addressType: AddressType = AddressType.P2WPKH,
     val customElectrumServers: Map<Network, ElectrumServer> = Env.defaultElectrumServers,
+    val selectedNetwork: Network = Env.network,
 )
