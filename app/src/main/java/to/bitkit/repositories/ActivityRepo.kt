@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.idValue
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -244,6 +245,55 @@ class ActivityRepo @Inject constructor(
         val tags = coreService.activity.allPossibleTags()
         _activityState.update { it.copy(availableTags = tags) }
         tags
+    }
+
+    suspend fun attachTagsToActivity(
+        paymentHashOrTxId: String?,
+        type: ActivityFilter,
+        txType: PaymentType,
+        tags: List<String>,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("attachTagsToActivity $tags", context = TAG)
+
+        when {
+            tags.isEmpty() -> {
+                Logger.debug("selectedTags empty", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("selectedTags empty"))
+            }
+
+            paymentHashOrTxId.isNullOrBlank() -> {
+                Logger.error(msg = "null paymentHashOrTxId", context = TAG)
+                return@withContext Result.failure(IllegalArgumentException("paymentHashOrTxId is null or empty"))
+            }
+        }
+
+        val activity = findActivityByPaymentId(
+            paymentHashOrTxId = paymentHashOrTxId,
+            type = type,
+            txType = txType
+        ).getOrNull() ?: return@withContext Result.failure(IllegalStateException("Activity not found"))
+
+        if (!activity.matchesPaymentId(paymentHashOrTxId)) {
+            Logger.error(
+                "ID mismatch. Expected: $paymentHashOrTxId found: ${activity.idValue}",
+                context = TAG
+            )
+            return@withContext Result.failure(IllegalStateException("Activity ID mismatch"))
+        }
+
+        coreService.activity.appendTags(
+            toActivityId = activity.idValue,
+            tags = tags
+        ).fold(
+            onFailure = { error ->
+                Logger.error("Error attaching tags $tags", error, context = TAG)
+                Result.failure(Exception("Error attaching tags $tags", error))
+            },
+            onSuccess = {
+                Logger.info("Success attaching tags $tags to activity ${activity.idValue}", context = TAG)
+                Result.success(Unit)
+            }
+        )
     }
 
     // MARK: - Test Methods (Regtest only)

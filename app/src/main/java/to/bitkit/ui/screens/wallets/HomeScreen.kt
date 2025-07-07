@@ -761,9 +761,9 @@ private fun HomeContentView(
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
                     Spacer(modifier = Modifier.height(16.dp))
                     val activity = activityListViewModel ?: return@Column
-                    val latestActivities by activity.latestActivities.collectAsStateWithLifecycle()
+                    val activityState by activity.activityState.collectAsStateWithLifecycle()
                     ActivityListSimple(
-                        items = latestActivities,
+                        items = activityState.latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
                         onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },

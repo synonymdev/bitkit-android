@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.activityListViewModel
@@ -103,9 +104,9 @@ fun SpendingWalletScreen(
                     }
 
                     val activity = activityListViewModel ?: return@Column
-                    val lightningActivities by activity.lightningActivities.collectAsState()
+                    val activityState by activity.activityState.collectAsStateWithLifecycle()
                     ActivityListGrouped(
-                        items = lightningActivities,
+                        items = activityState.lightningActivities,
                         showFooter = true,
                         onAllActivityButtonClick = onAllActivityButtonClick,
                         onActivityItemClick = onActivityItemClick,

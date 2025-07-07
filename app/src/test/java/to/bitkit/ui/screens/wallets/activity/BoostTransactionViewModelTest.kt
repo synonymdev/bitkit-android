@@ -14,6 +14,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
@@ -26,6 +27,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     private lateinit var sut: BoostTransactionViewModel
     private val lightningRepo: LightningRepo = mock()
     private val walletRepo: WalletRepo = mock()
+    private val activityRepo: ActivityRepo = mock()
 
     // Test data
     private val mockTxId = "test_txid_123"
@@ -59,7 +61,11 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        sut = BoostTransactionViewModel(lightningRepo, walletRepo)
+        sut = BoostTransactionViewModel(
+            lightningRepo = lightningRepo,
+            walletRepo = walletRepo,
+            activityRepo = activityRepo
+        )
     }
 
     @Test
@@ -203,9 +209,9 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
             txId = mockNewTxId,
             isBoosted = true
         )
-        whenever(walletRepo.getOnChainActivityByTxId(any(), any()))
+        whenever(activityRepo.findActivityByPaymentId(any(), any(), any()))
             .thenReturn(Result.success(Activity.Onchain(v1 = newActivity)))
-        whenever(walletRepo.updateActivity(any(), any()))
+        whenever(activityRepo.updateActivity(any(), any()))
             .thenReturn(Result.success(Unit))
 
         sut.setupActivity(receivedActivity)
@@ -216,7 +222,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
         }
 
         verify(lightningRepo).accelerateByCpfp(mockTxId, testFeeRate.toUInt(), mockAddress)
-        verify(walletRepo).updateActivity(any(), any())
-        verify(walletRepo, never()).deleteActivityById(any())
+        verify(activityRepo).updateActivity(any(), any())
+        verify(activityRepo, never()).deleteActivity(any())
     }
 }

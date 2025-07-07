@@ -46,6 +46,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
@@ -75,6 +76,7 @@ class AppViewModel @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
+    private val activityRepo: ActivityRepo,
 ) : ViewModel() {
     var splashVisible by mutableStateOf(true)
         private set
@@ -224,7 +226,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleTags(event: Event.PaymentReceived) {
         val tags = walletRepo.searchInvoice(txId = event.paymentHash).getOrNull()?.tags.orEmpty()
-        walletRepo.attachTagsToActivity(
+        activityRepo.attachTagsToActivity(
             paymentHashOrTxId = event.paymentHash,
             type = ActivityFilter.LIGHTNING,
             txType = PaymentType.RECEIVED,
@@ -592,7 +594,7 @@ class AppViewModel @Inject constructor(
                 if (result.isSuccess) {
                     val txId = result.getOrNull()
                     val tags = _sendUiState.value.selectedTags
-                    walletRepo.attachTagsToActivity(
+                    activityRepo.attachTagsToActivity(
                         paymentHashOrTxId = txId,
                         type = ActivityFilter.ONCHAIN,
                         txType = PaymentType.SENT,
@@ -625,7 +627,7 @@ class AppViewModel @Inject constructor(
                     val paymentHash = result.getOrNull()
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
-                    walletRepo.attachTagsToActivity(
+                    activityRepo.attachTagsToActivity(
                         paymentHashOrTxId = paymentHash,
                         type = ActivityFilter.LIGHTNING,
                         txType = PaymentType.SENT,

@@ -38,11 +38,11 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun TagSelectorSheet() {
     val activity = activityListViewModel ?: return
     val app = appViewModel ?: return
-    val availableTags by activity.availableTags.collectAsStateWithLifecycle()
+    val activityState by activity.activityState.collectAsStateWithLifecycle()
     val selectedTags by activity.selectedTags.collectAsStateWithLifecycle()
 
     TagSelectorSheetContent(
-        availableTags = availableTags,
+        availableTags = activityState.availableTags,
         selectedTags = selectedTags,
         onTagClick = { activity.toggleTag(it) },
         onClearClick = {

@@ -67,10 +67,10 @@ fun CoinSelectionScreen(
     val tagsByTxId by viewModel.tagsByTxId.collectAsStateWithLifecycle()
 
     val activity = activityListViewModel ?: return
-    val onchainActivities by activity.onchainActivities.collectAsStateWithLifecycle()
+    val activityState by activity.activityState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(requiredAmount, onchainActivities) {
-        viewModel.setOnchainActivities(onchainActivities.orEmpty())
+    LaunchedEffect(requiredAmount, activityState.onchainActivities) {
+        viewModel.setOnchainActivities(activityState.onchainActivities)
         viewModel.loadUtxos(requiredAmount)
     }
 
