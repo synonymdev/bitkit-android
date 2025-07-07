@@ -122,7 +122,7 @@ class ActivityListViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             lightningRepo.getPayments()
                 .onSuccess { payments ->
-                    activityRepo.syncLdkNodePayments(payments).onFailure { e ->
+                    activityRepo.syncActivities().onFailure { e ->
                         Logger.error("Failed to sync LDK-node payments", e)
                     }
                 }

@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.matchesPaymentId
 import to.bitkit.services.CoreService
+import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -20,6 +22,7 @@ import javax.inject.Singleton
 class ActivityRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
+    private val lightningService: LightningService,
 ) {
     private val _activityState = MutableStateFlow(ActivityState())
     val activityState = _activityState.asStateFlow()
@@ -107,6 +110,40 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
+     * Gets a specific activity by payment hash or txID
+     */
+    suspend fun findActivityByPaymentId(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType,
+    ): Result<Activity> = withContext(bgDispatcher) {
+
+        return@withContext try {
+            suspend fun findActivity(): Activity? = getActivities(
+                filter = type,
+                txType = txType,
+                limit = 10u
+            ).getOrNull()?.firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
+
+            var activity = findActivity()
+            if (activity == null) {
+                Logger.warn(
+                    "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after sync",
+                    context = TAG
+                )
+                syncActivities().onSuccess {
+                    activity = findActivity()
+                }
+            }
+
+            if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))
+        } catch (e: Exception) {
+
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Gets activities with specified filters
      */
     suspend fun getActivities(
@@ -146,29 +183,36 @@ class ActivityRepo @Inject constructor(
     /**
      * Deletes an activity by ID
      */
-    suspend fun deleteActivity(id: String): Result<Boolean> = executeOperation("Delete activity") {
-        coreService.activity.delete(id)
+    suspend fun deleteActivity(id: String): Result<Unit> = executeOperation("Delete activity") {
+        val success = coreService.activity.delete(id)
+        if (success) Result.success(Unit) else Result.failure(Exception())
     }
 
     /**
      * Syncs LDK node payments and refreshes state
      */
-    suspend fun syncLdkNodePayments(payments: List<org.lightningdevkit.ldknode.PaymentDetails>): Result<Unit> =
-        executeOperation("Sync LDK payments") {
-            if (_activityState.value.isSyncingLdkNodePayments) {
-                Logger.warn("LDK-node payments are already being synced, skipping")
-                return@executeOperation
-            }
-
-            _activityState.update { it.copy(isSyncingLdkNodePayments = true) }
-
-            try {
-                coreService.activity.syncLdkNodePayments(payments)
-                syncAllData().getOrThrow()
-            } finally {
-                _activityState.update { it.copy(isSyncingLdkNodePayments = false) }
-            }
+    suspend fun syncActivities(): Result<Unit> = executeOperation("Sync LDK payments") {
+        if (_activityState.value.isSyncingLdkNodePayments) {
+            Logger.warn("LDK-node payments are already being synced, skipping")
+            return@executeOperation
         }
+
+        _activityState.update { it.copy(isSyncingLdkNodePayments = true) }
+
+        val payments = lightningService.payments
+
+        if (payments.isNullOrEmpty()) {
+            Logger.error("Payments not found, skipping")
+            return@executeOperation
+        }
+
+        try {
+            coreService.activity.syncLdkNodePayments(payments)
+            syncAllData().getOrThrow()
+        } finally {
+            _activityState.update { it.copy(isSyncingLdkNodePayments = false) }
+        }
+    }
 
     // MARK: - Tag Methods
 
