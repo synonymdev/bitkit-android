@@ -116,7 +116,7 @@ class ActivityListViewModel @Inject constructor(
     fun syncLdkNodePayments() {
         viewModelScope.launch(bgDispatcher) {
             activityRepo.syncActivities().onFailure { e ->
-                Logger.error("Failed to sync LDK-node payments", e)
+                Logger.error("Failed to sync Activities", e)
             }
         }
     }

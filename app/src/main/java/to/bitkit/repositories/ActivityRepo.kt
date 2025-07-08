@@ -65,7 +65,8 @@ class ActivityRepo @Inject constructor(
                 latestActivities = latestActivities,
                 lightningActivities = lightningActivities,
                 onchainActivities = onchainActivities,
-                availableTags = availableTags
+                availableTags = availableTags,
+                isSyncingLdkNodePayments = false
             )
         }
 
@@ -205,6 +206,7 @@ class ActivityRepo @Inject constructor(
 
         if (payments.isNullOrEmpty()) {
             Logger.error("Payments not found, skipping", context = TAG)
+            _activityState.update { it.copy(isSyncingLdkNodePayments = false) }
             return@withContext Result.failure(Exception("Payments not found"))
         }
 
