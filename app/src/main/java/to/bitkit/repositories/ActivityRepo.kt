@@ -16,7 +16,9 @@ class ActivityRepo @Inject constructor(
 ) {
 
     var isSyncingLdkNodePayments = false
-    private suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("syncActivities called", context = TAG)
+
         return@withContext runCatching {
             if (isSyncingLdkNodePayments) {
                 Logger.warn("LDK-node payments are already being synced, skipping", context = TAG)
@@ -24,16 +26,17 @@ class ActivityRepo @Inject constructor(
             }
 
             isSyncingLdkNodePayments = true
-            lightningRepo.getPayments()
+            return@withContext lightningRepo.getPayments()
                 .onSuccess { payments ->
-                    Logger.debug("Got payments with success, syncing activities")
+                    Logger.debug("Got payments with success, syncing activities", context = TAG)
                     coreService.activity.syncLdkNodePayments(payments = payments)
+                    isSyncingLdkNodePayments = false
                     return@withContext Result.success(Unit)
                 }.onFailure { e ->
                     Logger.error("Failed to sync ldk-node payments", e, context = TAG)
+                    isSyncingLdkNodePayments = false
                     return@withContext Result.failure(e)
-                }
-            isSyncingLdkNodePayments = false
+                }.map { Unit }
         }.onFailure { e ->
             Logger.error("syncLdkNodePayments error", e, context = TAG)
         }
