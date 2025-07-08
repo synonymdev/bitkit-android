@@ -156,12 +156,8 @@ class ActivityService(
     private val coreService: CoreService,
 ) {
     suspend fun removeAll() {
-        ServiceQueue.CORE.background { // Only allow removing on regtest for now
-            if (Env.network != Network.REGTEST) {
-                throw AppError(message = "Regtest only")
-            }
-
-            // Get all activities and delete them one by one
+        // Get all activities and delete them one by one
+        ServiceQueue.CORE.background {
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
                 txType = null,
@@ -361,9 +357,6 @@ class ActivityService(
     }
 
     suspend fun generateRandomTestData(count: Int = 100) {
-        if (Env.network != Network.REGTEST) {
-            throw AppError(message = "Regtest only")
-        }
         ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
