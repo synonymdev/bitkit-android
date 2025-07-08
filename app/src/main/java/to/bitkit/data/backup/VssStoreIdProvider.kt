@@ -24,7 +24,7 @@ class VssStoreIdProvider @Inject constructor(
         val mnemonicData = mnemonic.encodeToByteArray()
         val hashedMnemonic = mnemonicData.toSha256()
 
-        val storeIdHack = Env.getVssStoreId(network) + hashedMnemonic.toHex()
+        val storeIdHack = Env.vssStoreId(network) + hashedMnemonic.toHex()
         Logger.info("storeIdHack: $storeIdHack")
 
         return storeIdHack

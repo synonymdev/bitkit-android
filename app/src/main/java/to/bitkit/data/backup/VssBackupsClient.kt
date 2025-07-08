@@ -151,7 +151,7 @@ class VssBackupsClient @Inject constructor(
 
     private suspend fun post(endpoint: String, request: MessageLite): HttpResponse {
         val selectedNetwork = settingsStore.data.first().selectedNetwork
-        val baseUrl = Env.getVssServerUrl(selectedNetwork)
+        val baseUrl = Env.vssServerUrl(selectedNetwork)
 
         val response = httpClient.post("$baseUrl$endpoint") {
             contentType(ContentType.Application.OctetStream)

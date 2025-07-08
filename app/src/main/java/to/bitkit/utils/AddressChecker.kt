@@ -25,7 +25,7 @@ class AddressChecker @Inject constructor(
         try {
             val selectedNetwork = settingsStore.data.first().selectedNetwork
 
-            val response = client.get("${Env.getEsploraServerUrl(selectedNetwork)}/address/$address")
+            val response = client.get("${Env.esploraServerUrl(selectedNetwork)}/address/$address")
 
             return response.body<AddressInfo>()
         } catch (e: Exception) {
@@ -37,7 +37,7 @@ class AddressChecker @Inject constructor(
         try {
             val selectedNetwork = settingsStore.data.first().selectedNetwork
 
-            val response = client.get("${Env.getEsploraServerUrl(selectedNetwork)}/tx/$txid")
+            val response = client.get("${Env.esploraServerUrl(selectedNetwork)}/tx/$txid")
 
             return response.body<TxDetails>()
         } catch (e: Exception) {

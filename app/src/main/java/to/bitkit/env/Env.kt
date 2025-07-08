@@ -24,31 +24,31 @@ internal object Env {
     val availableNetworks = listOf(Network.BITCOIN, Network.TESTNET, Network.REGTEST)
 
     // TODO: remove this to load from BT API instead
-    fun getTrustedLnPeers(network: Network) = when (network) {
+    fun trustedLnPeers(network: Network) = when (network) {
         Network.REGTEST -> listOf(Peers.btStaging)
         Network.TESTNET -> listOf(Peers.btStaging)
         else -> TODO("Not yet implemented")
     }
 
-    fun getLdkRgsServerUrl(network: Network) = when (network) {
+    fun lLdkRgsServerUrl(network: Network) = when (network) {
         Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
         Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
         else -> null
     }
 
-    fun getVssServerUrl(network: Network) = when (network) {
+    fun vssServerUrl(network: Network) = when (network) {
         Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
         Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
         else -> TODO("${network.name} network not implemented")
     }
 
-    fun getVssStoreId(network: Network) = when (network) {
+    fun vssStoreId(network: Network) = when (network) {
         Network.REGTEST -> "bitkit_regtest"
         Network.TESTNET -> "bitkit_testnet"
         else -> TODO("${network.name} network not implemented")
     }
 
-    fun getEsploraServerUrl(network: Network) = when (network) {
+    fun esploraServerUrl(network: Network) = when (network) {
         Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
         Network.TESTNET -> "https://blockstream.info/testnet/api"
         else -> TODO("${network.name} network not implemented")

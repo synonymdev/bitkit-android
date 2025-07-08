@@ -85,7 +85,7 @@ class LightningService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
         this.selectedNetwork = customNetwork ?: settingsStore.data.first().selectedNetwork
-        this.trustedLnPeers = Env.getTrustedLnPeers(selectedNetwork)
+        this.trustedLnPeers = Env.trustedLnPeers(selectedNetwork)
         val dirPath = Env.ldkStoragePath(walletIndex, selectedNetwork)
 
         val config = defaultConfig().apply {
@@ -105,7 +105,7 @@ class LightningService @Inject constructor(
 
                 configureChainSource(customServer = customServer, network = selectedNetwork)
 
-                val rgsServerUrl = Env.getLdkRgsServerUrl(selectedNetwork)
+                val rgsServerUrl = Env.lLdkRgsServerUrl(selectedNetwork)
                 if (rgsServerUrl != null) {
                     setGossipSourceRgs(rgsServerUrl)
                 } else {
@@ -121,7 +121,7 @@ class LightningService @Inject constructor(
         ServiceQueue.LDK.background {
             node = try {
                 builder.buildWithVssStoreAndFixedHeaders(
-                    vssUrl = Env.getVssServerUrl(selectedNetwork),
+                    vssUrl = Env.vssServerUrl(selectedNetwork),
                     storeId = vssStoreId,
                     fixedHeaders = emptyMap(),
                 )
@@ -153,7 +153,7 @@ class LightningService @Inject constructor(
                 ),
             )
         } else {
-            val serverUrl = Env.getEsploraServerUrl(network)
+            val serverUrl = Env.esploraServerUrl(network)
             Logger.info("Using onchain source Esplora url: $serverUrl")
             setChainSourceEsplora(
                 serverUrl = serverUrl,

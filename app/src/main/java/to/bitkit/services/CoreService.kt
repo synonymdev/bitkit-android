@@ -138,7 +138,7 @@ class CoreService @Inject constructor(
 
     private suspend fun getLspPeers(): List<LnPeer> {
         val selectedNetwork = settingsStore.data.first().selectedNetwork
-        val blocktankPeers = Env.getTrustedLnPeers(selectedNetwork)
+        val blocktankPeers = Env.trustedLnPeers(selectedNetwork)
         // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
         // pseudocode idea:
         // val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }.orEmpty()
