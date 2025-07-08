@@ -1,10 +1,8 @@
 package to.bitkit.ui.settings.advanced
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,14 +16,17 @@ import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.models.networkUiText
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 @HiltViewModel
 class BitcoinNetworkSelectionViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
+    private val walletRepo: WalletRepo,
+    private val coreService: CoreService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BitcoinNetworkSelectionUiState())
@@ -56,7 +57,12 @@ class BitcoinNetworkSelectionViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.restartWithNetworkChange(network)
                 .onSuccess {
-                    // TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
+                    walletRepo.refreshBip21(force = true)
+                    walletRepo.deleteAllInvoices()
+                    // TODO update activities state, see ActivityListViewModel.syncState - needs Activity Repo
+                    coreService.activity.removeAll()
+                    // coreService.activity.syncLdkNodePayments()
+
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
                         title = "Network Switched",
