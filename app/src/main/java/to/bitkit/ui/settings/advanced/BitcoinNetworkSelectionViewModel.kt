@@ -59,9 +59,12 @@ class BitcoinNetworkSelectionViewModel @Inject constructor(
                 .onSuccess {
                     walletRepo.refreshBip21(force = true)
                     walletRepo.deleteAllInvoices()
-                    // TODO update activities state, see ActivityListViewModel.syncState - needs Activity Repo
+
                     coreService.activity.removeAll()
-                    // coreService.activity.syncLdkNodePayments()
+                    coreService.init()
+                    // TODO update activities state, see ActivityListViewModel.syncState - needs Activity Repo
+                    lightningRepo.getPayments()
+                        .onSuccess { coreService.activity.syncLdkNodePayments(it) }
 
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,

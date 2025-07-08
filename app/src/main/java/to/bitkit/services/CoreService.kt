@@ -43,6 +43,7 @@ import com.synonym.bitkitcore.upsertActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -50,6 +51,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
@@ -67,6 +69,7 @@ import kotlin.random.Random
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
+    private val settingsStore: SettingsStore,
 ) {
     private var walletIndex: Int = 0
 
@@ -83,13 +86,14 @@ class CoreService @Inject constructor(
         init()
     }
 
-    private fun init(walletIndex: Int = 0) {
+    fun init(walletIndex: Int = 0) {
         this.walletIndex = walletIndex
 
         // Block queue until the init completes forcing any additional calls to wait for it
         ServiceQueue.CORE.blocking {
             try {
-                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex))
+                val selectedNetwork = settingsStore.data.first().selectedNetwork
+                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex, selectedNetwork))
                 Logger.info("bitkit-core database init: $result")
             } catch (e: Exception) {
                 Logger.error("bitkit-core database init failed", e)
