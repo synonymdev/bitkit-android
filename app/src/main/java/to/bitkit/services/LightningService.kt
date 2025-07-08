@@ -103,7 +103,7 @@ class LightningService @Inject constructor(
 
                 configureChainSource(customServer = customServer, network = selectedNetwork)
 
-                val rgsServerUrl = Env.ldkRgsServerUrl
+                val rgsServerUrl = Env.getLdkRgsServerUrl(selectedNetwork)
                 if (rgsServerUrl != null) {
                     setGossipSourceRgs(rgsServerUrl)
                 } else {

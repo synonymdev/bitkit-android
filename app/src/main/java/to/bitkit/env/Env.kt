@@ -32,12 +32,13 @@ internal object Env {
 
             else -> TODO("Not yet implemented")
         }
-    val ldkRgsServerUrl
-        get() = when (network) {
-            Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
-            Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
-            else -> null
-        }
+
+    fun getLdkRgsServerUrl(network: Network) = when (network) {
+        Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+        Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
+        else -> null
+    }
+
     val vssServerUrl
         get() = when (network) {
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
@@ -66,6 +67,7 @@ internal object Env {
 
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
     val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
+
     // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
     const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
     const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
