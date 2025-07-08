@@ -71,6 +71,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settings.lightning.components.ChannelStatusView
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -90,6 +91,7 @@ fun ChannelDetailScreen(
     val context = LocalContext.current
     val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
+    val settings = settingsViewModel ?: return
 
     val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
     val channel = selectedChannel ?: return
@@ -98,6 +100,7 @@ fun ChannelDetailScreen(
     val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
     val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
     val walletState by wallet.uiState.collectAsStateWithLifecycle()
+    val selectedNetwork by settings.selectedNetwork.collectAsStateWithLifecycle()
 
     // Fetch transaction details for funding transaction if available
     LaunchedEffect(channel.details.fundingTxo?.txid) {
@@ -125,7 +128,8 @@ fun ChannelDetailScreen(
                 description = text,
             )
         },
-        onOpenUrl = { url ->
+        onOpenUrl = { txId ->
+            val url = getBlockExplorerUrl(txId, selectedNetwork)
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             context.startActivity(intent)
         },
@@ -278,7 +282,7 @@ private fun Content(
                             },
                             onClick = {
                                 onCopyText(txId)
-                                onOpenUrl(getBlockExplorerUrl(txId))
+                                onOpenUrl(txId)
                             }
                         )
                     }

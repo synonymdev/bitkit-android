@@ -49,6 +49,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
+import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -73,8 +74,11 @@ fun ActivityExploreScreen(
         ?: return
 
     val app = appViewModel ?: return
+    val settings = settingsViewModel ?: return
+    val context = LocalContext.current
+
+    val selectedNetwork by settings.selectedNetwork.collectAsStateWithLifecycle()
     val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
-    val copyToastTitle = stringResource(R.string.common__copied)
 
     LaunchedEffect(item) {
         if (item is Activity.Onchain) {
@@ -102,10 +106,15 @@ fun ActivityExploreScreen(
             onCopy = { text ->
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
-                    title = copyToastTitle,
-                    description = text.ellipsisMiddle(40)
+                    title = context.getString(R.string.common__copied),
+                    description = text.ellipsisMiddle(40),
                 )
-            }
+            },
+            onClickExplore = { txid ->
+                val url = getBlockExplorerUrl(txid, selectedNetwork)
+                val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                context.startActivity(intent)
+            },
         )
     }
 }
@@ -113,8 +122,9 @@ fun ActivityExploreScreen(
 @Composable
 private fun ActivityExploreContent(
     item: Activity,
-    txDetails: TxDetails?,
-    onCopy: (String) -> Unit,
+    txDetails: TxDetails? = null,
+    onCopy: (String) -> Unit = {},
+    onClickExplore: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -151,7 +161,7 @@ private fun ActivityExploreContent(
                 Spacer(modifier = Modifier.weight(1f))
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explorer),
-                    onClick = handleExploreClick(item),
+                    onClick = { onClickExplore(item.v1.txId) },
                 )
             }
 
@@ -269,17 +279,6 @@ private fun Section(
     }
 }
 
-@Composable
-private fun handleExploreClick(
-    onchain: Activity.Onchain,
-): () -> Unit {
-    val context = LocalContext.current
-    val url = getBlockExplorerUrl(onchain.v1.txId)
-    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-
-    return { context.startActivity(intent) }
-}
-
 @Preview
 @Composable
 private fun PreviewLightning() {
@@ -300,8 +299,6 @@ private fun PreviewLightning() {
                     updatedAt = null,
                 ),
             ),
-            txDetails = null,
-            onCopy = {},
         )
     }
 }
@@ -332,8 +329,6 @@ private fun PreviewOnchain() {
                     updatedAt = null,
                 ),
             ),
-            txDetails = null,
-            onCopy = {},
         )
     }
 }
