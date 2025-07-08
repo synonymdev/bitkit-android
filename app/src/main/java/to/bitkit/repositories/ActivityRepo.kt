@@ -136,7 +136,7 @@ class ActivityRepo @Inject constructor(
                 )
                 syncActivities().onSuccess {
                     Logger.debug("Sync success, searching again the activity with paymentHashOrTxId:$paymentHashOrTxId")
-                    activity = findActivity()
+                    activity = coreService.activity.getLatestActivities(5u).firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
                 }
             }
 
