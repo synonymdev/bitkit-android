@@ -80,7 +80,7 @@ fun ActivityDetailScreen(
     onCloseClick: () -> Unit,
 ) {
     val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.rawId() == route.id }
+    val item = activities.find { it.rawId() == route.id }
         ?: return
 
     val app = appViewModel ?: return

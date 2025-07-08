@@ -72,6 +72,7 @@ class ActivityListViewModel @Inject constructor(
 
     fun setTab(tab: ActivityTab) {
         _selectedTab.value = tab
+        updateFilteredActivities()
     }
 
     fun toggleTag(tag: String) {
@@ -160,7 +161,10 @@ class ActivityListViewModel @Inject constructor(
                 maxDate = _endDate.value?.let { it / 1000 }?.toULong(),
 
                 ).onSuccess { activities ->
-                _filteredActivities.update { activities }
+                _filteredActivities.value = when (_selectedTab.value) {
+                    ActivityTab.OTHER -> activities.filter { it is Activity.Onchain && it.v1.isTransfer }
+                    else -> activities
+                }
             }.onFailure { e ->
                 Logger.error("Failed to get filtered activities", e)
             }
