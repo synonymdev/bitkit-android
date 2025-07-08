@@ -211,9 +211,12 @@ class ActivityRepo @Inject constructor(
         }
 
         return@withContext try {
-            withTimeout(5.seconds) { coreService.activity.syncLdkNodePayments(payments) }
+            coreService.activity.syncLdkNodePayments(payments)
+            Logger.debug("syncLdkNodePayments synced. Syncing calling syncAllData...", context = TAG )
             syncAllData().onFailure { e ->
                 Logger.error("Error syncing data", e, context = TAG)
+            }.onSuccess {
+                Logger.info("Activities successfully synced", context = TAG)
             }
         } catch (e: Exception) {
             Logger.error("Error syncing activities", e, context = TAG)
