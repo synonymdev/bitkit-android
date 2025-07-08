@@ -12,7 +12,7 @@ import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
 
-@Suppress("ConstPropertyName", "SpellCheckingInspection")
+@Suppress("ConstPropertyName")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
     val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
@@ -24,14 +24,11 @@ internal object Env {
     val availableNetworks = listOf(Network.BITCOIN, Network.TESTNET, Network.REGTEST)
 
     // TODO: remove this to load from BT API instead
-    val trustedLnPeers
-        get() = when (network) {
-            Network.REGTEST -> listOf(
-                Peers.btStaging,
-            )
-
-            else -> TODO("Not yet implemented")
-        }
+    fun getTrustedLnPeers(network: Network) = when (network) {
+        Network.REGTEST -> listOf(Peers.btStaging)
+        Network.TESTNET -> listOf(Peers.btStaging)
+        else -> TODO("Not yet implemented")
+    }
 
     fun getLdkRgsServerUrl(network: Network) = when (network) {
         Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"

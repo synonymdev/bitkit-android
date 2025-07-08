@@ -74,6 +74,7 @@ class LightningService @Inject constructor(
     var node: Node? = null
 
     private lateinit var selectedNetwork: Network
+    private lateinit var trustedLnPeers: List<LnPeer>
 
     suspend fun setup(
         walletIndex: Int,
@@ -84,13 +85,14 @@ class LightningService @Inject constructor(
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
         this.selectedNetwork = customNetwork ?: settingsStore.data.first().selectedNetwork
+        this.trustedLnPeers = Env.getTrustedLnPeers(selectedNetwork)
         val dirPath = Env.ldkStoragePath(walletIndex, selectedNetwork)
 
         val config = defaultConfig().apply {
             storageDirPath = dirPath
             this@apply.network = selectedNetwork
 
-            trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
+            trustedPeers0conf = trustedLnPeers.map { it.nodeId }
             anchorChannelsConfig = AnchorChannelsConfig(
                 trustedPeersNoReserve = trustedPeers0conf,
                 perChannelReserveSats = 1u,
@@ -274,7 +276,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         ServiceQueue.LDK.background {
-            for (peer in Env.trustedLnPeers) {
+            for (peer in trustedLnPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
                     Logger.info("Connected to trusted peer: $peer")
