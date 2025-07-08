@@ -280,103 +280,75 @@ class LightningRepo @Inject constructor(
         Logger.info("Changing ldk-node network")
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-
-        Logger.debug("Stopping node…")
-        stop().onFailure { error ->
-            Logger.error("Failed to stop node during network change", error)
-            return@withContext Result.failure(error)
+        stop().onFailure {
+            Logger.error("Failed to stop node during network change", it)
+            return@withContext Result.failure(it)
         }
 
-        // Start node with new network and cached event handler
-        Logger.debug("Starting node with new network")
-        val startResult = start(
+        Logger.debug("Starting node with new network: $newNetwork")
+
+        return@withContext start(
             eventHandler = cachedEventHandler,
             customNetwork = newNetwork,
             shouldRetry = false,
-        )
+        ).onFailure { startError ->
+             Logger.warn("Failed ldk-node config change, attempting recovery…")
+             restartWithPreviousConfig()
+             return@withContext Result.failure(startError)
+         }.onSuccess {
+             settingsStore.update { it.copy(selectedNetwork = newNetwork) }
 
-        if (startResult.isSuccess) {
-            settingsStore.update { it.copy(selectedNetwork = newNetwork) }
-            Logger.info("Successfully restarted node with new network")
-            return@withContext Result.success(Unit)
-        }
-
-        // Network change failed, try recovering previous setup
-        val originalError = startResult.exceptionOrNull()
-        Logger.warn("Failed to change network, attempting recovery…", originalError)
-
-        Logger.debug("Stopping node for recovery attempt")
-        stop().onFailure { stopError ->
-            Logger.error("Failed to stop node during recovery", stopError)
-            return@withContext Result.failure(stopError)
-        }
-
-        Logger.debug("Starting node with previous config for recovery")
-        val recoveryResult = start(
-            eventHandler = cachedEventHandler,
-            shouldRetry = false,
-        )
-
-        if (recoveryResult.isSuccess) {
-            Logger.debug("Successfully restarted node for recovery")
-            // Return failure because the initial operation failed
-            return@withContext Result.failure(Exception(originalError))
-        }
-
-        Logger.error("Failed to restart node with new network", startResult.exceptionOrNull())
-        return@withContext startResult
+             Logger.info("Successfully restarted node with new network")
+             return@withContext Result.success(Unit)
+         }
     }
 
     suspend fun restartWithElectrumServer(newServer: ElectrumServer): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: $newServer")
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-
-        Logger.debug("Stopping node…")
-        stop().onFailure { error ->
-            Logger.error("Failed to stop node during electrum server change", error)
-            return@withContext Result.failure(error)
+        stop().onFailure {
+            Logger.error("Failed to stop node during electrum server change", it)
+            return@withContext Result.failure(it)
         }
 
-        // Start node with new electrum server and cached event handler
-        Logger.debug("Starting node with new electrum server")
-        val startResult = start(
+        Logger.debug("Starting node with new electrum server: $newServer")
+
+        start(
             eventHandler = cachedEventHandler,
             customServer = newServer,
             shouldRetry = false,
-        )
-
-        if (startResult.isSuccess) {
+        ).onFailure { startError ->
+            Logger.warn("Failed ldk-node config change, attempting recovery…")
+            restartWithPreviousConfig()
+            return@withContext Result.failure(startError)
+        }.onSuccess {
             val currentNetwork = settingsStore.data.first().selectedNetwork
             settingsStore.setElectrumServer(newServer, currentNetwork)
+
             Logger.info("Successfully changed electrum server connection")
             return@withContext Result.success(Unit)
         }
+    }
 
-        // Connection to new server failed, try recovering previous setup
-        val originalError = startResult.exceptionOrNull()
-        Logger.warn("Failed to change electrum server, attempting recovery…", originalError)
-
+    private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Stopping node for recovery attempt")
-        stop().onFailure { stopError ->
-            Logger.error("Failed to stop node during recovery", stopError)
-            return@withContext Result.failure(stopError)
+
+        stop().onFailure { e ->
+            Logger.error("Failed to stop node during recovery", e)
+            return@withContext Result.failure(e)
         }
 
         Logger.debug("Starting node with previous config for recovery")
-        val recoveryResult = start(
+
+        start(
             eventHandler = cachedEventHandler,
             shouldRetry = false,
-        )
-
-        if (recoveryResult.isSuccess) {
-            Logger.info("Successfully restarted node for recovery")
-            // Return failure because the initial operation failed
-            return@withContext Result.failure(Exception(originalError))
+        ).onSuccess {
+            Logger.debug("Successfully started node with previous config")
+        }.onFailure { e ->
+            Logger.error("Failed starting node with previous config", e)
         }
-
-        Logger.error("Failed restoring electrum server connection", recoveryResult.exceptionOrNull())
-        return@withContext Result.failure(Exception(originalError))
     }
 
     private suspend fun waitForNodeToStop(): Result<Unit> = withContext(bgDispatcher) {
