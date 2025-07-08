@@ -50,12 +50,13 @@ internal object Env {
         Network.TESTNET -> "bitkit_testnet"
         else -> TODO("${network.name} network not implemented")
     }
-    val esploraServerUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
-            Network.TESTNET -> "https://blockstream.info/testnet/api"
-            else -> TODO("${network.name} network not implemented")
-        }
+
+    fun getEsploraServerUrl(network: Network) = when (network) {
+        Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
+        Network.TESTNET -> "https://blockstream.info/testnet/api"
+        else -> TODO("${network.name} network not implemented")
+    }
+
     val blocktankBaseUrl
         get() = when (network) {
             Network.REGTEST -> "https://api.stag0.blocktank.to"

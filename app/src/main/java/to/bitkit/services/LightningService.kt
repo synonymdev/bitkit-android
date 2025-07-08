@@ -151,7 +151,7 @@ class LightningService @Inject constructor(
                 ),
             )
         } else {
-            val serverUrl = Env.esploraServerUrl
+            val serverUrl = Env.getEsploraServerUrl(network)
             Logger.info("Using onchain source Esplora url: $serverUrl")
             setChainSourceEsplora(
                 serverUrl = serverUrl,
