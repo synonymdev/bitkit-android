@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.Toast
@@ -49,6 +50,11 @@ fun BlocktankRegtestScreen(
     viewModel: BlocktankRegtestViewModel,
     navController: NavController,
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val wallet = walletViewModel ?: return
+    val app = appViewModel ?: return
+    val uiState by wallet.uiState.collectAsState()
+
     ScreenColumn {
         AppTopBar(
             titleText = "Blocktank Regtest",
@@ -62,11 +68,6 @@ fun BlocktankRegtestScreen(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            val coroutineScope = rememberCoroutineScope()
-            val wallet = walletViewModel ?: return@Column
-            val app = appViewModel ?: return@Column
-            val uiState by wallet.uiState.collectAsState()
-
             // State variables for form inputs
             var depositAddress by remember { mutableStateOf(uiState.onchainAddress) }
             var depositAmount by remember { mutableStateOf("123000") }
@@ -81,7 +82,7 @@ fun BlocktankRegtestScreen(
             var isDepositing by remember { mutableStateOf(false) }
             var isMining by remember { mutableStateOf(false) }
 
-            InfoTextField(value = Env.blocktankBaseUrl, label = "Service")
+            InfoTextField(value = Env.blocktankBaseUrl(Network.REGTEST), label = "Service")
             Text(
                 text = "These actions are executed on the staging Blocktank server node.",
                 style = MaterialTheme.typography.bodySmall,

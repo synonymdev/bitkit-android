@@ -36,12 +36,11 @@ internal object Env {
         else -> null
     }
 
-    val vssServerUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
-            Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
-            else -> TODO("${network.name} network not implemented")
-        }
+    fun getVssServerUrl(network: Network) = when (network) {
+        Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
+        Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
+        else -> TODO("${network.name} network not implemented")
+    }
 
     fun getVssStoreId(network: Network) = when (network) {
         Network.REGTEST -> "bitkit_regtest"
@@ -55,15 +54,15 @@ internal object Env {
         else -> TODO("${network.name} network not implemented")
     }
 
-    val blocktankBaseUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://api.stag0.blocktank.to"
-            Network.TESTNET -> "https://api.stag0.blocktank.to"
-            else -> TODO("${network.name} network not implemented")
-        }
+    fun blocktankBaseUrl(network: Network) = when (network) {
+        Network.REGTEST -> "https://api.stag0.blocktank.to"
+        Network.TESTNET -> "https://api.stag0.blocktank.to"
+        else -> TODO("${network.name} network not implemented")
+    }
 
-    val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
-    val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
+    fun blocktankClientServer(network: Network) = "${blocktankBaseUrl(network)}/blocktank/api/v2"
+
+    fun blocktankPushNotificationServer(network: Network) = "${blocktankBaseUrl(network)}/notifications/api"
 
     // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
     const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"

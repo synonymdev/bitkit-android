@@ -38,7 +38,7 @@ class BlocktankTest {
         Env.initAppStoragePath(testDbPath)
         initDb(testDbPath)
         runBlocking {
-            updateBlocktankUrl(Env.blocktankClientServer)
+            updateBlocktankUrl(Env.blocktankClientServer())
         }
     }
 

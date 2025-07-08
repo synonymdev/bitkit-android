@@ -91,8 +91,9 @@ class CoreService @Inject constructor(
 
         // Block queue until the init completes forcing any additional calls to wait for it
         ServiceQueue.CORE.blocking {
+            val selectedNetwork = settingsStore.data.first().selectedNetwork
+
             try {
-                val selectedNetwork = settingsStore.data.first().selectedNetwork
                 val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex, selectedNetwork))
                 Logger.info("bitkit-core database init: $result")
             } catch (e: Exception) {
@@ -100,9 +101,9 @@ class CoreService @Inject constructor(
             }
 
             try {
-                val blocktankUrl = Env.blocktankClientServer
+                val blocktankUrl = Env.blocktankClientServer(selectedNetwork)
                 updateBlocktankUrl(newUrl = blocktankUrl)
-                Logger.info("Blocktank URL updated to $blocktankUrl")
+                Logger.info("Blocktank URL updated to: $blocktankUrl")
             } catch (e: Exception) {
                 Logger.error("Failed to update Blocktank URL", e)
             }

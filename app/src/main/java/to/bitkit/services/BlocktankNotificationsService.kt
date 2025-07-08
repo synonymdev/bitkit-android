@@ -1,8 +1,10 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CoroutineDispatcher
-import to.bitkit.async.BaseCoroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
@@ -18,13 +20,14 @@ import javax.inject.Singleton
 
 @Singleton
 class BlocktankNotificationsService @Inject constructor(
-    @BgDispatcher bgDispatcher: CoroutineDispatcher,
+    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val keychain: Keychain,
     private val crypto: Crypto,
-) : BaseCoroutineScope(bgDispatcher) {
+    private val settingsStore: SettingsStore,
+) {
 
-    suspend fun registerDevice(deviceToken: String) {
+    suspend fun registerDevice(deviceToken: String) = withContext(bgDispatcher) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
         Logger.debug("Registering device for notifications…")
@@ -44,6 +47,8 @@ class BlocktankNotificationsService @Inject constructor(
         }
         keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
+        val selectedNetwork = settingsStore.data.first().selectedNetwork
+
         ServiceQueue.CORE.background {
             com.synonym.bitkitcore.registerDevice(
                 deviceToken = deviceToken,
@@ -52,7 +57,7 @@ class BlocktankNotificationsService @Inject constructor(
                 nodeId = nodeId,
                 isoTimestamp = "$timestamp",
                 signature = signature,
-                customUrl = Env.blocktankPushNotificationServer,
+                customUrl = Env.blocktankPushNotificationServer(selectedNetwork),
                 isProduction = null,
             )
         }
@@ -66,15 +71,17 @@ class BlocktankNotificationsService @Inject constructor(
         Logger.info("Device registered for notifications")
     }
 
-    suspend fun testNotification(deviceToken: String) {
+    suspend fun testNotification(deviceToken: String) = withContext(bgDispatcher) {
         Logger.debug("Sending test notification to self…")
+
+        val selectedNetwork = settingsStore.data.first().selectedNetwork
 
         ServiceQueue.CORE.background {
             com.synonym.bitkitcore.testNotification(
                 deviceToken = deviceToken,
                 secretMessage = "hello",
                 notificationType = "incomingHtlc",
-                customUrl = Env.blocktankPushNotificationServer,
+                customUrl = Env.blocktankPushNotificationServer(selectedNetwork),
             )
         }
     }

@@ -121,7 +121,7 @@ class LightningService @Inject constructor(
         ServiceQueue.LDK.background {
             node = try {
                 builder.buildWithVssStoreAndFixedHeaders(
-                    vssUrl = Env.vssServerUrl,
+                    vssUrl = Env.getVssServerUrl(selectedNetwork),
                     storeId = vssStoreId,
                     fixedHeaders = emptyMap(),
                 )
