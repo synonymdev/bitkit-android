@@ -7,7 +7,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import to.bitkit.data.AppDb
-import to.bitkit.data.SettingsStore
 import javax.inject.Singleton
 
 @Module
@@ -18,8 +17,7 @@ object DbModule {
     @Singleton
     fun provideAppDb(
         @ApplicationContext applicationContext: Context,
-        settingsStore: SettingsStore,
     ): AppDb {
-        return AppDb.getInstance(applicationContext, settingsStore)
+        return AppDb.getInstance(applicationContext)
     }
 }

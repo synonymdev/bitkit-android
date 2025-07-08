@@ -18,9 +18,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
 import to.bitkit.data.dao.InvoiceTagDao
 import to.bitkit.data.entities.ConfigEntity
@@ -41,35 +38,21 @@ abstract class AppDb : RoomDatabase() {
     abstract fun invoiceTagDao(): InvoiceTagDao
 
     companion object {
+        private const val DB_NAME = "${BuildConfig.APPLICATION_ID}.sqlite"
+
         @Volatile
         private var instance: AppDb? = null
 
-        @Volatile
-        private var currentNetwork: Network? = null
-
-        fun getInstance(context: Context, settingsStore: SettingsStore): AppDb {
-            val selectedNetwork = runBlocking { settingsStore.data.first() }.selectedNetwork
-
-            // If network changed, clear the instance to force recreation
-            if (currentNetwork != selectedNetwork) {
-                synchronized(this) {
-                    instance?.close()
-                    instance = null
-                    currentNetwork = selectedNetwork
-                }
-            }
-
+        fun getInstance(context: Context): AppDb {
             return instance ?: synchronized(this) {
-                instance ?: buildDatabase(context, selectedNetwork).also { newInstance ->
-                    instance = newInstance
+                instance ?: buildDatabase(context).also {
+                    instance = it
                 }
             }
         }
 
-        private fun buildDatabase(context: Context, network: Network): AppDb {
-            val dbName = "${BuildConfig.APPLICATION_ID}.${network.name.lowercase()}.sqlite"
-
-            return Room.databaseBuilder(context, AppDb::class.java, dbName)
+        private fun buildDatabase(context: Context): AppDb {
+            return Room.databaseBuilder(context, AppDb::class.java, DB_NAME)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .fallbackToDestructiveMigration() // TODO remove in prod
                 .addCallback(object : Callback() {
@@ -92,12 +75,11 @@ abstract class AppDb : RoomDatabase() {
 class SeedDbWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val settingsStore: SettingsStore,
 ) : CoroutineWorker(context, workerParams) {
+
     override suspend fun doWork(): Result = coroutineScope {
         try {
-            // Note: This worker doesn't have access to DI
-            val db = AppDb.getInstance(applicationContext, settingsStore)
+            val db = AppDb.getInstance(applicationContext)
             db.configDao().upsert(
                 ConfigEntity(
                     walletIndex = 0L,
