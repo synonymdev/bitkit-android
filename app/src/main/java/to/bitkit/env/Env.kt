@@ -143,8 +143,8 @@ internal object Env {
         )
         val TESTNET = ElectrumServer(
             host = "electrum.blockstream.info",
-            tcp = 60001,
-            ssl = 60002,
+            tcp = 60001, // or 50001
+            ssl = 60002, // or 50002
             protocol = ElectrumProtocol.TCP,
         )
         val REGTEST = ElectrumServer(
