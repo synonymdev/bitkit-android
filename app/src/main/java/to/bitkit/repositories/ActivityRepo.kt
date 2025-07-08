@@ -135,13 +135,13 @@ class ActivityRepo @Inject constructor(
                     context = TAG
                 )
                 syncActivities().onSuccess {
+                    Logger.debug("Sync success, searching again the activity with paymentHashOrTxId:$paymentHashOrTxId")
                     activity = findActivity()
                 }
             }
 
             if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))
         } catch (e: Exception) {
-
             Result.failure(e)
         }
     }
