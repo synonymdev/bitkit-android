@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -244,6 +245,10 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(enableSendAmountWarning = value) }
         }
     }
+
+    val selectedNetwork = settingsStore.data.map { it.selectedNetwork }
+        .asStateFlow(initialValue = Env.network)
+
 
     // utils
     private fun <T> Flow<T>.asStateFlow(

@@ -1300,10 +1300,6 @@ fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
 )
 
-fun NavController.navigateToChannelOrdersSettings() = navigate(
-    route = Routes.ChannelOrdersSettings,
-)
-
 fun NavController.navigateToOrderDetail(id: String) = navigate(
     route = Routes.OrderDetail(id),
 )
@@ -1314,10 +1310,6 @@ fun NavController.navigateToCjitDetail(id: String) = navigate(
 
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
-)
-
-fun NavController.navigateToRegtestSettings() = navigate(
-    route = Routes.RegtestSettings,
 )
 
 fun NavController.navigateToTransferSavingsIntro() = navigate(
@@ -1358,10 +1350,6 @@ fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
     }
     navigate(Routes.QrScanner)
 }
-
-fun NavController.navigateToLogs() = navigate(
-    route = Routes.Logs,
-)
 
 fun NavController.navigateToLogDetail(fileName: String) = navigate(
     route = Routes.LogDetail(fileName),
