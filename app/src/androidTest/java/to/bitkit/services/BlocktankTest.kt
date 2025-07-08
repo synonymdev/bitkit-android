@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
 import javax.inject.Inject
 import kotlin.test.assertEquals
@@ -38,7 +39,7 @@ class BlocktankTest {
         Env.initAppStoragePath(testDbPath)
         initDb(testDbPath)
         runBlocking {
-            updateBlocktankUrl(Env.blocktankClientServer())
+            updateBlocktankUrl(Env.blocktankClientServer(Network.REGTEST))
         }
     }
 
