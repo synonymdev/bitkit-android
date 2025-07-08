@@ -65,8 +65,9 @@ internal object Env {
 
     val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
     val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
-    val btcRatesServer get() = "https://blocktank.synonym.to/fx/rates/btc/"
-    val geoCheckUrl get() = "https://api1.blocktank.to/api/geocheck"
+    // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
+    const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
+    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
