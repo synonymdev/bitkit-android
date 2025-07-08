@@ -83,8 +83,8 @@ class LightningService @Inject constructor(
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
-        val dirPath = Env.ldkStoragePath(walletIndex)
         this.selectedNetwork = customNetwork ?: settingsStore.data.first().selectedNetwork
+        val dirPath = Env.ldkStoragePath(walletIndex, selectedNetwork)
 
         val config = defaultConfig().apply {
             storageDirPath = dirPath
@@ -219,7 +219,7 @@ class LightningService @Inject constructor(
     fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
         Logger.warn("Wiping lightning storage…")
-        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
+        Path(Env.ldkStoragePath(walletIndex, selectedNetwork)).toFile().deleteRecursively()
         Logger.info("Lightning wallet wiped")
     }
 

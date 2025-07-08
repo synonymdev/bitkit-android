@@ -117,8 +117,11 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
-    fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
+    fun ldkStoragePath(walletIndex: Int, network: Network) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+
+    fun bitkitCoreStoragePath(walletIndex: Int, network: Network): String {
+        return storagePathOf(walletIndex, network.name.lowercase(), "core")
+    }
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
         require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }

@@ -5,7 +5,9 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
 import org.ldk.structs.KeysManager
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
 import to.bitkit.utils.Logger
@@ -18,11 +20,14 @@ import org.ldk.structs.UtilMethods.C2Tuple_ThirtyTwoBytesChannelMonitorZ_read as
 
 class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val settingsStore: SettingsStore,
 ) {
-    fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
+    suspend fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
         Logger.debug("Migrating LDK backup…")
 
-        val file = Path(Env.ldkStoragePath(0), LDK_DB_NAME).toFile()
+        val selectedNetwork = settingsStore.data.first().selectedNetwork
+
+        val file = Path(Env.ldkStoragePath(0, selectedNetwork), LDK_DB_NAME).toFile()
 
         // Skip if db already exists
         if (file.exists()) {
