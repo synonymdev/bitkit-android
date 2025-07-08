@@ -79,10 +79,11 @@ class BoostTransactionViewModel @Inject constructor(
                     PaymentType.RECEIVED -> lightningRepo.calculateCpfpFeeRate(activityContent.txId)
                 }
 
-                val totalFeeResult = lightningRepo.estimateTotalFee(
-                    speed = TransactionSpeed.Custom(
-                        satsPerVByte = feeRateResult.getOrNull()?.toUInt() ?: 0u
-                    )
+                // TODO ideally include utxos for a better fee estimate
+                val totalFeeResult = lightningRepo.calculateTotalFee(
+                    address = walletRepo.getOnchainAddress(),
+                    amountSats = activityContent.value,
+                    speed = TransactionSpeed.Custom(feeRateResult.getOrDefault(0u).toUInt()),
                 )
 
                 when {
@@ -224,7 +225,12 @@ class BoostTransactionViewModel @Inject constructor(
         _uiState.update { it.copy(feeRate = newFeeRate) }
 
         viewModelScope.launch {
-            lightningRepo.estimateTotalFee(TransactionSpeed.Custom(newFeeRate.toUInt()))
+            lightningRepo
+                .calculateTotalFee(
+                    address = walletRepo.getOnchainAddress(),
+                    amountSats = requireNotNull(activity).v1.value,
+                    speed = TransactionSpeed.Custom(newFeeRate.toUInt()),
+                )
                 .fold(
                     onSuccess = { newTotalFee ->
                         val currentFee = activity?.v1?.fee ?: 0u
