@@ -14,9 +14,9 @@ import javax.inject.Singleton
 class VssStoreIdProvider @Inject constructor(
     private val keychain: Keychain,
 ) {
-    fun getVssStoreId(network: Network): String {
-        // MARK: Temp fix as we don't have VSS auth yet
-        if (network == Network.BITCOIN) {
+    fun getVssStoreId(): String {
+        // TODO Temp fix as we don't have VSS auth yet
+        if (Env.network == Network.BITCOIN) {
             error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")
         }
 
@@ -24,7 +24,7 @@ class VssStoreIdProvider @Inject constructor(
         val mnemonicData = mnemonic.encodeToByteArray()
         val hashedMnemonic = mnemonicData.toSha256()
 
-        val storeIdHack = Env.vssStoreId(network) + hashedMnemonic.toHex()
+        val storeIdHack = Env.vssStoreId + hashedMnemonic.toHex()
         Logger.info("storeIdHack: $storeIdHack")
 
         return storeIdHack

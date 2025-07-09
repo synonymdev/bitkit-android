@@ -24,7 +24,6 @@ import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
@@ -73,24 +72,22 @@ class LightningService @Inject constructor(
     @Volatile
     var node: Node? = null
 
-    private lateinit var selectedNetwork: Network
     private lateinit var trustedLnPeers: List<LnPeer>
 
     suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
-        customNetwork: Network? = null,
     ) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
-        this.selectedNetwork = customNetwork ?: settingsStore.data.first().selectedNetwork
-        this.trustedLnPeers = Env.trustedLnPeers(selectedNetwork)
-        val dirPath = Env.ldkStoragePath(walletIndex, selectedNetwork)
+        // TODO get trustedLnPeers from blocktank info
+        this.trustedLnPeers = Env.trustedLnPeers
+        val dirPath = Env.ldkStoragePath(walletIndex)
 
         val config = defaultConfig().apply {
             storageDirPath = dirPath
-            this@apply.network = selectedNetwork
+            network = Env.network
 
             trustedPeers0conf = trustedLnPeers.map { it.nodeId }
             anchorChannelsConfig = AnchorChannelsConfig(
@@ -103,9 +100,9 @@ class LightningService @Inject constructor(
             .apply {
                 setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
 
-                configureChainSource(customServer = customServer, network = selectedNetwork)
+                configureChainSource(customServer = customServer)
 
-                val rgsServerUrl = Env.lLdkRgsServerUrl(selectedNetwork)
+                val rgsServerUrl = Env.ldkRgsServerUrl
                 if (rgsServerUrl != null) {
                     setGossipSourceRgs(rgsServerUrl)
                 } else {
@@ -116,12 +113,12 @@ class LightningService @Inject constructor(
 
         Logger.debug("Building node…")
 
-        val vssStoreId = vssStoreIdProvider.getVssStoreId(selectedNetwork)
+        val vssStoreId = vssStoreIdProvider.getVssStoreId()
 
         ServiceQueue.LDK.background {
             node = try {
                 builder.buildWithVssStoreAndFixedHeaders(
-                    vssUrl = Env.vssServerUrl(selectedNetwork),
+                    vssUrl = Env.vssServerUrl,
                     storeId = vssStoreId,
                     fixedHeaders = emptyMap(),
                 )
@@ -135,9 +132,8 @@ class LightningService @Inject constructor(
 
     private suspend fun Builder.configureChainSource(
         customServer: ElectrumServer? = null,
-        network: Network,
     ) {
-        val electrumServer = customServer ?: settingsStore.data.first().customElectrumServers[network]
+        val electrumServer = customServer ?: settingsStore.data.first().customElectrumServers[Env.network]
 
         if (electrumServer != null) {
             val serverUrl = electrumServer.toString()
@@ -153,7 +149,7 @@ class LightningService @Inject constructor(
                 ),
             )
         } else {
-            val serverUrl = Env.esploraServerUrl(network)
+            val serverUrl = Env.esploraServerUrl
             Logger.info("Using onchain source Esplora url: $serverUrl")
             setChainSourceEsplora(
                 serverUrl = serverUrl,
@@ -221,7 +217,7 @@ class LightningService @Inject constructor(
     fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning
         Logger.warn("Wiping lightning storage…")
-        Path(Env.ldkStoragePath(walletIndex, selectedNetwork)).toFile().deleteRecursively()
+        Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Logger.info("Lightning wallet wiped")
     }
 

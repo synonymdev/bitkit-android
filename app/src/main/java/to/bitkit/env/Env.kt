@@ -15,54 +15,56 @@ import kotlin.io.path.Path
 @Suppress("ConstPropertyName")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
-    val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
-    val network = Network.REGTEST
+    val network = Network.valueOf(BuildConfig.NETWORK)
     val walletSyncIntervalSecs = 10_uL // TODO review
     val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
-    val availableNetworks = listOf(Network.BITCOIN, Network.TESTNET, Network.REGTEST)
-
     // TODO: remove this to load from BT API instead
-    fun trustedLnPeers(network: Network) = when (network) {
-        Network.REGTEST -> listOf(Peers.btStaging)
-        Network.TESTNET -> listOf(Peers.btStaging)
-        else -> TODO("Not yet implemented")
-    }
+    val trustedLnPeers
+        get() = when (network) {
+            Network.REGTEST -> listOf(Peers.btStaging)
+            Network.TESTNET -> listOf(Peers.btStaging)
+            else -> TODO("Not yet implemented")
+        }
 
-    fun lLdkRgsServerUrl(network: Network) = when (network) {
-        Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
-        Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
-        else -> null
-    }
+    val ldkRgsServerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
+            Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
+            else -> null
+        }
 
-    fun vssServerUrl(network: Network) = when (network) {
-        Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
-        Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
-        else -> TODO("${network.name} network not implemented")
-    }
+    val vssServerUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
+            Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
+            else -> TODO("${network.name} network not implemented")
+        }
 
-    fun vssStoreId(network: Network) = when (network) {
-        Network.REGTEST -> "bitkit_regtest"
-        Network.TESTNET -> "bitkit_testnet"
-        else -> TODO("${network.name} network not implemented")
-    }
+    val vssStoreId
+        get() = when (network) {
+            Network.REGTEST -> "bitkit_regtest"
+            Network.TESTNET -> "bitkit_testnet"
+            else -> TODO("${network.name} network not implemented")
+        }
 
-    fun esploraServerUrl(network: Network) = when (network) {
-        Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
-        Network.TESTNET -> "https://blockstream.info/testnet/api"
-        else -> TODO("${network.name} network not implemented")
-    }
+    val esploraServerUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
+            Network.TESTNET -> "https://blockstream.info/testnet/api"
+            else -> TODO("${network.name} network not implemented")
+        }
 
-    fun blocktankBaseUrl(network: Network) = when (network) {
-        Network.REGTEST -> "https://api.stag0.blocktank.to"
-        Network.TESTNET -> "https://api.stag0.blocktank.to"
-        else -> TODO("${network.name} network not implemented")
-    }
+    val blocktankBaseUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://api.stag0.blocktank.to"
+            Network.TESTNET -> "https://api.stag0.blocktank.to"
+            else -> TODO("${network.name} network not implemented")
+        }
 
-    fun blocktankClientServer(network: Network) = "${blocktankBaseUrl(network)}/blocktank/api/v2"
-
-    fun blocktankPushNotificationServer(network: Network) = "${blocktankBaseUrl(network)}/notifications/api"
+    val blocktankClientServer get() = "$blocktankBaseUrl/blocktank/api/v2"
+    val blocktankPushNotificationServer get() = "$blocktankBaseUrl/notifications/api"
 
     // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
     const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
@@ -113,9 +115,9 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    fun ldkStoragePath(walletIndex: Int, network: Network) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
+    fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
 
-    fun bitkitCoreStoragePath(walletIndex: Int, network: Network): String {
+    fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }
 

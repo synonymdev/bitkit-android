@@ -373,31 +373,5 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
     }
 
-    @Test
-    fun `restartWithNetworkChange should setup with new network`() = test {
-        startNodeForTesting()
-        val customNetwork = Network.TESTNET
-        whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.stop()).thenReturn(Unit)
 
-        val result = sut.restartWithNetworkChange(customNetwork)
-
-        assertTrue(result.isSuccess)
-        val inOrder = inOrder(lightningService)
-        inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), anyOrNull(), eq(customNetwork))
-        inOrder.verify(lightningService).start(anyOrNull(), any())
-        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
-    }
-
-    @Test
-    fun `restartWithNetworkChange should handle stop failure`() = test {
-        startNodeForTesting()
-        val customNetwork = Network.TESTNET
-        whenever(lightningService.stop()).thenThrow(RuntimeException("Stop failed"))
-
-        val result = sut.restartWithNetworkChange(customNetwork)
-
-        assertTrue(result.isFailure)
-    }
 }

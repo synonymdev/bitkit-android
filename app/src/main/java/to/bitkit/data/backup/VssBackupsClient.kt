@@ -9,7 +9,6 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import kotlinx.coroutines.flow.first
 import org.vss.DeleteObjectRequest
 import org.vss.ErrorResponse
 import org.vss.GetObjectRequest
@@ -18,7 +17,6 @@ import org.vss.KeyValue
 import org.vss.ListKeyVersionsRequest
 import org.vss.ListKeyVersionsResponse
 import org.vss.PutObjectRequest
-import to.bitkit.data.SettingsStore
 import to.bitkit.di.ProtoClient
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
@@ -31,12 +29,8 @@ import javax.inject.Singleton
 class VssBackupsClient @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
-    private val settingsStore: SettingsStore,
 ) {
-    private suspend fun getVssStoreId(): String {
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-        return vssStoreIdProvider.getVssStoreId(selectedNetwork)
-    }
+    private fun getVssStoreId(): String = vssStoreIdProvider.getVssStoreId()
 
     suspend fun putObject(
         category: BackupCategory,
@@ -150,8 +144,7 @@ class VssBackupsClient @Inject constructor(
     }
 
     private suspend fun post(endpoint: String, request: MessageLite): HttpResponse {
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-        val baseUrl = Env.vssServerUrl(selectedNetwork)
+        val baseUrl = Env.vssServerUrl
 
         val response = httpClient.post("$baseUrl$endpoint") {
             contentType(ContentType.Application.OctetStream)

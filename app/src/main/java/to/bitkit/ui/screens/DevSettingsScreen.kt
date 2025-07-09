@@ -5,14 +5,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
@@ -38,8 +37,6 @@ fun DevSettingsScreen(
     val settings = settingsViewModel ?: return
     val app = appViewModel ?: return
 
-    val selectedNetwork by settings.selectedNetwork.collectAsStateWithLifecycle()
-
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__dev_title),
@@ -54,7 +51,7 @@ fun DevSettingsScreen(
             SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
             SettingsButtonRow("Channel Orders") { Routes.ChannelOrdersSettings }
 
-            if (selectedNetwork == Network.REGTEST) {
+            if (Env.network == Network.REGTEST) {
                 SectionHeader(title = "REGTEST ONLY")
 
                 SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }

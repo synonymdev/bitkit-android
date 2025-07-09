@@ -30,7 +30,6 @@ class AdvancedSettingsViewModel @Inject constructor(
         AdvancedSettingsUiState(
             isRescanning = isRescanning,
             addressType = settings.addressType,
-            currentNetwork = settings.selectedNetwork,
             isDevModeEnabled = settings.isDevModeEnabled,
         )
     }.stateIn(
@@ -64,6 +63,5 @@ class AdvancedSettingsViewModel @Inject constructor(
 data class AdvancedSettingsUiState(
     val isRescanning: Boolean = false,
     val addressType: AddressType = AddressType.P2WPKH,
-    val currentNetwork: Network = Env.network,
     val isDevModeEnabled: Boolean = false,
 )

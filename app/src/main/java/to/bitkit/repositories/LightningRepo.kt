@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
@@ -125,10 +126,9 @@ class LightningRepo @Inject constructor(
     private suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
-        customNetwork: Network? = null,
     ) = withContext(bgDispatcher) {
         return@withContext try {
-            lightningService.setup(walletIndex, customServer, customNetwork)
+            lightningService.setup(walletIndex, customServer)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
@@ -142,7 +142,6 @@ class LightningRepo @Inject constructor(
         shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null,
         customServer: ElectrumServer? = null,
-        customNetwork: Network? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
@@ -155,7 +154,7 @@ class LightningRepo @Inject constructor(
 
             // Setup if not already setup
             if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServer, customNetwork)
+                val setupResult = setup(walletIndex, customServer)
                 if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
@@ -276,32 +275,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun restartWithNetworkChange(newNetwork: Network): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Changing ldk-node network")
 
-        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-        stop().onFailure {
-            Logger.error("Failed to stop node during network change", it)
-            return@withContext Result.failure(it)
-        }
-
-        Logger.debug("Starting node with new network: $newNetwork")
-
-        return@withContext start(
-            eventHandler = cachedEventHandler,
-            customNetwork = newNetwork,
-            shouldRetry = false,
-        ).onFailure { startError ->
-             Logger.warn("Failed ldk-node config change, attempting recovery…")
-             restartWithPreviousConfig()
-             return@withContext Result.failure(startError)
-         }.onSuccess {
-             settingsStore.update { it.copy(selectedNetwork = newNetwork) }
-
-             Logger.info("Successfully restarted node with new network")
-             return@withContext Result.success(Unit)
-         }
-    }
 
     suspend fun restartWithElectrumServer(newServer: ElectrumServer): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: $newServer")
@@ -323,8 +297,7 @@ class LightningRepo @Inject constructor(
             restartWithPreviousConfig()
             return@withContext Result.failure(startError)
         }.onSuccess {
-            val currentNetwork = settingsStore.data.first().selectedNetwork
-            settingsStore.setElectrumServer(newServer, currentNetwork)
+            settingsStore.setElectrumServer(newServer, Env.network)
 
             Logger.info("Successfully changed electrum server connection")
             return@withContext Result.success(Unit)

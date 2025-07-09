@@ -25,9 +25,7 @@ class MigrationService @Inject constructor(
     suspend fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
         Logger.debug("Migrating LDK backup…")
 
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-
-        val file = Path(Env.ldkStoragePath(0, selectedNetwork), LDK_DB_NAME).toFile()
+        val file = Path(Env.ldkStoragePath(0), LDK_DB_NAME).toFile()
 
         // Skip if db already exists
         if (file.exists()) {

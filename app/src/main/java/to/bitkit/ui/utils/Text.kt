@@ -17,6 +17,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ext.formatPlural
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -156,13 +157,12 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = 2): String? {
 
 fun getBlockExplorerUrl(
     id: String,
-    network: Network,
     type: BlockExplorerType = BlockExplorerType.TX,
 ): String {
     val service = "https://mempool.space"
     val type = type.name.lowercase()
 
-    return when (network) {
+    return when (Env.network) {
         Network.TESTNET -> "$service/testnet/$type/$id"
         else -> "$service/$type/$id"
     }

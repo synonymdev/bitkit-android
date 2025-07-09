@@ -86,22 +86,20 @@ class CoreService @Inject constructor(
         init()
     }
 
-    fun init(walletIndex: Int = 0) {
+    private fun init(walletIndex: Int = 0) {
         this.walletIndex = walletIndex
 
         // Block queue until the init completes forcing any additional calls to wait for it
         ServiceQueue.CORE.blocking {
-            val selectedNetwork = settingsStore.data.first().selectedNetwork
-
             try {
-                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex, selectedNetwork))
+                val result = initDb(basePath = Env.bitkitCoreStoragePath(walletIndex))
                 Logger.info("bitkit-core database init: $result")
             } catch (e: Exception) {
                 Logger.error("bitkit-core database init failed", e)
             }
 
             try {
-                val blocktankUrl = Env.blocktankClientServer(selectedNetwork)
+                val blocktankUrl = Env.blocktankClientServer
                 updateBlocktankUrl(newUrl = blocktankUrl)
                 Logger.info("Blocktank URL updated to: $blocktankUrl")
             } catch (e: Exception) {
@@ -137,8 +135,7 @@ class CoreService @Inject constructor(
     }
 
     private suspend fun getLspPeers(): List<LnPeer> {
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-        val blocktankPeers = Env.trustedLnPeers(selectedNetwork)
+        val blocktankPeers = Env.trustedLnPeers
         // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
         // pseudocode idea:
         // val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }.orEmpty()

@@ -105,7 +105,6 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
-import to.bitkit.ui.settings.advanced.BitcoinNetworkSelectionScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.GapLimitScreen
@@ -749,9 +748,6 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
     composableWithDefaultTransitions<Routes.WebRelay> {
         WebRelayScreen(navController)
-    }
-    composableWithDefaultTransitions<Routes.BitcoinNetworkSelection> {
-        BitcoinNetworkSelectionScreen(navController)
     }
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
@@ -1429,9 +1425,6 @@ object Routes {
 
     @Serializable
     data object WebRelay
-
-    @Serializable
-    data object BitcoinNetworkSelection
 
     @Serializable
     data object AddressViewer

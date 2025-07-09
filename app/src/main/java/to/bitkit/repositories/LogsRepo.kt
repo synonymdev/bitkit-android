@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import to.bitkit.BuildConfig
 import to.bitkit.data.ChatwootHttpClient
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env

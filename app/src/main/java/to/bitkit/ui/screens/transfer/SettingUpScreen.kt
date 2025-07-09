@@ -26,6 +26,7 @@ import com.synonym.bitkitcore.regtestMine
 import kotlinx.coroutines.delay
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
@@ -35,7 +36,6 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.ProgressSteps
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
-import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.localizedRandom
@@ -51,15 +51,13 @@ fun SettingUpScreen(
     onCloseClick: () -> Unit = {},
 ) {
     val app = appViewModel ?: return
-    val settings = settingsViewModel ?: return
     val lightningSetupStep by viewModel.lightningSetupStep.collectAsState()
-    val selectedNetwork by settings.selectedNetwork.collectAsState()
 
     LaunchedEffect(Unit) {
         Logger.debug("SettingUp view appeared - TransferViewModel is handling order updates")
 
         // Auto-mine a block on regtest after a 5-seconds delay
-        if (selectedNetwork == Network.REGTEST) {
+        if (Env.network == Network.REGTEST) {
             delay(5000)
 
             try {

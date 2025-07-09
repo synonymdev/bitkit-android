@@ -246,8 +246,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val selectedNetwork = settingsStore.data.map { it.selectedNetwork }
-        .asStateFlow(initialValue = Env.network)
+
 
 
     // utils

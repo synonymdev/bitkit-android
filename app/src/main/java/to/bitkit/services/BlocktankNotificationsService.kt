@@ -47,8 +47,6 @@ class BlocktankNotificationsService @Inject constructor(
         }
         keychain.save(Key.PUSH_NOTIFICATION_PRIVATE_KEY.name, keypair.privateKey)
 
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-
         ServiceQueue.CORE.background {
             com.synonym.bitkitcore.registerDevice(
                 deviceToken = deviceToken,
@@ -57,7 +55,7 @@ class BlocktankNotificationsService @Inject constructor(
                 nodeId = nodeId,
                 isoTimestamp = "$timestamp",
                 signature = signature,
-                customUrl = Env.blocktankPushNotificationServer(selectedNetwork),
+                customUrl = Env.blocktankPushNotificationServer,
                 isProduction = null,
             )
         }
@@ -74,14 +72,12 @@ class BlocktankNotificationsService @Inject constructor(
     suspend fun testNotification(deviceToken: String) = withContext(bgDispatcher) {
         Logger.debug("Sending test notification to self…")
 
-        val selectedNetwork = settingsStore.data.first().selectedNetwork
-
         ServiceQueue.CORE.background {
             com.synonym.bitkitcore.testNotification(
                 deviceToken = deviceToken,
                 secretMessage = "hello",
                 notificationType = "incomingHtlc",
-                customUrl = Env.blocktankPushNotificationServer(selectedNetwork),
+                customUrl = Env.blocktankPushNotificationServer,
             )
         }
     }
