@@ -25,7 +25,6 @@ import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
@@ -294,7 +293,7 @@ class LightningRepo @Inject constructor(
             restartWithPreviousConfig()
             return@withContext Result.failure(startError)
         }.onSuccess {
-            settingsStore.setElectrumServer(newServer, Env.network)
+            settingsStore.setElectrumServer(newServer)
 
             Logger.info("Successfully changed electrum server connection")
             return@withContext Result.success(Unit)

@@ -57,7 +57,8 @@ class SettingsStore @Inject constructor(
         }
     }
 
-    suspend fun setElectrumServer(server: ElectrumServer, network: Network) {
+    suspend fun setElectrumServer(server: ElectrumServer) {
+        val network = Env.network
         store.updateData { currentSettings ->
             currentSettings.copy(
                 customElectrumServers = currentSettings.customElectrumServers + (network to server)

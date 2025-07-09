@@ -23,9 +23,7 @@ import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.ElectrumServerPeer
 import to.bitkit.models.Toast
-import to.bitkit.models.defaultElectrumPorts
 import to.bitkit.models.getDefaultPort
-import to.bitkit.models.getProtocolForPort
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
@@ -36,11 +34,12 @@ class ElectrumConfigViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
-    private val network: Network,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ElectrumConfigUiState())
     val uiState: StateFlow<ElectrumConfigUiState> = _uiState.asStateFlow()
+
+    val defaultElectrumPorts = listOf("51002", "50002", "51001", "50001")
 
     init {
         observeState()
@@ -60,7 +59,7 @@ class ElectrumConfigViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             settingsStore.data.map { it.customElectrumServers }.distinctUntilChanged()
                 .collect { customElectrumServers ->
-                    val savedServer = customElectrumServers[network]
+                    val savedServer = customElectrumServers[Env.network]
                     val connectedPeer = savedServer?.let { server ->
                         ElectrumServerPeer(
                             host = server.host,
@@ -100,7 +99,7 @@ class ElectrumConfigViewModel @Inject constructor(
         _uiState.update {
             // Toggle the port if the protocol changes and the default ports are still used
             val newPort = if (it.port.isEmpty() || it.port in defaultElectrumPorts) {
-                protocol.getDefaultPort(Env.network).toString()
+                protocol.getDefaultPort().toString()
             } else {
                 it.port
             }
@@ -144,7 +143,6 @@ class ElectrumConfigViewModel @Inject constructor(
                     host = currentState.host,
                     port = port,
                     protocol = protocol,
-                    network = network,
                 )
 
                 lightningRepo.restartWithElectrumServer(electrumServer)
@@ -296,7 +294,7 @@ class ElectrumConfigViewModel @Inject constructor(
         }
     }
 
-    private suspend fun parseElectrumScanData(data: String): Result<ElectrumServerPeer> {
+    private fun parseElectrumScanData(data: String): Result<ElectrumServerPeer> {
         return when {
             // Handle plain format: host:port or host:port:s (Umbrel format)
             !data.startsWith("http://") && !data.startsWith("https://") -> {
@@ -311,7 +309,7 @@ class ElectrumConfigViewModel @Inject constructor(
                         if (shortProtocol == "s") ElectrumProtocol.SSL else ElectrumProtocol.TCP
                     } else {
                         // Prefix protocol for common ports if missing
-                        getProtocolForPort(port, Env.network)
+                        getProtocolForPort(port)
                     }
 
                     return@runCatching ElectrumServerPeer(host, port, protocol)
@@ -332,6 +330,22 @@ class ElectrumConfigViewModel @Inject constructor(
                     return@runCatching ElectrumServerPeer(host, port, protocol)
                 }
             }
+        }
+    }
+
+    private fun getProtocolForPort(port: String): ElectrumProtocol {
+        if (port == "443") return ElectrumProtocol.SSL
+
+        // Network-specific logic for testnet
+        if (Env.network == Network.TESTNET) {
+            return if (port == "51002") ElectrumProtocol.SSL else ElectrumProtocol.TCP
+        }
+
+        // Default logic for mainnet and other networks
+        return when (port) {
+            "50002", "51002" -> ElectrumProtocol.SSL
+            "50001", "51001" -> ElectrumProtocol.TCP
+            else -> ElectrumProtocol.TCP // Default to TCP
         }
     }
 }
