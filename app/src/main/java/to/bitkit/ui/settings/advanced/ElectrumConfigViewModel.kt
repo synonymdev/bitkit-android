@@ -58,11 +58,11 @@ class ElectrumConfigViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             settingsStore.data.map { it.electrumServer }.distinctUntilChanged()
-                .collect { savedServer ->
+                .collect { electrumServer ->
                     val connectedPeer = ElectrumServerPeer(
-                        host = savedServer.host,
-                        port = savedServer.getPort().toString(),
-                        protocol = savedServer.protocol,
+                        host = electrumServer.host,
+                        port = electrumServer.getPort().toString(),
+                        protocol = electrumServer.protocol,
                     )
 
                     _uiState.update {

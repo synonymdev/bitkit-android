@@ -19,7 +19,7 @@ import org.ldk.structs.UtilMethods.C2Tuple_ThirtyTwoBytesChannelMonitorZ_read as
 class MigrationService @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    suspend fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
+    fun migrate(seed: ByteArray, manager: ByteArray, monitors: List<ByteArray>) {
         Logger.debug("Migrating LDK backup…")
 
         val file = Path(Env.ldkStoragePath(0), LDK_DB_NAME).toFile()
