@@ -744,7 +744,7 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
         ElectrumConfigScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
-        RgsServerScreen(navController)
+        RgsServerScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.WebRelay> {
         WebRelayScreen(navController)

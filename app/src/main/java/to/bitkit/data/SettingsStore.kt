@@ -105,4 +105,5 @@ data class SettingsData(
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val addressType: AddressType = AddressType.P2WPKH,
     val electrumServer: ElectrumServer = Env.defaultElectrumServer,
+    val rgsServerUrl: String? = Env.ldkRgsServerUrl,
 )

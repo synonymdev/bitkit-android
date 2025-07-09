@@ -124,9 +124,10 @@ class LightningRepo @Inject constructor(
     private suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
+        customRgsServerUrl: String? = null,
     ) = withContext(bgDispatcher) {
         return@withContext try {
-            lightningService.setup(walletIndex, customServer)
+            lightningService.setup(walletIndex, customServer, customRgsServerUrl)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
@@ -140,6 +141,7 @@ class LightningRepo @Inject constructor(
         shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null,
         customServer: ElectrumServer? = null,
+        customRgsServerUrl: String? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
@@ -152,7 +154,7 @@ class LightningRepo @Inject constructor(
 
             // Setup if not already setup
             if (lightningService.node == null) {
-                val setupResult = setup(walletIndex, customServer)
+                val setupResult = setup(walletIndex, customServer, customRgsServerUrl)
                 if (setupResult.isFailure) {
                     _lightningState.update {
                         it.copy(
@@ -205,6 +207,7 @@ class LightningRepo @Inject constructor(
                     shouldRetry = false,
                     eventHandler = eventHandler,
                     customServer = customServer,
+                    customRgsServerUrl = customRgsServerUrl,
                 )
             } else {
                 Logger.error("Node start error", e, context = TAG)
@@ -296,6 +299,33 @@ class LightningRepo @Inject constructor(
             settingsStore.update { it.copy(electrumServer = newServer) }
 
             Logger.info("Successfully changed electrum server connection")
+            return@withContext Result.success(Unit)
+        }
+    }
+
+    suspend fun restartWithRgsServer(newRgsUrl: String): Result<Unit> = withContext(bgDispatcher) {
+        Logger.info("Changing ldk-node RGS server to: $newRgsUrl")
+
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+        stop().onFailure {
+            Logger.error("Failed to stop node during RGS server change", it)
+            return@withContext Result.failure(it)
+        }
+
+        Logger.debug("Starting node with new RGS server: $newRgsUrl")
+
+        start(
+            eventHandler = cachedEventHandler,
+            shouldRetry = false,
+            customRgsServerUrl = newRgsUrl,
+        ).onFailure { startError ->
+            Logger.warn("Failed ldk-node config change, attempting recovery…")
+            restartWithPreviousConfig()
+            return@withContext Result.failure(startError)
+        }.onSuccess {
+            settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
+
+            Logger.info("Successfully changed RGS server")
             return@withContext Result.success(Unit)
         }
     }
