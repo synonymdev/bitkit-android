@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
@@ -12,6 +13,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -69,6 +71,21 @@ class ActivityRepo @Inject constructor(
                     "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after sync",
                     context = TAG
                 )
+                Logger.debug(
+                    "5 seconds delay",
+                    context = TAG
+                )
+                delay(5.seconds)
+                Logger.debug(
+                    "Syncing LDN node called",
+                    context = TAG
+                )
+                lightningRepo.sync().onSuccess {
+                    Logger.debug(
+                        "Syncing LDN node SUCCESS",
+                        context = TAG
+                    )
+                }
                 syncActivities().onSuccess {
                     Logger.debug(
                         "Sync success, searching again the activity with paymentHashOrTxId:$paymentHashOrTxId",

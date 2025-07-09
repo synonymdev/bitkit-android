@@ -258,7 +258,7 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
-        Logger.debug("Updating activity for txId: $newTxId", context = TAG)
+        Logger.debug("Updating activity for txId: $newTxId. isRBF:$isRBF", context = TAG)
 
         return activityRepo.findActivityByPaymentId(
             paymentHashOrTxId = newTxId,
@@ -285,6 +285,7 @@ class BoostTransactionViewModel @Inject constructor(
                         updatedActivity = updatedActivity
                     ).fold(
                         onSuccess = {
+                            Logger.debug("Activity ${updatedActivity.v1.id} updated with success. Deleting old activity ${activity?.v1?.id}", context = TAG)
                             // Delete the old activity
                             activity?.v1?.id?.let { oldId ->
                                 walletRepo.deleteActivityById(oldId).map { Unit }
