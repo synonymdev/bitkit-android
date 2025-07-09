@@ -57,23 +57,20 @@ class ElectrumConfigViewModel @Inject constructor(
         }
 
         viewModelScope.launch(bgDispatcher) {
-            settingsStore.data.map { it.customElectrumServers }.distinctUntilChanged()
-                .collect { customElectrumServers ->
-                    val savedServer = customElectrumServers[Env.network]
-                    val connectedPeer = savedServer?.let { server ->
-                        ElectrumServerPeer(
-                            host = server.host,
-                            port = server.getPort().toString(),
-                            protocol = server.protocol,
-                        )
-                    }
+            settingsStore.data.map { it.electrumServer }.distinctUntilChanged()
+                .collect { savedServer ->
+                    val connectedPeer = ElectrumServerPeer(
+                        host = savedServer.host,
+                        port = savedServer.getPort().toString(),
+                        protocol = savedServer.protocol,
+                    )
 
                     _uiState.update {
                         val newState = it.copy(
                             connectedPeer = connectedPeer,
-                            host = connectedPeer?.host ?: "",
-                            port = connectedPeer?.port ?: "",
-                            protocol = connectedPeer?.protocol ?: it.protocol,
+                            host = connectedPeer.host,
+                            port = connectedPeer.port,
+                            protocol = connectedPeer.protocol,
                         )
                         newState.copy(hasEdited = computeHasEdited(newState))
                     }
@@ -113,16 +110,14 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun resetToDefault() {
-        val defaultServer = Env.defaultElectrumServers[Env.network]
-        if (defaultServer != null) {
-            _uiState.update {
-                val newState = it.copy(
-                    host = defaultServer.host,
-                    port = defaultServer.getPort().toString(),
-                    protocol = defaultServer.protocol,
-                )
-                newState.copy(hasEdited = computeHasEdited(newState))
-            }
+        val defaultServer = Env.defaultElectrumServer
+        _uiState.update {
+            it.copy(
+                host = defaultServer.host,
+                port = defaultServer.getPort().toString(),
+                protocol = defaultServer.protocol,
+                hasEdited = false,
+            )
         }
     }
 

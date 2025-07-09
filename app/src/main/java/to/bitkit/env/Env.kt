@@ -1,5 +1,6 @@
 package to.bitkit.env
 
+import android.os.Build
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
@@ -17,7 +18,7 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     val network = Network.valueOf(BuildConfig.NETWORK)
     val walletSyncIntervalSecs = 10_uL // TODO review
-    val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
+    val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     // TODO: remove this to load from BT API instead
@@ -159,11 +160,13 @@ internal object Env {
         )
     }
 
-    val defaultElectrumServers = mapOf(
-        Network.BITCOIN to ElectrumServers.BITCOIN,
-        Network.TESTNET to ElectrumServers.TESTNET,
-        Network.REGTEST to ElectrumServers.REGTEST,
-    )
+    val defaultElectrumServer: ElectrumServer
+        get() = when (network) {
+            Network.REGTEST -> ElectrumServers.REGTEST
+            Network.TESTNET -> ElectrumServers.TESTNET
+            Network.BITCOIN -> ElectrumServers.BITCOIN
+            else -> TODO("${network.name} network not implemented")
+        }
 
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8

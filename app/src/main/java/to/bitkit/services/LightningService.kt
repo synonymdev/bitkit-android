@@ -21,7 +21,6 @@ import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
-import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Node
@@ -130,38 +129,21 @@ class LightningService @Inject constructor(
         Logger.info("LDK node setup")
     }
 
-    private suspend fun Builder.configureChainSource(
-        customServer: ElectrumServer? = null,
-    ) {
-        val electrumServer = customServer ?: settingsStore.data.first().customElectrumServers[Env.network]
+    private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
+        val electrumServer = customServer ?: settingsStore.data.first().electrumServer
 
-        if (electrumServer != null) {
-            val serverUrl = electrumServer.toString()
-            Logger.info("Using onchain source Electrum url: $serverUrl")
-            setChainSourceElectrum(
-                serverUrl = serverUrl,
-                config = ElectrumSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
+        val serverUrl = electrumServer.toString()
+        Logger.info("Using onchain source Electrum url: $serverUrl")
+        setChainSourceElectrum(
+            serverUrl = serverUrl,
+            config = ElectrumSyncConfig(
+                BackgroundSyncConfig(
+                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
-            )
-        } else {
-            val serverUrl = Env.esploraServerUrl
-            Logger.info("Using onchain source Esplora url: $serverUrl")
-            setChainSourceEsplora(
-                serverUrl = serverUrl,
-                config = EsploraSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
-                ),
-            )
-        }
+            ),
+        )
     }
 
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
