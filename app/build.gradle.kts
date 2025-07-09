@@ -70,8 +70,8 @@ android {
             applicationIdSuffix = ".tnet"
             buildConfigField("String", "NETWORK", "\"TESTNET\"")
             resValue("string", "app_name", "Bitkit Testnet")
-            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_black"
-            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_black_round"
+            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_testnet"
+            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_testnet_round"
         }
     }
 
