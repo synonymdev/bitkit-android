@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
@@ -22,7 +24,8 @@ import javax.inject.Inject
 @HiltViewModel
 class BoostTransactionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
-    private val walletRepo: WalletRepo
+    private val walletRepo: WalletRepo,
+    private val activityRepo: ActivityRepo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -257,8 +260,9 @@ class BoostTransactionViewModel @Inject constructor(
     private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
         Logger.debug("Updating activity for txId: $newTxId", context = TAG)
 
-        return walletRepo.getOnChainActivityByTxId(
-            txId = newTxId,
+        return activityRepo.findActivityByPaymentId(
+            paymentHashOrTxId = newTxId,
+            type = ActivityFilter.ONCHAIN,
             txType = PaymentType.SENT
         ).fold(
             onSuccess = { newActivity ->
