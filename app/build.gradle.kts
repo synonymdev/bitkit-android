@@ -57,14 +57,14 @@ android {
             manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_regtest"
             manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_regtest_round"
         }
-        create("mainnet") {
-            dimension = "network"
-            applicationIdSuffix = ""
-            buildConfigField("String", "NETWORK", "\"BITCOIN\"")
-            resValue("string", "app_name", "Bitkit")
-            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_orange"
-            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_orange_round"
-        }
+        // create("mainnet") {
+        //     dimension = "network"
+        //     applicationIdSuffix = ""
+        //     buildConfigField("String", "NETWORK", "\"BITCOIN\"")
+        //     resValue("string", "app_name", "Bitkit")
+        //     manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_orange"
+        //     manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_orange_round"
+        // }
         create("tnet") {
             dimension = "network"
             applicationIdSuffix = ".tnet"
