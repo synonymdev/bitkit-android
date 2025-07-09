@@ -233,7 +233,7 @@ class LightningService @Inject constructor(
     }
 
     // private fun setMaxDustHtlcExposureForCurrentChannels() {
-    //     if (selectedNetwork != Network.REGTEST) {
+    //     if (Env.network != Network.REGTEST) {
     //         Logger.debug("Not updating channel config for non-regtest network")
     //         return
     //     }

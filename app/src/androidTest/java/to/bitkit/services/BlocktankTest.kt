@@ -14,7 +14,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-
 import to.bitkit.env.Env
 import javax.inject.Inject
 import kotlin.test.assertEquals

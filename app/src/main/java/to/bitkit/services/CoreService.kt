@@ -43,7 +43,6 @@ import com.synonym.bitkitcore.upsertActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -159,8 +158,8 @@ class ActivityService(
     private val coreService: CoreService,
 ) {
     suspend fun removeAll() {
-        // Get all activities and delete them one by one
         ServiceQueue.CORE.background {
+            // Get all activities and delete them one by one
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
                 txType = null,

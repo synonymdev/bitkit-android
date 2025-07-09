@@ -10,9 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Env
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -245,9 +243,6 @@ class SettingsViewModel @Inject constructor(
             settingsStore.update { it.copy(enableSendAmountWarning = value) }
         }
     }
-
-
-
 
     // utils
     private fun <T> Flow<T>.asStateFlow(

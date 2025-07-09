@@ -99,7 +99,6 @@ fun ChannelDetailScreen(
     val txDetails by viewModel.txDetails.collectAsStateWithLifecycle()
     val walletState by wallet.uiState.collectAsStateWithLifecycle()
 
-
     // Fetch transaction details for funding transaction if available
     LaunchedEffect(channel.details.fundingTxo?.txid) {
         channel.details.fundingTxo?.txid?.let { txid ->

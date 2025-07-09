@@ -11,9 +11,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -35,6 +36,7 @@ class ElectrumConfigViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
+    private val network: Network,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ElectrumConfigUiState())
@@ -56,13 +58,9 @@ class ElectrumConfigViewModel @Inject constructor(
         }
 
         viewModelScope.launch(bgDispatcher) {
-            settingsStore.data
-                .distinctUntilChanged { old, new ->
-                    old.customElectrumServers == new.customElectrumServers &&
-                        true
-                }
-                .collect { settings ->
-                    val savedServer = settings.customElectrumServers[Env.network]
+            settingsStore.data.map { it.customElectrumServers }.distinctUntilChanged()
+                .collect { customElectrumServers ->
+                    val savedServer = customElectrumServers[network]
                     val connectedPeer = savedServer?.let { server ->
                         ElectrumServerPeer(
                             host = server.host,
@@ -142,12 +140,12 @@ class ElectrumConfigViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             try {
-                        val electrumServer = ElectrumServer.fromUserInput(
-            host = currentState.host,
-            port = port,
-            protocol = protocol,
-            network = Env.network,
-        )
+                val electrumServer = ElectrumServer.fromUserInput(
+                    host = currentState.host,
+                    port = port,
+                    protocol = protocol,
+                    network = network,
+                )
 
                 lightningRepo.restartWithElectrumServer(electrumServer)
                     .onSuccess {
