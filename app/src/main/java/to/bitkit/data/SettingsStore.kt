@@ -102,7 +102,7 @@ data class SettingsData(
     val lastTimeAskedBalanceWarningMillis: Long = 0,
     val balanceWarningTimes: Int = 0,
     val coinSelectAuto: Boolean = true,
-    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
+    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
     val addressType: AddressType = AddressType.P2WPKH,
     val electrumServer: ElectrumServer = Env.defaultElectrumServer,
 )
