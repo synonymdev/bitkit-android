@@ -56,13 +56,6 @@ class SettingsStore @Inject constructor(
         }
     }
 
-    suspend fun setElectrumServer(server: ElectrumServer) {
-        store.updateData { currentSettings ->
-            currentSettings.copy(electrumServer = server)
-        }
-        Logger.info("Saved custom electrum server: $server")
-    }
-
     suspend fun reset() {
         store.updateData { SettingsData() }
         Logger.info("Deleted all user settings data.")

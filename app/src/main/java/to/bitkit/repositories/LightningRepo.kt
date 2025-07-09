@@ -293,7 +293,7 @@ class LightningRepo @Inject constructor(
             restartWithPreviousConfig()
             return@withContext Result.failure(startError)
         }.onSuccess {
-            settingsStore.setElectrumServer(newServer)
+            settingsStore.update { it.copy(electrumServer = newServer) }
 
             Logger.info("Successfully changed electrum server connection")
             return@withContext Result.success(Unit)
