@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.dataStoreFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.models.FxRate
@@ -41,6 +42,14 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun addActivityToDeletedList(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId in store.data.first().deletedActivities) return
+        store.updateData {
+            it.copy(deletedActivities = it.deletedActivities + activityId)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -55,4 +64,5 @@ class CacheStore @Inject constructor(
 data class AppCacheData(
     val cachedRates: List<FxRate> = listOf(),
     val paidOrders: Map<String, String> = mapOf(),
+    val deletedActivities: List<String> = listOf()
 )

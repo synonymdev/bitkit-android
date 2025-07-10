@@ -43,6 +43,7 @@ import com.synonym.bitkitcore.upsertActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -50,6 +51,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
@@ -69,10 +71,11 @@ class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
     private val settingsStore: SettingsStore,
+    private val cacheStore: CacheStore,
 ) {
     private var walletIndex: Int = 0
 
-    val activity: ActivityService by lazy { ActivityService(coreService = this) }
+    val activity: ActivityService by lazy { ActivityService(coreService = this, cacheStore = cacheStore) }
     val blocktank: BlocktankService by lazy {
         BlocktankService(
             coreService = this,
@@ -156,6 +159,7 @@ class CoreService @Inject constructor(
 
 class ActivityService(
     private val coreService: CoreService,
+    private val cacheStore: CacheStore,
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
@@ -253,7 +257,7 @@ class ActivityService(
         }
     }
 
-    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
+    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>, forceUpdate: Boolean = false) {
         ServiceQueue.CORE.background {
             for (payment in payments) {
                 try {
@@ -314,6 +318,11 @@ class ActivityService(
                                     createdAt = timestamp,
                                     updatedAt = timestamp,
                                 )
+                            }
+
+                            if (onChain.id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+                                Logger.debug("Activity ${onChain.id} was already deleted, skipping", context = "ActivityService")
+                                continue
                             }
 
                             if (existentActivity != null) {

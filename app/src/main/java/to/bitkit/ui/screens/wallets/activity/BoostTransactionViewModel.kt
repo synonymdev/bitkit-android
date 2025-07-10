@@ -291,7 +291,7 @@ class BoostTransactionViewModel @Inject constructor(
                             Logger.debug("Activity ${updatedActivity.v1.id} updated with success. new data: $updatedActivity. Deleting old activity ${activity?.v1?.id}", context = TAG)
                             // Delete the old activity
                             activity?.v1?.id?.let { oldId ->
-                                walletRepo.deleteActivityById(oldId).map { Unit }
+                                activityRepo.deleteActivity(oldId)
                             } ?: Result.success(Unit)
                         },
                         onFailure = {

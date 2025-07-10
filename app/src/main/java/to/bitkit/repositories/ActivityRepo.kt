@@ -6,10 +6,13 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentDetails
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
+import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -21,6 +24,7 @@ class ActivityRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
+    private val cacheStore: CacheStore,
 ) {
 
     var isSyncingLdkNodePayments = false
@@ -120,7 +124,7 @@ class ActivityRepo @Inject constructor(
                     )
                     activity = findActivity()
                 }
-            }
+            } //TODO IF ACTIVITY STILL NOT FOUND, SAVE THE ID TO TRY LATER
 
             if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))
         } catch (e: Exception) {
@@ -169,21 +173,35 @@ class ActivityRepo @Inject constructor(
 
     /**
      * Updates an activity
+     * @param forceUpdate use it if you want update a deleted activity
      */
-    suspend fun updateActivity(id: String, activity: Activity): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
-            coreService.activity.update(id, activity)
-        }.onFailure { e ->
-            Logger.error("updateActivity error for ID: $id", e, context = TAG)
+    suspend fun updateActivity(
+        id: String,
+        activity: Activity,
+        forceUpdate: Boolean = false
+    ): Result<Unit> = withContext(bgDispatcher) {
+            return@withContext runCatching {
+                if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+                    Logger.debug("Activity $id was deleted", context = TAG)
+                    return@withContext Result.failure(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))
+                }
+                coreService.activity.update(id, activity)
+            }.onFailure { e ->
+                Logger.error("updateActivity error for ID: $id", e, context = TAG)
+            }
         }
-    }
 
     /**
      * Deletes an activity
      */
-    suspend fun deleteActivity(id: String): Result<Boolean> = withContext(bgDispatcher) {
+    suspend fun deleteActivity(id: String): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
-            coreService.activity.delete(id)
+            val deleted = coreService.activity.delete(id)
+            if (deleted) {
+                cacheStore.addActivityToDeletedList(id)
+            } else {
+                return@withContext Result.failure(Exception("Activity not deleted"))
+            }
         }.onFailure { e ->
             Logger.error("deleteActivity error for ID: $id", e, context = TAG)
         }
@@ -194,6 +212,10 @@ class ActivityRepo @Inject constructor(
      */
     suspend fun insertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
+            if (activity.rawId() in cacheStore.data.first().deletedActivities) {
+                Logger.debug("Activity ${activity.rawId()} was deleted, skipping", context = TAG)
+                return@withContext Result.failure(Exception("Activity ${activity.rawId()} was deleted"))
+            }
             coreService.activity.insert(activity)
         }.onFailure { e ->
             Logger.error("insertActivity error", e, context = TAG)
@@ -229,18 +251,19 @@ class ActivityRepo @Inject constructor(
     /**
      * Removes tags from an activity
      */
-    suspend fun removeTagsFromActivity(activityId: String, tags: List<String>): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
-            // Business logic: validate activity exists before removing tags
-            val activity = coreService.activity.getActivity(activityId)
-                ?: throw IllegalArgumentException("Activity with ID $activityId not found")
+    suspend fun removeTagsFromActivity(activityId: String, tags: List<String>): Result<Unit> =
+        withContext(bgDispatcher) {
+            return@withContext runCatching {
+                // Business logic: validate activity exists before removing tags
+                val activity = coreService.activity.getActivity(activityId)
+                    ?: throw IllegalArgumentException("Activity with ID $activityId not found")
 
-            coreService.activity.dropTags(activityId, tags)
-            Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
-        }.onFailure { e ->
-            Logger.error("removeTagsFromActivity error for activity $activityId", e, context = TAG)
+                coreService.activity.dropTags(activityId, tags)
+                Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
+            }.onFailure { e ->
+                Logger.error("removeTagsFromActivity error for activity $activityId", e, context = TAG)
+            }
         }
-    }
 
     /**
      * Gets all tags for an activity
