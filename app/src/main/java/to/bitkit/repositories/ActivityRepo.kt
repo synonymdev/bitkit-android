@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.services.CoreService
@@ -23,6 +24,7 @@ class ActivityRepo @Inject constructor(
 ) {
 
     var isSyncingLdkNodePayments = false
+
     suspend fun syncActivities(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("syncActivities called", context = TAG)
 
@@ -36,7 +38,7 @@ class ActivityRepo @Inject constructor(
             return@withContext lightningRepo.getPayments()
                 .onSuccess { payments ->
                     Logger.debug("Got payments with success, syncing activities", context = TAG)
-                    coreService.activity.syncLdkNodePayments(payments = payments)
+                    syncLdkNodePayments(payments = payments)
                     isSyncingLdkNodePayments = false
                     return@withContext Result.success(Unit)
                 }.onFailure { e ->
@@ -50,7 +52,39 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Gets a specific activity by payment hash or txID
+     * Business logic: Syncs LDK node payments with proper error handling and counting
+     */
+    private suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
+        var addedCount = 0
+        var updatedCount = 0
+        var latestCaughtError: Throwable? = null
+
+        for (payment in payments) {
+            try {
+                val existentActivity = coreService.activity.getActivity(payment.id)
+                val wasUpdate = existentActivity != null
+
+                // Delegate the actual sync to the service layer
+                coreService.activity.syncLdkNodePayments(listOf(payment))
+
+                if (wasUpdate) {
+                    updatedCount++
+                } else {
+                    addedCount++
+                }
+            } catch (e: Throwable) {
+                Logger.error("Error syncing LDK payment:", e, context = TAG)
+                latestCaughtError = e
+            }
+        }
+
+        latestCaughtError?.let { throw it }
+
+        Logger.info("Synced LDK payments - Added: $addedCount - Updated: $updatedCount", context = TAG)
+    }
+
+    /**
+     * Gets a specific activity by payment hash or txID with retry logic
      */
     suspend fun findActivityByPaymentId(
         paymentHashOrTxId: String,
@@ -71,21 +105,14 @@ class ActivityRepo @Inject constructor(
                     "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after sync",
                     context = TAG
                 )
-                Logger.debug(
-                    "5 seconds delay",
-                    context = TAG
-                )
+                Logger.debug("5 seconds delay", context = TAG)
                 delay(5.seconds)
-                Logger.debug(
-                    "Syncing LN node called",
-                    context = TAG
-                )
+                Logger.debug("Syncing LN node called", context = TAG)
+
                 lightningRepo.sync().onSuccess {
-                    Logger.debug(
-                        "Syncing LN node SUCCESS",
-                        context = TAG
-                    )
+                    Logger.debug("Syncing LN node SUCCESS", context = TAG)
                 }
+
                 syncActivities().onSuccess {
                     Logger.debug(
                         "Sync success, searching again the activity with paymentHashOrTxId:$paymentHashOrTxId",
@@ -126,6 +153,146 @@ class ActivityRepo @Inject constructor(
                 e = e,
                 context = TAG
             )
+        }
+    }
+
+    /**
+     * Gets a specific activity by ID
+     */
+    suspend fun getActivity(id: String): Result<Activity?> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.getActivity(id)
+        }.onFailure { e ->
+            Logger.error("getActivity error for ID: $id", e, context = TAG)
+        }
+    }
+
+    /**
+     * Updates an activity
+     */
+    suspend fun updateActivity(id: String, activity: Activity): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.update(id, activity)
+        }.onFailure { e ->
+            Logger.error("updateActivity error for ID: $id", e, context = TAG)
+        }
+    }
+
+    /**
+     * Deletes an activity
+     */
+    suspend fun deleteActivity(id: String): Result<Boolean> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.delete(id)
+        }.onFailure { e ->
+            Logger.error("deleteActivity error for ID: $id", e, context = TAG)
+        }
+    }
+
+    /**
+     * Inserts a new activity
+     */
+    suspend fun insertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.insert(activity)
+        }.onFailure { e ->
+            Logger.error("insertActivity error", e, context = TAG)
+        }
+    }
+
+    // MARK: - Tag Business Logic
+
+    /**
+     * Adds tags to an activity with business logic validation
+     */
+    suspend fun addTagsToActivity(activityId: String, tags: List<String>): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            // Business logic: validate activity exists before adding tags
+            val activity = coreService.activity.getActivity(activityId)
+                ?: throw IllegalArgumentException("Activity with ID $activityId not found")
+
+            // Business logic: filter out empty or duplicate tags
+            val existingTags = coreService.activity.tags(activityId)
+            val newTags = tags.filter { it.isNotBlank() && it !in existingTags }
+
+            if (newTags.isNotEmpty()) {
+                coreService.activity.appendTags(activityId, newTags).getOrThrow()
+                Logger.info("Added ${newTags.size} new tags to activity $activityId", context = TAG)
+            } else {
+                Logger.info("No new tags to add to activity $activityId", context = TAG)
+            }
+        }.onFailure { e ->
+            Logger.error("addTagsToActivity error for activity $activityId", e, context = TAG)
+        }
+    }
+
+    /**
+     * Removes tags from an activity
+     */
+    suspend fun removeTagsFromActivity(activityId: String, tags: List<String>): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            // Business logic: validate activity exists before removing tags
+            val activity = coreService.activity.getActivity(activityId)
+                ?: throw IllegalArgumentException("Activity with ID $activityId not found")
+
+            coreService.activity.dropTags(activityId, tags)
+            Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
+        }.onFailure { e ->
+            Logger.error("removeTagsFromActivity error for activity $activityId", e, context = TAG)
+        }
+    }
+
+    /**
+     * Gets all tags for an activity
+     */
+    suspend fun getActivityTags(activityId: String): Result<List<String>> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.tags(activityId)
+        }.onFailure { e ->
+            Logger.error("getActivityTags error for activity $activityId", e, context = TAG)
+        }
+    }
+
+    /**
+     * Gets all possible tags across all activities
+     */
+    suspend fun getAllAvailableTags(): Result<List<String>> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.allPossibleTags()
+        }.onFailure { e ->
+            Logger.error("getAllAvailableTags error", e, context = TAG)
+        }
+    }
+
+    // MARK: - Development/Testing Methods
+
+    /**
+     * Removes all activities (regtest only) with business validation
+     */
+    suspend fun removeAllActivities(): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            coreService.activity.removeAll()
+            Logger.info("Removed all activities", context = TAG)
+        }.onFailure { e ->
+            Logger.error("removeAllActivities error", e, context = TAG)
+        }
+    }
+
+    /**
+     * Generates random test data (regtest only) with business logic
+     */
+    suspend fun generateTestData(count: Int = 100): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+            // Business logic: validate count is reasonable
+            val validatedCount = count.coerceIn(1, 1000)
+            if (validatedCount != count) {
+                Logger.warn("Adjusted test data count from $count to $validatedCount", context = TAG)
+            }
+
+            coreService.activity.generateRandomTestData(validatedCount)
+            Logger.info("Generated $validatedCount test activities", context = TAG)
+        }.onFailure { e ->
+            Logger.error("generateTestData error", e, context = TAG)
         }
     }
 

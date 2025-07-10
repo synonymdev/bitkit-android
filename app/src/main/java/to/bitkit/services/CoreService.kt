@@ -159,6 +159,11 @@ class ActivityService(
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
+            // Only allow removing on regtest for now
+            if (Env.network != Network.REGTEST) {
+                throw AppError(message = "Regtest only")
+            }
+
             // Get all activities and delete them one by one
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
@@ -186,12 +191,70 @@ class ActivityService(
         }
     }
 
+    suspend fun getActivity(id: String): Activity? {
+        return ServiceQueue.CORE.background {
+            getActivityById(id)
+        }
+    }
+
+    suspend fun get(
+        filter: ActivityFilter? = null,
+        txType: PaymentType? = null,
+        tags: List<String>? = null,
+        search: String? = null,
+        minDate: ULong? = null,
+        maxDate: ULong? = null,
+        limit: UInt? = null,
+        sortDirection: SortDirection? = null,
+    ): List<Activity> {
+        return ServiceQueue.CORE.background {
+            getActivities(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
+        }
+    }
+
+    suspend fun update(id: String, activity: Activity) {
+        ServiceQueue.CORE.background {
+            updateActivity(id, activity)
+        }
+    }
+
+    suspend fun delete(id: String): Boolean {
+        return ServiceQueue.CORE.background {
+            deleteActivityById(id)
+        }
+    }
+
+    suspend fun appendTags(toActivityId: String, tags: List<String>): Result<Unit> {
+        return try {
+            ServiceQueue.CORE.background {
+                addTags(toActivityId, tags)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun dropTags(fromActivityId: String, tags: List<String>) {
+        ServiceQueue.CORE.background {
+            removeTags(fromActivityId, tags)
+        }
+    }
+
+    suspend fun tags(forActivityId: String): List<String> {
+        return ServiceQueue.CORE.background {
+            getTags(forActivityId)
+        }
+    }
+
+    suspend fun allPossibleTags(): List<String> {
+        return ServiceQueue.CORE.background {
+            getAllUniqueTags()
+        }
+    }
+
     suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
         ServiceQueue.CORE.background {
-            var addedCount = 0
-            var updatedCount = 0
-            var latestCaughtError: Throwable? = null
-
             for (payment in payments) {
                 try {
                     val state = when (payment.status) {
@@ -255,10 +318,8 @@ class ActivityService(
 
                             if (existentActivity != null) {
                                 updateActivity(payment.id, Activity.Onchain(onChain))
-                                updatedCount++
                             } else {
                                 upsertActivity(Activity.Onchain(onChain))
-                                addedCount++
                             }
                         }
 
@@ -284,10 +345,8 @@ class ActivityService(
 
                             if (getActivityById(payment.id) != null) {
                                 updateActivity(payment.id, Activity.Lightning(ln))
-                                updatedCount++
                             } else {
                                 upsertActivity(Activity.Lightning(ln))
-                                addedCount++
                             }
                         }
 
@@ -295,85 +354,21 @@ class ActivityService(
                     }
                 } catch (e: Throwable) {
                     Logger.error("Error syncing LDK payment:", e, context = "CoreService")
-                    latestCaughtError = e
+                    throw e
                 }
             }
-
-            // If any of the inserts failed, we want to throw the error up
-            latestCaughtError?.let { throw it }
-
-            Logger.info("Synced LDK payments - Added: $addedCount - Updated: $updatedCount", context = "CoreService")
         }
     }
 
     private fun PaymentDirection.toPaymentType(): PaymentType =
         if (this == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED
 
-    suspend fun getActivity(id: String): Activity? {
-        return ServiceQueue.CORE.background {
-            getActivityById(id)
-        }
-    }
-
-    suspend fun get(
-        filter: ActivityFilter? = null,
-        txType: PaymentType? = null,
-        tags: List<String>? = null,
-        search: String? = null,
-        minDate: ULong? = null,
-        maxDate: ULong? = null,
-        limit: UInt? = null,
-        sortDirection: SortDirection? = null,
-    ): List<Activity> {
-        return ServiceQueue.CORE.background {
-            getActivities(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
-        }
-    }
-
-    suspend fun update(id: String, activity: Activity) {
-        ServiceQueue.CORE.background {
-            updateActivity(id, activity)
-        }
-    }
-
-    suspend fun delete(id: String): Boolean {
-        return ServiceQueue.CORE.background {
-            deleteActivityById(id)
-        }
-    }
-
-    // MARK: - Tag Methods
-
-    suspend fun appendTags(toActivityId: String, tags: List<String>): Result<Unit> {
-        return try {
-            ServiceQueue.CORE.background {
-                addTags(toActivityId, tags)
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun dropTags(fromActivityId: String, tags: List<String>) {
-        ServiceQueue.CORE.background {
-            removeTags(fromActivityId, tags)
-        }
-    }
-
-    suspend fun tags(forActivityId: String): List<String> {
-        return ServiceQueue.CORE.background {
-            getTags(forActivityId)
-        }
-    }
-
-    suspend fun allPossibleTags(): List<String> {
-        return ServiceQueue.CORE.background {
-            getAllUniqueTags()
-        }
-    }
+    // MARK: - Test Data Generation (regtest only)
 
     suspend fun generateRandomTestData(count: Int = 100) {
+        if (Env.network != Network.REGTEST) {
+            throw AppError(message = "Regtest only")
+        }
         ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
