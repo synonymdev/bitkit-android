@@ -224,7 +224,9 @@ class ActivityService(
 
     suspend fun delete(id: String): Boolean {
         return ServiceQueue.CORE.background {
-            deleteActivityById(id)
+            deleteActivityById(id).apply {
+                if (this) cacheStore.addActivityToDeletedList(id)
+            }
         }
     }
 
@@ -321,7 +323,7 @@ class ActivityService(
                             }
 
                             if (onChain.id in cacheStore.data.first().deletedActivities && !forceUpdate) {
-                                Logger.debug("Activity ${onChain.id} was already deleted, skipping", context = "ActivityService")
+                                Logger.debug("Activity ${onChain.id} was already deleted, skipping", context = TAG)
                                 continue
                             }
 
@@ -464,6 +466,10 @@ class ActivityService(
                 }
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "ActivityService"
     }
 }
 
