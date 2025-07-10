@@ -63,7 +63,7 @@ class LightningRepoTest : BaseUnitTest() {
     private suspend fun startNodeForTesting() {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         sut.start().let { assertTrue(it.isSuccess) }
@@ -73,7 +73,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
 
         sut.lightningState.test {
@@ -356,7 +356,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), eq(customServer))
+        inOrder.verify(lightningService).setup(any(), eq(customServer), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }

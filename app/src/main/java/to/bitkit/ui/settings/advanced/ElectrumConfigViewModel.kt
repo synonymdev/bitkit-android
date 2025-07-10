@@ -150,14 +150,7 @@ class ElectrumConfigViewModel @Inject constructor(
                             )
                         }
                     }
-                    .onFailure { error ->
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                connectionResult = Result.failure(error),
-                            )
-                        }
-                    }
+                    .onFailure { error -> throw error }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
