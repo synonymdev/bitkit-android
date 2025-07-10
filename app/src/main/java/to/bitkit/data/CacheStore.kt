@@ -49,6 +49,13 @@ class CacheStore @Inject constructor(
             it.copy(deletedActivities = it.deletedActivities + activityId)
         }
     }
+    suspend fun addActivityToPendingDelete(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId in store.data.first().activitiesPendingDelete) return
+        store.updateData {
+            it.copy(activitiesPendingDelete = it.activitiesPendingDelete + activityId)
+        }
+    }
 
     suspend fun reset() {
         store.updateData { AppCacheData() }
@@ -64,5 +71,6 @@ class CacheStore @Inject constructor(
 data class AppCacheData(
     val cachedRates: List<FxRate> = listOf(),
     val paidOrders: Map<String, String> = mapOf(),
-    val deletedActivities: List<String> = listOf()
+    val deletedActivities: List<String> = listOf(),
+    val activitiesPendingDelete: List<String> = listOf(),
 )

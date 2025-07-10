@@ -14,7 +14,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
-import to.bitkit.ui.screens.wallets.activity.BoostTransactionViewModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -210,10 +209,10 @@ class ActivityRepo @Inject constructor(
                     context = TAG
                 )
                 deleteActivity(activityIdToDelete).onFailure {
-                    //TODO CACHE
+                    cacheStore.addActivityToPendingDelete(activityId = activityIdToDelete)
                 }
             },
-            onFailure = { //TODO CACHE
+            onFailure = {
                 Logger.error(
                     "Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
                     context = TAG
