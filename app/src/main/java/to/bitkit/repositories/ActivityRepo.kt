@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
 class ActivityRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
-    private val lightningRepo: LightningRepo
+    private val lightningRepo: LightningRepo,
 ) {
 
     var isSyncingLdkNodePayments = false
@@ -77,12 +77,12 @@ class ActivityRepo @Inject constructor(
                 )
                 delay(5.seconds)
                 Logger.debug(
-                    "Syncing LDN node called",
+                    "Syncing LN node called",
                     context = TAG
                 )
                 lightningRepo.sync().onSuccess {
                     Logger.debug(
-                        "Syncing LDN node SUCCESS",
+                        "Syncing LN node SUCCESS",
                         context = TAG
                     )
                 }
