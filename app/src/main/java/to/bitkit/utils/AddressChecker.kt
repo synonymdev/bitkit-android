@@ -2,11 +2,8 @@ package to.bitkit.utils
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.get
-import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import to.bitkit.env.Env
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,14 +21,8 @@ class AddressChecker @Inject constructor(
     suspend fun getAddressInfo(address: String): AddressInfo {
         try {
             val response = client.get("${Env.esploraServerUrl}/address/$address")
-            if (!response.status.isSuccess()) {
-                throw AddressCheckerError.InvalidResponse
-            }
+
             return response.body<AddressInfo>()
-        } catch (_: ClientRequestException) {
-            throw AddressCheckerError.InvalidResponse
-        } catch (_: SerializationException) {
-            throw AddressCheckerError.InvalidResponse
         } catch (e: Exception) {
             throw AddressCheckerError.NetworkError(e)
         }
@@ -40,14 +31,8 @@ class AddressChecker @Inject constructor(
     suspend fun getTransaction(txid: String): TxDetails {
         try {
             val response = client.get("${Env.esploraServerUrl}/tx/$txid")
-            if (!response.status.isSuccess()) {
-                throw AddressCheckerError.InvalidResponse
-            }
+
             return response.body<TxDetails>()
-        } catch (_: ClientRequestException) {
-            throw AddressCheckerError.InvalidResponse
-        } catch (_: SerializationException) {
-            throw AddressCheckerError.InvalidResponse
         } catch (e: Exception) {
             throw AddressCheckerError.NetworkError(e)
         }
@@ -115,5 +100,4 @@ data class TxDetails(
 
 sealed class AddressCheckerError(message: String? = null) : AppError(message) {
     data class NetworkError(val error: Throwable) : AddressCheckerError(error.message)
-    data object InvalidResponse : AddressCheckerError()
 }

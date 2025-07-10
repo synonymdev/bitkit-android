@@ -158,12 +158,11 @@ fun BigDecimal.formatCurrency(decimalPlaces: Int = 2): String? {
 fun getBlockExplorerUrl(
     id: String,
     type: BlockExplorerType = BlockExplorerType.TX,
-    network: Network = Env.network,
 ): String {
     val service = "https://mempool.space"
     val type = type.name.lowercase()
 
-    return when (network) {
+    return when (Env.network) {
         Network.TESTNET -> "$service/testnet/$type/$id"
         else -> "$service/$type/$id"
     }

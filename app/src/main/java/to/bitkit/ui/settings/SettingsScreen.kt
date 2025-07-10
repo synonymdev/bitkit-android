@@ -24,9 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -58,7 +56,7 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     SettingsScreenContent(
-        isDevModeEnabled = isDevModeEnabled || Env.network == Network.REGTEST,
+        isDevModeEnabled = isDevModeEnabled,
         onClose = { navController.popBackStack() },
         onGeneralClick = { navController.navigateToGeneralSettings() },
         onSecurityClick = { navController.navigateToSecuritySettings() },
@@ -74,6 +72,7 @@ fun SettingsScreen(
             if (enableDevModeTapCount >= DEV_MODE_TAP_THRESHOLD) {
                 val newValue = !isDevModeEnabled
                 settings.setIsDevModeEnabled(newValue)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
                 app.toast(
                     type = Toast.ToastType.SUCCESS,

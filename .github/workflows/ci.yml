@@ -43,13 +43,13 @@ jobs:
       - name: Build for debug with gradle
         env:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDevDebug
 
       - name: Run tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDevDebugUnitTest
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
         with:
           name: unit_test_report
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/testDevDebugUnitTest/
