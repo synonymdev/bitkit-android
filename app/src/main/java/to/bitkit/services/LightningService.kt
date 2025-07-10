@@ -76,6 +76,7 @@ class LightningService @Inject constructor(
     suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
+        customRgsServerUrl: String? = null,
     ) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
@@ -95,20 +96,14 @@ class LightningService @Inject constructor(
             )
         }
 
-        val builder = Builder.fromConfig(config)
-            .apply {
-                setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
+        val builder = Builder.fromConfig(config).apply {
+            setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
 
-                configureChainSource(customServer = customServer)
+            configureChainSource(customServer)
+            configureGossipSource(customRgsServerUrl)
 
-                val rgsServerUrl = Env.ldkRgsServerUrl
-                if (rgsServerUrl != null) {
-                    setGossipSourceRgs(rgsServerUrl)
-                } else {
-                    setGossipSourceP2p()
-                }
-                setEntropyBip39Mnemonic(mnemonic, passphrase)
-            }
+            setEntropyBip39Mnemonic(mnemonic, passphrase)
+        }
 
         Logger.debug("Building node…")
 
@@ -129,9 +124,19 @@ class LightningService @Inject constructor(
         Logger.info("LDK node setup")
     }
 
+    private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
+        val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
+        if (rgsServerUrl != null) {
+            Logger.info("Using gossip source rgs url: $rgsServerUrl")
+            setGossipSourceRgs(rgsServerUrl)
+        } else {
+            Logger.info("Using gossip source p2p")
+            setGossipSourceP2p()
+        }
+    }
+
     private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
         val electrumServer = customServer ?: settingsStore.data.first().electrumServer
-
         val serverUrl = electrumServer.toString()
         Logger.info("Using onchain source Electrum url: $serverUrl")
         setChainSourceElectrum(
