@@ -14,6 +14,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
+import to.bitkit.ui.screens.wallets.activity.BoostTransactionViewModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -180,16 +181,47 @@ class ActivityRepo @Inject constructor(
         activity: Activity,
         forceUpdate: Boolean = false
     ): Result<Unit> = withContext(bgDispatcher) {
-            return@withContext runCatching {
-                if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
-                    Logger.debug("Activity $id was deleted", context = TAG)
-                    return@withContext Result.failure(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))
-                }
-                coreService.activity.update(id, activity)
-            }.onFailure { e ->
-                Logger.error("updateActivity error for ID: $id", e, context = TAG)
+        return@withContext runCatching {
+            if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+                Logger.debug("Activity $id was deleted", context = TAG)
+                return@withContext Result.failure(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))
             }
+            coreService.activity.update(id, activity)
+        }.onFailure { e ->
+            Logger.error("updateActivity error for ID: $id", e, context = TAG)
         }
+    }
+
+    /**
+     * Updates an activity and delete other one. In case of failure in the update or deletion, the data will be cached to try again on the next sync
+     */
+    suspend fun replaceActivity(
+        id: String,
+        activityIdToDelete: String,
+        activity: Activity,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext updateActivity(
+            id = id,
+            activity = activity
+        ).fold(
+            onSuccess = {
+                Logger.debug(
+                    "Activity $id updated with success. new data: $activity. Deleting old activity $activityIdToDelete",
+                    context = TAG
+                )
+                deleteActivity(activityIdToDelete).onFailure {
+                    //TODO CACHE
+                }
+            },
+            onFailure = { //TODO CACHE
+                Logger.error(
+                    "Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
+                    context = TAG
+                )
+                Result.failure(it)
+            }
+        )
+    }
 
     /**
      * Deletes an activity

@@ -283,26 +283,16 @@ class BoostTransactionViewModel @Inject constructor(
 
                 if (isRBF) {
                     // For RBF, update new activity and delete old one
-                    walletRepo.updateActivity(
+                    activityRepo.replaceActivity(
                         id = updatedActivity.v1.id,
-                        updatedActivity = updatedActivity
-                    ).fold(
-                        onSuccess = {
-                            Logger.debug("Activity ${updatedActivity.v1.id} updated with success. new data: $updatedActivity. Deleting old activity ${activity?.v1?.id}", context = TAG)
-                            // Delete the old activity
-                            activity?.v1?.id?.let { oldId ->
-                                activityRepo.deleteActivity(oldId)
-                            } ?: Result.success(Unit)
-                        },
-                        onFailure = {
-                            Logger.error("Update activity ${updatedActivity.v1.id} fail")
-                            Result.failure(it) }
+                        activityIdToDelete = activity?.v1?.id.orEmpty(),
+                        activity = updatedActivity,
                     )
                 } else {
                     // For CPFP, just update the activity
-                    walletRepo.updateActivity(
+                    activityRepo.updateActivity(
                         id = updatedActivity.v1.id,
-                        updatedActivity = updatedActivity
+                        activity = updatedActivity
                     )
                 }
             },
