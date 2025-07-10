@@ -220,37 +220,46 @@ class ActivityService(
                                 confirmedTimestamp = timestamp
                             }
 
-                            val onchain = OnchainActivity(
-                                id = payment.id,
-                                txType = payment.direction.toPaymentType(),
-                                txId = kind.txid,
-                                value = payment.amountSats ?: 0u,
-                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                feeRate = 1u, // TODO: get from somewhere
-                                address = "todo_find_address", // TODO: find address
-                                confirmed = isConfirmed,
-                                timestamp = timestamp,
-                                isBoosted = false, // TODO: handle
-                                isTransfer = false, // TODO: handle when paying for order
-                                doesExist = true,
-                                confirmTimestamp = confirmedTimestamp,
-                                channelId = null, // TODO: get from linked order
-                                transferTxId = null, // TODO: get from linked order
-                                createdAt = timestamp,
-                                updatedAt = timestamp,
-                            )
-
                             val existentActivity = getActivityById(payment.id)
-
-                            if (existentActivity != null && existentActivity is Activity.Onchain &&  (existentActivity.v1.updatedAt ?: 0u) > (onchain.updatedAt ?: 0u)) {
+                            if (existentActivity != null && existentActivity is Activity.Onchain && (existentActivity.v1.updatedAt
+                                    ?: 0u) > payment.latestUpdateTimestamp
+                            ) {
                                 continue
                             }
 
+                            val onChain = if (existentActivity is Activity.Onchain) {
+                                existentActivity.v1.copy(
+                                    confirmed = isConfirmed,
+                                    confirmTimestamp = confirmedTimestamp,
+                                    updatedAt = timestamp,
+                                )
+                            } else {
+                                OnchainActivity(
+                                    id = payment.id,
+                                    txType = payment.direction.toPaymentType(),
+                                    txId = kind.txid,
+                                    value = payment.amountSats ?: 0u,
+                                    fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                    feeRate = 1u, // TODO: get from somewhere
+                                    address = "todo_find_address", // TODO: find address
+                                    confirmed = isConfirmed,
+                                    timestamp = timestamp,
+                                    isBoosted = false,
+                                    isTransfer = false, // TODO: handle when paying for order
+                                    doesExist = true,
+                                    confirmTimestamp = confirmedTimestamp,
+                                    channelId = null, // TODO: get from linked order
+                                    transferTxId = null, // TODO: get from linked order
+                                    createdAt = timestamp,
+                                    updatedAt = timestamp,
+                                )
+                            }
+
                             if (existentActivity != null) {
-                                updateActivity(payment.id, Activity.Onchain(onchain))
+                                updateActivity(payment.id, Activity.Onchain(onChain))
                                 updatedCount++
                             } else {
-                                upsertActivity(Activity.Onchain(onchain))
+                                upsertActivity(Activity.Onchain(onChain))
                                 addedCount++
                             }
                         }
