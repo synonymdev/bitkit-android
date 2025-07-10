@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
@@ -188,7 +189,6 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleBoostSuccess(newTxId: Txid, isRBF: Boolean) {
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
-
         updateActivity(newTxId = newTxId, isRBF = isRBF).fold(
             onSuccess = {
                 _uiState.update { it.copy(boosting = false) }
@@ -275,6 +275,9 @@ class BoostTransactionViewModel @Inject constructor(
                     v1 = newOnChainActivity.v1.copy(
                         isBoosted = true,
                         txId = newTxId,
+                        feeRate = _uiState.value.feeRate,
+                        fee = _uiState.value.totalFeeSats,
+                        updatedAt = nowTimestamp().toEpochMilli().toULong()
                     )
                 )
 
@@ -285,13 +288,15 @@ class BoostTransactionViewModel @Inject constructor(
                         updatedActivity = updatedActivity
                     ).fold(
                         onSuccess = {
-                            Logger.debug("Activity ${updatedActivity.v1.id} updated with success. Deleting old activity ${activity?.v1?.id}", context = TAG)
+                            Logger.debug("Activity ${updatedActivity.v1.id} updated with success. new data: $updatedActivity. Deleting old activity ${activity?.v1?.id}", context = TAG)
                             // Delete the old activity
                             activity?.v1?.id?.let { oldId ->
                                 walletRepo.deleteActivityById(oldId).map { Unit }
                             } ?: Result.success(Unit)
                         },
-                        onFailure = { Result.failure(it) }
+                        onFailure = {
+                            Logger.error("Update activity ${updatedActivity.v1.id} fail")
+                            Result.failure(it) }
                     )
                 } else {
                     // For CPFP, just update the activity

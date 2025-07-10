@@ -240,7 +240,13 @@ class ActivityService(
                                 updatedAt = timestamp,
                             )
 
-                            if (getActivityById(payment.id) != null) {
+                            val existentActivity = getActivityById(payment.id)
+
+                            if (existentActivity != null && existentActivity is Activity.Onchain &&  (existentActivity.v1.updatedAt ?: 0u) > (onchain.updatedAt ?: 0u)) {
+                                continue
+                            }
+
+                            if (existentActivity != null) {
                                 updateActivity(payment.id, Activity.Onchain(onchain))
                                 updatedCount++
                             } else {
