@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
@@ -297,7 +298,16 @@ class BoostTransactionViewModel @Inject constructor(
                 }
             },
             onFailure = { error ->
-                Logger.error("Activity $newTxId not found", e = error, context = TAG)
+                Logger.error("Activity $newTxId not found. Caching data to try again on next sync", e = error, context = TAG)
+                activityRepo.addActivityToPendingBoost(
+                    PendingBoostActivity(
+                        txId = newTxId,
+                        feeRate = _uiState.value.feeRate,
+                        fee = _uiState.value.totalFeeSats,
+                        updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                        activityToDelete = activity?.v1?.id.takeIf { isRBF }
+                    )
+                )
                 Result.failure(error)
             }
         )

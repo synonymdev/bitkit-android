@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.data.CacheStore
+import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.rawId
@@ -124,7 +125,7 @@ class ActivityRepo @Inject constructor(
                     )
                     activity = findActivity()
                 }
-            } //TODO IF ACTIVITY STILL NOT FOUND, SAVE THE ID TO TRY LATER
+            }
 
             if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))
         } catch (e: Exception) {
@@ -253,7 +254,10 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    // MARK: - Tag Business Logic
+    suspend fun addActivityToPendingBoost(pendingBoostActivity: PendingBoostActivity) = withContext(bgDispatcher) {
+        cacheStore.addActivityToPendingBoost(pendingBoostActivity)
+    }
+
 
     /**
      * Adds tags to an activity with business logic validation

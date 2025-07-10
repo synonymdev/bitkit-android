@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
+import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.models.FxRate
 import to.bitkit.utils.Logger
@@ -57,6 +58,20 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun addActivityToPendingBoost(pendingBoostActivity: PendingBoostActivity) {
+        if (pendingBoostActivity in store.data.first().pendingBoostActivities) return
+        store.updateData {
+            it.copy(pendingBoostActivities = it.pendingBoostActivities + pendingBoostActivity)
+        }
+    }
+
+    suspend fun removeActivityFromPendingBoost(pendingBoostActivity: PendingBoostActivity) {
+        if (pendingBoostActivity !in store.data.first().pendingBoostActivities) return
+        store.updateData {
+            it.copy(pendingBoostActivities = it.pendingBoostActivities - pendingBoostActivity)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -73,4 +88,5 @@ data class AppCacheData(
     val paidOrders: Map<String, String> = mapOf(),
     val deletedActivities: List<String> = listOf(),
     val activitiesPendingDelete: List<String> = listOf(),
+    val pendingBoostActivities: List<PendingBoostActivity> = listOf()
 )
