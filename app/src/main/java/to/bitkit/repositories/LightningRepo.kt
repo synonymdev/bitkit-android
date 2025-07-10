@@ -16,8 +16,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
-import org.lightningdevkit.ldknode.FeeRate
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
@@ -57,7 +55,6 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
-    private val network: Network,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -124,7 +121,10 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) = withContext(bgDispatcher) {
+    private suspend fun setup(
+        walletIndex: Int,
+        customServer: ElectrumServer? = null,
+    ) = withContext(bgDispatcher) {
         return@withContext try {
             lightningService.setup(walletIndex, customServer)
             Result.success(Unit)
@@ -276,62 +276,63 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithElectrumServer(newServer: ElectrumServer): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: $newServer")
 
-        // If node is stopping wait for it
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+        stop().onFailure {
+            Logger.error("Failed to stop node during electrum server change", it)
+            return@withContext Result.failure(it)
+        }
+
+        Logger.debug("Starting node with new electrum server: $newServer")
+
+        start(
+            eventHandler = cachedEventHandler,
+            customServer = newServer,
+            shouldRetry = false,
+        ).onFailure { startError ->
+            Logger.warn("Failed ldk-node config change, attempting recovery…")
+            restartWithPreviousConfig()
+            return@withContext Result.failure(startError)
+        }.onSuccess {
+            settingsStore.update { it.copy(electrumServer = newServer) }
+
+            Logger.info("Successfully changed electrum server connection")
+            return@withContext Result.success(Unit)
+        }
+    }
+
+    private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.debug("Stopping node for recovery attempt")
+
+        stop().onFailure { e ->
+            Logger.error("Failed to stop node during recovery", e)
+            return@withContext Result.failure(e)
+        }
+
+        Logger.debug("Starting node with previous config for recovery")
+
+        start(
+            eventHandler = cachedEventHandler,
+            shouldRetry = false,
+        ).onSuccess {
+            Logger.debug("Successfully started node with previous config")
+        }.onFailure { e ->
+            Logger.error("Failed starting node with previous config", e)
+        }
+    }
+
+    private suspend fun waitForNodeToStop(): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState == NodeLifecycleState.Stopping) {
-            Logger.debug("Waiting for node stop before changing electrum server")
+            Logger.debug("Waiting for node to stop…")
             val stopped = withTimeoutOrNull(30.seconds) {
                 _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
             }
             if (stopped == null) {
-                Logger.warn("Timeout while waiting for node to stop")
-                return@withContext Result.failure(Exception("Timeout waiting for node to stop"))
+                val error = Exception("Timeout waiting for node to stop")
+                Logger.warn(error.message)
+                return@withContext Result.failure(error)
             }
         }
-
-        Logger.debug("Stopping node to change electrum server")
-        stop().onFailure { error ->
-            Logger.error("Failed to stop node during electrum server change", error)
-            return@withContext Result.failure(error)
-        }
-
-        // Start node with new electrum server and cached event handler
-        Logger.debug("Starting node with new electrum server")
-        val newServerResult = start(
-            eventHandler = cachedEventHandler,
-            customServer = newServer,
-            shouldRetry = false,
-        )
-
-        if (newServerResult.isSuccess) {
-            settingsStore.setElectrumServer(newServer, network)
-            Logger.info("Successfully changed electrum server connection")
-            return@withContext Result.success(Unit)
-        }
-
-        // Connection to new server failed, try recovering previous server connection
-        val originalError = newServerResult.exceptionOrNull()
-        Logger.warn("Failed to change electrum server, attempting recovery…", originalError)
-
-        Logger.debug("Stopping node before recovery attempt")
-        stop().onFailure { stopError ->
-            Logger.error("Failed to stop node during recovery", stopError)
-            return@withContext Result.failure(stopError)
-        }
-
-        Logger.debug("Starting node with previous electrum server for recovery")
-        val recoveryResult = start(
-            eventHandler = cachedEventHandler,
-            shouldRetry = false,
-        )
-
-        if (recoveryResult.isSuccess) {
-            Logger.info("Successfully restored electrum server connection")
-            // Return failure because changing the electrum server failed
-            return@withContext Result.failure(Exception(originalError))
-        }
-
-        Logger.error("Failed restoring electrum server connection", recoveryResult.exceptionOrNull())
-        return@withContext Result.failure(Exception(originalError))
+        return@withContext Result.success(Unit)
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {

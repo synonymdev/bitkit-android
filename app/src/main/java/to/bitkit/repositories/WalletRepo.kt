@@ -15,7 +15,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
@@ -49,7 +48,6 @@ class WalletRepo @Inject constructor(
     private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
-    private val network: Network,
 ) {
 
     private val _walletState = MutableStateFlow(
@@ -245,7 +243,7 @@ class WalletRepo @Inject constructor(
         //     val result: GetAddressResponse = coreService.onchain.deriveBitcoinAddress(
         //         mnemonicPhrase = mnemonic,
         //         derivationPathStr = derivationPath,
-        //         network = network,
+        //         network = settingsStore.data.first().selectedNetwork,
         //         bip39Passphrase = passphrase,
         //     )
         //

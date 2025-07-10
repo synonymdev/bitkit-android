@@ -21,7 +21,6 @@ import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
-import org.lightningdevkit.ldknode.EsploraSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Node
@@ -69,33 +68,42 @@ class LightningService @Inject constructor(
     private val settingsStore: SettingsStore,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    @Volatile
     var node: Node? = null
 
-    suspend fun setup(walletIndex: Int, customServer: ElectrumServer? = null) {
+    private lateinit var trustedLnPeers: List<LnPeer>
+
+    suspend fun setup(
+        walletIndex: Int,
+        customServer: ElectrumServer? = null,
+    ) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
+        // TODO get trustedLnPeers from blocktank info
+        this.trustedLnPeers = Env.trustedLnPeers
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        val builder = Builder
-            .fromConfig(
-                defaultConfig().apply {
-                    storageDirPath = dirPath
-                    network = Env.network
+        val config = defaultConfig().apply {
+            storageDirPath = dirPath
+            network = Env.network
 
-                    trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
-                    anchorChannelsConfig = AnchorChannelsConfig(
-                        trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 1u,
-                    )
-                })
+            trustedPeers0conf = trustedLnPeers.map { it.nodeId }
+            anchorChannelsConfig = AnchorChannelsConfig(
+                trustedPeersNoReserve = trustedPeers0conf,
+                perChannelReserveSats = 1u,
+            )
+        }
+
+        val builder = Builder.fromConfig(config)
             .apply {
                 setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
 
-                configureChainSource(customServer)
+                configureChainSource(customServer = customServer)
 
-                if (Env.ldkRgsServerUrl != null) {
-                    setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
+                val rgsServerUrl = Env.ldkRgsServerUrl
+                if (rgsServerUrl != null) {
+                    setGossipSourceRgs(rgsServerUrl)
                 } else {
                     setGossipSourceP2p()
                 }
@@ -122,36 +130,20 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
-        val electrumServer = customServer
-            ?: settingsStore.data.first().customElectrumServers[Env.network]
+        val electrumServer = customServer ?: settingsStore.data.first().electrumServer
 
-        if (electrumServer != null) {
-            val serverUrl = electrumServer.toString()
-            Logger.info("Using onchain source Electrum url: $serverUrl")
-            setChainSourceElectrum(
-                serverUrl = serverUrl,
-                config = ElectrumSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
+        val serverUrl = electrumServer.toString()
+        Logger.info("Using onchain source Electrum url: $serverUrl")
+        setChainSourceElectrum(
+            serverUrl = serverUrl,
+            config = ElectrumSyncConfig(
+                BackgroundSyncConfig(
+                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
-            )
-        } else {
-            val serverUrl = Env.esploraServerUrl
-            Logger.info("Using onchain source Esplora url: $serverUrl")
-            setChainSourceEsplora(
-                serverUrl = serverUrl,
-                config = EsploraSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
-                ),
-            )
-        }
+            ),
+        )
     }
 
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
@@ -262,7 +254,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         ServiceQueue.LDK.background {
-            for (peer in Env.trustedLnPeers) {
+            for (peer in trustedLnPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
                     Logger.info("Connected to trusted peer: $peer")

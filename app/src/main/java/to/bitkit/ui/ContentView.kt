@@ -105,7 +105,6 @@ import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
-import to.bitkit.ui.settings.advanced.BitcoinNetworkSelectionScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.GapLimitScreen
@@ -750,9 +749,6 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.WebRelay> {
         WebRelayScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.BitcoinNetworkSelection> {
-        BitcoinNetworkSelectionScreen(navController)
-    }
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
     }
@@ -1300,10 +1296,6 @@ fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
 )
 
-fun NavController.navigateToChannelOrdersSettings() = navigate(
-    route = Routes.ChannelOrdersSettings,
-)
-
 fun NavController.navigateToOrderDetail(id: String) = navigate(
     route = Routes.OrderDetail(id),
 )
@@ -1314,10 +1306,6 @@ fun NavController.navigateToCjitDetail(id: String) = navigate(
 
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
-)
-
-fun NavController.navigateToRegtestSettings() = navigate(
-    route = Routes.RegtestSettings,
 )
 
 fun NavController.navigateToTransferSavingsIntro() = navigate(
@@ -1358,10 +1346,6 @@ fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
     }
     navigate(Routes.QrScanner)
 }
-
-fun NavController.navigateToLogs() = navigate(
-    route = Routes.Logs,
-)
 
 fun NavController.navigateToLogDetail(fileName: String) = navigate(
     route = Routes.LogDetail(fileName),
@@ -1441,9 +1425,6 @@ object Routes {
 
     @Serializable
     data object WebRelay
-
-    @Serializable
-    data object BitcoinNetworkSelection
 
     @Serializable
     data object AddressViewer

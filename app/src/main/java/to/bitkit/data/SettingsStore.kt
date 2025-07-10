@@ -8,7 +8,6 @@ import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
@@ -55,15 +54,6 @@ class SettingsStore @Inject constructor(
             val updatedDismissedSuggestions = (currentSettings.dismissedSuggestions + suggestion.name).distinct()
             currentSettings.copy(dismissedSuggestions = updatedDismissedSuggestions)
         }
-    }
-
-    suspend fun setElectrumServer(server: ElectrumServer, network: Network) {
-        store.updateData { currentSettings ->
-            currentSettings.copy(
-                customElectrumServers = currentSettings.customElectrumServers + (network to server)
-            )
-        }
-        Logger.info("Saved Electrum server for $network: $server")
     }
 
     suspend fun reset() {
@@ -114,5 +104,5 @@ data class SettingsData(
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
     val addressType: AddressType = AddressType.P2WPKH,
-    val customElectrumServers: Map<Network, ElectrumServer> = Env.defaultElectrumServers,
+    val electrumServer: ElectrumServer = Env.defaultElectrumServer,
 )

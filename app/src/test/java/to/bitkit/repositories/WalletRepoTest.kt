@@ -11,7 +11,6 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
@@ -50,7 +49,6 @@ class WalletRepoTest : BaseUnitTest() {
     private val lightningRepo: LightningRepo = mock()
 
     private val cacheStore: CacheStore = mock()
-    private val network = Network.REGTEST
 
     @Before
     fun setUp() {
@@ -79,7 +77,6 @@ class WalletRepoTest : BaseUnitTest() {
             addressChecker = addressChecker,
             lightningRepo = lightningRepo,
             cacheStore = cacheStore,
-            network = network,
         )
     }
 

@@ -125,7 +125,8 @@ fun ChannelDetailScreen(
                 description = text,
             )
         },
-        onOpenUrl = { url ->
+        onOpenUrl = { txId ->
+            val url = getBlockExplorerUrl(txId)
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             context.startActivity(intent)
         },
@@ -278,7 +279,7 @@ private fun Content(
                             },
                             onClick = {
                                 onCopyText(txId)
-                                onOpenUrl(getBlockExplorerUrl(txId))
+                                onOpenUrl(txId)
                             }
                         )
                     }

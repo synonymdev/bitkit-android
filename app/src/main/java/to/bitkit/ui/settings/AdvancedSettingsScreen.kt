@@ -20,7 +20,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.addressTypeInfo
-import to.bitkit.models.networkUiText
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SectionHeader
@@ -45,7 +44,6 @@ object AdvancedSettingsTestTags {
     const val ELECTRUM_SERVER_BUTTON = "electrum_server_button"
     const val RGS_SERVER_BUTTON = "rgs_server_button"
     const val WEB_RELAY_BUTTON = "web_relay_button"
-    const val BITCOIN_NETWORK_BUTTON = "bitcoin_network_button"
     const val ADDRESS_VIEWER_BUTTON = "address_viewer_button"
     const val RESCAN_BUTTON = "rescan_button"
     const val SUGGESTIONS_RESET_BUTTON = "suggestions_reset_button"
@@ -92,9 +90,6 @@ fun AdvancedSettingsScreen(
         onWebRelayClick = {
             navController.navigate(Routes.WebRelay)
         },
-        onBitcoinNetworkClick = {
-            navController.navigate(Routes.BitcoinNetworkSelection)
-        },
         onAddressViewerClick = {
             navController.navigate(Routes.AddressViewer)
         },
@@ -124,7 +119,6 @@ private fun Content(
     onElectrumServerClick: () -> Unit = {},
     onRgsServerClick: () -> Unit = {},
     onWebRelayClick: () -> Unit = {},
-    onBitcoinNetworkClick: () -> Unit = {},
     onAddressViewerClick: () -> Unit = {},
     onRescanClick: () -> Unit = {},
     onSuggestionsResetClick: () -> Unit = {},
@@ -206,15 +200,6 @@ private fun Content(
                 onClick = onWebRelayClick,
                 modifier = Modifier.testTag(AdvancedSettingsTestTags.WEB_RELAY_BUTTON),
             )
-
-            if (uiState.isDevModeEnabled) {
-                SettingsButtonRow(
-                    title = stringResource(R.string.settings__adv__bitcoin_network),
-                    value = SettingsButtonValue.StringValue(uiState.currentNetwork.networkUiText()),
-                    onClick = onBitcoinNetworkClick,
-                    modifier = Modifier.testTag(AdvancedSettingsTestTags.BITCOIN_NETWORK_BUTTON),
-                )
-            }
 
             // Other Section
             SectionHeader(title = stringResource(R.string.settings__adv__section_other))

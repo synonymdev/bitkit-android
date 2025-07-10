@@ -30,7 +30,7 @@ class VssBackupsClient @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
 ) {
-    private val vssStoreId: String get() = vssStoreIdProvider.getVssStoreId()
+    private fun getVssStoreId(): String = vssStoreIdProvider.getVssStoreId()
 
     suspend fun putObject(
         category: BackupCategory,
@@ -51,7 +51,7 @@ class VssBackupsClient @Inject constructor(
                 .build()
 
             val request = PutObjectRequest.newBuilder()
-                .setStoreId(vssStoreId)
+                .setStoreId(getVssStoreId())
                 .addTransactionItems(keyValue)
                 .build()
 
@@ -72,7 +72,7 @@ class VssBackupsClient @Inject constructor(
 
         val key = category.name.lowercase()
         val request = GetObjectRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
             .setKey(key)
             .build()
 
@@ -98,7 +98,7 @@ class VssBackupsClient @Inject constructor(
             .build()
 
         val request = DeleteObjectRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
             .setKeyValue(keyValue)
             .build()
 
@@ -117,7 +117,7 @@ class VssBackupsClient @Inject constructor(
         Logger.debug("Listing objects with prefix: $keyPrefix", context = TAG)
 
         val requestBuilder = ListKeyVersionsRequest.newBuilder()
-            .setStoreId(vssStoreId)
+            .setStoreId(getVssStoreId())
 
         keyPrefix?.let { requestBuilder.setKeyPrefix(it) }
         pageSize?.let { requestBuilder.setPageSize(it) }
@@ -144,7 +144,9 @@ class VssBackupsClient @Inject constructor(
     }
 
     private suspend fun post(endpoint: String, request: MessageLite): HttpResponse {
-        val response = httpClient.post("${Env.vssServerUrl}$endpoint") {
+        val baseUrl = Env.vssServerUrl
+
+        val response = httpClient.post("$baseUrl$endpoint") {
             contentType(ContentType.Application.OctetStream)
             setBody(request.toByteArray())
         }

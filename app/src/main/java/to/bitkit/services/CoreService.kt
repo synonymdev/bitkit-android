@@ -50,6 +50,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
@@ -67,6 +68,7 @@ import kotlin.random.Random
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
+    private val settingsStore: SettingsStore,
 ) {
     private var walletIndex: Int = 0
 
@@ -98,7 +100,7 @@ class CoreService @Inject constructor(
             try {
                 val blocktankUrl = Env.blocktankClientServer
                 updateBlocktankUrl(newUrl = blocktankUrl)
-                Logger.info("Blocktank URL updated to $blocktankUrl")
+                Logger.info("Blocktank URL updated to: $blocktankUrl")
             } catch (e: Exception) {
                 Logger.error("Failed to update Blocktank URL", e)
             }
@@ -131,7 +133,7 @@ class CoreService @Inject constructor(
         }
     }
 
-    suspend fun getLspPeers(): List<LnPeer> {
+    private suspend fun getLspPeers(): List<LnPeer> {
         val blocktankPeers = Env.trustedLnPeers
         // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
         // pseudocode idea:
@@ -156,11 +158,7 @@ class ActivityService(
     private val coreService: CoreService,
 ) {
     suspend fun removeAll() {
-        ServiceQueue.CORE.background { // Only allow removing on regtest for now
-            if (Env.network != Network.REGTEST) {
-                throw AppError(message = "Regtest only")
-            }
-
+        ServiceQueue.CORE.background {
             // Get all activities and delete them one by one
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
@@ -361,9 +359,6 @@ class ActivityService(
     }
 
     suspend fun generateRandomTestData(count: Int = 100) {
-        if (Env.network != Network.REGTEST) {
-            throw AppError(message = "Regtest only")
-        }
         ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =

@@ -1,5 +1,6 @@
 package to.bitkit.env
 
+import android.os.Build
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
@@ -12,55 +13,63 @@ import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
 
-@Suppress("ConstPropertyName", "SpellCheckingInspection")
+@Suppress("ConstPropertyName")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
-    val isUnitTest = System.getProperty("java.class.path")?.contains("junit") == true
-    val network = Network.REGTEST
+    val network = Network.valueOf(BuildConfig.NETWORK)
     val walletSyncIntervalSecs = 10_uL // TODO review
-    val platform = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
+    val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
-            Network.REGTEST -> listOf(
-                Peers.btStaging,
-            )
-
+            Network.REGTEST -> listOf(Peers.btStaging)
+            Network.TESTNET -> listOf(Peers.btStaging)
             else -> TODO("Not yet implemented")
         }
+
     val ldkRgsServerUrl
         get() = when (network) {
             Network.BITCOIN -> "https://rapidsync.lightningdevkit.org/snapshot/"
             Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
             else -> null
         }
+
     val vssServerUrl
         get() = when (network) {
             Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
-            else -> TODO("${network.name} network not implemented")
-        }
-    val vssStoreId
-        get() = when (network) {
-            Network.REGTEST -> "bitkit_regtest"
-            else -> TODO("${network.name} network not implemented")
-        }
-    val esploraServerUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
-            else -> TODO("${network.name} network not implemented")
-        }
-    val blocktankBaseUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://api.stag0.blocktank.to"
+            Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
             else -> TODO("${network.name} network not implemented")
         }
 
-    val blocktankClientServer get() = "${blocktankBaseUrl}/blocktank/api/v2"
-    val blocktankPushNotificationServer get() = "${blocktankBaseUrl}/notifications/api"
-    val btcRatesServer get() = "https://blocktank.synonym.to/fx/rates/btc/"
-    val geoCheckUrl get() = "https://api1.blocktank.to/api/geocheck"
+    val vssStoreId
+        get() = when (network) {
+            Network.REGTEST -> "bitkit_regtest"
+            Network.TESTNET -> "bitkit_testnet"
+            else -> TODO("${network.name} network not implemented")
+        }
+
+    val esploraServerUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
+            Network.TESTNET -> "https://blockstream.info/testnet/api"
+            else -> TODO("${network.name} network not implemented")
+        }
+
+    val blocktankBaseUrl
+        get() = when (network) {
+            Network.REGTEST -> "https://api.stag0.blocktank.to"
+            Network.TESTNET -> "https://api.stag0.blocktank.to"
+            else -> TODO("${network.name} network not implemented")
+        }
+
+    val blocktankClientServer get() = "$blocktankBaseUrl/blocktank/api/v2"
+    val blocktankPushNotificationServer get() = "$blocktankBaseUrl/notifications/api"
+
+    // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
+    const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
+    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
@@ -108,7 +117,10 @@ internal object Env {
     val ldkLogLevel = LogLevel.TRACE
 
     fun ldkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ldk")
-    fun bitkitCoreStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "core")
+
+    fun bitkitCoreStoragePath(walletIndex: Int): String {
+        return storagePathOf(walletIndex, network.name.lowercase(), "core")
+    }
 
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
         require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
@@ -127,51 +139,34 @@ internal object Env {
         )
     }
 
-    @Suppress("unused")
     object ElectrumServers {
-        val REGTEST = ElectrumServer(
-            host = "34.65.252.32",
-            tcp = 18483,
-            ssl = 18484,
-            protocol = ElectrumProtocol.TCP,
-        )
         val BITCOIN = ElectrumServer(
             host = "35.187.18.233",
             tcp = 8911,
             ssl = 8900,
             protocol = ElectrumProtocol.SSL,
         )
-        val TESTNET_1 = ElectrumServer(
-            host = "testnet.hsmiths.com",
-            tcp = 53012,
-            ssl = 53012,
-            protocol = ElectrumProtocol.SSL,
+        val TESTNET = ElectrumServer(
+            host = "electrum.blockstream.info",
+            tcp = 60001, // or 50001
+            ssl = 60002, // or 50002
+            protocol = ElectrumProtocol.TCP,
         )
-        val TESTNET_2 = ElectrumServer(
-            host = "tn.not.fyi",
-            tcp = 55002,
-            ssl = 55002,
-            protocol = ElectrumProtocol.SSL,
-        )
-        val TESTNET_3 = ElectrumServer(
-            host = "testnet.aranguren.org",
-            tcp = 51001,
-            ssl = 51002,
-            protocol = ElectrumProtocol.SSL,
-        )
-        val TESTNET_4 = ElectrumServer(
-            host = "blackie.c3-soft.com",
-            tcp = 57006,
-            ssl = 57006,
-            protocol = ElectrumProtocol.SSL,
+        val REGTEST = ElectrumServer(
+            host = "34.65.252.32",
+            tcp = 18483,
+            ssl = 18484,
+            protocol = ElectrumProtocol.TCP,
         )
     }
 
-    val defaultElectrumServers = mapOf(
-        Network.BITCOIN to ElectrumServers.BITCOIN,
-        Network.TESTNET to ElectrumServers.TESTNET_1,
-        Network.REGTEST to ElectrumServers.REGTEST,
-    )
+    val defaultElectrumServer: ElectrumServer
+        get() = when (network) {
+            Network.REGTEST -> ElectrumServers.REGTEST
+            Network.TESTNET -> ElectrumServers.TESTNET
+            Network.BITCOIN -> ElectrumServers.BITCOIN
+            else -> TODO("${network.name} network not implemented")
+        }
 
     const val PIN_LENGTH = 4
     const val PIN_ATTEMPTS = 8

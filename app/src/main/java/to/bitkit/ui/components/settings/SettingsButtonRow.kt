@@ -107,7 +107,7 @@ fun SettingsButtonRow(
                                 isLoading && isChecked -> CircularProgressIndicator(
                                     color = Colors.White,
                                     strokeWidth = 2.dp,
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(24.dp)
                                 )
 
                                 isChecked -> Icon(

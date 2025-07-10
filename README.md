@@ -17,15 +17,24 @@ Bitkit Android Native app.
 ## Localization
 See repo: https://github.com/synonymdev/bitkit-transifex-sync
 
+## Bitcoin Networks
+The build config supports building 3 different apps for the 3 bitcoin networks (mainnet, testnet, regtest) via the 3 build flavors:
+- dev flavour = regtest
+- mainnet flavour = mainnet
+- tnet flavour = testnet
+
 ## Build for Release
 
 **Prerequisite**: setup the signing config:
 - Add the keystore file to root, eg. `./release.keystore`
 - Add `keystore.properties` to root of the project (see `keystore.properties.template`)
 
+### Routine:
 Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
-./gradlew assembleRelease
+./gradlew assembleDevRelease
+# ./gradlew assembleRelease # for all flavors
 ```
 
-APK is generated in `app/build/outputs/apk/release/`
+APK is generated in `app/build/outputs/apk/_flavor_/release`. (_flavor_ can be any of 'dev', 'mainnet', 'tnet').
+Example for dev: `app/build/outputs/apk/dev/release`
