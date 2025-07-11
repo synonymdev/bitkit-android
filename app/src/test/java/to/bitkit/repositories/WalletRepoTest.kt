@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -20,9 +19,8 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
-import to.bitkit.data.AppStorage
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.CoreService
@@ -39,7 +37,6 @@ class WalletRepoTest : BaseUnitTest() {
 
     private lateinit var sut: WalletRepo
 
-    private val appStorage: AppStorage = mock()
     private val db: AppDb = mock()
     private val keychain: Keychain = mock()
     private val coreService: CoreService = mock()
@@ -47,38 +44,32 @@ class WalletRepoTest : BaseUnitTest() {
     private val settingsStore: SettingsStore = mock()
     private val addressChecker: AddressChecker = mock()
     private val lightningRepo: LightningRepo = mock()
-
     private val cacheStore: CacheStore = mock()
 
     @Before
     fun setUp() {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
-        whenever(appStorage.onchainAddress).thenReturn("")
-        whenever(appStorage.bolt11).thenReturn("")
-        whenever(appStorage.bip21).thenReturn("")
-        whenever(appStorage.loadBalance()).thenReturn(null)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(lightningRepo.getSyncFlow()).thenReturn(flowOf(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(addressType = AddressType.P2WPKH)))
 
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
         whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
 
         whenever(coreService.onchain).thenReturn(onchainService)
-
-        sut = WalletRepo(
-            bgDispatcher = testDispatcher,
-            appStorage = appStorage,
-            db = db,
-            keychain = keychain,
-            coreService = coreService,
-            settingsStore = settingsStore,
-            addressChecker = addressChecker,
-            lightningRepo = lightningRepo,
-            cacheStore = cacheStore,
-        )
+        sut = createSut()
     }
+
+    private fun createSut() = WalletRepo(
+        bgDispatcher = testDispatcher,
+        db = db,
+        keychain = keychain,
+        coreService = coreService,
+        settingsStore = settingsStore,
+        addressChecker = addressChecker,
+        lightningRepo = lightningRepo,
+        cacheStore = cacheStore,
+    )
 
     @Test
     fun `walletExists should return true when mnemonic exists in keychain`() = test {
@@ -137,7 +128,6 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current is empty`() = test {
-        whenever(sut.getOnchainAddress()).thenReturn("")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
@@ -150,7 +140,6 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 should set receiveOnSpendingBalance as false if shouldBlockLightning is true`() = test {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
-        whenever(sut.getOnchainAddress()).thenReturn("")
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mock())
 
@@ -162,7 +151,8 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should generate new address when current has transactions`() = test {
-        whenever(sut.getOnchainAddress()).thenReturn("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+        val testAddress = "testAddress"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = testAddress)))
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(
             mockAddressInfo().let { addressInfo ->
@@ -181,9 +171,10 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 should keep address when current has no transactions`() = test {
-        val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
+        val existingAddress = "existingAddress"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = existingAddress)))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mockAddressInfo())
+        sut = createSut()
 
         val result = sut.refreshBip21()
 
@@ -193,8 +184,8 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21 forced should always generate new address`() = test {
-        val existingAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        whenever(sut.getOnchainAddress()).thenReturn(existingAddress)
+        val existingAddress = "existingAddress"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = existingAddress)))
         whenever(lightningRepo.newAddress()).thenReturn(Result.success("newAddress"))
         whenever(addressChecker.getAddressInfo(any())).thenReturn(mockAddressInfo())
 
@@ -297,9 +288,10 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `updateBip21Invoice should build correct BIP21 URL`() = test {
-        val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-        whenever(sut.getOnchainAddress()).thenReturn(testAddress)
+        val testAddress = "testAddress"
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = testAddress)))
         whenever(lightningRepo.hasChannels()).thenReturn(false)
+        sut = createSut()
 
         sut.updateBip21Invoice(amountSats = 1000uL, description = "test").let { result ->
             assertTrue(result.isSuccess)
@@ -337,7 +329,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setOnchainAddress(testAddress)
 
         assertEquals(testAddress, sut.walletState.value.onchainAddress)
-        verify(appStorage).onchainAddress = testAddress
+        verify(cacheStore).setOnchainAddress(testAddress)
     }
 
     @Test
@@ -347,7 +339,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBolt11(testBolt11)
 
         assertEquals(testBolt11, sut.walletState.value.bolt11)
-        verify(appStorage).bolt11 = testBolt11
+        verify(cacheStore).saveBolt11(testBolt11)
     }
 
     @Test
@@ -357,12 +349,12 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBip21(testBip21)
 
         assertEquals(testBip21, sut.walletState.value.bip21)
-        verify(appStorage).bip21 = testBip21
+        verify(cacheStore).setBip21(testBip21)
     }
 
     @Test
     fun `buildBip21Url should create correct URL`() = test {
-        val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val testAddress = "testAddress"
         val testAmount = 1000uL
         val testMessage = "test message"
         val testInvoice = "testInvoice"
@@ -388,7 +380,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `toggleReceiveOnSpendingBalance should return failure if shouldBlockLightning is true`() = test {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(true)
 
-        if (sut.walletState.value.receiveOnSpendingBalance == true) {
+        if (sut.walletState.value.receiveOnSpendingBalance) {
             sut.toggleReceiveOnSpendingBalance()
         }
 
@@ -504,7 +496,7 @@ class WalletRepoTest : BaseUnitTest() {
 }
 
 private fun mockAddressInfo() = AddressInfo(
-    address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+    address = "testAddress",
     chain_stats = AddressStats(
         funded_txo_count = 1,
         funded_txo_sum = 2,
