@@ -41,9 +41,3 @@ fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) 
     is Activity.Lightning -> paymentHashOrTxId == v1.id
     is Activity.Onchain -> paymentHashOrTxId == v1.txId
 }
-
-val Activity.idValue: String
-    get() = when (this) {
-        is Activity.Lightning -> v1.id
-        is Activity.Onchain -> v1.txId
-    }
