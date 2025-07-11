@@ -46,6 +46,7 @@ class ActivityRepo @Inject constructor(
                 .onSuccess { payments ->
                     Logger.debug("Got payments with success, syncing activities", context = TAG)
                     syncLdkNodePayments(payments = payments)
+                    boostPendingActivities()
                     isSyncingLdkNodePayments = false
                     return@withContext Result.success(Unit)
                 }.onFailure { e ->
@@ -235,6 +236,51 @@ class ActivityRepo @Inject constructor(
         cacheStore.data.first().activitiesPendingDelete.forEach { activityId ->
             deleteActivity(id = activityId).onSuccess {
                 cacheStore.removeActivityFromPendingDelete(activityId)
+            }
+        }
+    }
+
+    private suspend fun boostPendingActivities() = withContext(bgDispatcher) {
+        cacheStore.data.first().pendingBoostActivities.forEach { pendingBoostActivity ->
+            findActivityByPaymentId(
+                paymentHashOrTxId = pendingBoostActivity.txId,
+                type = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT
+            ).onSuccess { activityToUpdate ->
+                Logger.debug("boostPendingActivities = Activity found: ${activityToUpdate.rawId()}", context = TAG)
+
+                val newOnChainActivity = activityToUpdate as? Activity.Onchain ?: return@onSuccess
+
+                if ((newOnChainActivity.v1.updatedAt ?: 0u) > pendingBoostActivity.updatedAt) {
+                    cacheStore.removeActivityFromPendingBoost(pendingBoostActivity)
+                    return@onSuccess
+                }
+
+                val updatedActivity = Activity.Onchain(
+                    v1 = newOnChainActivity.v1.copy(
+                        isBoosted = true,
+                        feeRate = pendingBoostActivity.feeRate,
+                        fee = pendingBoostActivity.fee,
+                        updatedAt = pendingBoostActivity.updatedAt
+                    )
+                )
+
+                if (pendingBoostActivity.activityToDelete != null) {
+                    replaceActivity(
+                        id = updatedActivity.v1.id,
+                        activity = updatedActivity,
+                        activityIdToDelete = pendingBoostActivity.activityToDelete
+                    ).onSuccess {
+                        cacheStore.removeActivityFromPendingBoost(pendingBoostActivity)
+                    }
+                } else {
+                    updateActivity(
+                        id = updatedActivity.v1.id,
+                        activity = updatedActivity
+                    ).onSuccess {
+                        cacheStore.removeActivityFromPendingBoost(pendingBoostActivity)
+                    }
+                }
             }
         }
     }
