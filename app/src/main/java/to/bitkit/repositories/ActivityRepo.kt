@@ -39,6 +39,8 @@ class ActivityRepo @Inject constructor(
                 return@withContext Result.failure(Exception())
             }
 
+            deletePendingActivities()
+
             isSyncingLdkNodePayments = true
             return@withContext lightningRepo.getPayments()
                 .onSuccess { payments ->
@@ -227,6 +229,14 @@ class ActivityRepo @Inject constructor(
                 Result.failure(e)
             }
         )
+    }
+
+    private suspend fun deletePendingActivities() = withContext(bgDispatcher) {
+        cacheStore.data.first().activitiesPendingDelete.forEach { activityId ->
+            deleteActivity(id = activityId).onSuccess {
+                cacheStore.removeActivityFromPendingDelete(activityId)
+            }
+        }
     }
 
     /**

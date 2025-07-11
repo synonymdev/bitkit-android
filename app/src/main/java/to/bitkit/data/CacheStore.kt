@@ -57,6 +57,13 @@ class CacheStore @Inject constructor(
             it.copy(activitiesPendingDelete = it.activitiesPendingDelete + activityId)
         }
     }
+    suspend fun removeActivityFromPendingDelete(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId !in store.data.first().activitiesPendingDelete) return
+        store.updateData {
+            it.copy(activitiesPendingDelete = it.activitiesPendingDelete - activityId)
+        }
+    }
 
     suspend fun addActivityToPendingBoost(pendingBoostActivity: PendingBoostActivity) {
         if (pendingBoostActivity in store.data.first().pendingBoostActivities) return
