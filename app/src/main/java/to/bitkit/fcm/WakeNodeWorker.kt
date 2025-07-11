@@ -63,7 +63,11 @@ class WakeNodeWorker @AssistedInject constructor(
 
         try {
             withPerformanceLogging {
-                lightningRepo.start(walletIndex = 0, timeout= timeout) { event -> handleLdkEvent(event) }
+                lightningRepo.start(
+                    walletIndex = 0,
+                    timeout = timeout,
+                    eventHandler = { event -> handleLdkEvent(event) }
+                )
                 lightningRepo.connectToTrustedPeers()
 
                 // Once node is started, handle the manual channel opening if needed

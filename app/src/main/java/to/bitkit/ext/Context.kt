@@ -63,7 +63,7 @@ fun Context.findActivity(): Activity? =
     }
 
 // Clipboard
-fun Context.setClipboardText(label: String = "", text: String) {
+fun Context.setClipboardText(text: String, label: String = "") {
     this.clipboardManager.setPrimaryClip(
         ClipData.newPlainText(label, text)
     )

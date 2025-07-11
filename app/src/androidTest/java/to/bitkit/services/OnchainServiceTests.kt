@@ -35,7 +35,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddressNativeSegWit(): Unit = runBlocking {
-            val derivationPath = AddressType.P2WPKH.toDerivationPath(Network.BITCOIN)
+            val derivationPath = AddressType.P2WPKH.toDerivationPath(network = Network.BITCOIN)
 
             val result = onchainService.deriveBitcoinAddress(
                 mnemonicPhrase = mnemonic,
@@ -53,7 +53,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddressSegWit(): Unit = runBlocking {
-        val derivationPath = AddressType.P2SH.toDerivationPath(Network.BITCOIN)
+        val derivationPath = AddressType.P2SH.toDerivationPath(network = Network.BITCOIN)
 
         val result = onchainService.deriveBitcoinAddress(
             mnemonicPhrase = mnemonic,
@@ -71,7 +71,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddressTaproot(): Unit = runBlocking {
-        val derivationPath = AddressType.P2TR.toDerivationPath(Network.BITCOIN)
+        val derivationPath = AddressType.P2TR.toDerivationPath(network = Network.BITCOIN)
 
         val result = onchainService.deriveBitcoinAddress(
             mnemonicPhrase = mnemonic,
@@ -89,7 +89,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddressLegacy(): Unit = runBlocking {
-        val derivationPath = AddressType.P2PKH.toDerivationPath(Network.BITCOIN)
+        val derivationPath = AddressType.P2PKH.toDerivationPath(network = Network.BITCOIN)
 
         val result = onchainService.deriveBitcoinAddress(
             mnemonicPhrase = mnemonic,
@@ -107,7 +107,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddressTestnet(): Unit = runBlocking {
-        val derivationPath = AddressType.P2WPKH.toDerivationPath(Network.TESTNET)
+        val derivationPath = AddressType.P2WPKH.toDerivationPath(network = Network.TESTNET)
 
         val result = onchainService.deriveBitcoinAddress(
             mnemonicPhrase = mnemonic,
@@ -126,7 +126,7 @@ class OnchainServiceTests {
     @Test
     fun testDeriveAddressRegtest(): Unit = runBlocking {
         val network = Network.REGTEST
-        val derivationPath = AddressType.P2WPKH.toDerivationPath(network)
+        val derivationPath = AddressType.P2WPKH.toDerivationPath(network = network)
 
         val result = onchainService.deriveBitcoinAddress(
             mnemonicPhrase = mnemonic,
@@ -144,7 +144,7 @@ class OnchainServiceTests {
 
     @Test
     fun testDeriveAddresses(): Unit = runBlocking {
-        val derivationPath = AddressType.P2WPKH.toDerivationPath(Network.BITCOIN)
+        val derivationPath = AddressType.P2WPKH.toDerivationPath(network = Network.BITCOIN)
         val network = Network.BITCOIN
         val isChange = false
         val startIndex = 0u
@@ -177,7 +177,7 @@ class OnchainServiceTests {
 
         val result = onchainService.deriveBitcoinAddresses(
             mnemonicPhrase = mnemonic,
-            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network),
+            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network = network),
             network = network,
             bip39Passphrase = null,
             isChange = true,
@@ -202,7 +202,7 @@ class OnchainServiceTests {
 
         val result = onchainService.derivePrivateKey(
             mnemonicPhrase = mnemonic,
-            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network),
+            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network = network),
             network = network,
             bip39Passphrase = null,
         )
@@ -218,7 +218,7 @@ class OnchainServiceTests {
 
         val result = onchainService.derivePrivateKey(
             mnemonicPhrase = mnemonic,
-            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network),
+            derivationPathStr = AddressType.P2WPKH.toDerivationPath(network = network),
             network = network,
             bip39Passphrase = null,
         )

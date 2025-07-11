@@ -94,3 +94,5 @@ fun Long.formatToModernDisplay(): String {
     }
     return formatter.format(sats)
 }
+
+fun ULong.formatToModernDisplay(): String = this.toLong().formatToModernDisplay()

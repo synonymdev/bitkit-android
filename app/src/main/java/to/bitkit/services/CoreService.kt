@@ -34,6 +34,8 @@ import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
 import com.synonym.bitkitcore.openChannel
+import com.synonym.bitkitcore.refreshActiveCjitEntries
+import com.synonym.bitkitcore.refreshActiveOrders
 import com.synonym.bitkitcore.removeTags
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.updateBlocktankUrl
@@ -48,6 +50,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
@@ -65,6 +68,7 @@ import kotlin.random.Random
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
+    private val settingsStore: SettingsStore,
 ) {
     private var walletIndex: Int = 0
 
@@ -96,7 +100,7 @@ class CoreService @Inject constructor(
             try {
                 val blocktankUrl = Env.blocktankClientServer
                 updateBlocktankUrl(newUrl = blocktankUrl)
-                Logger.info("Blocktank URL updated to $blocktankUrl")
+                Logger.info("Blocktank URL updated to: $blocktankUrl")
             } catch (e: Exception) {
                 Logger.error("Failed to update Blocktank URL", e)
             }
@@ -129,7 +133,7 @@ class CoreService @Inject constructor(
         }
     }
 
-    suspend fun getLspPeers(): List<LnPeer> {
+    private suspend fun getLspPeers(): List<LnPeer> {
         val blocktankPeers = Env.trustedLnPeers
         // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
         // pseudocode idea:
@@ -141,7 +145,8 @@ class CoreService @Inject constructor(
 
     suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
 
-    //TODO this is business logic, should be moved to the domain layer in the future
+    // TODO this is business logic, should be moved to the domain layer in the future
+    // TODO this spams network calls too often, it needs a caching mechanism
     suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalNode()
 }
 
@@ -153,11 +158,7 @@ class ActivityService(
     private val coreService: CoreService,
 ) {
     suspend fun removeAll() {
-        ServiceQueue.CORE.background { // Only allow removing on regtest for now
-            if (Env.network != Network.REGTEST) {
-                throw AppError(message = "Regtest only")
-            }
-
+        ServiceQueue.CORE.background {
             // Get all activities and delete them one by one
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
@@ -358,9 +359,6 @@ class ActivityService(
     }
 
     suspend fun generateRandomTestData(count: Int = 100) {
-        if (Env.network != Network.REGTEST) {
-            throw AppError(message = "Regtest only")
-        }
         ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
@@ -464,11 +462,11 @@ class BlocktankService(
         }
     }
 
-    private suspend fun fees(refresh: Boolean = true) : FeeRates? {
+    private suspend fun fees(refresh: Boolean = true): FeeRates? {
         return info(refresh)?.onchain?.feeRates
     }
 
-    suspend fun getFees() : Result<FeeRates> {
+    suspend fun getFees(): Result<FeeRates> {
         var fees = fees(refresh = true)
         if (fees == null) {
             Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
@@ -507,6 +505,9 @@ class BlocktankService(
         refresh: Boolean = true,
     ): List<IcJitEntry> {
         return ServiceQueue.CORE.background {
+            if (refresh) {
+                refreshActiveCjitEntries()
+            }
             getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
         }
     }
@@ -541,6 +542,9 @@ class BlocktankService(
         refresh: Boolean = true,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
+            if (refresh) {
+                refreshActiveOrders()
+            }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)
         }
     }

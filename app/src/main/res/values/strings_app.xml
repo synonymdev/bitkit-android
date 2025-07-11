@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Bitkit</string>
     <string name="app_notifications_channel_desc">Main Notification Channel for generic notifications.</string>
     <string name="app_notifications_channel_id" translatable="false">channel_app</string>
     <string name="app_notifications_channel_name">App Notifications</string>

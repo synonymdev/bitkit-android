@@ -2,11 +2,8 @@ package to.bitkit.utils
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.get
-import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import to.bitkit.env.Env
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,14 +21,8 @@ class AddressChecker @Inject constructor(
     suspend fun getAddressInfo(address: String): AddressInfo {
         try {
             val response = client.get("${Env.esploraServerUrl}/address/$address")
-            if (!response.status.isSuccess()) {
-                throw AddressCheckerError.InvalidResponse
-            }
+
             return response.body<AddressInfo>()
-        } catch (_: ClientRequestException) {
-            throw AddressCheckerError.InvalidResponse
-        } catch (_: SerializationException) {
-            throw AddressCheckerError.InvalidResponse
         } catch (e: Exception) {
             throw AddressCheckerError.NetworkError(e)
         }
@@ -40,18 +31,24 @@ class AddressChecker @Inject constructor(
     suspend fun getTransaction(txid: String): TxDetails {
         try {
             val response = client.get("${Env.esploraServerUrl}/tx/$txid")
-            if (!response.status.isSuccess()) {
-                throw AddressCheckerError.InvalidResponse
-            }
+
             return response.body<TxDetails>()
-        } catch (_: ClientRequestException) {
-            throw AddressCheckerError.InvalidResponse
-        } catch (_: SerializationException) {
-            throw AddressCheckerError.InvalidResponse
         } catch (e: Exception) {
             throw AddressCheckerError.NetworkError(e)
         }
     }
+
+    suspend fun getUtxosForAddress(address: String): List<EsploraUtxo> {
+        try {
+            val response = client.get("${Env.esploraServerUrl}/address/$address/utxo")
+
+            return response.body<List<EsploraUtxo>>()
+        } catch (e: Exception) {
+            throw AddressCheckerError.NetworkError(e)
+        }
+    }
+
+
 }
 
 @Suppress("PropertyName")
@@ -96,14 +93,30 @@ data class TxOutput(
     val n: Int? = null,
 )
 
+@Suppress("PropertyName")
+@Serializable
+data class TxStatus(
+    val confirmed: Boolean,
+    val block_height: Int? = null,
+    val block_hash: String? = null,
+    val block_time: Long? = null,
+)
+
 @Serializable
 data class TxDetails(
     val txid: String,
     val vin: List<TxInput>,
     val vout: List<TxOutput>,
+    val status: TxStatus,
+)
+
+@Serializable
+data class EsploraUtxo(
+    val txid: String,
+    val vout: Int,
+    val value: Long,
 )
 
 sealed class AddressCheckerError(message: String? = null) : AppError(message) {
     data class NetworkError(val error: Throwable) : AddressCheckerError(error.message)
-    data object InvalidResponse : AddressCheckerError()
 }

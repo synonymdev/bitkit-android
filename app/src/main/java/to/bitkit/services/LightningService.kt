@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
@@ -19,7 +20,7 @@ import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
-import org.lightningdevkit.ldknode.EsploraSyncConfig
+import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Node
@@ -33,12 +34,14 @@ import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.uByteList
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.LnPeer.Companion.toLnPeer
 import to.bitkit.utils.LdkError
@@ -62,48 +65,45 @@ class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
+    private val settingsStore: SettingsStore,
 ) : BaseCoroutineScope(bgDispatcher) {
 
+    @Volatile
     var node: Node? = null
 
-    suspend fun setup(walletIndex: Int) {
+    private lateinit var trustedLnPeers: List<LnPeer>
+
+    suspend fun setup(
+        walletIndex: Int,
+        customServer: ElectrumServer? = null,
+        customRgsServerUrl: String? = null,
+    ) {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
 
+        // TODO get trustedLnPeers from blocktank info
+        this.trustedLnPeers = Env.trustedLnPeers
         val dirPath = Env.ldkStoragePath(walletIndex)
 
-        val builder = Builder
-            .fromConfig(
-                defaultConfig().apply {
-                    storageDirPath = dirPath
-                    network = Env.network
+        val config = defaultConfig().apply {
+            storageDirPath = dirPath
+            network = Env.network
 
-                    trustedPeers0conf = Env.trustedLnPeers.map { it.nodeId }
-                    anchorChannelsConfig = AnchorChannelsConfig(
-                        trustedPeersNoReserve = trustedPeers0conf,
-                        perChannelReserveSats = 1u,
-                    )
-                })
-            .apply {
-                setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
+            trustedPeers0conf = trustedLnPeers.map { it.nodeId }
+            anchorChannelsConfig = AnchorChannelsConfig(
+                trustedPeersNoReserve = trustedPeers0conf,
+                perChannelReserveSats = 1u,
+            )
+        }
 
-                setChainSourceEsplora(
-                    serverUrl = Env.esploraServerUrl,
-                    config = EsploraSyncConfig(
-                        BackgroundSyncConfig(
-                            onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                            lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                            feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                        ),
-                    ),
-                )
-                if (Env.ldkRgsServerUrl != null) {
-                    setGossipSourceRgs(requireNotNull(Env.ldkRgsServerUrl))
-                } else {
-                    setGossipSourceP2p()
-                }
-                setEntropyBip39Mnemonic(mnemonic, passphrase)
-            }
+        val builder = Builder.fromConfig(config).apply {
+            setFilesystemLogger(generateLogFilePath(), Env.ldkLogLevel)
+
+            configureChainSource(customServer)
+            configureGossipSource(customRgsServerUrl)
+
+            setEntropyBip39Mnemonic(mnemonic, passphrase)
+        }
 
         Logger.debug("Building node…")
 
@@ -124,13 +124,52 @@ class LightningService @Inject constructor(
         Logger.info("LDK node setup")
     }
 
+    private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
+        val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
+        if (rgsServerUrl != null) {
+            Logger.info("Using gossip source rgs url: $rgsServerUrl")
+            setGossipSourceRgs(rgsServerUrl)
+        } else {
+            Logger.info("Using gossip source p2p")
+            setGossipSourceP2p()
+        }
+    }
+
+    private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
+        val electrumServer = customServer ?: settingsStore.data.first().electrumServer
+        val serverUrl = electrumServer.toString()
+        Logger.info("Using onchain source Electrum url: $serverUrl")
+        setChainSourceElectrum(
+            serverUrl = serverUrl,
+            config = ElectrumSyncConfig(
+                BackgroundSyncConfig(
+                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
+                ),
+            ),
+        )
+    }
+
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
+        Logger.debug("Starting node…")
+
+        ServiceQueue.LDK.background {
+            try {
+                node.start()
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+
+        // start event listener after node started
         onEvent?.let { eventHandler ->
             shouldListenForEvents = true
             launch {
                 try {
+                    Logger.debug("LDK event listener started")
                     if (timeout != null) {
                         withTimeout(timeout) { listenForEvents(eventHandler) }
                     } else {
@@ -142,10 +181,6 @@ class LightningService @Inject constructor(
             }
         }
 
-        Logger.debug("Starting node…")
-        ServiceQueue.LDK.background {
-            node.start()
-        }
         Logger.info("Node started")
     }
 
@@ -155,8 +190,13 @@ class LightningService @Inject constructor(
 
         Logger.debug("Stopping node…")
         ServiceQueue.LDK.background {
-            node.stop()
-            this@LightningService.node = null
+            try {
+                node.stop()
+                this@LightningService.node = null
+            } catch (_: NodeException.NotRunning) {
+                // Node is not running, clear the reference
+                this@LightningService.node = null
+            }
         }
         Logger.info("Node stopped")
     }
@@ -188,7 +228,7 @@ class LightningService @Inject constructor(
     //     runCatching {
     //         for (channel in node.listChannels()) {
     //             val config = channel.config
-    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL.millis)
+    //             config.maxDustHtlcExposure = MaxDustHtlcExposure.FixedLimit(limitMsat = 999_999_UL * 1000u)
     //             node.updateChannelConfig(channel.userChannelId, channel.counterpartyNodeId, config)
     //             Logger.info("Updated channel config for: ${channel.userChannelId}")
     //         }
@@ -219,7 +259,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         ServiceQueue.LDK.background {
-            for (peer in Env.trustedLnPeers) {
+            for (peer in trustedLnPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
                     Logger.info("Connected to trusted peer: $peer")
@@ -295,11 +335,20 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun closeChannel(userChannelId: String, counterpartyNodeId: String) {
+    suspend fun closeChannel(
+        userChannelId: String,
+        counterpartyNodeId: String,
+        force: Boolean = false,
+        forceCloseReason: String? = null,
+    ) {
         val node = this.node ?: throw ServiceError.NodeNotStarted
         try {
             ServiceQueue.LDK.background {
-                node.closeChannel(userChannelId, counterpartyNodeId)
+                if (force) {
+                    node.forceCloseChannel(userChannelId, counterpartyNodeId, forceCloseReason.orEmpty())
+                } else {
+                    node.closeChannel(userChannelId, counterpartyNodeId)
+                }
             }
         } catch (e: NodeException) {
             throw LdkError(e)
@@ -472,6 +521,51 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    // region fee
+    suspend fun calculateCpfpFeeRate(parentTxid: Txid): FeeRate {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Calculating CPFP fee for parentTxid $parentTxid")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                node.onchainPayment().calculateCpfpFeeRate(
+                    parentTxid = parentTxid,
+                    urgent = true
+                )
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+
+    suspend fun calculateTotalFee(
+        address: Address,
+        amountSats: ULong,
+        satsPerVByte: UInt,
+        utxosToSpend: List<SpendableUtxo>? = null,
+    ): ULong {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+
+        Logger.info("Calculating fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
+
+        return ServiceQueue.LDK.background {
+            return@background try {
+                val fee = node.onchainPayment().calculateTotalFee(
+                    address = address,
+                    amountSats = amountSats,
+                    feeRate = convertVByteToKwu(satsPerVByte),
+                    utxosToSpend = utxosToSpend,
+                )
+                Logger.debug("Calculated fee=$fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
+                fee
+            } catch (e: NodeException) {
+                throw LdkError(e)
+            }
+        }
+    }
+    // endregion
+
     // region events
     private var shouldListenForEvents = true
 
@@ -565,7 +659,7 @@ class LightningService @Inject constructor(
     fun syncFlow(): Flow<Unit> = flow {
         while (currentCoroutineContext().isActive) {
             emit(Unit)
-            delay(Env.ldkNodeSyncIntervalSecs.toLong().seconds)
+            delay(Env.walletSyncIntervalSecs.toLong().seconds)
         }
     }.flowOn(bgDispatcher)
     // endregion

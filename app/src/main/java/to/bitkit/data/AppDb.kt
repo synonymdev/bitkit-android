@@ -1,6 +1,7 @@
 package to.bitkit.data
 
 import android.content.Context
+import androidx.hilt.work.HiltWorker
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Query
@@ -13,6 +14,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
@@ -20,12 +23,11 @@ import to.bitkit.data.dao.InvoiceTagDao
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.entities.InvoiceTagEntity
 import to.bitkit.data.typeConverters.StringListConverter
-import to.bitkit.env.Env
 
 @Database(
     entities = [
         ConfigEntity::class,
-        InvoiceTagEntity::class
+        InvoiceTagEntity::class,
     ],
     version = 2,
 )
@@ -36,7 +38,7 @@ abstract class AppDb : RoomDatabase() {
     abstract fun invoiceTagDao(): InvoiceTagDao
 
     companion object {
-        private val DB_NAME = "${BuildConfig.APPLICATION_ID}.${Env.network.name.lowercase()}.sqlite"
+        private const val DB_NAME = "${BuildConfig.APPLICATION_ID}.sqlite"
 
         @Volatile
         private var instance: AppDb? = null
@@ -69,7 +71,12 @@ abstract class AppDb : RoomDatabase() {
     }
 }
 
-internal class SeedDbWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+@HiltWorker
+class SeedDbWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted workerParams: WorkerParameters,
+) : CoroutineWorker(context, workerParams) {
+
     override suspend fun doWork(): Result = coroutineScope {
         try {
             val db = AppDb.getInstance(applicationContext)
@@ -79,7 +86,7 @@ internal class SeedDbWorker(context: Context, workerParams: WorkerParameters) : 
                 ),
             )
             Result.success()
-        } catch (ex: Exception) {
+        } catch (_: Exception) {
             Result.failure()
         }
     }

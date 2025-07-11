@@ -49,6 +49,11 @@ fun BlocktankRegtestScreen(
     viewModel: BlocktankRegtestViewModel,
     navController: NavController,
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val wallet = walletViewModel ?: return
+    val app = appViewModel ?: return
+    val uiState by wallet.uiState.collectAsState()
+
     ScreenColumn {
         AppTopBar(
             titleText = "Blocktank Regtest",
@@ -61,13 +66,7 @@ fun BlocktankRegtestScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-        ) {
-            val coroutineScope = rememberCoroutineScope()
-            val wallet = walletViewModel ?: return@Column
-            val app = appViewModel ?: return@Column
-            val uiState by wallet.uiState.collectAsState()
-
-            // State variables for form inputs
+        ) { // State variables for form inputs
             var depositAddress by remember { mutableStateOf(uiState.onchainAddress) }
             var depositAmount by remember { mutableStateOf("123000") }
             var mineBlockCount by remember { mutableStateOf("1") }
@@ -142,8 +141,7 @@ fun BlocktankRegtestScreen(
             // Mining Section
             Caption13Up("MINING", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))
             Row(
-                verticalAlignment = CenterVertically,
-                modifier = Modifier
+                verticalAlignment = CenterVertically, modifier = Modifier
                     .padding(vertical = 4.dp)
                     .fillMaxWidth()
             ) {
@@ -160,8 +158,8 @@ fun BlocktankRegtestScreen(
                             Logger.debug("Starting regtest mining with block count: $mineBlockCount")
                             isMining = true
                             try {
-                                val count = mineBlockCount.toUIntOrNull()
-                                    ?: error("Invalid block count: $mineBlockCount")
+                                val count =
+                                    mineBlockCount.toUIntOrNull() ?: error("Invalid block count: $mineBlockCount")
                                 viewModel.regtestMine(count)
                                 Logger.debug("Successfully mined $count blocks")
                                 app.toast(
@@ -272,8 +270,8 @@ fun BlocktankRegtestScreen(
                         Logger.debug("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")
                         try {
                             val voutNum = vout.toUIntOrNull() ?: error("Invalid Vout: $vout")
-                            val closeAfter = forceCloseAfter.toULongOrNull()
-                                ?: error("Invalid Force Close After: $forceCloseAfter")
+                            val closeAfter =
+                                forceCloseAfter.toULongOrNull() ?: error("Invalid Force Close After: $forceCloseAfter")
                             val closingTxId = viewModel.regtestCloseChannel(
                                 fundingTxId = fundingTxId,
                                 vout = voutNum,

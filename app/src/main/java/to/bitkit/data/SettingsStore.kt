@@ -8,9 +8,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
-import com.synonym.bitkitcore.AddressType
+import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
@@ -36,7 +37,7 @@ class SettingsStore @Inject constructor(
     suspend fun addLastUsedTag(newTag: String) {
         store.updateData { currentSettings ->
             val combinedTags = (listOf(newTag) + currentSettings.lastUsedTags).distinct()
-            val limitedTags = combinedTags.take(10)
+            val limitedTags = combinedTags.take(MAX_LAST_USED_TAGS)
             currentSettings.copy(lastUsedTags = limitedTags)
         }
     }
@@ -57,6 +58,10 @@ class SettingsStore @Inject constructor(
     suspend fun reset() {
         store.updateData { SettingsData() }
         Logger.info("Deleted all user settings data.")
+    }
+
+    companion object {
+        private const val MAX_LAST_USED_TAGS = 10
     }
 }
 
@@ -96,6 +101,7 @@ data class SettingsData(
     val lastTimeAskedBalanceWarningMillis: Long = 0,
     val balanceWarningTimes: Int = 0,
     val coinSelectAuto: Boolean = true,
-    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.FirstInFirstOut,
-    val addressType: AddressType = AddressType.P2WPKH,
+    val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
+    val electrumServer: ElectrumServer = Env.defaultElectrumServer,
+    val rgsServerUrl: String? = Env.ldkRgsServerUrl,
 )

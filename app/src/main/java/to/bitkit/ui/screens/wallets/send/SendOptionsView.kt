@@ -127,6 +127,7 @@ fun SendOptionsView(
                 val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 CoinSelectionScreen(
                     requiredAmount = sendUiState.amount,
+                    address = sendUiState.address,
                     onBack = { navController.popBackStack() },
                     onContinue = { utxos -> appViewModel.setSendEvent(SendEvent.CoinSelectionContinue(utxos)) },
                 )

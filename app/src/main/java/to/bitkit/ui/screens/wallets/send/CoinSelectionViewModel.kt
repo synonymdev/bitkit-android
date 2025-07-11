@@ -39,16 +39,21 @@ class CoinSelectionViewModel @Inject constructor(
         this.onchainActivities = onchainActivities
     }
 
-    fun loadUtxos(requiredAmount: ULong) {
+    fun loadUtxos(requiredAmount: ULong, address: String) {
         viewModelScope.launch {
             try {
-                val availableUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
-                val sortedUtxos = availableUtxos.sortedByDescending { it.valueSats }
-                val totalRequired = calculateTotalRequired(requiredAmount)
+                val sortedUtxos = lightningRepo.listSpendableOutputs().getOrThrow()
+                    .sortedByDescending { it.valueSats }
+
+                val totalRequired = calculateTotalRequired(
+                    address = address,
+                    amountSats = requiredAmount,
+                    utxosToSpend = sortedUtxos,
+                )
+
+                val totalSelected = sortedUtxos.sumOf { it.valueSats }
 
                 _uiState.update { state ->
-                    val totalSelected = sortedUtxos.sumOf { it.valueSats }
-
                     state.copy(
                         availableUtxos = sortedUtxos,
                         selectedUtxos = sortedUtxos,
@@ -131,9 +136,19 @@ class CoinSelectionViewModel @Inject constructor(
             totalSelectedSat >= totalRequiredSat
     }
 
-    private suspend fun calculateTotalRequired(amount: ULong): ULong {
-        val estimatedFee = lightningRepo.estimateTotalFee().getOrThrow()
-        return amount + estimatedFee
+    private suspend fun calculateTotalRequired(
+        address: String,
+        amountSats: ULong,
+        utxosToSpend: List<SpendableUtxo>,
+    ): ULong {
+        return lightningRepo
+            .calculateTotalFee(
+                address = address,
+                amountSats = amountSats,
+                utxosToSpend = utxosToSpend,
+            )
+            .map { fee -> amountSats + fee }
+            .getOrThrow()
     }
 }
 

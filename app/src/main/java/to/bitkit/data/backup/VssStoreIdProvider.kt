@@ -15,8 +15,8 @@ class VssStoreIdProvider @Inject constructor(
     private val keychain: Keychain,
 ) {
     fun getVssStoreId(): String {
-        // MARK: Temp fix as we don't have VSS auth yet
-        if (Env.network != Network.REGTEST) {
+        // TODO Temp fix as we don't have VSS auth yet
+        if (Env.network == Network.BITCOIN) {
             error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")
         }
 

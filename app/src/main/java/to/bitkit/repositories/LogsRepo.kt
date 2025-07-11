@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import to.bitkit.BuildConfig
 import to.bitkit.data.ChatwootHttpClient
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -34,8 +33,8 @@ class LogsRepo @Inject constructor(
                 message = ChatwootMessage(
                     email = email,
                     message = message,
-                    platform = "${Env.PLATFORM} ${Env.androidSDKVersion}",
-                    version = "${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
+                    platform = Env.platform,
+                    version = Env.version,
                     logs = logsBase64,
                     logsFileName = logsFileName,
                 )
