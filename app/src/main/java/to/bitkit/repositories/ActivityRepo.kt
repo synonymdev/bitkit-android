@@ -206,19 +206,25 @@ class ActivityRepo @Inject constructor(
         ).fold(
             onSuccess = {
                 Logger.debug(
-                    "Activity $id updated with success. new data: $activity. Deleting old activity $activityIdToDelete",
+                    "Activity $id updated with success. new data: $activity. Deleting activity $activityIdToDelete",
                     context = TAG
                 )
-                deleteActivity(activityIdToDelete).onFailure {
+                deleteActivity(activityIdToDelete).onFailure { e ->
+                    Logger.warn(
+                        "Failed to delete $activityIdToDelete caching to retry on next sync",
+                        e = e,
+                        context = TAG
+                    )
                     cacheStore.addActivityToPendingDelete(activityId = activityIdToDelete)
                 }
             },
-            onFailure = {
+            onFailure = { e ->
                 Logger.error(
                     "Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
+                    e = e,
                     context = TAG
                 )
-                Result.failure(it)
+                Result.failure(e)
             }
         )
     }

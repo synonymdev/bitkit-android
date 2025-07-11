@@ -288,13 +288,33 @@ class BoostTransactionViewModel @Inject constructor(
                         id = updatedActivity.v1.id,
                         activityIdToDelete = activity?.v1?.id.orEmpty(),
                         activity = updatedActivity,
-                    )
+                    ).onFailure {
+                        activityRepo.addActivityToPendingBoost(
+                            PendingBoostActivity(
+                                txId = newTxId,
+                                feeRate = _uiState.value.feeRate,
+                                fee = _uiState.value.totalFeeSats,
+                                updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                                activityToDelete = activity?.v1?.id
+                            )
+                        )
+                    }
                 } else {
                     // For CPFP, just update the activity
                     activityRepo.updateActivity(
                         id = updatedActivity.v1.id,
                         activity = updatedActivity
-                    )
+                    ).onFailure {
+                        activityRepo.addActivityToPendingBoost(
+                            PendingBoostActivity(
+                                txId = newTxId,
+                                feeRate = _uiState.value.feeRate,
+                                fee = _uiState.value.totalFeeSats,
+                                updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                                activityToDelete = null
+                            )
+                        )
+                    }
                 }
             },
             onFailure = { error ->
