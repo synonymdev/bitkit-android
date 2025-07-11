@@ -3,6 +3,7 @@ package to.bitkit.ui.components
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -56,30 +58,26 @@ fun QrCodeImage(
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
 ) {
     val clipboard = LocalClipboardManager.current
-
     val tooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
 
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier
-            .background(Color.White, RoundedCornerShape(8.dp))
+            .background(Color.White, AppShapes.small)
             .aspectRatio(1f)
             .padding(8.dp)
     ) {
         val bitmap = rememberQrBitmap(content, size)
 
         if (bitmap != null) {
-            Tooltip(
-                text = tipMessage,
-                tooltipState = tooltipState
-            ) {
+            val imageComposable = @Composable {
                 Image(
                     painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap()) },
                     contentDescription = null,
                     contentScale = ContentScale.Inside,
                     modifier = if (tipMessage.isNotBlank()) {
-                        Modifier.clickableAlpha {
+                        Modifier.clickable {
                             coroutineScope.launch {
                                 clipboard.setText(AnnotatedString(content))
                                 tooltipState.show()
@@ -88,6 +86,17 @@ fun QrCodeImage(
                     } else Modifier
                 )
             }
+
+            if (tipMessage.isNotBlank()) {
+                Tooltip(
+                    text = tipMessage,
+                    tooltipState = tooltipState,
+                    content = imageComposable,
+                )
+            } else {
+                imageComposable()
+            }
+
             logoPainter?.let {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -99,14 +108,14 @@ fun QrCodeImage(
                     Image(
                         painter = it,
                         contentDescription = null,
-                        modifier = Modifier.size(50.dp),
-                        contentScale = ContentScale.Fit
+                        modifier = Modifier.size(50.dp)
                     )
                 }
             }
         } else {
             CircularProgressIndicator(
                 color = Colors.Black,
+                strokeWidth = 2.dp,
                 modifier = Modifier.align(Alignment.Center)
             )
         }

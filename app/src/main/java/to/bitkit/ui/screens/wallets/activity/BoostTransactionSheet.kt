@@ -313,7 +313,8 @@ private fun CustomModeContent(
     onSwipe: () -> Unit
 ) {
     Column(
-        modifier = Modifier.testTag(BoostTransactionTestTags.CUSTOM_MODE_CONTENT)
+        modifier = Modifier.testTag(BoostTransactionTestTags.CUSTOM_MODE_CONTENT),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

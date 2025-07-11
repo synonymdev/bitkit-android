@@ -37,6 +37,18 @@ class AddressChecker @Inject constructor(
             throw AddressCheckerError.NetworkError(e)
         }
     }
+
+    suspend fun getUtxosForAddress(address: String): List<EsploraUtxo> {
+        try {
+            val response = client.get("${Env.esploraServerUrl}/address/$address/utxo")
+
+            return response.body<List<EsploraUtxo>>()
+        } catch (e: Exception) {
+            throw AddressCheckerError.NetworkError(e)
+        }
+    }
+
+
 }
 
 @Suppress("PropertyName")
@@ -96,6 +108,13 @@ data class TxDetails(
     val vin: List<TxInput>,
     val vout: List<TxOutput>,
     val status: TxStatus,
+)
+
+@Serializable
+data class EsploraUtxo(
+    val txid: String,
+    val vout: Int,
+    val value: Long,
 )
 
 sealed class AddressCheckerError(message: String? = null) : AppError(message) {
