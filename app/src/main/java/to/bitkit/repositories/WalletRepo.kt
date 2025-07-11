@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -25,8 +26,10 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
+import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
@@ -254,6 +257,46 @@ class WalletRepo @Inject constructor(
         //     Logger.error("Address generation error", e, context = TAG)
         //     Result.failure(e)
         // }
+    }
+
+    suspend fun getAddresses(
+        startIndex: Int = 0,
+        isChange: Boolean = false,
+        count: Int = 20,
+    ): Result<List<AddressModel>> = withContext(bgDispatcher) {
+        return@withContext try {
+            val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+
+            val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+            val baseDerivationPath = AddressType.P2WPKH.toDerivationPath(
+                index = 0,
+                isChange = isChange,
+            ).substringBeforeLast("/0")
+
+            val result = coreService.onchain.deriveBitcoinAddresses(
+                mnemonicPhrase = mnemonic,
+                derivationPathStr = baseDerivationPath,
+                network = Env.network,
+                bip39Passphrase = passphrase,
+                isChange = isChange,
+                startIndex = startIndex.toUInt(),
+                count = count.toUInt(),
+            )
+
+            val addresses = result.addresses.mapIndexed { index, address ->
+                AddressModel(
+                    address = address.address,
+                    index = startIndex + index,
+                    path = address.path,
+                )
+            }
+
+            Result.success(addresses)
+        } catch (e: Exception) {
+            Logger.error("Error getting addresses", e)
+            Result.failure(e)
+        }
     }
 
     // Bolt11 management
@@ -554,8 +597,11 @@ class WalletRepo @Inject constructor(
 
         var activity = findActivity()
         if (activity == null) {
-            Logger.warn("activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after delay", context = TAG)
-            //TODO REFRESH ACTIVITIES
+            Logger.warn(
+                "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after delay",
+                context = TAG
+            )
+            // TODO REFRESH ACTIVITIES
             delay(5.seconds)
             activity = findActivity()
         }
