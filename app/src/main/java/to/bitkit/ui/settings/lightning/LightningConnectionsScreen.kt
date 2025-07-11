@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +40,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
@@ -49,7 +47,6 @@ import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
@@ -83,20 +80,12 @@ fun LightningConnectionsScreen(
     viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
-    val blocktank = blocktankViewModel ?: return
-    val blocktankOrders by blocktank.orders.collectAsStateWithLifecycle()
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        blocktank.refreshOrders()
         viewModel.clearSelectedChannel()
-    }
-
-    LaunchedEffect(blocktank.orders) {
-        viewModel.setBlocktankOrders(blocktankOrders)
-        viewModel.syncState()
+        viewModel.clearTransactionDetails()
     }
 
     Content(
@@ -129,7 +118,6 @@ fun LightningConnectionsScreen(
             navController.navigate(Routes.ChannelDetail)
         },
         onRefresh = {
-            scope.launch { blocktank.refreshOrders() }
             viewModel.onPullToRefresh()
         },
     )
@@ -235,9 +223,8 @@ private fun Content(
                     )
                 }
 
-                FillHeight()
-
                 // Bottom Section
+                FillHeight()
                 VerticalSpacer(16.dp)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),

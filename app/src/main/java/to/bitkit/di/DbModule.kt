@@ -9,8 +9,8 @@ import dagger.hilt.components.SingletonComponent
 import to.bitkit.data.AppDb
 import javax.inject.Singleton
 
-@InstallIn(SingletonComponent::class)
 @Module
+@InstallIn(SingletonComponent::class)
 object DbModule {
 
     @Provides

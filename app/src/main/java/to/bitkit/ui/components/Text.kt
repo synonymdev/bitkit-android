@@ -151,11 +151,17 @@ fun BodyM(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     BodyM(
         text = AnnotatedString(text),
         color = color,
         modifier = modifier,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
     )
 }
 
@@ -164,6 +170,9 @@ fun BodyM(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -174,8 +183,10 @@ fun BodyM(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
@@ -274,8 +285,7 @@ fun BodySSB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
-
-    ) {
+) {
     BodySSB(
         text = AnnotatedString(text),
         color = color,
@@ -359,6 +369,9 @@ fun Caption(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -369,8 +382,10 @@ fun Caption(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }
@@ -378,6 +393,25 @@ fun Caption(
 @Composable
 fun CaptionB(
     text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+) {
+    CaptionB(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        color = color,
+        textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+    )
+}
+
+@Composable
+fun CaptionB(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
@@ -428,6 +462,9 @@ fun Footnote(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Colors.White32,
+    textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -438,8 +475,10 @@ fun Footnote(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
+        maxLines = maxLines,
+        overflow = overflow,
         modifier = modifier,
     )
 }

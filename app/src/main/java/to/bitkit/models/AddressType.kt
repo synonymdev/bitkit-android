@@ -2,6 +2,7 @@ package to.bitkit.models
 
 import com.synonym.bitkitcore.AddressType
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.env.Env
 
 data class AddressTypeInfo(
     val path: String,
@@ -11,6 +12,7 @@ data class AddressTypeInfo(
     val example: String,
 )
 
+@Suppress("unused")
 fun AddressType.addressTypeInfo(): AddressTypeInfo = when (this) {
     AddressType.P2TR -> AddressTypeInfo(
         path = "m/86'/0'/0'/0/0",
@@ -57,20 +59,22 @@ fun AddressType.addressTypeInfo(): AddressTypeInfo = when (this) {
  * Generate derivation path string for this address type and network
  * @param network The network to generate the path for
  * @param index The address index (default: 0)
- * @return Complete derivation path string like "m/84'/0'/0'/0/0"
+ * @param isChange Whether this is a change address (default: false)
+ * @return Complete derivation path string like "m/84'/0'/0'/0/0" or "m/84'/0'/0'/1/0" for change
  */
-fun AddressType.toDerivationPath(network: Network, index: Int = 0): String {
-    val coinType = network.asCoinType()
+fun AddressType.toDerivationPath(
+    index: Int = 0,
+    network: Network = Env.network,
+    isChange: Boolean = false,
+): String {
+    val coinType = if (network == Network.BITCOIN) 0 else 1
+    val changeIndex = if (isChange) 1 else 0
+
     return when (this) {
-        AddressType.P2TR -> "m/86'/$coinType'/0'/0/$index"
-        AddressType.P2WPKH -> "m/84'/$coinType'/0'/0/$index"
-        AddressType.P2SH -> "m/49'/$coinType'/0'/0/$index"
-        AddressType.P2PKH -> "m/44'/$coinType'/0'/0/$index"
+        AddressType.P2TR -> "m/86'/$coinType'/0'/$changeIndex/$index"
+        AddressType.P2WPKH -> "m/84'/$coinType'/0'/$changeIndex/$index"
+        AddressType.P2SH -> "m/49'/$coinType'/0'/$changeIndex/$index"
+        AddressType.P2PKH -> "m/44'/$coinType'/0'/$changeIndex/$index"
         else -> ""
     }
-}
-
-private fun Network.asCoinType(): String = when (this) {
-    Network.BITCOIN -> "0"
-    Network.TESTNET, Network.REGTEST, Network.SIGNET -> "1"
 }

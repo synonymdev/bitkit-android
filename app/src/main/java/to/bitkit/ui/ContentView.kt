@@ -43,6 +43,7 @@ import to.bitkit.ui.screens.DevSettingsScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.shop.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
@@ -102,15 +103,10 @@ import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
-import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
-import to.bitkit.ui.settings.advanced.BitcoinNetworkSelectionScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
-import to.bitkit.ui.settings.advanced.GapLimitScreen
-import to.bitkit.ui.settings.advanced.PaymentPreferenceScreen
 import to.bitkit.ui.settings.advanced.RgsServerScreen
-import to.bitkit.ui.settings.advanced.WebRelayScreen
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
@@ -120,6 +116,7 @@ import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
 import to.bitkit.ui.settings.lightning.ChannelDetailScreen
+import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
 import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
@@ -408,7 +405,6 @@ private fun RootNavHost(
         settings(navController, settingsViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel)
-        nodeState(walletViewModel, navController)
         generalSettings(navController)
         advancedSettings(navController)
         aboutSettings(navController)
@@ -483,8 +479,8 @@ private fun RootNavHost(
             }
             composable<Routes.SavingsProgress> {
                 SavingsProgressScreen(
-                    onContinueClick = { navController.navigateToHome() },
-                    onCloseClick = { navController.navigateToHome() },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.SpendingIntro> {
@@ -533,8 +529,8 @@ private fun RootNavHost(
             composable<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
-                    onCloseClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigateToHome() },
+                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
             composable<Routes.Funding> {
@@ -610,8 +606,8 @@ private fun RootNavHost(
                 }
                 composable<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
-                        onContinue = { navController.navigateToHome() },
-                        onClose = { navController.navigateToHome() },
+                        onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onClose = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     )
                 }
                 composable<Routes.ExternalFeeCustom> {
@@ -710,18 +706,6 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.nodeState(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
-) {
-    composable<Routes.NodeState>(
-        enterTransition = { screenSlideIn },
-        exitTransition = { screenSlideOut },
-    ) {
-        NodeStateScreen(viewModel, navController)
-    }
-}
-
 private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.GeneralSettings> {
         GeneralSettingsScreen(navController)
@@ -740,32 +724,20 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.AdvancedSettings> {
         AdvancedSettingsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.AddressTypePreference> {
-        AddressTypePreferenceScreen(navController)
-    }
     composableWithDefaultTransitions<Routes.CoinSelectPreference> {
         CoinSelectPreferenceScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.PaymentPreference> {
-        PaymentPreferenceScreen(navController)
-    }
-    composableWithDefaultTransitions<Routes.GapLimit> {
-        GapLimitScreen(navController)
-    }
     composableWithDefaultTransitions<Routes.ElectrumConfig> {
-        ElectrumConfigScreen(navController)
+        ElectrumConfigScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
-        RgsServerScreen(navController)
-    }
-    composableWithDefaultTransitions<Routes.WebRelay> {
-        WebRelayScreen(navController)
-    }
-    composableWithDefaultTransitions<Routes.BitcoinNetworkSelection> {
-        BitcoinNetworkSelectionScreen(navController)
+        RgsServerScreen(it.savedStateHandle, navController)
     }
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.NodeInfo> {
+        NodeInfoScreen(navController)
     }
 }
 
@@ -918,6 +890,14 @@ private fun NavGraphBuilder.lightningConnections(
                 viewModel = viewModel,
             )
         }
+        composableWithDefaultTransitions<Routes.CloseConnection> {
+            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
+            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            CloseConnectionScreen(
+                navController = navController,
+                viewModel = viewModel,
+            )
+        }
     }
 }
 
@@ -974,7 +954,7 @@ private fun NavGraphBuilder.qrScanner(
             navController.popBackStack()
             appViewModel.onScanSuccess(
                 data = qrCode,
-                onResultDelay = 650 // slight delay to for home navigation before showing send sheet
+                onResultDelay = 650 // slight delay for nav transition before showing send sheet
             )
         }
     }
@@ -1244,10 +1224,6 @@ fun NavController.navigateToSettings() = navigate(
     route = Routes.Settings,
 )
 
-fun NavController.navigateToNodeState() = navigate(
-    route = Routes.NodeState,
-)
-
 fun NavController.navigateToGeneralSettings() = navigate(
     route = Routes.GeneralSettings,
 )
@@ -1304,10 +1280,6 @@ fun NavController.navigateToBackupSettings() = navigate(
     route = Routes.BackupSettings,
 )
 
-fun NavController.navigateToChannelOrdersSettings() = navigate(
-    route = Routes.ChannelOrdersSettings,
-)
-
 fun NavController.navigateToOrderDetail(id: String) = navigate(
     route = Routes.OrderDetail(id),
 )
@@ -1318,10 +1290,6 @@ fun NavController.navigateToCjitDetail(id: String) = navigate(
 
 fun NavController.navigateToDevSettings() = navigate(
     route = Routes.DevSettings,
-)
-
-fun NavController.navigateToRegtestSettings() = navigate(
-    route = Routes.RegtestSettings,
 )
 
 fun NavController.navigateToTransferSavingsIntro() = navigate(
@@ -1356,13 +1324,12 @@ fun NavController.navigateToActivityExplore(id: String) = navigate(
     route = Routes.ActivityExplore(id),
 )
 
-fun NavController.navigateToQrScanner() = navigate(
-    route = Routes.QrScanner,
-)
-
-fun NavController.navigateToLogs() = navigate(
-    route = Routes.Logs,
-)
+fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
+    if (isCalledForResult) {
+        currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
+    }
+    navigate(Routes.QrScanner)
+}
 
 fun NavController.navigateToLogDetail(fileName: String) = navigate(
     route = Routes.LogDetail(fileName),
@@ -1405,7 +1372,7 @@ object Routes {
     data object Settings
 
     @Serializable
-    data object NodeState
+    data object NodeInfo
 
     @Serializable
     data object GeneralSettings
@@ -1423,28 +1390,13 @@ object Routes {
     data object AdvancedSettings
 
     @Serializable
-    data object AddressTypePreference
-
-    @Serializable
     data object CoinSelectPreference
-
-    @Serializable
-    data object PaymentPreference
-
-    @Serializable
-    data object GapLimit
 
     @Serializable
     data object ElectrumConfig
 
     @Serializable
     data object RgsServer
-
-    @Serializable
-    data object WebRelay
-
-    @Serializable
-    data object BitcoinNetworkSelection
 
     @Serializable
     data object AddressViewer
@@ -1516,6 +1468,9 @@ object Routes {
 
     @Serializable
     data object ChannelDetail
+
+    @Serializable
+    data object CloseConnection
 
     @Serializable
     data object DevSettings

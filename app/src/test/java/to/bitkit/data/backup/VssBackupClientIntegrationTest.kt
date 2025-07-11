@@ -39,7 +39,7 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
 
         vssClient = VssBackupsClient(
             httpClient = httpClient,
-            vssStoreIdProvider = vssStoreIdProvider
+            vssStoreIdProvider = vssStoreIdProvider,
         )
     }
 

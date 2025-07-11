@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.data.AppStorage
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
@@ -36,12 +36,13 @@ import javax.inject.Singleton
 class BackupsRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val appStorage: AppStorage,
+    private val cacheStore: CacheStore,
     private val vssBackupsClient: VssBackupsClient,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + bgDispatcher)
+    private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
+
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
     private val statusObserverJobs = mutableListOf<Job>()
     private val dataListenerJobs = mutableListOf<Job>()
@@ -90,7 +91,7 @@ class BackupsRepo @Inject constructor(
         // Observe backup status changes for each category
         BackupCategory.entries.forEach { category ->
             val job = scope.launch {
-                appStorage.backupStatuses
+                cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
                         // restart scheduling when synced or required timestamps change
@@ -144,7 +145,7 @@ class BackupsRepo @Inject constructor(
             delay(BACKUP_DEBOUNCE)
 
             // Double-check if backup is still needed
-            val status = appStorage.backupStatuses.value[category] ?: BackupItemStatus()
+            val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
             if (status.synced < status.required && !status.running && !isRestoring) {
                 triggerBackup(category)
             }
@@ -164,16 +165,19 @@ class BackupsRepo @Inject constructor(
         val currentTime = System.currentTimeMillis()
 
         // find if there are any backup categories that have been failing for more than 30 minutes
-        val hasFailedBackups = BackupCategory.entries.any { category ->
-            val status = appStorage.backupStatuses.value[category] ?: BackupItemStatus()
+        scope.launch {
+            val backupStatuses = cacheStore.backupStatuses.first()
+            val hasFailedBackups = BackupCategory.entries.any { category ->
+                val status = backupStatuses[category] ?: BackupItemStatus()
 
-            val isPendingAndOverdue = status.synced < status.required &&
-                currentTime - status.required > FAILED_BACKUP_CHECK_TIME
-            return@any isPendingAndOverdue
-        }
+                val isPendingAndOverdue = status.synced < status.required &&
+                    currentTime - status.required > FAILED_BACKUP_CHECK_TIME
+                return@any isPendingAndOverdue
+            }
 
-        if (hasFailedBackups) {
-            showBackupFailureNotification(currentTime)
+            if (hasFailedBackups) {
+                showBackupFailureNotification(currentTime)
+            }
         }
     }
 
@@ -197,13 +201,13 @@ class BackupsRepo @Inject constructor(
     suspend fun triggerBackup(category: BackupCategory) = withContext(bgDispatcher) {
         Logger.debug("Backup starting for category: $category", context = TAG)
 
-        appStorage.updateBackupStatus(category) {
+        cacheStore.updateBackupStatus(category) {
             it.copy(running = true, required = System.currentTimeMillis())
         }
 
         performBackup(category)
             .onSuccess {
-                appStorage.updateBackupStatus(category) {
+                cacheStore.updateBackupStatus(category) {
                     it.copy(
                         running = false,
                         synced = System.currentTimeMillis(),
@@ -212,7 +216,7 @@ class BackupsRepo @Inject constructor(
                 Logger.info("Backup succeeded for category: $category", context = TAG)
             }
             .onFailure { e ->
-                appStorage.updateBackupStatus(category) {
+                cacheStore.updateBackupStatus(category) {
                     it.copy(running = false)
                 }
                 Logger.error("Backup failed for category: $category", e = e, context = TAG)
@@ -221,7 +225,7 @@ class BackupsRepo @Inject constructor(
 
     fun markBackupRequired(category: BackupCategory) {
         scope.launch {
-            appStorage.updateBackupStatus(category) {
+            cacheStore.updateBackupStatus(category) {
                 it.copy(required = System.currentTimeMillis())
             }
         }
@@ -322,7 +326,7 @@ class BackupsRepo @Inject constructor(
 
         restoreAction(dataBytes)
 
-        appStorage.updateBackupStatus(category) {
+        cacheStore.updateBackupStatus(category) {
             it.copy(running = false, synced = System.currentTimeMillis())
         }
 

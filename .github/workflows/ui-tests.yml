@@ -40,7 +40,7 @@ jobs:
 
       - name: Build for debug with gradle
         run: |
-          ./gradlew assembleDebug assembleAndroidTest
+          ./gradlew assembleDevDebug assembleDevDebugAndroidTest
           ls -la app/build/outputs/apk/debug/
           ls -la app/build/outputs/apk/androidTest/debug/
 
@@ -92,8 +92,8 @@ jobs:
             adb shell getprop ro.product.cpu.abi
 
             # Install and run tests
-            ./gradlew installDebug
-            ./gradlew connectedDebugAndroidTest
+            ./gradlew installDevDebug
+            ./gradlew connectedDevDebugAndroidTest
 
       - name: Upload UI test report
         if: always()

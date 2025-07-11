@@ -36,16 +36,45 @@ android {
     namespace = "to.bitkit"
     compileSdk = 35
     defaultConfig {
-        applicationId = "to.bitkit.dev"
+        applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.0.6"
+        versionCode = 7
+        versionName = "0.0.7"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
     }
+
+    flavorDimensions += "network"
+    productFlavors {
+        create("dev") {
+            dimension = "network"
+            applicationIdSuffix = ".dev"
+            buildConfigField("String", "NETWORK", "\"REGTEST\"")
+            resValue("string", "app_name", "Bitkit Regtest")
+            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_regtest"
+            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_regtest_round"
+        }
+        // create("mainnet") {
+        //     dimension = "network"
+        //     applicationIdSuffix = ""
+        //     buildConfigField("String", "NETWORK", "\"BITCOIN\"")
+        //     resValue("string", "app_name", "Bitkit")
+        //     manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_orange"
+        //     manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_orange_round"
+        // }
+        create("tnet") {
+            dimension = "network"
+            applicationIdSuffix = ".tnet"
+            buildConfigField("String", "NETWORK", "\"TESTNET\"")
+            resValue("string", "app_name", "Bitkit Testnet")
+            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_testnet"
+            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_testnet_round"
+        }
+    }
+
     signingConfigs {
         getByName("debug") {
             storeFile = file("debug.keystore")

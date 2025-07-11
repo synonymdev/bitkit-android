@@ -176,9 +176,9 @@ class WalletViewModel @Inject constructor(
 
     fun refreshState() {
         viewModelScope.launch {
-            lightningRepo.sync()
+            walletRepo.syncNodeAndWallet()
                 .onFailure { error ->
-                    Logger.error("Failed to sync: ${error.message}", error)
+                    Logger.error("Failed to refresh state: ${error.message}", error)
                     ToastEventBus.send(error)
                 }
         }
@@ -188,13 +188,11 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             walletRepo.syncNodeAndWallet()
-                .onSuccess {
-                    _uiState.update { it.copy(isRefreshing = false) }
-                }
                 .onFailure { error ->
+                    Logger.error("Failed to refresh state: ${error.message}", error)
                     ToastEventBus.send(error)
-                    _uiState.update { it.copy(isRefreshing = false) }
                 }
+            _uiState.update { it.copy(isRefreshing = false) }
         }
     }
 
@@ -266,14 +264,14 @@ class WalletViewModel @Inject constructor(
 
             if (peer == null) {
                 ToastEventBus.send(
-                    type = Toast.ToastType.INFO,
-                    title = "Channel Pending",
-                    description = "No peer connected to open channel"
+                    type = Toast.ToastType.WARNING,
+                    title = "Error",
+                    description = "No connected peer available for opening a channel"
                 )
                 return@launch
             }
 
-            lightningRepo.openChannel(peer, 50000u, 10000u)
+            lightningRepo.openChannel(peer, 50_000u, 25_000u)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.INFO,
@@ -282,17 +280,6 @@ class WalletViewModel @Inject constructor(
                     )
                 }
                 .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun closeChannel(channel: ChannelDetails) {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.closeChannel(
-                channel.userChannelId,
-                channel.counterpartyNodeId
-            ).onFailure {
-                ToastEventBus.send(it)
-            }
         }
     }
 
@@ -375,12 +362,6 @@ class WalletViewModel @Inject constructor(
                 title = "Transaction sheet cached",
                 description = "Restart app to see sheet."
             )
-        }
-    }
-
-    fun stopIfNeeded() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.stop()
         }
     }
 

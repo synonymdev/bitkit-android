@@ -12,15 +12,15 @@ import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.models.Toast
+import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.navigateToChannelOrdersSettings
 import to.bitkit.ui.navigateToHome
-import to.bitkit.ui.navigateToLogs
-import to.bitkit.ui.navigateToRegtestSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -35,6 +35,7 @@ fun DevSettingsScreen(
     val activity = activityListViewModel ?: return
     val currency = currencyViewModel ?: return
     val settings = settingsViewModel ?: return
+    val app = appViewModel ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -47,23 +48,34 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Channel Orders") { navController.navigateToChannelOrdersSettings() }
-            SettingsButtonRow("Logs") { navController.navigateToLogs() }
+            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
+            SettingsButtonRow("Channel Orders") { Routes.ChannelOrdersSettings }
 
             if (Env.network == Network.REGTEST) {
                 SectionHeader(title = "REGTEST ONLY")
 
-                SettingsButtonRow("Blocktank Regtest") { navController.navigateToRegtestSettings() }
-                SettingsTextButtonRow("Reset All Activities") { activity.removeAllActivities() }
+                SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
                 SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
-                SettingsTextButtonRow("Reset Settings Store") { settings.reset() }
+            }
+
+            SectionHeader(title = "APP CACHE")
+            SettingsTextButtonRow("Reset Settings Store") {
+                settings.reset()
+                app.toast(type = Toast.ToastType.SUCCESS, title = "Settings store reset")
+            }
+            SettingsTextButtonRow("Reset All Activities") {
+                activity.removeAllActivities()
+                app.toast(type = Toast.ToastType.SUCCESS, title = "Activities removed")
+            }
+            SettingsTextButtonRow("Refresh Currency Rates") {
+                currency.triggerRefresh()
+                app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
             }
 
             SectionHeader(title = "DEBUG")
             SettingsTextButtonRow("Log FCM Token") { viewModel.debugFcmToken() }
             SettingsTextButtonRow("Log Blocktank Info") { viewModel.debugBlocktankInfo() }
             SettingsTextButtonRow("Fake New BG Transaction") { viewModel.debugTransactionSheet() }
-            SettingsTextButtonRow("Refresh Currency Rates") { currency.triggerRefresh() }
 
             SectionHeader("Blocktank")
             SettingsTextButtonRow("Register for notifications", onClick = viewModel::manualRegisterForNotifications)

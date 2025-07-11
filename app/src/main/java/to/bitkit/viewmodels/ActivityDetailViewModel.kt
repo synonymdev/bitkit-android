@@ -7,10 +7,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
@@ -22,6 +24,7 @@ class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val addressChecker: AddressChecker,
     private val coreService: CoreService,
+    private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TxDetails?>(null)
@@ -29,6 +32,9 @@ class ActivityDetailViewModel @Inject constructor(
 
     private val _tags = MutableStateFlow<List<String>>(emptyList())
     val tags = _tags.asStateFlow()
+
+    private val _boostSheetVisible = MutableStateFlow(false)
+    val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
 
@@ -91,6 +97,14 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun clearTransactionDetails() {
         _txDetails.value = null
+    }
+
+    fun onClickBoost() {
+        _boostSheetVisible.update { true }
+    }
+
+    fun onDismissBoostSheet() {
+        _boostSheetVisible.update { false }
     }
 
     private companion object {

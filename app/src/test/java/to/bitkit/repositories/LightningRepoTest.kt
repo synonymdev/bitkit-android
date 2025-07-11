@@ -10,6 +10,8 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -17,9 +19,10 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.models.TransactionSpeed
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -53,34 +56,24 @@ class LightningRepoTest : BaseUnitTest() {
             coreService = coreService,
             blocktankNotificationsService = blocktankNotificationsService,
             firebaseMessaging = firebaseMessaging,
-            keychain = keychain
+            keychain = keychain,
         )
     }
 
     private suspend fun startNodeForTesting() {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(defaultTransactionSpeed = TransactionSpeed.Medium)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         sut.start().let { assertTrue(it.isSuccess) }
-    }
-
-    @Test
-    fun `setup should call service setup and return success`() = test {
-        whenever(lightningService.setup(any())).thenReturn(Unit)
-
-        val result = sut.setup(0)
-
-        assertTrue(result.isSuccess)
-        verify(lightningService).setup(0)
     }
 
     @Test
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
 
         sut.lightningState.test {
@@ -210,16 +203,16 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `closeChannel should fail when node is not running`() = test {
-        val result = sut.closeChannel("channelId", "nodeId")
+        val result = sut.closeChannel(createChannelDetails())
         assertTrue(result.isFailure)
     }
 
     @Test
     fun `closeChannel should succeed when node is running`() = test {
         startNodeForTesting()
-        whenever(lightningService.closeChannel(any(), any())).thenReturn(Unit)
+        whenever(lightningService.closeChannel(any(), any(), any(), anyOrNull())).thenReturn(Unit)
 
-        val result = sut.closeChannel("channelId", "nodeId")
+        val result = sut.closeChannel(createChannelDetails())
         assertTrue(result.isSuccess)
     }
 
@@ -348,6 +341,34 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `testNotification should fail when node is not running`() = test {
         val result = sut.testNotification()
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithElectrumServer should setup with new server`() = test {
+        startNodeForTesting()
+        val customServer = mock<ElectrumServer>()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        val result = sut.restartWithElectrumServer(customServer)
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(lightningService)
+        inOrder.verify(lightningService).stop()
+        inOrder.verify(lightningService).setup(any(), eq(customServer), anyOrNull())
+        inOrder.verify(lightningService).start(anyOrNull(), any())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer should handle stop failure`() = test {
+        startNodeForTesting()
+        val customServer = mock<ElectrumServer>()
+        whenever(lightningService.stop()).thenThrow(RuntimeException("Stop failed"))
+
+        val result = sut.restartWithElectrumServer(customServer)
+
         assertTrue(result.isFailure)
     }
 }

@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
