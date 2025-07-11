@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -22,7 +21,6 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppDb
 import to.bitkit.data.AppStorage
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.services.CoreService
@@ -59,8 +57,6 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(appStorage.loadBalance()).thenReturn(null)
         whenever(lightningRepo.getSyncFlow()).thenReturn(flowOf(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(addressType = AddressType.P2WPKH)))
 
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
         whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)

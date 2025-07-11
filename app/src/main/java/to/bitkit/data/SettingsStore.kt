@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.dataStoreFile
-import com.synonym.bitkitcore.AddressType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
@@ -103,7 +102,6 @@ data class SettingsData(
     val balanceWarningTimes: Int = 0,
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
-    val addressType: AddressType = AddressType.P2WPKH,
     val electrumServer: ElectrumServer = Env.defaultElectrumServer,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
 )
