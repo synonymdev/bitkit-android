@@ -12,6 +12,7 @@ data class AddressTypeInfo(
     val example: String,
 )
 
+@Suppress("unused")
 fun AddressType.addressTypeInfo(): AddressTypeInfo = when (this) {
     AddressType.P2TR -> AddressTypeInfo(
         path = "m/86'/0'/0'/0/0",
@@ -66,7 +67,7 @@ fun AddressType.toDerivationPath(
     network: Network = Env.network,
     isChange: Boolean = false,
 ): String {
-    val coinType = network.asCoinType()
+    val coinType = if (network == Network.BITCOIN) 0 else 1
     val changeIndex = if (isChange) 1 else 0
 
     return when (this) {
@@ -76,9 +77,4 @@ fun AddressType.toDerivationPath(
         AddressType.P2PKH -> "m/44'/$coinType'/0'/$changeIndex/$index"
         else -> ""
     }
-}
-
-private fun Network.asCoinType(): String = when (this) {
-    Network.BITCOIN -> "0"
-    Network.TESTNET, Network.REGTEST, Network.SIGNET -> "1"
 }

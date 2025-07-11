@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.data.AppStorage
+import to.bitkit.data.CacheStore
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.NodeLifecycleState
@@ -18,7 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class BackupsViewModel @Inject constructor(
-    private val appStorage: AppStorage,
+    private val cacheStore: CacheStore,
     private val backupsRepo: BackupsRepo,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
@@ -32,7 +32,7 @@ class BackupsViewModel @Inject constructor(
 
     private fun collectState() {
         viewModelScope.launch {
-            appStorage.backupStatuses.collect { cachedStatuses ->
+            cacheStore.backupStatuses.collect { cachedStatuses ->
                 val categories = BackupCategory.entries.map { category ->
                     val cachedStatus = cachedStatuses[category] ?: BackupItemStatus(synced = 0, required = 1)
                     category.toUiState(cachedStatus).let { uiState ->

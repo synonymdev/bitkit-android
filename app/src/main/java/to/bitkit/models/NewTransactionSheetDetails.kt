@@ -5,9 +5,11 @@ import android.content.SharedPreferences
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.serialization.Serializable
-import to.bitkit.data.APP_PREFS
 import to.bitkit.di.json
 import to.bitkit.utils.Logger
+import androidx.core.content.edit
+
+private const val APP_PREFS = "bitkit_prefs"
 
 @Serializable
 data class NewTransactionSheetDetails(
@@ -44,7 +46,7 @@ data class NewTransactionSheetDetails(
 
         fun clear(context: Context) {
             val sharedPreferences = getSharedPreferences(context)
-            sharedPreferences.edit().remove(BACKGROUND_TRANSACTION_KEY).apply()
+            sharedPreferences.edit { remove(BACKGROUND_TRANSACTION_KEY) }
         }
 
         private fun getSharedPreferences(context: Context): SharedPreferences {
