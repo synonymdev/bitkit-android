@@ -220,9 +220,7 @@ class ActivityService(
 
     suspend fun delete(id: String): Boolean {
         return ServiceQueue.CORE.background {
-            deleteActivityById(id).apply {
-                if (this) cacheStore.addActivityToDeletedList(id)
-            }
+            deleteActivityById(id)
         }
     }
 
