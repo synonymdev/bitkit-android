@@ -163,10 +163,6 @@ class ActivityService(
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
-            // Only allow removing on regtest for now
-            if (Env.network != Network.REGTEST) {
-                throw AppError(message = "Regtest only")
-            }
 
             // Get all activities and delete them one by one
             val activities = getActivities(
