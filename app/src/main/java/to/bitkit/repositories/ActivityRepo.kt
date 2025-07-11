@@ -387,7 +387,7 @@ class ActivityRepo @Inject constructor(
     // MARK: - Development/Testing Methods
 
     /**
-     * Removes all activities (regtest only) with business validation
+     * Removes all activities
      */
     suspend fun removeAllActivities(): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
