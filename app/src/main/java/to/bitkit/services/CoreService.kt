@@ -283,15 +283,15 @@ class ActivityService(
                                 confirmedTimestamp = timestamp
                             }
 
-                            val existentActivity = getActivityById(payment.id)
-                            if (existentActivity != null && existentActivity is Activity.Onchain && (existentActivity.v1.updatedAt
+                            val existingActivity = getActivityById(payment.id)
+                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
                                     ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
 
-                            val onChain = if (existentActivity is Activity.Onchain) {
-                                existentActivity.v1.copy(
+                            val onChain = if (existingActivity is Activity.Onchain) {
+                                existingActivity.v1.copy(
                                     confirmed = isConfirmed,
                                     confirmTimestamp = confirmedTimestamp,
                                     updatedAt = timestamp,
@@ -323,7 +323,7 @@ class ActivityService(
                                 continue
                             }
 
-                            if (existentActivity != null) {
+                            if (existingActivity != null) {
                                 updateActivity(payment.id, Activity.Onchain(onChain))
                             } else {
                                 upsertActivity(Activity.Onchain(onChain))
