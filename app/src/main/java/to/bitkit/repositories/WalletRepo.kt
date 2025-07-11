@@ -7,18 +7,21 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
-import to.bitkit.data.AppStorage
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.InvoiceTagEntity
@@ -43,7 +46,6 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class WalletRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val appStorage: AppStorage,
     private val db: AppDb,
     private val keychain: Keychain,
     private val coreService: CoreService,
@@ -52,19 +54,35 @@ class WalletRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
 ) {
+    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
-    private val _walletState = MutableStateFlow(
-        WalletState(
-            onchainAddress = appStorage.onchainAddress,
-            bolt11 = appStorage.bolt11,
-            bip21 = appStorage.bip21,
-            walletExists = walletExists()
-        )
-    )
+    private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
     val walletState = _walletState.asStateFlow()
 
-    private val _balanceState = MutableStateFlow(getBalanceState())
+    private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
+
+    init {
+        // Load from cache once on init
+        loadFromCache()
+    }
+
+    fun loadFromCache() {
+        // TODO try keeping in sync with cache if performant and reliable
+        repoScope.launch {
+            val cacheData = cacheStore.data.first()
+            _walletState.update { currentState ->
+                currentState.copy(
+                    onchainAddress = cacheData.onchainAddress,
+                    bolt11 = cacheData.bolt11,
+                    bip21 = cacheData.bip21,
+                )
+            }
+            cacheData.balance?.let { balance ->
+                _balanceState.update { balance }
+            }
+        }
+    }
 
     fun walletExists(): Boolean = keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)
 
@@ -106,15 +124,13 @@ class WalletRepo @Inject constructor(
         val currentAddress = getOnchainAddress()
         if (force || currentAddress.isEmpty()) {
             newAddress()
-                .onSuccess { address -> setOnchainAddress(address) }
-                .onFailure { error -> Logger.error("Error generating new address", error) }
         } else {
             // Check if current address has been used
             checkAddressUsage(currentAddress)
                 .onSuccess { hasTransactions ->
                     if (hasTransactions) {
                         // Address has been used, generate a new one
-                        newAddress().onSuccess { address -> setOnchainAddress(address) }
+                        newAddress()
                     }
                 }
         }
@@ -204,7 +220,6 @@ class WalletRepo @Inject constructor(
     suspend fun wipeWallet(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
         try {
             keychain.wipe()
-            appStorage.clear()
             settingsStore.reset()
             cacheStore.reset()
             // TODO CLEAN ACTIVITY'S AND UPDATE STATE. CHECK ActivityListViewModel.removeAllActivities
@@ -222,15 +237,17 @@ class WalletRepo @Inject constructor(
     }
 
     // Blockchain address management
-    fun getOnchainAddress(): String = appStorage.onchainAddress
+    fun getOnchainAddress(): String = _walletState.value.onchainAddress
 
-    fun setOnchainAddress(address: String) {
-        appStorage.onchainAddress = address
+    suspend fun setOnchainAddress(address: String) {
+        cacheStore.setOnchainAddress(address)
         _walletState.update { it.copy(onchainAddress = address) }
     }
 
     suspend fun newAddress(): Result<String> = withContext(bgDispatcher) {
         return@withContext lightningRepo.newAddress()
+            .onSuccess { address -> setOnchainAddress(address) }
+            .onFailure { error -> Logger.error("Error generating new address", error) }
     }
 
     suspend fun getAddresses(
@@ -276,16 +293,14 @@ class WalletRepo @Inject constructor(
     // Bolt11 management
     fun getBolt11(): String = _walletState.value.bolt11
 
-    fun setBolt11(bolt11: String) {
-        appStorage.bolt11 = bolt11
+    suspend fun setBolt11(bolt11: String) {
+        runCatching { cacheStore.saveBolt11(bolt11) }
         _walletState.update { it.copy(bolt11 = bolt11) }
     }
 
     // BIP21 management
-    fun getBip21(): String = _walletState.value.bip21
-
-    fun setBip21(bip21: String) {
-        appStorage.bip21 = bip21
+    suspend fun setBip21(bip21: String) {
+        runCatching { cacheStore.setBip21(bip21) }
         _walletState.update { it.copy(bip21 = bip21) }
     }
 
@@ -304,10 +319,8 @@ class WalletRepo @Inject constructor(
     }
 
     // Balance management
-    fun getBalanceState(): BalanceState = appStorage.loadBalance() ?: BalanceState()
-
     suspend fun saveBalanceState(balanceState: BalanceState) {
-        appStorage.cacheBalance(balanceState)
+        runCatching { cacheStore.cacheBalance(balanceState) }
         _balanceState.update { balanceState }
 
         if (balanceState.totalSats > 0u) {
@@ -335,7 +348,7 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun toggleReceiveOnSpendingBalance(): Result<Unit> = withContext(bgDispatcher) {
-        if (_walletState.value.receiveOnSpendingBalance == false && coreService.shouldBlockLightning()) {
+        if (!_walletState.value.receiveOnSpendingBalance && coreService.shouldBlockLightning()) {
             return@withContext Result.failure(ServiceError.GeoBlocked)
         }
 
@@ -401,7 +414,7 @@ class WalletRepo @Inject constructor(
 
     suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
         return@withContext try {
-            if (_walletState.value.receiveOnSpendingBalance == false) return@withContext Result.success(false)
+            if (!_walletState.value.receiveOnSpendingBalance) return@withContext Result.success(false)
 
             if (coreService.checkGeoStatus() == true) return@withContext Result.success(false)
 
