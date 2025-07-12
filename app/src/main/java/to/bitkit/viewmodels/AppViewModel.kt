@@ -475,11 +475,11 @@ class AppViewModel @Inject constructor(
                             lnUrlParameters = LnUrlParameters.LnUrlAddress(data)
                         )
                     } else {
-                        Logger.error("Error decoding LnurlAddress. scan: $scan", context = "AppViewModel")
+                        Logger.error("Error scan is not Lightning type. scan: $scan", context = "AppViewModel")
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
+                            description = context.getString(R.string.other__scan__error__generic),
                         )
                     }
                 }.onFailure { e ->
@@ -487,7 +487,7 @@ class AppViewModel @Inject constructor(
                     toast(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__expired),
+                        description = context.getString(R.string.other__scan__error__generic),
                     )
                 }
             }
@@ -496,8 +496,8 @@ class AppViewModel @Inject constructor(
                 val data = scan.data
                 Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
 
-                val minSendable = data.minSendable
-                val maxSendable = data.maxSendable
+                val minSendable = data.minSendable / 1000u
+                val maxSendable = data.maxSendable / 1000u
 
                 if (!lightningService.canSend(minSendable)) {
                     toast(
@@ -507,31 +507,52 @@ class AppViewModel @Inject constructor(
                     )
                     return
                 }
-                val amount = if (minSendable == maxSendable) minSendable else 0UL
-                lightningService.createLnurlInvoice(
-                    address = data.uri,
-                    amountSatoshis = amount,
-                ).onSuccess { lightningInvoice ->
-                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                    if (scan is Scanner.Lightning) {
-                        val invoice = scan.invoice
-                        handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data))
-                    } else {
-                        Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
+                if (minSendable == maxSendable && minSendable > 0u) {
+                    Logger.debug("sLnurlPay: minSendable == maxSendable. navigating directly to confirm screen", context = "AppViewModel")
+
+                    lightningService.createLnurlInvoice(
+                        address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
+                        amountSatoshis = minSendable,
+                    ).onSuccess { lightningInvoice ->
+                        val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
+                        if (scan is Scanner.Lightning) {
+                            val invoice = scan.invoice
+                            handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data))
+                        } else {
+                            Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
+                            toast(
+                                type = Toast.ToastType.ERROR,
+                                title = context.getString(R.string.other__scan_err_decoding),
+                                description = context.getString(R.string.other__scan__error__expired),
+                            )
+                        }
+                    }.onFailure { e ->
+                        Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.other__scan_err_decoding),
                             description = context.getString(R.string.other__scan__error__expired),
                         )
                     }
-                }.onFailure { e ->
-                    Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__expired),
+                } else {
+                    val lnUrlParameters = LnUrlParameters.LnUrlPay(
+                        data = data
                     )
+
+                    _sendUiState.update {
+                        it.copy(
+                            payMethod = SendMethod.LIGHTNING,
+                            lnUrlParameters = lnUrlParameters
+                        )
+                    }
+
+                    if (isMainScanner) {
+                        showSheet(BottomSheetType.Send(SendRoute.Amount))
+                    } else {
+                        setSendEffect(SendEffect.NavigateToAmount)
+                    }
                 }
+
             }
 
             is Scanner.LnurlWithdraw -> TODO("Not implemented")
