@@ -349,7 +349,37 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        setSendEffect(SendEffect.NavigateToReview)
+        val lnUrlParameters = _sendUiState.value.lnUrlParameters
+        if (lnUrlParameters != null && _sendUiState.value.bolt11.isNullOrEmpty()) {
+            val address = when (lnUrlParameters) {
+                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
+                is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
+            }
+
+            lightningService.createLnurlInvoice(
+                address = address,
+                amountSatoshis = _sendUiState.value.amount
+            ).onSuccess { lightningInvoice ->
+                _sendUiState.update {
+                    it.copy(bolt11 = lightningInvoice)
+                }
+                setSendEffect(SendEffect.NavigateToReview)
+            }.onFailure { e ->
+                Logger.error(
+                    "Error generating invoice from lnurl parameters: $lnUrlParameters",
+                    e = e,
+                    context = "AppViewModel"
+                )
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+            }
+        } else {
+            setSendEffect(SendEffect.NavigateToReview)
+        }
+
     }
 
     private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -482,14 +512,14 @@ class AppViewModel @Inject constructor(
                         handleLightningInvoice(
                             invoice = invoice,
                             uri = uri,
-                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data)
+                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data = data, address = uri)
                         )
                     } else {
-                        Logger.error("Error decoding LnurlAddress. scan: $scan", context = "AppViewModel")
+                        Logger.error("Error scan is not Lightning type. scan: $scan", context = "AppViewModel")
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
+                            description = context.getString(R.string.other__scan__error__generic),
                         )
                         resetSendState()
                     }
@@ -498,7 +528,7 @@ class AppViewModel @Inject constructor(
                     toast(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__expired),
+                        description = context.getString(R.string.other__scan__error__generic),
                     )
                     resetSendState()
                 }
@@ -508,8 +538,8 @@ class AppViewModel @Inject constructor(
                 val data = scan.data
                 Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
 
-                val minSendable = data.minSendable
-                val maxSendable = data.maxSendable
+                val minSendable = data.minSendable / 1000u
+                val maxSendable = data.maxSendable / 1000u
 
                 if (!lightningService.canSend(minSendable)) {
                     toast(
@@ -520,17 +550,31 @@ class AppViewModel @Inject constructor(
                     resetSendState()
                     return
                 }
-                val amount = if (minSendable == maxSendable) minSendable else 0UL
-                lightningService.createLnurlInvoice(
-                    address = data.uri,
-                    amountSatoshis = amount,
-                ).onSuccess { lightningInvoice ->
-                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                    if (scan is Scanner.Lightning) {
-                        val invoice = scan.invoice
-                        handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data))
-                    } else {
-                        Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
+                if (minSendable == maxSendable && minSendable > 0u) {
+                    Logger.debug(
+                        "LnurlPay: minSendable == maxSendable. navigating directly to confirm screen",
+                        context = "AppViewModel"
+                    )
+
+                    lightningService.createLnurlInvoice(
+                        address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
+                        amountSatoshis = minSendable,
+                    ).onSuccess { lightningInvoice ->
+                        val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
+                        if (scan is Scanner.Lightning) {
+                            val invoice = scan.invoice
+                            handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data, address = uri))
+                        } else {
+                            Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
+                            toast(
+                                type = Toast.ToastType.ERROR,
+                                title = context.getString(R.string.other__scan_err_decoding),
+                                description = context.getString(R.string.other__scan__error__expired),
+                            )
+                            resetSendState()
+                        }
+                    }.onFailure { e ->
+                        Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.other__scan_err_decoding),
@@ -538,14 +582,24 @@ class AppViewModel @Inject constructor(
                         )
                         resetSendState()
                     }
-                }.onFailure { e ->
-                    Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__expired),
+                } else {
+                    val lnUrlParameters = LnUrlParameters.LnUrlPay(
+                        data = data,
+                        address = uri
                     )
-                    resetSendState()
+
+                    _sendUiState.update {
+                        it.copy(
+                            payMethod = SendMethod.LIGHTNING,
+                            lnUrlParameters = lnUrlParameters
+                        )
+                    }
+
+                    if (isMainScanner) {
+                        showSheet(BottomSheetType.Send(SendRoute.Amount))
+                    } else {
+                        setSendEffect(SendEffect.NavigateToAmount)
+                    }
                 }
             }
 
@@ -751,13 +805,18 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.LIGHTNING -> {
-                val bolt11 = _sendUiState.value.bolt11 ?: return // TODO show error
+                val bolt11 = _sendUiState.value.bolt11
+                if (bolt11 == null) {
+                    toast(Exception("Couldn't find invoice"))
+                    Logger.error("Null invoice", context = "AppViewModel")
+                    return
+                }
                 // Determine if we should override amount
                 val decodedInvoice = _sendUiState.value.decodedInvoice
                 val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
                 val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
                 val result = sendLightning(bolt11, paymentAmount)
-                if (result.isSuccess) {
+                result.onSuccess {
                     val paymentHash = result.getOrNull()
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
@@ -768,9 +827,10 @@ class AppViewModel @Inject constructor(
                         tags = tags
                     )
                     setSendEffect(SendEffect.PaymentSuccess())
-                } else {
+                }.onFailure { e ->
                     // TODO error UI
                     Logger.error("Error sending lightning payment", result.exceptionOrNull())
+                    toast(e)
                 }
             }
         }
@@ -1080,7 +1140,6 @@ sealed class SendEffect {
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
-
     data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()
     data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
@@ -1118,8 +1177,8 @@ sealed class SendEvent {
 }
 
 sealed interface LnUrlParameters {
-    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
-    data class LnUrlAddress(val data: LnurlAddressData) : LnUrlParameters
+    data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
+    data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
     data class LnUrlWithdraw(val data: LnurlWithdrawData) : LnUrlParameters
 }
 // endregion
