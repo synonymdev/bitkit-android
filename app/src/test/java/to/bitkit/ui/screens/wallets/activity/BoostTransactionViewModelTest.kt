@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.activity
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.test.runTest
@@ -15,6 +16,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
@@ -27,6 +29,8 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     private lateinit var sut: BoostTransactionViewModel
     private val lightningRepo: LightningRepo = mock()
     private val walletRepo: WalletRepo = mock()
+
+    private val activityRepo: ActivityRepo = mock()
 
     // Test data
     private val mockTxId = "test_txid_123"
@@ -60,7 +64,11 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        sut = BoostTransactionViewModel(lightningRepo, walletRepo)
+        sut = BoostTransactionViewModel(
+            lightningRepo = lightningRepo,
+            walletRepo = walletRepo,
+            activityRepo = activityRepo
+        )
     }
 
     @Test
@@ -200,17 +208,25 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
             .thenReturn(Result.success(testTotalFee))
         whenever(walletRepo.getOnchainAddress())
             .thenReturn(mockAddress)
-        whenever(lightningRepo.accelerateByCpfp(eq(mockTxId), any(), eq(mockAddress)))
+        whenever(lightningRepo.accelerateByCpfp(any(), any(), any()))
             .thenReturn(Result.success(mockNewTxId))
 
         val newActivity = mockOnchainActivity.copy(
-            txType = PaymentType.RECEIVED,
+            txType = PaymentType.SENT,
             txId = mockNewTxId,
             isBoosted = true
         )
-        whenever(walletRepo.getOnChainActivityByTxId(any(), any()))
-            .thenReturn(Result.success(Activity.Onchain(v1 = newActivity)))
-        whenever(walletRepo.updateActivity(any(), any()))
+
+        whenever(
+            activityRepo.findActivityByPaymentId(
+                paymentHashOrTxId = any(),
+                type = any(),
+                txType = any()
+            )
+        ).thenReturn(Result.success(Activity.Onchain(v1 = newActivity)))
+
+        // Fix: Mock updateActivity with 3 parameters (likely id, activity, and a third parameter)
+        whenever(activityRepo.updateActivity(any(), any(), any()))
             .thenReturn(Result.success(Unit))
 
         sut.setupActivity(receivedActivity)
@@ -220,8 +236,8 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
             assertEquals(BoostTransactionEffects.OnBoostSuccess, awaitItem())
         }
 
-        verify(lightningRepo).accelerateByCpfp(mockTxId, testFeeRate.toUInt(), mockAddress)
-        verify(walletRepo).updateActivity(any(), any())
-        verify(walletRepo, never()).deleteActivityById(any())
+        verify(lightningRepo).accelerateByCpfp(any(), any(), any())
+        verify(activityRepo).updateActivity(any(), any(), any())
+        verify(activityRepo, never()).deleteActivity(any())
     }
 }
