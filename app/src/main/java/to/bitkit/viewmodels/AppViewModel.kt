@@ -897,6 +897,7 @@ class AppViewModel @Inject constructor(
                 paymentRequest = invoice
             ).onSuccess { callBackUrl ->
                 //TODO WHAT TO DO WITH THIS CALLBACK?
+                Logger.debug("LnUrl callback created with success $callBackUrl", context = "AppViewModel")
                 toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_withdr_success_title),

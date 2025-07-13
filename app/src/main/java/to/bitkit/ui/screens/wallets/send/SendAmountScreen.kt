@@ -363,7 +363,8 @@ private fun PreviewWithdraw() {
                         minWithdrawable = 1UL,
                         maxWithdrawable = 130UL,
                         tag = ""
-                    )
+                    ),
+                    address = ""
                 )
             ),
             walletUiState = MainUiState(
