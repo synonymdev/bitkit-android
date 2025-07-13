@@ -344,15 +344,14 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (_sendUiState.value.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+        val lnUrlParameters = _sendUiState.value.lnUrlParameters
+        if (lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
 
-        val lnUrlParameters = _sendUiState.value.lnUrlParameters
         if (
-            lnUrlParameters != null
-            && (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
+            (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
             && _sendUiState.value.bolt11.isNullOrEmpty()
         ) {
             val address = when (lnUrlParameters) {
@@ -413,10 +412,9 @@ class AppViewModel @Inject constructor(
             }
 
             is LnUrlParameters.LnUrlWithdraw -> {
-                amount < lnUrlParams.data.maxWithdrawable
+                amount < lnUrlParams.data.maxWithdrawable / 1000u
             }
         }
-
 
         return when (payMethod) {
             SendMethod.ONCHAIN -> amount > getMinOnchainTx()
@@ -864,18 +862,30 @@ class AppViewModel @Inject constructor(
     }
 
     fun onConfirmWithdraw() {
-        val success = true //TODO IMPLEMENT REQUEST
-        if (success) {
-            toast(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.other__lnurl_withdr_success_title),
-                description = context.getString(R.string.other__lnurl_withdr_success_title),
-            )
-            //TODO NAVIGATE HOME
-        } else {
-            setSendEffect(SendEffect.NavigateToWithdrawError)
-        }
+        viewModelScope.launch {
+            val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw ?: return@launch
+            _sendUiState.update {
+                it.copy(
+                    amount = it.amount.coerceAtLeast(
+                        (lnUrlData.data.minWithdrawable ?: 0u) / 1000u
+                    )
+                )
+            }
 
+            lightningService.createLnUrlWithdrawUrl(
+                k1 = lnUrlData.data.k1,
+                callback = lnUrlData.data.callback,
+                paymentRequest = "" //TODO GET FROM SOMEWHERE
+            ).onSuccess {
+                toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.other__lnurl_withdr_success_title),
+                    description = context.getString(R.string.other__lnurl_withdr_success_title),
+                )
+            }.onFailure {
+                setSendEffect(SendEffect.NavigateToWithdrawError)
+            }
+        }
     }
 
     fun onClickActivityDetail() {

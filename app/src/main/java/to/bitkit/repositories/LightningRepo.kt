@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -401,6 +402,14 @@ class LightningRepo @Inject constructor(
         amountSatoshis: ULong
     ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
         val invoice = getLnurlInvoice(address, amountSatoshis)
+        Result.success(invoice)
+    }
+    suspend fun createLnUrlWithdrawUrl(
+        k1: String,
+        callback: String,
+        paymentRequest: String,
+    ): Result<String> = executeWhenNodeRunning("create LnUrl withdraw callback") {
+        val invoice = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Result.success(invoice)
     }
 
