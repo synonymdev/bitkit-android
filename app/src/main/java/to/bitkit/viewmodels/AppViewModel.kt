@@ -900,7 +900,7 @@ class AppViewModel @Inject constructor(
                 toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
-                    description = context.getString(R.string.other__lnurl_withdr_success_title),
+                    description = context.getString(R.string.other__lnurl_withdr_success_msg),
                 )
                 //TODO NAVIGATE HOME
             }.onFailure {
