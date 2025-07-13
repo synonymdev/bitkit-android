@@ -628,13 +628,23 @@ class AppViewModel @Inject constructor(
                     return
                 }
 
-                if (minWithdrawable == maxWithdrawable) {
+                _sendUiState.update {
+                    it.copy(
+                        amount = minWithdrawable,
+                        lnUrlParameters = LnUrlParameters.LnUrlWithdraw(data = data, address = uri)
+                    )
+                }
 
-                    //Navigates to confirm screen
+                if (minWithdrawable == maxWithdrawable) {
+                    setSendEffect(SendEffect.NavigateToWithdrawConfirm)
                     return
                 }
 
-                //Navigate to withdraw amount
+                if (isMainScanner) {
+                    showSheet(BottomSheetType.Send(SendRoute.Amount))
+                } else {
+                    setSendEffect(SendEffect.NavigateToAmount)
+                }
             }
 
             is Scanner.LnurlAuth -> TODO("Not implemented")
@@ -1196,6 +1206,6 @@ sealed class SendEvent {
 sealed interface LnUrlParameters {
     data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
     data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
-    data class LnUrlWithdraw(val data: LnurlWithdrawData) : LnUrlParameters
+    data class LnUrlWithdraw(val data: LnurlWithdrawData, val address: String) : LnUrlParameters
 }
 // endregion
