@@ -508,7 +508,7 @@ class AppViewModel @Inject constructor(
                     return
                 }
                 if (minSendable == maxSendable && minSendable > 0u) {
-                    Logger.debug("sLnurlPay: minSendable == maxSendable. navigating directly to confirm screen", context = "AppViewModel")
+                    Logger.debug("LnurlPay: minSendable == maxSendable. navigating directly to confirm screen", context = "AppViewModel")
 
                     lightningService.createLnurlInvoice(
                         address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
@@ -741,13 +741,18 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.LIGHTNING -> {
-                val bolt11 = _sendUiState.value.bolt11 ?: return // TODO show error
+                val bolt11 = _sendUiState.value.bolt11
+                if (bolt11 == null) {
+                    toast(Exception("Couldn't find invoice"))
+                    Logger.error("Null invoice", context = "AppViewModel")
+                    return
+                }
                 // Determine if we should override amount
                 val decodedInvoice = _sendUiState.value.decodedInvoice
                 val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
                 val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
                 val result = sendLightning(bolt11, paymentAmount)
-                if (result.isSuccess) {
+                result.onSuccess {
                     val paymentHash = result.getOrNull()
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
@@ -758,9 +763,10 @@ class AppViewModel @Inject constructor(
                         tags = tags
                     )
                     setSendEffect(SendEffect.PaymentSuccess())
-                } else {
+                }.onFailure { e ->
                     // TODO error UI
                     Logger.error("Error sending lightning payment", result.exceptionOrNull())
+                    toast(e)
                 }
             }
         }
