@@ -407,8 +407,8 @@ class AppViewModel @Inject constructor(
             null -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlPay -> {
-                lnUrlParams.data.minSendable < amount
-                    && amount < lnUrlParams.data.maxSendable
+                lnUrlParams.data.minSendable / 1000u < amount
+                    && amount < lnUrlParams.data.maxSendable / 1000u
                     && lightningService.canSend(amount)
             }
 
