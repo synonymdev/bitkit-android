@@ -350,10 +350,15 @@ class AppViewModel @Inject constructor(
         }
 
         val lnUrlParameters = _sendUiState.value.lnUrlParameters
-        if (lnUrlParameters != null && _sendUiState.value.bolt11.isNullOrEmpty()) {
+        if (
+            lnUrlParameters != null
+            && (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
+            && _sendUiState.value.bolt11.isNullOrEmpty()
+        ) {
             val address = when (lnUrlParameters) {
                 is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
                 is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
+                else -> ""
             }
 
             lightningService.createLnurlInvoice(
@@ -563,7 +568,11 @@ class AppViewModel @Inject constructor(
                         val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
                         if (scan is Scanner.Lightning) {
                             val invoice = scan.invoice
-                            handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data, address = uri))
+                            handleLightningInvoice(
+                                invoice = invoice,
+                                uri = uri,
+                                LnUrlParameters.LnUrlPay(data = data, address = uri)
+                            )
                         } else {
                             Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
                             toast(
@@ -606,8 +615,8 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlWithdraw -> {
                 val data = scan.data
 
-                val minWithdrawable = data.minWithdrawable ?: 0uL
-                val maxWithdrawable = data.maxWithdrawable
+                val minWithdrawable = (data.minWithdrawable ?: 0uL) / 1000u
+                val maxWithdrawable = data.maxWithdrawable / 1000u
 
                 if (minWithdrawable > maxWithdrawable) {
                     toast(
@@ -618,6 +627,14 @@ class AppViewModel @Inject constructor(
                     resetSendState()
                     return
                 }
+
+                if (minWithdrawable == maxWithdrawable) {
+
+                    //Navigates to confirm screen
+                    return
+                }
+
+                //Navigate to withdraw amount
             }
 
             is Scanner.LnurlAuth -> TODO("Not implemented")
