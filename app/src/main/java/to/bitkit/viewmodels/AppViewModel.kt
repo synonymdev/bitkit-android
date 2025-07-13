@@ -345,13 +345,13 @@ class AppViewModel @Inject constructor(
 
         val lnUrlParameters = _sendUiState.value.lnUrlParameters
         if (lnUrlParameters != null && _sendUiState.value.bolt11.isNullOrEmpty()) {
-            val uri = when (lnUrlParameters) {
-                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.data.uri
-                is LnUrlParameters.LnUrlPay -> lnUrlParameters.data.uri
+            val address = when (lnUrlParameters) {
+                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
+                is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
             }
 
             lightningService.createLnurlInvoice(
-                address = uri,
+                address = address,
                 amountSatoshis = _sendUiState.value.amount
             ).onSuccess { lightningInvoice ->
                 _sendUiState.update {
@@ -503,7 +503,7 @@ class AppViewModel @Inject constructor(
                         handleLightningInvoice(
                             invoice = invoice,
                             uri = uri,
-                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data)
+                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data = data, address = uri)
                         )
                     } else {
                         Logger.error("Error scan is not Lightning type. scan: $scan", context = "AppViewModel")
@@ -551,7 +551,7 @@ class AppViewModel @Inject constructor(
                         val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
                         if (scan is Scanner.Lightning) {
                             val invoice = scan.invoice
-                            handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data))
+                            handleLightningInvoice(invoice = invoice, uri = uri, LnUrlParameters.LnUrlPay(data = data, address = uri))
                         } else {
                             Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
                             toast(
@@ -570,7 +570,8 @@ class AppViewModel @Inject constructor(
                     }
                 } else {
                     val lnUrlParameters = LnUrlParameters.LnUrlPay(
-                        data = data
+                        data = data,
+                        address = uri
                     )
 
                     _sendUiState.update {
@@ -1130,7 +1131,7 @@ sealed class SendEvent {
 }
 
 sealed interface LnUrlParameters {
-    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
-    data class LnUrlAddress(val data: LnurlAddressData) : LnUrlParameters
+    data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
+    data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
 }
 // endregion
