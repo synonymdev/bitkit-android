@@ -342,7 +342,38 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
         }
-        setSendEffect(SendEffect.NavigateToReview)
+
+        val lnUrlParameters = _sendUiState.value.lnUrlParameters
+        if (lnUrlParameters != null && _sendUiState.value.bolt11.isNullOrEmpty()) {
+            val uri = when (lnUrlParameters) {
+                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.data.uri
+                is LnUrlParameters.LnUrlPay -> lnUrlParameters.data.uri
+            }
+
+            lightningService.createLnurlInvoice(
+                address = uri,
+                amountSatoshis = _sendUiState.value.amount
+            ).onSuccess { lightningInvoice ->
+                _sendUiState.update {
+                    it.copy(bolt11 = lightningInvoice)
+                }
+                setSendEffect(SendEffect.NavigateToReview)
+            }.onFailure { e ->
+                Logger.error(
+                    "Error generating invoice from lnurl parameters: $lnUrlParameters",
+                    e = e,
+                    context = "AppViewModel"
+                )
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+            }
+        } else {
+            setSendEffect(SendEffect.NavigateToReview)
+        }
+
     }
 
     private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -508,7 +539,10 @@ class AppViewModel @Inject constructor(
                     return
                 }
                 if (minSendable == maxSendable && minSendable > 0u) {
-                    Logger.debug("LnurlPay: minSendable == maxSendable. navigating directly to confirm screen", context = "AppViewModel")
+                    Logger.debug(
+                        "LnurlPay: minSendable == maxSendable. navigating directly to confirm screen",
+                        context = "AppViewModel"
+                    )
 
                     lightningService.createLnurlInvoice(
                         address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
