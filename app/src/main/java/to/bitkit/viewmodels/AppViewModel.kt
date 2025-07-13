@@ -862,8 +862,15 @@ class AppViewModel @Inject constructor(
     }
 
     fun onConfirmWithdraw() {
-        viewModelScope.launch {
-            val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw ?: return@launch
+        viewModelScope.launch { //TODO LOADING SATE
+            val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw
+
+            if (lnUrlData == null) {
+                resetSendState()
+                setSendEffect(SendEffect.NavigateToWithdrawError)
+                return@launch
+            }
+
             _sendUiState.update {
                 it.copy(
                     amount = it.amount.coerceAtLeast(
@@ -872,17 +879,32 @@ class AppViewModel @Inject constructor(
                 )
             }
 
+            val invoice = lightningService.createInvoice(
+                amountSats = _sendUiState.value.amount,
+                description = lnUrlData.data.defaultDescription,
+                expirySeconds = 3600u
+            ).getOrNull()
+
+            if (invoice == null) {
+                resetSendState()
+                setSendEffect(SendEffect.NavigateToWithdrawError)
+                return@launch
+            }
+
             lightningService.createLnUrlWithdrawUrl(
                 k1 = lnUrlData.data.k1,
                 callback = lnUrlData.data.callback,
-                paymentRequest = "" //TODO GET FROM SOMEWHERE
-            ).onSuccess {
+                paymentRequest = invoice
+            ).onSuccess { callBackUrl ->
+                //TODO WHAT TO DO WITH THIS CALLBACK?
                 toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
                     description = context.getString(R.string.other__lnurl_withdr_success_title),
                 )
+                //TODO NAVIGATE HOME
             }.onFailure {
+                resetSendState()
                 setSendEffect(SendEffect.NavigateToWithdrawError)
             }
         }
