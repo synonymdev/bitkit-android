@@ -36,3 +36,8 @@ fun Activity.isBoosted() = when (this) {
     is Activity.Onchain -> v1.isBoosted
     else -> false
 }
+
+fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) {
+    is Activity.Lightning -> paymentHashOrTxId == v1.id
+    is Activity.Onchain -> paymentHashOrTxId == v1.txId
+}

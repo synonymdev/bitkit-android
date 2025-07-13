@@ -6,8 +6,10 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.dataStoreFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
+import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -73,6 +75,44 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun addActivityToDeletedList(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId in store.data.first().deletedActivities) return
+        store.updateData {
+            it.copy(deletedActivities = it.deletedActivities + activityId)
+        }
+    }
+
+    suspend fun addActivityToPendingDelete(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId in store.data.first().activitiesPendingDelete) return
+        store.updateData {
+            it.copy(activitiesPendingDelete = it.activitiesPendingDelete + activityId)
+        }
+    }
+
+    suspend fun removeActivityFromPendingDelete(activityId: String) {
+        if (activityId.isBlank()) return
+        if (activityId !in store.data.first().activitiesPendingDelete) return
+        store.updateData {
+            it.copy(activitiesPendingDelete = it.activitiesPendingDelete - activityId)
+        }
+    }
+
+    suspend fun addActivityToPendingBoost(pendingBoostActivity: PendingBoostActivity) {
+        if (pendingBoostActivity in store.data.first().pendingBoostActivities) return
+        store.updateData {
+            it.copy(pendingBoostActivities = it.pendingBoostActivities + pendingBoostActivity)
+        }
+    }
+
+    suspend fun removeActivityFromPendingBoost(pendingBoostActivity: PendingBoostActivity) {
+        if (pendingBoostActivity !in store.data.first().pendingBoostActivities) return
+        store.updateData {
+            it.copy(pendingBoostActivities = it.pendingBoostActivities - pendingBoostActivity)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -92,4 +132,7 @@ data class AppCacheData(
     val bip21: String = "",
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
+    val deletedActivities: List<String> = listOf(),
+    val activitiesPendingDelete: List<String> = listOf(),
+    val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
 )

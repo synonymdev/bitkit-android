@@ -43,6 +43,7 @@ import com.synonym.bitkitcore.upsertActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.flow.first
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -50,6 +51,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
@@ -69,10 +71,11 @@ class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
     private val settingsStore: SettingsStore,
+    private val cacheStore: CacheStore,
 ) {
     private var walletIndex: Int = 0
 
-    val activity: ActivityService by lazy { ActivityService(coreService = this) }
+    val activity: ActivityService by lazy { ActivityService(coreService = this, cacheStore = cacheStore) }
     val blocktank: BlocktankService by lazy {
         BlocktankService(
             coreService = this,
@@ -156,9 +159,11 @@ class CoreService @Inject constructor(
 
 class ActivityService(
     private val coreService: CoreService,
+    private val cacheStore: CacheStore,
 ) {
     suspend fun removeAll() {
         ServiceQueue.CORE.background {
+
             // Get all activities and delete them one by one
             val activities = getActivities(
                 filter = ActivityFilter.ALL,
@@ -185,114 +190,6 @@ class ActivityService(
             insertActivity(activity)
         }
     }
-
-    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
-        ServiceQueue.CORE.background {
-            var addedCount = 0
-            var updatedCount = 0
-            var latestCaughtError: Throwable? = null
-
-            for (payment in payments) {
-                try {
-                    val state = when (payment.status) {
-                        PaymentStatus.FAILED -> PaymentState.FAILED
-                        PaymentStatus.PENDING -> PaymentState.PENDING
-                        PaymentStatus.SUCCEEDED -> PaymentState.SUCCEEDED
-                    }
-
-                    when (val kind = payment.kind) {
-                        is PaymentKind.Onchain -> {
-                            var isConfirmed = false
-                            var confirmedTimestamp: ULong? = null
-
-                            val status = kind.status
-                            if (status is ConfirmationStatus.Confirmed) {
-                                isConfirmed = true
-                                confirmedTimestamp = status.timestamp
-                            }
-
-                            // Ensure confirmTimestamp is at least equal to timestamp when confirmed
-                            val timestamp = payment.latestUpdateTimestamp
-
-                            if (isConfirmed && confirmedTimestamp != null && confirmedTimestamp < timestamp) {
-                                confirmedTimestamp = timestamp
-                            }
-
-                            val onchain = OnchainActivity(
-                                id = payment.id,
-                                txType = payment.direction.toPaymentType(),
-                                txId = kind.txid,
-                                value = payment.amountSats ?: 0u,
-                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                feeRate = 1u, // TODO: get from somewhere
-                                address = "todo_find_address", // TODO: find address
-                                confirmed = isConfirmed,
-                                timestamp = timestamp,
-                                isBoosted = false, // TODO: handle
-                                isTransfer = false, // TODO: handle when paying for order
-                                doesExist = true,
-                                confirmTimestamp = confirmedTimestamp,
-                                channelId = null, // TODO: get from linked order
-                                transferTxId = null, // TODO: get from linked order
-                                createdAt = timestamp,
-                                updatedAt = timestamp,
-                            )
-
-                            if (getActivityById(payment.id) != null) {
-                                updateActivity(payment.id, Activity.Onchain(onchain))
-                                updatedCount++
-                            } else {
-                                upsertActivity(Activity.Onchain(onchain))
-                                addedCount++
-                            }
-                        }
-
-                        is PaymentKind.Bolt11 -> {
-                            // Skip pending inbound payments, just means they created an invoice
-                            if (payment.status == PaymentStatus.PENDING && payment.direction == PaymentDirection.INBOUND) {
-                                continue
-                            }
-
-                            val ln = LightningActivity(
-                                id = payment.id,
-                                txType = payment.direction.toPaymentType(),
-                                status = state,
-                                value = payment.amountSats ?: 0u,
-                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                invoice = "lnbc123_todo", // TODO
-                                message = "",
-                                timestamp = payment.latestUpdateTimestamp,
-                                preimage = kind.preimage,
-                                createdAt = payment.latestUpdateTimestamp,
-                                updatedAt = payment.latestUpdateTimestamp,
-                            )
-
-                            if (getActivityById(payment.id) != null) {
-                                updateActivity(payment.id, Activity.Lightning(ln))
-                                updatedCount++
-                            } else {
-                                upsertActivity(Activity.Lightning(ln))
-                                addedCount++
-                            }
-                        }
-
-                        else -> Unit // Handle spontaneous payments if needed
-                    }
-                } catch (e: Throwable) {
-                    Logger.error("Error syncing LDK payment:", e, context = "CoreService")
-                    latestCaughtError = e
-                }
-            }
-
-            // If any of the inserts failed, we want to throw the error up
-            latestCaughtError?.let { throw it }
-
-            Logger.info("Synced LDK payments - Added: $addedCount - Updated: $updatedCount", context = "CoreService")
-        }
-    }
-
-    private fun PaymentDirection.toPaymentType(): PaymentType =
-        if (this == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED
 
     suspend fun getActivity(id: String): Activity? {
         return ServiceQueue.CORE.background {
@@ -327,8 +224,6 @@ class ActivityService(
         }
     }
 
-    // MARK: - Tag Methods
-
     suspend fun appendTags(toActivityId: String, tags: List<String>): Result<Unit> {
         return try {
             ServiceQueue.CORE.background {
@@ -358,7 +253,127 @@ class ActivityService(
         }
     }
 
+    suspend fun syncLdkNodePayments(payments: List<PaymentDetails>, forceUpdate: Boolean = false) {
+        ServiceQueue.CORE.background {
+            for (payment in payments) {
+                try {
+                    val state = when (payment.status) {
+                        PaymentStatus.FAILED -> PaymentState.FAILED
+                        PaymentStatus.PENDING -> PaymentState.PENDING
+                        PaymentStatus.SUCCEEDED -> PaymentState.SUCCEEDED
+                    }
+
+                    when (val kind = payment.kind) {
+                        is PaymentKind.Onchain -> {
+                            var isConfirmed = false
+                            var confirmedTimestamp: ULong? = null
+
+                            val status = kind.status
+                            if (status is ConfirmationStatus.Confirmed) {
+                                isConfirmed = true
+                                confirmedTimestamp = status.timestamp
+                            }
+
+                            // Ensure confirmTimestamp is at least equal to timestamp when confirmed
+                            val timestamp = payment.latestUpdateTimestamp
+
+                            if (isConfirmed && confirmedTimestamp != null && confirmedTimestamp < timestamp) {
+                                confirmedTimestamp = timestamp
+                            }
+
+                            val existingActivity = getActivityById(payment.id)
+                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
+                                    ?: 0u) > payment.latestUpdateTimestamp
+                            ) {
+                                continue
+                            }
+
+                            val onChain = if (existingActivity is Activity.Onchain) {
+                                existingActivity.v1.copy(
+                                    confirmed = isConfirmed,
+                                    confirmTimestamp = confirmedTimestamp,
+                                    updatedAt = timestamp,
+                                )
+                            } else {
+                                OnchainActivity(
+                                    id = payment.id,
+                                    txType = payment.direction.toPaymentType(),
+                                    txId = kind.txid,
+                                    value = payment.amountSats ?: 0u,
+                                    fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                    feeRate = 1u, // TODO: get from somewhere
+                                    address = "todo_find_address", // TODO: find address
+                                    confirmed = isConfirmed,
+                                    timestamp = timestamp,
+                                    isBoosted = false,
+                                    isTransfer = false, // TODO: handle when paying for order
+                                    doesExist = true,
+                                    confirmTimestamp = confirmedTimestamp,
+                                    channelId = null, // TODO: get from linked order
+                                    transferTxId = null, // TODO: get from linked order
+                                    createdAt = timestamp,
+                                    updatedAt = timestamp,
+                                )
+                            }
+
+                            if (onChain.id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+                                Logger.debug("Activity ${onChain.id} was already deleted, skipping", context = TAG)
+                                continue
+                            }
+
+                            if (existingActivity != null) {
+                                updateActivity(payment.id, Activity.Onchain(onChain))
+                            } else {
+                                upsertActivity(Activity.Onchain(onChain))
+                            }
+                        }
+
+                        is PaymentKind.Bolt11 -> {
+                            // Skip pending inbound payments, just means they created an invoice
+                            if (payment.status == PaymentStatus.PENDING && payment.direction == PaymentDirection.INBOUND) {
+                                continue
+                            }
+
+                            val ln = LightningActivity(
+                                id = payment.id,
+                                txType = payment.direction.toPaymentType(),
+                                status = state,
+                                value = payment.amountSats ?: 0u,
+                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                invoice = "lnbc123_todo", // TODO
+                                message = "",
+                                timestamp = payment.latestUpdateTimestamp,
+                                preimage = kind.preimage,
+                                createdAt = payment.latestUpdateTimestamp,
+                                updatedAt = payment.latestUpdateTimestamp,
+                            )
+
+                            if (getActivityById(payment.id) != null) {
+                                updateActivity(payment.id, Activity.Lightning(ln))
+                            } else {
+                                upsertActivity(Activity.Lightning(ln))
+                            }
+                        }
+
+                        else -> Unit // Handle spontaneous payments if needed
+                    }
+                } catch (e: Throwable) {
+                    Logger.error("Error syncing LDK payment:", e, context = "CoreService")
+                    throw e
+                }
+            }
+        }
+    }
+
+    private fun PaymentDirection.toPaymentType(): PaymentType =
+        if (this == PaymentDirection.OUTBOUND) PaymentType.SENT else PaymentType.RECEIVED
+
+    // MARK: - Test Data Generation (regtest only)
+
     suspend fun generateRandomTestData(count: Int = 100) {
+        if (Env.network != Network.REGTEST) {
+            throw AppError(message = "Regtest only")
+        }
         ServiceQueue.CORE.background {
             val timestamp = System.currentTimeMillis().toULong() / 1000u
             val possibleTags =
@@ -445,6 +460,10 @@ class ActivityService(
                 }
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "ActivityService"
     }
 }
 

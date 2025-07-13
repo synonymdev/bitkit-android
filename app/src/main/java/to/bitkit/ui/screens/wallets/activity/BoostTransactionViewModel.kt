@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -12,7 +13,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Txid
+import to.bitkit.data.dto.PendingBoostActivity
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
@@ -22,7 +26,8 @@ import javax.inject.Inject
 @HiltViewModel
 class BoostTransactionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
-    private val walletRepo: WalletRepo
+    private val walletRepo: WalletRepo,
+    private val activityRepo: ActivityRepo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -185,7 +190,6 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleBoostSuccess(newTxId: Txid, isRBF: Boolean) {
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
-
         updateActivity(newTxId = newTxId, isRBF = isRBF).fold(
             onSuccess = {
                 _uiState.update { it.copy(boosting = false) }
@@ -255,10 +259,11 @@ class BoostTransactionViewModel @Inject constructor(
     }
 
     private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
-        Logger.debug("Updating activity for txId: $newTxId", context = TAG)
+        Logger.debug("Updating activity for txId: $newTxId. isRBF:$isRBF", context = TAG)
 
-        return walletRepo.getOnChainActivityByTxId(
-            txId = newTxId,
+        return activityRepo.findActivityByPaymentId(
+            paymentHashOrTxId = newTxId,
+            type = ActivityFilter.ONCHAIN,
             txType = PaymentType.SENT
         ).fold(
             onSuccess = { newActivity ->
@@ -271,33 +276,58 @@ class BoostTransactionViewModel @Inject constructor(
                     v1 = newOnChainActivity.v1.copy(
                         isBoosted = true,
                         txId = newTxId,
+                        feeRate = _uiState.value.feeRate,
+                        fee = _uiState.value.totalFeeSats,
+                        updatedAt = nowTimestamp().toEpochMilli().toULong()
                     )
                 )
 
                 if (isRBF) {
                     // For RBF, update new activity and delete old one
-                    walletRepo.updateActivity(
+                    activityRepo.replaceActivity(
                         id = updatedActivity.v1.id,
-                        updatedActivity = updatedActivity
-                    ).fold(
-                        onSuccess = {
-                            // Delete the old activity
-                            activity?.v1?.id?.let { oldId ->
-                                walletRepo.deleteActivityById(oldId).map { Unit }
-                            } ?: Result.success(Unit)
-                        },
-                        onFailure = { Result.failure(it) }
-                    )
+                        activityIdToDelete = activity?.v1?.id.orEmpty(),
+                        activity = updatedActivity,
+                    ).onFailure {
+                        activityRepo.addActivityToPendingBoost(
+                            PendingBoostActivity(
+                                txId = newTxId,
+                                feeRate = _uiState.value.feeRate,
+                                fee = _uiState.value.totalFeeSats,
+                                updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                                activityToDelete = activity?.v1?.id
+                            )
+                        )
+                    }
                 } else {
                     // For CPFP, just update the activity
-                    walletRepo.updateActivity(
+                    activityRepo.updateActivity(
                         id = updatedActivity.v1.id,
-                        updatedActivity = updatedActivity
-                    )
+                        activity = updatedActivity
+                    ).onFailure {
+                        activityRepo.addActivityToPendingBoost(
+                            PendingBoostActivity(
+                                txId = newTxId,
+                                feeRate = _uiState.value.feeRate,
+                                fee = _uiState.value.totalFeeSats,
+                                updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                                activityToDelete = null
+                            )
+                        )
+                    }
                 }
             },
             onFailure = { error ->
-                Logger.error("Activity $newTxId not found", e = error, context = TAG)
+                Logger.error("Activity $newTxId not found. Caching data to try again on next sync", e = error, context = TAG)
+                activityRepo.addActivityToPendingBoost(
+                    PendingBoostActivity(
+                        txId = newTxId,
+                        feeRate = _uiState.value.feeRate,
+                        fee = _uiState.value.totalFeeSats,
+                        updatedAt = nowTimestamp().toEpochMilli().toULong(),
+                        activityToDelete = activity?.v1?.id.takeIf { isRBF }
+                    )
+                )
                 Result.failure(error)
             }
         )
