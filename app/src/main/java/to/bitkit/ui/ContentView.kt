@@ -553,7 +553,7 @@ private fun RootNavHost(
                     },
                     onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
                     onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.navigateUp() },
+                    onCloseClick = { navController.navigateToHome() },
                 )
             }
             composable<Routes.FundingAdvanced> {
@@ -561,7 +561,7 @@ private fun RootNavHost(
                     onLnUrl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onCloseClick = { navController.navigateToHome() },
                 )
             }
             navigation<Routes.ExternalNav>(
@@ -578,7 +578,7 @@ private fun RootNavHost(
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
                         onScanClick = { navController.navigateToScanner() },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
                 composable<Routes.ExternalAmount> {
@@ -589,7 +589,7 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onContinue = { navController.navigate(Routes.ExternalConfirm) },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
                 composable<Routes.ExternalConfirm> {
@@ -604,13 +604,13 @@ private fun RootNavHost(
                         },
                         onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
                 composable<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
                         onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        onClose = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onClose = { navController.navigateToHome() },
                     )
                 }
                 composable<Routes.ExternalFeeCustom> {
