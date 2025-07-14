@@ -207,7 +207,7 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityDetail(it.activityId))
+                is MainScreenEffect.Navigate -> navController.navigate(it.route)
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
@@ -565,13 +565,15 @@ private fun RootNavHost(
                 )
             }
             navigation<Routes.ExternalNav>(
-                startDestination = Routes.ExternalConnection,
+                startDestination = Routes.ExternalConnection(),
             ) {
                 composable<Routes.ExternalConnection> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val route = it.toRoute<Routes.ExternalConnection>()
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
                     ExternalConnectionScreen(
+                        route = route,
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
                         onScanClick = { navController.navigateToQrScanner() },
@@ -1365,66 +1367,66 @@ fun NavController.navigateToAboutSettings() = navigate(
 )
 // endregion
 
-object Routes {
+sealed interface Routes {
     @Serializable
-    data object Home
+    data object Home : Routes
 
     @Serializable
-    data object Settings
+    data object Settings : Routes
 
     @Serializable
-    data object NodeInfo
+    data object NodeInfo : Routes
 
     @Serializable
-    data object GeneralSettings
+    data object GeneralSettings : Routes
 
     @Serializable
-    data object TransactionSpeedSettings
+    data object TransactionSpeedSettings : Routes
 
     @Serializable
-    data object WidgetsSettings
+    data object WidgetsSettings : Routes
 
     @Serializable
-    data object TagsSettings
+    data object TagsSettings : Routes
 
     @Serializable
-    data object AdvancedSettings
+    data object AdvancedSettings : Routes
 
     @Serializable
-    data object CoinSelectPreference
+    data object CoinSelectPreference : Routes
 
     @Serializable
-    data object ElectrumConfig
+    data object ElectrumConfig : Routes
 
     @Serializable
-    data object RgsServer
+    data object RgsServer : Routes
 
     @Serializable
-    data object AddressViewer
+    data object AddressViewer : Routes
 
     @Serializable
-    data object AboutSettings
+    data object AboutSettings : Routes
 
     @Serializable
-    data object CustomFeeSettings
+    data object CustomFeeSettings : Routes
 
     @Serializable
-    data object SecuritySettings
+    data object SecuritySettings : Routes
 
     @Serializable
-    data object DisablePin
+    data object DisablePin : Routes
 
     @Serializable
-    data object ChangePin
+    data object ChangePin : Routes
 
     @Serializable
-    data object ChangePinNew
+    data object ChangePinNew : Routes
 
     @Serializable
-    data class ChangePinConfirm(val newPin: String)
+    data class ChangePinConfirm(val newPin: String) : Routes
 
     @Serializable
-    data object ChangePinResult
+    data object ChangePinResult : Routes
 
     @Serializable
     data class AuthCheck(
@@ -1432,209 +1434,209 @@ object Routes {
         val requirePin: Boolean = false,
         val requireBiometrics: Boolean = false,
         val onSuccessActionId: String,
-    )
+    ) : Routes
 
     @Serializable
-    data object DefaultUnitSettings
+    data object DefaultUnitSettings : Routes
 
     @Serializable
-    data object LocalCurrencySettings
+    data object LocalCurrencySettings : Routes
 
     @Serializable
-    data object BackupSettings
+    data object BackupSettings : Routes
 
     @Serializable
-    data object ResetAndRestoreSettings
+    data object ResetAndRestoreSettings : Routes
 
     @Serializable
-    data object ChannelOrdersSettings
+    data object ChannelOrdersSettings : Routes
 
     @Serializable
-    data object Logs
+    data object Logs : Routes
 
     @Serializable
-    data class LogDetail(val fileName: String)
+    data class LogDetail(val fileName: String) : Routes
 
     @Serializable
-    data class OrderDetail(val id: String)
+    data class OrderDetail(val id: String) : Routes
 
     @Serializable
-    data class CjitDetail(val id: String)
+    data class CjitDetail(val id: String) : Routes
 
     @Serializable
-    data object ConnectionsNav
+    data object ConnectionsNav : Routes
 
     @Serializable
-    data object LightningConnections
+    data object LightningConnections : Routes
 
     @Serializable
-    data object ChannelDetail
+    data object ChannelDetail : Routes
 
     @Serializable
-    data object CloseConnection
+    data object CloseConnection : Routes
 
     @Serializable
-    data object DevSettings
+    data object DevSettings : Routes
 
     @Serializable
-    data object RegtestSettings
+    data object RegtestSettings : Routes
 
     @Serializable
-    data object TransferRoot
+    data object TransferRoot : Routes
 
     @Serializable
-    data object TransferIntro
+    data object TransferIntro : Routes
 
     @Serializable
-    data object SpendingIntro
+    data object SpendingIntro : Routes
 
     @Serializable
-    data object SpendingAmount
+    data object SpendingAmount : Routes
 
     @Serializable
-    data object SpendingConfirm
+    data object SpendingConfirm : Routes
 
     @Serializable
-    data object SpendingAdvanced
+    data object SpendingAdvanced : Routes
 
     @Serializable
-    data object TransferLiquidity
+    data object TransferLiquidity : Routes
 
     @Serializable
-    data object SettingUp
+    data object SettingUp : Routes
 
     @Serializable
-    data object SavingsIntro
+    data object SavingsIntro : Routes
 
     @Serializable
-    data object SavingsAvailability
+    data object SavingsAvailability : Routes
 
     @Serializable
-    data object SavingsConfirm
+    data object SavingsConfirm : Routes
 
     @Serializable
-    data object SavingsAdvanced
+    data object SavingsAdvanced : Routes
 
     @Serializable
-    data object SavingsProgress
+    data object SavingsProgress : Routes
 
     @Serializable
-    data object Funding
+    data object Funding : Routes
 
     @Serializable
-    data object FundingAdvanced
+    data object FundingAdvanced : Routes
 
     @Serializable
-    data object ExternalNav
+    data object ExternalNav : Routes
 
     @Serializable
-    data object ExternalConnection
+    data class ExternalConnection(val scannedNodeUri: String? = null) : Routes
 
     @Serializable
-    data object ExternalAmount
+    data object ExternalAmount : Routes
 
     @Serializable
-    data object ExternalConfirm
+    data object ExternalConfirm : Routes
 
     @Serializable
-    data object ExternalSuccess
+    data object ExternalSuccess : Routes
 
     @Serializable
-    data object ExternalFeeCustom
+    data object ExternalFeeCustom : Routes
 
     @Serializable
-    data class ActivityDetail(val id: String)
+    data class ActivityDetail(val id: String) : Routes
 
     @Serializable
-    data class ActivityExplore(val id: String)
+    data class ActivityExplore(val id: String) : Routes
 
     @Serializable
-    data object QrScanner
+    data object QrScanner : Routes
 
     @Serializable
-    data object BuyIntro
+    data object BuyIntro : Routes
 
     @Serializable
-    data object Support
+    data object Support : Routes
 
     @Serializable
-    data object ReportIssue
+    data object ReportIssue : Routes
 
     @Serializable
-    data object ReportIssueSuccess
+    data object ReportIssueSuccess : Routes
 
     @Serializable
-    data object ReportIssueFailure
+    data object ReportIssueFailure : Routes
 
     @Serializable
-    data object QuickPayIntro
+    data object QuickPayIntro : Routes
 
     @Serializable
-    data object QuickPaySettings
+    data object QuickPaySettings : Routes
 
     @Serializable
-    data object ProfileIntro
+    data object ProfileIntro : Routes
 
     @Serializable
-    data object CreateProfile
+    data object CreateProfile : Routes
 
     @Serializable
-    data object ShopIntro
+    data object ShopIntro : Routes
 
     @Serializable
-    data object ShopDiscover
+    data object ShopDiscover : Routes
 
     @Serializable
-    data object WidgetsIntro
+    data object WidgetsIntro : Routes
 
     @Serializable
-    data object AddWidget
+    data object AddWidget : Routes
 
     @Serializable
-    data object Headlines
+    data object Headlines : Routes
 
     @Serializable
-    data object HeadlinesPreview
+    data object HeadlinesPreview : Routes
 
     @Serializable
-    data object HeadlinesEdit
+    data object HeadlinesEdit : Routes
 
     @Serializable
-    data object Facts
+    data object Facts : Routes
 
     @Serializable
-    data object FactsPreview
+    data object FactsPreview : Routes
 
     @Serializable
-    data object FactsEdit
+    data object FactsEdit : Routes
 
     @Serializable
-    data object Blocks
+    data object Blocks : Routes
 
     @Serializable
-    data object BlocksPreview
+    data object BlocksPreview : Routes
 
     @Serializable
-    data object BlocksEdit
+    data object BlocksEdit : Routes
 
     @Serializable
-    data object Weather
+    data object Weather : Routes
 
     @Serializable
-    data object WeatherPreview
+    data object WeatherPreview : Routes
 
     @Serializable
-    data object WeatherEdit
+    data object WeatherEdit : Routes
 
     @Serializable
-    data object Price
+    data object Price : Routes
 
     @Serializable
-    data object PricePreview
+    data object PricePreview : Routes
 
     @Serializable
-    data object PriceEdit
+    data object PriceEdit : Routes
 
     @Serializable
-    data object CalculatorPreview
+    data object CalculatorPreview : Routes
 }

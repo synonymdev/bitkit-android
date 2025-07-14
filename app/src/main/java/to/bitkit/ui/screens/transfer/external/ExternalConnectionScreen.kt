@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.LnPeer
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -52,6 +53,7 @@ import to.bitkit.viewmodels.ExternalNodeViewModel
 
 @Composable
 fun ExternalConnectionScreen(
+    route: Routes.ExternalConnection,
     viewModel: ExternalNodeViewModel,
     onNodeConnected: () -> Unit,
     onScanClick: () -> Unit,
@@ -60,6 +62,12 @@ fun ExternalConnectionScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(route.scannedNodeUri) {
+        if (route.scannedNodeUri != null) {
+            viewModel.parseNodeUri(route.scannedNodeUri)
+        }
+    }
 
     LaunchedEffect(viewModel, onNodeConnected) {
         viewModel.effects.collect {
@@ -73,7 +81,7 @@ fun ExternalConnectionScreen(
     ExternalConnectionContent(
         uiState = uiState,
         onContinueClick = { peer -> viewModel.onConnectionContinue(peer) },
-        onPasteClick = { viewModel.onConnectionPaste(clipboardText = context.getClipboardText().orEmpty()) },
+        onPasteClick = { viewModel.parseNodeUri(context.getClipboardText().orEmpty()) },
         onScanClick = onScanClick,
         onBackClick = onBackClick,
         onCloseClick = onCloseClick,

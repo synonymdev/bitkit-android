@@ -58,9 +58,9 @@ class ExternalNodeViewModel @Inject constructor(
         }
     }
 
-    fun onConnectionPaste(clipboardText: String) {
+    fun parseNodeUri(uriString: String) {
         viewModelScope.launch {
-            val result = LnPeer.parseUri(clipboardText)
+            val result = LnPeer.parseUri(uriString)
 
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
