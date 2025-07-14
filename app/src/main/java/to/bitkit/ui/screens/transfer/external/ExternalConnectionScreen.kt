@@ -126,7 +126,7 @@ private fun ExternalConnectionContent(
                 onValueChange = { nodeId = it },
                 singleLine = false,
                 colors = AppTextFieldDefaults.semiTransparent,
-                shape = AppShapes.smallInput,
+                shape = AppShapes.small,
                 keyboardOptions = KeyboardOptions(
                     autoCorrectEnabled = false,
                     imeAction = ImeAction.Done,
@@ -144,7 +144,7 @@ private fun ExternalConnectionContent(
                 onValueChange = { host = it },
                 singleLine = true,
                 colors = AppTextFieldDefaults.semiTransparent,
-                shape = AppShapes.smallInput,
+                shape = AppShapes.small,
                 keyboardOptions = KeyboardOptions(
                     autoCorrectEnabled = false,
                     imeAction = ImeAction.Done,
@@ -162,7 +162,7 @@ private fun ExternalConnectionContent(
                 onValueChange = { port = it },
                 singleLine = true,
                 colors = AppTextFieldDefaults.semiTransparent,
-                shape = AppShapes.smallInput,
+                shape = AppShapes.small,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
                     autoCorrectEnabled = false,
