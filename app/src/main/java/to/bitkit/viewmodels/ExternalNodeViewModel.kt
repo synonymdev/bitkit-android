@@ -1,8 +1,10 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -19,14 +21,13 @@ import to.bitkit.models.Toast
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.ResourceProvider
 import to.bitkit.viewmodels.ExternalNodeContract.SideEffect
 import to.bitkit.viewmodels.ExternalNodeContract.UiState
 import javax.inject.Inject
 
 @HiltViewModel
 class ExternalNodeViewModel @Inject constructor(
-    private val resourceProvider: ResourceProvider,
+    @ApplicationContext private val context: Context,
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
 ) : ViewModel() {
@@ -51,8 +52,8 @@ class ExternalNodeViewModel @Inject constructor(
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = resourceProvider.getString(R.string.lightning__error_add_title),
-                    description = resourceProvider.getString(R.string.lightning__error_add),
+                    title = context.getString(R.string.lightning__error_add_title),
+                    description = context.getString(R.string.lightning__error_add),
                 )
             }
         }
@@ -67,7 +68,7 @@ class ExternalNodeViewModel @Inject constructor(
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
-                    title = resourceProvider.getString(R.string.lightning__error_add_uri),
+                    title = context.getString(R.string.lightning__error_add_uri),
                 )
             }
         }
@@ -103,15 +104,13 @@ class ExternalNodeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun failConfirm(errorMessage: String) {
+    private suspend fun failConfirm(error: String) {
         _uiState.update { it.copy(isLoading = false) }
 
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
-            title = resourceProvider.getString(R.string.lightning__error_channel_purchase),
-            description = resourceProvider
-                .getString(R.string.lightning__error_channel_setup_msg)
-                .replace("{raw}", errorMessage),
+            title = context.getString(R.string.lightning__error_channel_purchase),
+            description = context.getString(R.string.lightning__error_channel_setup_msg).replace("{raw}", error),
         )
     }
 
