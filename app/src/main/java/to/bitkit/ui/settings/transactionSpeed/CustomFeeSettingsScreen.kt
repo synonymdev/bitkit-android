@@ -43,12 +43,13 @@ fun CustomFeeSettingsScreen(
 ) {
     val settings = settingsViewModel ?: return
     val customFeeRate = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
+    val currency = currencyViewModel ?: return
+    var converted: ConvertedAmount? by remember { mutableStateOf(null) }
+
     var input by remember {
         mutableStateOf((customFeeRate.value as? TransactionSpeed.Custom)?.satsPerVByte?.toString() ?: "")
     }
-    val currency = currencyViewModel ?: return
     val totalFee = Env.TransactionDefaults.recommendedBaseFee * (input.toUIntOrNull() ?: 0u)
-    var converted: ConvertedAmount? by remember { mutableStateOf(null) }
 
     LaunchedEffect(input) {
         val inputNum = input.toLongOrNull() ?: 0
@@ -116,7 +117,7 @@ private fun CustomFeeSettingsContent(
             Spacer(modifier = Modifier.height(16.dp))
             LargeRow(
                 prefix = null,
-                text = if (input.isEmpty()) "0" else input,
+                text = input.ifEmpty { "0" },
                 symbol = BITCOIN_SYMBOL,
                 showSymbol = true,
             )
