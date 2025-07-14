@@ -38,14 +38,14 @@ fun TextInput(
     TextField(
         placeholder = {
             if (!placeholder.isNullOrEmpty()) {
-                BodyMSB(
+                BodySSB(
                     placeholder,
-                    color = Colors.White64
+                    color = Colors.White64,
                 )
             } else null
         },
         isError = isError,
-        textStyle = AppTextStyles.BodyMSB,
+        textStyle = AppTextStyles.BodySSB,
         value = value,
         onValueChange = onValueChange,
         maxLines = maxLines,

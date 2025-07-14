@@ -203,9 +203,7 @@ fun BodyMSB(
     Text(
         text = text,
         style = AppTextStyles.BodyMSB.merge(
-            TextStyle(
-                color = color,
-            )
+            color = color,
         ),
         maxLines = maxLines,
         overflow = overflow,
@@ -302,14 +300,8 @@ fun BodySSB(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.BodySSB.merge(
             color = color,
-            textAlign = TextAlign.Start,
         ),
         modifier = modifier,
         maxLines = maxLines,

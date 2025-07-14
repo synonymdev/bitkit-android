@@ -60,4 +60,13 @@ object AppTextStyles {
         textAlign = TextAlign.Start,
         color = Color.Unspecified,
     )
+    val BodySSB = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.4.sp,
+        fontFamily = InterFontFamily,
+        color = Color.Unspecified,
+        textAlign = TextAlign.Start,
+    )
 }
