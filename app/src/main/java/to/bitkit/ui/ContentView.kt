@@ -574,6 +574,7 @@ private fun RootNavHost(
                     ExternalConnectionScreen(
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
+                        onScanClick = { navController.navigateToQrScanner() },
                         onBackClick = { navController.popBackStack() },
                         onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     )

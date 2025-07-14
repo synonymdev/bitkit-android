@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -34,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.LnPeer
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
@@ -56,10 +54,10 @@ import to.bitkit.viewmodels.ExternalNodeViewModel
 fun ExternalConnectionScreen(
     viewModel: ExternalNodeViewModel,
     onNodeConnected: () -> Unit,
+    onScanClick: () -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    val app = appViewModel ?: return
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
@@ -75,8 +73,8 @@ fun ExternalConnectionScreen(
     ExternalConnectionContent(
         uiState = uiState,
         onContinueClick = { peer -> viewModel.onConnectionContinue(peer) },
-        onScanClick = { app.toast(Exception("Coming soon")) },
         onPasteClick = { viewModel.onConnectionPaste(clipboardText = context.getClipboardText().orEmpty()) },
+        onScanClick = onScanClick,
         onBackClick = onBackClick,
         onCloseClick = onCloseClick,
     )
@@ -152,7 +150,7 @@ private fun ExternalConnectionContent(
             Caption13Up(text = stringResource(R.string.lightning__external_manual__port), color = Colors.White64)
             Spacer(modifier = Modifier.height(8.dp))
             TextInput(
-                placeholder ="9735",
+                placeholder = "9735",
                 value = port,
                 onValueChange = { port = it },
                 singleLine = true,
