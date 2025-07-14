@@ -558,7 +558,7 @@ private fun RootNavHost(
             }
             composable<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnUrl = { navController.navigateToQrScanner() },
+                    onLnUrl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
@@ -576,7 +576,7 @@ private fun RootNavHost(
                         route = route,
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
-                        onScanClick = { navController.navigateToQrScanner() },
+                        onScanClick = { navController.navigateToScanner() },
                         onBackClick = { navController.popBackStack() },
                         onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     )
@@ -1327,7 +1327,7 @@ fun NavController.navigateToActivityExplore(id: String) = navigate(
     route = Routes.ActivityExplore(id),
 )
 
-fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
+fun NavController.navigateToScanner(isCalledForResult: Boolean = false) {
     if (isCalledForResult) {
         currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
     }
