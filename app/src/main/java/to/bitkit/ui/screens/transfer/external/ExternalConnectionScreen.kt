@@ -30,7 +30,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.LnPeer
@@ -56,7 +55,6 @@ import to.bitkit.viewmodels.ExternalNodeViewModel
 fun ExternalConnectionScreen(
     route: Routes.ExternalConnection,
     viewModel: ExternalNodeViewModel,
-    navController: NavController,
     onNodeConnected: () -> Unit,
     onScanClick: () -> Unit,
     onBackClick: () -> Unit,
@@ -68,7 +66,6 @@ fun ExternalConnectionScreen(
     LaunchedEffect(route.scannedNodeUri) {
         if (route.scannedNodeUri != null) {
             viewModel.parseNodeUri(route.scannedNodeUri)
-            navController.popBackStack() // prevent back nav to same screen
         }
     }
 
