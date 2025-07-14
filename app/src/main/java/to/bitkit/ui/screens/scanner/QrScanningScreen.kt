@@ -17,7 +17,6 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.AnimationConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +70,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
 import java.util.concurrent.Executors
-import kotlin.time.Duration.Companion.milliseconds
 
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
 const val SCAN_RESULT_KEY = "SCAN_RESULT"
@@ -99,6 +97,7 @@ fun QrScanningScreen(
                 navController.popBackStack()
                 backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
             } else {
+                navController.popBackStack()
                 onScanSuccess(qrCode)
             }
 

@@ -954,7 +954,6 @@ private fun NavGraphBuilder.qrScanner(
         exitTransition = { screenSlideOut },
     ) {
         QrScanningScreen(navController = navController) { qrCode ->
-            navController.popBackStack()
             appViewModel.onScanSuccess(
                 data = qrCode,
                 onResultDelay = 650 // slight delay for nav transition before showing send sheet
