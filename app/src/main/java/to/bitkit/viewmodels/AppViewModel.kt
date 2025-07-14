@@ -494,6 +494,7 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.NodeId -> {
+                hideSheet() // hide scan sheet if opened
                 val nextRoute = Routes.ExternalConnection(scan.url)
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }
