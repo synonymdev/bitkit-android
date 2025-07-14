@@ -436,7 +436,7 @@ private fun RootNavHost(
         navigation<Routes.TransferRoot>(
             startDestination = Routes.TransferIntro,
         ) {
-            composable<Routes.TransferIntro> {
+            composableWithDefaultTransitions<Routes.TransferIntro> {
                 TransferIntroScreen(
                     onContinueClick = {
                         navController.navigateToTransferFunding()
@@ -445,7 +445,7 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsIntro> {
+            composableWithDefaultTransitions<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
                         navController.navigate(Routes.SavingsAvailability)
@@ -455,14 +455,14 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsAvailability> {
+            composableWithDefaultTransitions<Routes.SavingsAvailability> {
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
                     onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
                 )
             }
-            composable<Routes.SavingsConfirm> {
+            composableWithDefaultTransitions<Routes.SavingsConfirm> {
                 SavingsConfirmScreen(
                     onConfirm = { navController.navigate(Routes.SavingsProgress) },
                     onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
@@ -470,20 +470,20 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsAdvanced> {
+            composableWithDefaultTransitions<Routes.SavingsAdvanced> {
                 SavingsAdvancedScreen(
                     onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsProgress> {
+            composableWithDefaultTransitions<Routes.SavingsProgress> {
                 SavingsProgressScreen(
                     onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
-            composable<Routes.SpendingIntro> {
+            composableWithDefaultTransitions<Routes.SpendingIntro> {
                 SpendingIntroScreen(
                     onContinueClick = {
                         navController.navigate(Routes.SpendingAmount)
@@ -493,7 +493,7 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SpendingAmount> {
+            composableWithDefaultTransitions<Routes.SpendingAmount> {
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -501,7 +501,7 @@ private fun RootNavHost(
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
                 )
             }
-            composable<Routes.SpendingConfirm> {
+            composableWithDefaultTransitions<Routes.SpendingConfirm> {
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -511,7 +511,7 @@ private fun RootNavHost(
                     onConfirm = { navController.navigate(Routes.SettingUp) },
                 )
             }
-            composable<Routes.SpendingAdvanced> {
+            composableWithDefaultTransitions<Routes.SpendingAdvanced> {
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -519,21 +519,21 @@ private fun RootNavHost(
                     onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
                 )
             }
-            composable<Routes.TransferLiquidity> {
+            composableWithDefaultTransitions<Routes.TransferLiquidity> {
                 LiquidityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onContinueClick = { navController.popBackStack() }
                 )
             }
-            composable<Routes.SettingUp> {
+            composableWithDefaultTransitions<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
                     onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
-            composable<Routes.Funding> {
+            composableWithDefaultTransitions<Routes.Funding> {
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
                 FundingScreen(
                     onTransfer = {
@@ -556,7 +556,7 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.FundingAdvanced> {
+            composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
                     onLnUrl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
@@ -567,7 +567,7 @@ private fun RootNavHost(
             navigation<Routes.ExternalNav>(
                 startDestination = Routes.ExternalConnection(),
             ) {
-                composable<Routes.ExternalConnection> {
+                composableWithDefaultTransitions<Routes.ExternalConnection> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val route = it.toRoute<Routes.ExternalConnection>()
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
@@ -582,7 +582,7 @@ private fun RootNavHost(
                         onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalAmount> {
+                composableWithDefaultTransitions<Routes.ExternalAmount> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
@@ -593,7 +593,7 @@ private fun RootNavHost(
                         onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalConfirm> {
+                composableWithDefaultTransitions<Routes.ExternalConfirm> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
@@ -608,13 +608,13 @@ private fun RootNavHost(
                         onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalSuccess> {
+                composableWithDefaultTransitions<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
                         onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                         onClose = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalFeeCustom> {
+                composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
                     ExternalFeeCustomScreen(
                         onBackClick = { navController.popBackStack() },
                         onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
