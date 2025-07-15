@@ -40,7 +40,7 @@ fun RectangleButton(
             containerColor = Colors.White10,
         ),
         enabled = enabled,
-        shape = AppShapes.smallButton,
+        shape = AppShapes.small,
         contentPadding = PaddingValues(24.dp),
         modifier = modifier
             .alpha(if (enabled) 1f else 0.5f)

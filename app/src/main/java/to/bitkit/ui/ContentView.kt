@@ -207,7 +207,7 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.NavigateActivityDetail -> navController.navigate(Routes.ActivityDetail(it.activityId))
+                is MainScreenEffect.Navigate -> navController.navigate(it.route)
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
@@ -436,7 +436,7 @@ private fun RootNavHost(
         navigation<Routes.TransferRoot>(
             startDestination = Routes.TransferIntro,
         ) {
-            composable<Routes.TransferIntro> {
+            composableWithDefaultTransitions<Routes.TransferIntro> {
                 TransferIntroScreen(
                     onContinueClick = {
                         navController.navigateToTransferFunding()
@@ -445,7 +445,7 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsIntro> {
+            composableWithDefaultTransitions<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
                         navController.navigate(Routes.SavingsAvailability)
@@ -455,14 +455,14 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsAvailability> {
+            composableWithDefaultTransitions<Routes.SavingsAvailability> {
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
                     onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
                 )
             }
-            composable<Routes.SavingsConfirm> {
+            composableWithDefaultTransitions<Routes.SavingsConfirm> {
                 SavingsConfirmScreen(
                     onConfirm = { navController.navigate(Routes.SavingsProgress) },
                     onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
@@ -470,20 +470,20 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsAdvanced> {
+            composableWithDefaultTransitions<Routes.SavingsAdvanced> {
                 SavingsAdvancedScreen(
                     onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SavingsProgress> {
+            composableWithDefaultTransitions<Routes.SavingsProgress> {
                 SavingsProgressScreen(
                     onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
-            composable<Routes.SpendingIntro> {
+            composableWithDefaultTransitions<Routes.SpendingIntro> {
                 SpendingIntroScreen(
                     onContinueClick = {
                         navController.navigate(Routes.SpendingAmount)
@@ -493,7 +493,7 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.SpendingAmount> {
+            composableWithDefaultTransitions<Routes.SpendingAmount> {
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -501,7 +501,7 @@ private fun RootNavHost(
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
                 )
             }
-            composable<Routes.SpendingConfirm> {
+            composableWithDefaultTransitions<Routes.SpendingConfirm> {
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -511,7 +511,7 @@ private fun RootNavHost(
                     onConfirm = { navController.navigate(Routes.SettingUp) },
                 )
             }
-            composable<Routes.SpendingAdvanced> {
+            composableWithDefaultTransitions<Routes.SpendingAdvanced> {
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
@@ -519,21 +519,21 @@ private fun RootNavHost(
                     onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
                 )
             }
-            composable<Routes.TransferLiquidity> {
+            composableWithDefaultTransitions<Routes.TransferLiquidity> {
                 LiquidityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onContinueClick = { navController.popBackStack() }
                 )
             }
-            composable<Routes.SettingUp> {
+            composableWithDefaultTransitions<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
                     onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                     onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
-            composable<Routes.Funding> {
+            composableWithDefaultTransitions<Routes.Funding> {
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
                 FundingScreen(
                     onTransfer = {
@@ -553,32 +553,36 @@ private fun RootNavHost(
                     },
                     onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
                     onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.navigateUp() },
+                    onCloseClick = { navController.navigateToHome() },
                 )
             }
-            composable<Routes.FundingAdvanced> {
+            composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnUrl = { navController.navigateToQrScanner() },
+                    onLnUrl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
-                    onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onCloseClick = { navController.navigateToHome() },
                 )
             }
             navigation<Routes.ExternalNav>(
-                startDestination = Routes.ExternalConnection,
+                startDestination = Routes.ExternalConnection(),
             ) {
-                composable<Routes.ExternalConnection> {
+                composableWithDefaultTransitions<Routes.ExternalConnection> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val route = it.toRoute<Routes.ExternalConnection>()
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
                     ExternalConnectionScreen(
+                        route = route,
+                        savedStateHandle = it.savedStateHandle,
                         viewModel = viewModel,
                         onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
+                        onScanClick = { navController.navigateToScanner(isCalledForResult = true) },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalAmount> {
+                composableWithDefaultTransitions<Routes.ExternalAmount> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
@@ -586,10 +590,10 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onContinue = { navController.navigate(Routes.ExternalConfirm) },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalConfirm> {
+                composableWithDefaultTransitions<Routes.ExternalConfirm> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
 
@@ -601,16 +605,16 @@ private fun RootNavHost(
                         },
                         onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
                         onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onCloseClick = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalSuccess> {
+                composableWithDefaultTransitions<Routes.ExternalSuccess> {
                     ExternalSuccessScreen(
                         onContinue = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                        onClose = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        onClose = { navController.navigateToHome() },
                     )
                 }
-                composable<Routes.ExternalFeeCustom> {
+                composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
                     ExternalFeeCustomScreen(
                         onBackClick = { navController.popBackStack() },
                         onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
@@ -951,7 +955,6 @@ private fun NavGraphBuilder.qrScanner(
         exitTransition = { screenSlideOut },
     ) {
         QrScanningScreen(navController = navController) { qrCode ->
-            navController.popBackStack()
             appViewModel.onScanSuccess(
                 data = qrCode,
                 onResultDelay = 650 // slight delay for nav transition before showing send sheet
@@ -1324,7 +1327,7 @@ fun NavController.navigateToActivityExplore(id: String) = navigate(
     route = Routes.ActivityExplore(id),
 )
 
-fun NavController.navigateToQrScanner(isCalledForResult: Boolean = false) {
+fun NavController.navigateToScanner(isCalledForResult: Boolean = false) {
     if (isCalledForResult) {
         currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
     }
@@ -1364,66 +1367,66 @@ fun NavController.navigateToAboutSettings() = navigate(
 )
 // endregion
 
-object Routes {
+sealed interface Routes {
     @Serializable
-    data object Home
+    data object Home : Routes
 
     @Serializable
-    data object Settings
+    data object Settings : Routes
 
     @Serializable
-    data object NodeInfo
+    data object NodeInfo : Routes
 
     @Serializable
-    data object GeneralSettings
+    data object GeneralSettings : Routes
 
     @Serializable
-    data object TransactionSpeedSettings
+    data object TransactionSpeedSettings : Routes
 
     @Serializable
-    data object WidgetsSettings
+    data object WidgetsSettings : Routes
 
     @Serializable
-    data object TagsSettings
+    data object TagsSettings : Routes
 
     @Serializable
-    data object AdvancedSettings
+    data object AdvancedSettings : Routes
 
     @Serializable
-    data object CoinSelectPreference
+    data object CoinSelectPreference : Routes
 
     @Serializable
-    data object ElectrumConfig
+    data object ElectrumConfig : Routes
 
     @Serializable
-    data object RgsServer
+    data object RgsServer : Routes
 
     @Serializable
-    data object AddressViewer
+    data object AddressViewer : Routes
 
     @Serializable
-    data object AboutSettings
+    data object AboutSettings : Routes
 
     @Serializable
-    data object CustomFeeSettings
+    data object CustomFeeSettings : Routes
 
     @Serializable
-    data object SecuritySettings
+    data object SecuritySettings : Routes
 
     @Serializable
-    data object DisablePin
+    data object DisablePin : Routes
 
     @Serializable
-    data object ChangePin
+    data object ChangePin : Routes
 
     @Serializable
-    data object ChangePinNew
+    data object ChangePinNew : Routes
 
     @Serializable
-    data class ChangePinConfirm(val newPin: String)
+    data class ChangePinConfirm(val newPin: String) : Routes
 
     @Serializable
-    data object ChangePinResult
+    data object ChangePinResult : Routes
 
     @Serializable
     data class AuthCheck(
@@ -1431,209 +1434,209 @@ object Routes {
         val requirePin: Boolean = false,
         val requireBiometrics: Boolean = false,
         val onSuccessActionId: String,
-    )
+    ) : Routes
 
     @Serializable
-    data object DefaultUnitSettings
+    data object DefaultUnitSettings : Routes
 
     @Serializable
-    data object LocalCurrencySettings
+    data object LocalCurrencySettings : Routes
 
     @Serializable
-    data object BackupSettings
+    data object BackupSettings : Routes
 
     @Serializable
-    data object ResetAndRestoreSettings
+    data object ResetAndRestoreSettings : Routes
 
     @Serializable
-    data object ChannelOrdersSettings
+    data object ChannelOrdersSettings : Routes
 
     @Serializable
-    data object Logs
+    data object Logs : Routes
 
     @Serializable
-    data class LogDetail(val fileName: String)
+    data class LogDetail(val fileName: String) : Routes
 
     @Serializable
-    data class OrderDetail(val id: String)
+    data class OrderDetail(val id: String) : Routes
 
     @Serializable
-    data class CjitDetail(val id: String)
+    data class CjitDetail(val id: String) : Routes
 
     @Serializable
-    data object ConnectionsNav
+    data object ConnectionsNav : Routes
 
     @Serializable
-    data object LightningConnections
+    data object LightningConnections : Routes
 
     @Serializable
-    data object ChannelDetail
+    data object ChannelDetail : Routes
 
     @Serializable
-    data object CloseConnection
+    data object CloseConnection : Routes
 
     @Serializable
-    data object DevSettings
+    data object DevSettings : Routes
 
     @Serializable
-    data object RegtestSettings
+    data object RegtestSettings : Routes
 
     @Serializable
-    data object TransferRoot
+    data object TransferRoot : Routes
 
     @Serializable
-    data object TransferIntro
+    data object TransferIntro : Routes
 
     @Serializable
-    data object SpendingIntro
+    data object SpendingIntro : Routes
 
     @Serializable
-    data object SpendingAmount
+    data object SpendingAmount : Routes
 
     @Serializable
-    data object SpendingConfirm
+    data object SpendingConfirm : Routes
 
     @Serializable
-    data object SpendingAdvanced
+    data object SpendingAdvanced : Routes
 
     @Serializable
-    data object TransferLiquidity
+    data object TransferLiquidity : Routes
 
     @Serializable
-    data object SettingUp
+    data object SettingUp : Routes
 
     @Serializable
-    data object SavingsIntro
+    data object SavingsIntro : Routes
 
     @Serializable
-    data object SavingsAvailability
+    data object SavingsAvailability : Routes
 
     @Serializable
-    data object SavingsConfirm
+    data object SavingsConfirm : Routes
 
     @Serializable
-    data object SavingsAdvanced
+    data object SavingsAdvanced : Routes
 
     @Serializable
-    data object SavingsProgress
+    data object SavingsProgress : Routes
 
     @Serializable
-    data object Funding
+    data object Funding : Routes
 
     @Serializable
-    data object FundingAdvanced
+    data object FundingAdvanced : Routes
 
     @Serializable
-    data object ExternalNav
+    data object ExternalNav : Routes
 
     @Serializable
-    data object ExternalConnection
+    data class ExternalConnection(val scannedNodeUri: String? = null) : Routes
 
     @Serializable
-    data object ExternalAmount
+    data object ExternalAmount : Routes
 
     @Serializable
-    data object ExternalConfirm
+    data object ExternalConfirm : Routes
 
     @Serializable
-    data object ExternalSuccess
+    data object ExternalSuccess : Routes
 
     @Serializable
-    data object ExternalFeeCustom
+    data object ExternalFeeCustom : Routes
 
     @Serializable
-    data class ActivityDetail(val id: String)
+    data class ActivityDetail(val id: String) : Routes
 
     @Serializable
-    data class ActivityExplore(val id: String)
+    data class ActivityExplore(val id: String) : Routes
 
     @Serializable
-    data object QrScanner
+    data object QrScanner : Routes
 
     @Serializable
-    data object BuyIntro
+    data object BuyIntro : Routes
 
     @Serializable
-    data object Support
+    data object Support : Routes
 
     @Serializable
-    data object ReportIssue
+    data object ReportIssue : Routes
 
     @Serializable
-    data object ReportIssueSuccess
+    data object ReportIssueSuccess : Routes
 
     @Serializable
-    data object ReportIssueFailure
+    data object ReportIssueFailure : Routes
 
     @Serializable
-    data object QuickPayIntro
+    data object QuickPayIntro : Routes
 
     @Serializable
-    data object QuickPaySettings
+    data object QuickPaySettings : Routes
 
     @Serializable
-    data object ProfileIntro
+    data object ProfileIntro : Routes
 
     @Serializable
-    data object CreateProfile
+    data object CreateProfile : Routes
 
     @Serializable
-    data object ShopIntro
+    data object ShopIntro : Routes
 
     @Serializable
-    data object ShopDiscover
+    data object ShopDiscover : Routes
 
     @Serializable
-    data object WidgetsIntro
+    data object WidgetsIntro : Routes
 
     @Serializable
-    data object AddWidget
+    data object AddWidget : Routes
 
     @Serializable
-    data object Headlines
+    data object Headlines : Routes
 
     @Serializable
-    data object HeadlinesPreview
+    data object HeadlinesPreview : Routes
 
     @Serializable
-    data object HeadlinesEdit
+    data object HeadlinesEdit : Routes
 
     @Serializable
-    data object Facts
+    data object Facts : Routes
 
     @Serializable
-    data object FactsPreview
+    data object FactsPreview : Routes
 
     @Serializable
-    data object FactsEdit
+    data object FactsEdit : Routes
 
     @Serializable
-    data object Blocks
+    data object Blocks : Routes
 
     @Serializable
-    data object BlocksPreview
+    data object BlocksPreview : Routes
 
     @Serializable
-    data object BlocksEdit
+    data object BlocksEdit : Routes
 
     @Serializable
-    data object Weather
+    data object Weather : Routes
 
     @Serializable
-    data object WeatherPreview
+    data object WeatherPreview : Routes
 
     @Serializable
-    data object WeatherEdit
+    data object WeatherEdit : Routes
 
     @Serializable
-    data object Price
+    data object Price : Routes
 
     @Serializable
-    data object PricePreview
+    data object PricePreview : Routes
 
     @Serializable
-    data object PriceEdit
+    data object PriceEdit : Routes
 
     @Serializable
-    data object CalculatorPreview
+    data object CalculatorPreview : Routes
 }
