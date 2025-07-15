@@ -896,13 +896,11 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningService.createLnUrlWithdrawUrl(
+            lightningService.handleLnUrlWithdraw(
                 k1 = lnUrlData.data.k1,
                 callback = lnUrlData.data.callback,
                 paymentRequest = invoice
-            ).onSuccess { callBackUrl ->
-                //TODO WHAT TO DO WITH THIS CALLBACK?
-                Logger.debug("LnUrl callback created with success $callBackUrl", context = "AppViewModel")
+            ).onSuccess {
                 toast(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
