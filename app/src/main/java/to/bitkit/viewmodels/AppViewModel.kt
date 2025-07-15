@@ -867,6 +867,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onConfirmWithdraw() {
+        _sendUiState.update { it.copy(isLoading = true) }
         viewModelScope.launch { //TODO LOADING SATE
             val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw
 
@@ -907,9 +908,11 @@ class AppViewModel @Inject constructor(
                     description = context.getString(R.string.other__lnurl_withdr_success_msg),
                 )
                 hideSheet()
+                _sendUiState.update { it.copy(isLoading = false) }
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.Home))
-            }.onFailure {
                 resetSendState()
+            }.onFailure {
+                _sendUiState.update { it.copy(isLoading = false) }
                 setSendEffect(SendEffect.NavigateToWithdrawError)
             }
         }
@@ -1195,6 +1198,7 @@ data class SendUiState(
     val shouldConfirmPay: Boolean = false,
     val selectedUtxos: List<SpendableUtxo>? = null,
     val lnUrlParameters: LnUrlParameters? = null,
+    val isLoading: Boolean = false
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }

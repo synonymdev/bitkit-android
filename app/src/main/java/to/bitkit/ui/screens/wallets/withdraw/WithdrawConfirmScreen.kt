@@ -64,6 +64,7 @@ fun WithdrawConfirmScreen(
             PrimaryButton(
                 text = stringResource(R.string.wallet__lnurl_w_button),
                 onClick = onConfirm,
+                isLoading = uiState.isLoading,
                 modifier = Modifier.testTag("continue_button")
             )
 
