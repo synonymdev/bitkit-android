@@ -19,6 +19,7 @@ import to.bitkit.ext.watchUntil
 import to.bitkit.models.LnPeer
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
@@ -33,6 +34,7 @@ class ExternalNodeViewModel @Inject constructor(
     private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val walletRepo: WalletRepo,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -106,13 +108,33 @@ class ExternalNodeViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(amount = it.amount.copy(sats = sats, overrideSats = null)) }
+
+        updateNetworkFee()
     }
 
-    fun onAmountOverride(sats: Long?) {
-        val maxAmount = _uiState.value.amount.max
-        val cappedSats = sats?.let { minOf(it, maxAmount) } ?: 0L
+    fun onAmountOverride(sats: Long) {
+        val max = _uiState.value.amount.max
+        val nextAmount = minOf(sats, max)
 
-        _uiState.update { it.copy(amount = it.amount.copy(overrideSats = cappedSats)) }
+        _uiState.update { it.copy(amount = it.amount.copy(overrideSats = nextAmount)) }
+
+        updateNetworkFee()
+    }
+
+    private fun updateNetworkFee() {
+        viewModelScope.launch {
+            val amountSats = _uiState.value.amount.sats
+            if (amountSats <= 0) {
+                _uiState.update { it.copy(networkFee = 0L) }
+                return@launch
+            }
+
+            val fee = lightningRepo.calculateTotalFee(
+                amountSats = amountSats.toULong(),
+            ).getOrDefault(1000uL)
+
+            _uiState.update { it.copy(networkFee = fee.toLong()) }
+        }
     }
 
     fun onConfirm() {
@@ -181,6 +203,7 @@ interface ExternalNodeContract {
         val isLoading: Boolean = false,
         val peer: LnPeer? = null,
         val amount: Amount = Amount(),
+        val networkFee: Long = 0,
     ) {
         data class Amount(
             val sats: Long = 0,

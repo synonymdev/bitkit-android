@@ -93,7 +93,7 @@ private fun Content(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            val networkFee = 0L // TODO calculate txFee
+            val networkFee = uiState.networkFee
             val serviceFee = 0L
             val totalFee = uiState.amount.sats + networkFee
 
@@ -180,6 +180,7 @@ private fun Preview() {
         Content(
             uiState = ExternalNodeContract.UiState(
                 amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
+                networkFee = 2_100L,
             )
         )
     }
