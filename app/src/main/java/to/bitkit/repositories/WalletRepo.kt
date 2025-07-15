@@ -346,7 +346,7 @@ class WalletRepo @Inject constructor(
 
             return@withContext maxSendable
         } catch (_: Throwable) {
-            Logger.debug("Could not calculate max send amount, using fallback 90% of total", context = TAG)
+            Logger.debug("Could not calculate max send amount, using as fallback 90% of total", context = TAG)
 
             val fallbackMax = (totalOnchainSats.toDouble() * 0.9).toULong()
             return@withContext fallbackMax

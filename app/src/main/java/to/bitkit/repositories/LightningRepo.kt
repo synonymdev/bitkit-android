@@ -510,9 +510,9 @@ class LightningRepo @Inject constructor(
                 utxosToSpend = utxosToSpend,
             )
             Result.success(fee)
-        } catch (e: Throwable) {
+        } catch (_: Throwable) {
             val fallbackFee = 1000uL
-            Logger.error("Estimate fee error, using conservative fallback of $fallbackFee", e, context = TAG)
+            Logger.warn("Error calculating fee, using fallback of $fallbackFee", context = TAG)
             Result.success(fallbackFee)
         }
     }
