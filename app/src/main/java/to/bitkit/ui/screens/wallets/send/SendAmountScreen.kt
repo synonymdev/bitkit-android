@@ -154,7 +154,7 @@ private fun SendAmountNodeRunning(
 ) {
     val availableAmount = when {
         uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
-            uiState.lnUrlParameters.data.maxWithdrawable.toLong()
+            uiState.lnUrlParameters.data.maxWithdrawable.toLong().div(1000) //Convert from millisats to sats
         }
 
         uiState.payMethod == SendMethod.ONCHAIN -> {
