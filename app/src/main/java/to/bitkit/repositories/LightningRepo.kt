@@ -430,7 +430,7 @@ class LightningRepo @Inject constructor(
         utxosToSpend: List<SpendableUtxo>? = null,
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
-            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
+            val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
             val fees = coreService.blocktank.getFees().getOrThrow()
             val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
 

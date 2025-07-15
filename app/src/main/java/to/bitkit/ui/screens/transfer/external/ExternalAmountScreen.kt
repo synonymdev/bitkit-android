@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -34,10 +33,10 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.ExternalNodeContract
-import kotlin.math.roundToLong
+import to.bitkit.viewmodels.ExternalNodeViewModel
 import kotlin.math.min
+import kotlin.math.roundToLong
 
 @Composable
 fun ExternalAmountScreen(
@@ -52,7 +51,10 @@ fun ExternalAmountScreen(
         amountState = uiState.amount,
         onAmountChange = { sats -> viewModel.onAmountChange(sats) },
         onAmountOverride = { sats -> viewModel.onAmountOverride(sats) },
-        onContinueClick = { onContinue() },
+        onContinueClick = {
+            viewModel.onAmountContinue()
+            onContinue()
+        },
         onBackClick = onBackClick,
         onCloseClick = onCloseClick,
     )

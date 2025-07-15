@@ -9,15 +9,19 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.R
+import to.bitkit.data.SettingsStore
+import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.LnPeer
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
@@ -35,6 +39,7 @@ class ExternalNodeViewModel @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -108,8 +113,6 @@ class ExternalNodeViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(amount = it.amount.copy(sats = sats, overrideSats = null)) }
-
-        updateNetworkFee()
     }
 
     fun onAmountOverride(sats: Long) {
@@ -117,24 +120,45 @@ class ExternalNodeViewModel @Inject constructor(
         val nextAmount = minOf(sats, max)
 
         _uiState.update { it.copy(amount = it.amount.copy(overrideSats = nextAmount)) }
+    }
 
-        updateNetworkFee()
+    fun onAmountContinue() {
+        viewModelScope.launch {
+            val speed = settingsStore.data.first().defaultTransactionSpeed
+            val defaultSatsPerVbyte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow().toUInt()
+            _uiState.update {
+                it.copy(
+                    customFeeRate = defaultSatsPerVbyte,
+                )
+            }
+            updateNetworkFee()
+        }
     }
 
     private fun updateNetworkFee() {
         viewModelScope.launch {
             val amountSats = _uiState.value.amount.sats
-            if (amountSats <= 0) {
+            val customFeeRate = _uiState.value.customFeeRate
+
+            if (amountSats <= Env.TransactionDefaults.recommendedBaseFee.toLong() || customFeeRate == 0u) {
                 _uiState.update { it.copy(networkFee = 0L) }
                 return@launch
             }
 
+            val speed = customFeeRate?.let { TransactionSpeed.Custom(it) }
+
             val fee = lightningRepo.calculateTotalFee(
                 amountSats = amountSats.toULong(),
+                speed = speed,
             ).getOrDefault(1000uL)
 
             _uiState.update { it.copy(networkFee = fee.toLong()) }
         }
+    }
+
+    fun onCustomFeeRateChange(feeRate: UInt) {
+        _uiState.update { it.copy(customFeeRate = feeRate) }
+        updateNetworkFee()
     }
 
     fun onConfirm() {
@@ -204,6 +228,7 @@ interface ExternalNodeContract {
         val peer: LnPeer? = null,
         val amount: Amount = Amount(),
         val networkFee: Long = 0,
+        val customFeeRate: UInt? = null,
     ) {
         data class Amount(
             val sats: Long = 0,

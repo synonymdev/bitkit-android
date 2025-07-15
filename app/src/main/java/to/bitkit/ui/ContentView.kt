@@ -615,9 +615,13 @@ private fun RootNavHost(
                     )
                 }
                 composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
                     ExternalFeeCustomScreen(
-                        onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                        onClose = { navController.navigateToHome() },
                     )
                 }
             }
