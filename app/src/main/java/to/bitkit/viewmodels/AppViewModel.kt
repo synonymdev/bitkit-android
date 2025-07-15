@@ -557,7 +557,7 @@ class AppViewModel @Inject constructor(
                             toast(
                                 type = Toast.ToastType.ERROR,
                                 title = context.getString(R.string.other__scan_err_decoding),
-                                description = context.getString(R.string.other__scan__error__expired),
+                                description = context.getString(R.string.other__scan__error__generic),
                             )
                         }
                     }.onFailure { e ->
@@ -565,7 +565,7 @@ class AppViewModel @Inject constructor(
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__expired),
+                            description = context.getString(R.string.other__scan__error__generic),
                         )
                     }
                 } else {
