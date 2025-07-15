@@ -28,12 +28,6 @@ class LnUrlWithdrawService @Inject constructor(
             withdrawResponse.status == "ERROR" -> {
                 throw Exception("LNURL error: ${withdrawResponse.reason}")
             }
-            withdrawResponse.tag != "withdrawRequest" -> {
-                throw Exception("Invalid LNURL response: expected withdrawRequest, got ${withdrawResponse.tag}")
-            }
-            withdrawResponse.callback.isNullOrBlank() -> {
-                throw Exception("Missing callback URL in LNURL response")
-            }
             else -> withdrawResponse
         }
     }.onFailure {
