@@ -37,6 +37,7 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ExternalNodeViewModel
 import to.bitkit.viewmodels.ExternalNodeContract
 import kotlin.math.roundToLong
+import kotlin.math.min
 
 @Composable
 fun ExternalAmountScreen(
@@ -46,8 +47,6 @@ fun ExternalAmountScreen(
     onCloseClick: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
-    LaunchedEffect(Unit) { viewModel.updateMaxAmount() }
 
     Content(
         amountState = uiState.amount,
@@ -80,7 +79,7 @@ private fun Content(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            val availableAmount = LocalBalances.current.totalOnchainSats
+            val totalOnchainSats = LocalBalances.current.totalOnchainSats
 
             Spacer(modifier = Modifier.height(16.dp))
             Display(stringResource(R.string.lightning__external_amount__title).withAccent(accentColor = Colors.Purple))
@@ -107,7 +106,7 @@ private fun Content(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = availableAmount.toLong())
+                    MoneySSB(sats = amountState.max.toLong())
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(color = Colors.Purple)
@@ -116,8 +115,9 @@ private fun Content(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = (availableAmount.toDouble() / 4.0).roundToLong()
-                        onAmountOverride(quarter)
+                        val quarterOfTotal = (totalOnchainSats.toDouble() / 4.0).roundToLong()
+                        val cappedQuarter = min(quarterOfTotal, amountState.max)
+                        onAmountOverride(cappedQuarter)
                     },
                 )
                 // Max Button

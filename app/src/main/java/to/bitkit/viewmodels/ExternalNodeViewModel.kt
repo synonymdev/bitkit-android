@@ -18,6 +18,7 @@ import to.bitkit.ext.WatchResult
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.LnPeer
 import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
@@ -40,11 +41,17 @@ class ExternalNodeViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
     private fun setEffect(effect: SideEffect) = viewModelScope.launch { _effects.emit(effect) }
 
-    fun updateMaxAmount() {
-        val totalOnchainSats = walletRepo.balanceState.value.totalOnchainSats
-        val maxAmount = (totalOnchainSats.toDouble() * 0.9).toLong()
+    init {
+        observeState()
+    }
 
-        _uiState.update { it.copy(amount = it.amount.copy(max = maxAmount)) }
+    private fun observeState() {
+        viewModelScope.launch {
+            walletRepo.balanceState.collect {
+                val maxAmount = walletRepo.getMaxSendAmount()
+                _uiState.update { it.copy(amount = it.amount.copy(max = maxAmount.toLong())) }
+            }
+        }
     }
 
     fun onConnectionContinue(peer: LnPeer) {
@@ -84,11 +91,28 @@ class ExternalNodeViewModel @Inject constructor(
     }
 
     fun onAmountChange(sats: Long) {
+        val maxAmount = _uiState.value.amount.max
+
+        if (sats > maxAmount) {
+            viewModelScope.launch {
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(R.string.lightning__spending_amount__error_max__description)
+                        .replace("{amount}", maxAmount.formatToModernDisplay()),
+                )
+            }
+            return
+        }
+
         _uiState.update { it.copy(amount = it.amount.copy(sats = sats, overrideSats = null)) }
     }
 
     fun onAmountOverride(sats: Long?) {
-        _uiState.update { it.copy(amount = it.amount.copy(overrideSats = sats)) }
+        val maxAmount = _uiState.value.amount.max
+        val cappedSats = sats?.let { minOf(it, maxAmount) } ?: 0L
+
+        _uiState.update { it.copy(amount = it.amount.copy(overrideSats = cappedSats)) }
     }
 
     fun onConfirm() {
