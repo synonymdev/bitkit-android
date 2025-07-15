@@ -906,6 +906,7 @@ class AppViewModel @Inject constructor(
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
                     description = context.getString(R.string.other__lnurl_withdr_success_msg),
                 )
+                hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(Routes.Home))
             }.onFailure {
                 resetSendState()
