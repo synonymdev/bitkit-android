@@ -40,7 +40,6 @@ import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.wallets.send.SendRoute.*
 import to.bitkit.ui.screens.wallets.withdraw.WithDrawErrorScreen
 import to.bitkit.ui.screens.wallets.withdraw.WithdrawConfirmScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -79,22 +78,22 @@ fun SendOptionsView(
         LaunchedEffect(appViewModel, navController) {
             appViewModel.sendEffect.collect {
                 when (it) {
-                    is SendEffect.NavigateToAmount -> navController.navigate(Amount)
-                    is SendEffect.NavigateToAddress -> navController.navigate(Address)
-                    is SendEffect.NavigateToScan -> navController.navigate(QrScanner)
-                    is SendEffect.NavigateToCoinSelection -> navController.navigate(CoinSelection)
-                    is SendEffect.NavigateToReview -> navController.navigate(ReviewAndSend)
+                    is SendEffect.NavigateToAmount -> navController.navigate(SendRoute.Amount)
+                    is SendEffect.NavigateToAddress -> navController.navigate(SendRoute.Address)
+                    is SendEffect.NavigateToScan -> navController.navigate(SendRoute.QrScanner)
+                    is SendEffect.NavigateToCoinSelection -> navController.navigate(SendRoute.CoinSelection)
+                    is SendEffect.NavigateToReview -> navController.navigate(SendRoute.ReviewAndSend)
                     is SendEffect.PaymentSuccess -> {
                         onComplete(it.sheet)
                         context.setClipboardText(text = "")
                     }
 
                     is SendEffect.NavigateToQuickPay -> {
-                        navController.navigate(QuickPay(it.invoice, it.amount))
+                        navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
                     }
 
-                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(WithdrawConfirm)
-                    SendEffect.NavigateToWithdrawError -> navController.navigate(WithdrawError)
+                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithdrawConfirm)
+                    SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                 }
             }
         }
