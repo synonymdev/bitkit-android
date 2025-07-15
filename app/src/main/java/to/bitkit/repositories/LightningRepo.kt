@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -392,6 +393,14 @@ class LightningRepo @Inject constructor(
         }
 
         val invoice = lightningService.receive(amountSats, description, expirySeconds)
+        Result.success(invoice)
+    }
+
+    suspend fun createLnurlInvoice(
+        address: String,
+        amountSatoshis: ULong
+    ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
+        val invoice = getLnurlInvoice(address, amountSatoshis)
         Result.success(invoice)
     }
 
