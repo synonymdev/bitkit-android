@@ -64,7 +64,7 @@ fun ExternalConfirmScreen(
         }
     }
 
-    ExternalConfirmContent(
+    Content(
         uiState = uiState,
         onConfirm = { viewModel.onConfirm() },
         onNetworkFeeClick = onNetworkFeeClick,
@@ -74,7 +74,7 @@ fun ExternalConfirmScreen(
 }
 
 @Composable
-private fun ExternalConfirmContent(
+private fun Content(
     uiState: ExternalNodeContract.UiState,
     onConfirm: () -> Unit = {},
     onNetworkFeeClick: () -> Unit = {},
@@ -173,11 +173,11 @@ private fun ExternalConfirmContent(
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
-private fun ExternalConfirmScreenPreview() {
+private fun Preview() {
     AppThemeSurface {
-        ExternalConfirmContent(
+        Content(
             uiState = ExternalNodeContract.UiState(
                 amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
             )

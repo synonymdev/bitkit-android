@@ -106,7 +106,7 @@ private fun Content(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = amountState.max.toLong())
+                    MoneySSB(sats = amountState.max)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(color = Colors.Purple)
