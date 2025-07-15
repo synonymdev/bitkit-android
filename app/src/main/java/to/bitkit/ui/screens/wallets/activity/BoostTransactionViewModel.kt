@@ -27,7 +27,7 @@ import javax.inject.Inject
 class BoostTransactionViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
-    private val activityRepo: ActivityRepo
+    private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BoostTransactionUiState())
@@ -83,7 +83,6 @@ class BoostTransactionViewModel @Inject constructor(
 
                 // TODO ideally include utxos for a better fee estimate
                 val totalFeeResult = lightningRepo.calculateTotalFee(
-                    address = walletRepo.getOnchainAddress(),
                     amountSats = activityContent.value,
                     speed = TransactionSpeed.Custom(feeRateResult.getOrDefault(0u).toUInt()),
                 )
@@ -177,7 +176,7 @@ class BoostTransactionViewModel @Inject constructor(
         lightningRepo.accelerateByCpfp(
             satsPerVByte = _uiState.value.feeRate.toUInt(),
             originalTxId = activity.v1.txId,
-            destinationAddress = walletRepo.getOnchainAddress()
+            destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(
             onSuccess = { newTxId ->
                 handleBoostSuccess(newTxId, isRBF = false)
@@ -228,7 +227,6 @@ class BoostTransactionViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo
                 .calculateTotalFee(
-                    address = walletRepo.getOnchainAddress(),
                     amountSats = requireNotNull(activity).v1.value,
                     speed = TransactionSpeed.Custom(newFeeRate.toUInt()),
                 )

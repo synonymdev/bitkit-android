@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -56,6 +57,7 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
+    private val cacheStore: CacheStore,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -398,7 +400,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun createLnurlInvoice(
         address: String,
-        amountSatoshis: ULong
+        amountSatoshis: ULong,
     ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
         val invoice = getLnurlInvoice(address, amountSatoshis)
         Result.success(invoice)
@@ -494,17 +496,19 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun calculateTotalFee(
-        address: Address,
         amountSats: ULong,
+        address: Address? = null,
         speed: TransactionSpeed? = null,
         utxosToSpend: List<SpendableUtxo>? = null,
     ): Result<ULong> = withContext(bgDispatcher) {
         return@withContext try {
-            val transactionSpeed = speed ?: settingsStore.data.map { it.defaultTransactionSpeed }.first()
+            val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
             val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
 
+            val addressOrDefault = address ?: cacheStore.data.first().onchainAddress
+
             val fee = lightningService.calculateTotalFee(
-                address = address,
+                address = addressOrDefault,
                 amountSats = amountSats,
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = utxosToSpend,
