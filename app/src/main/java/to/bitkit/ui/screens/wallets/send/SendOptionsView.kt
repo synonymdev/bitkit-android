@@ -32,12 +32,17 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
+import to.bitkit.ui.screens.wallets.withdraw.WithDrawErrorScreen
+import to.bitkit.ui.screens.wallets.withdraw.WithdrawConfirmScreen
+import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -86,6 +91,9 @@ fun SendOptionsView(
                     is SendEffect.NavigateToQuickPay -> {
                         navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
                     }
+
+                    is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithdrawConfirm)
+                    SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                 }
             }
         }
@@ -142,6 +150,30 @@ fun SendOptionsView(
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.WithdrawConfirm> { backStackEntry ->
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                WithdrawConfirmScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onConfirm = { appViewModel.onConfirmWithdraw() },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.WithdrawError> { backStackEntry ->
+                val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                WithDrawErrorScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onClickScan = { navController.navigate(SendRoute.QrScanner) },
+                    onClickSupport = { navController.navigate(SendRoute.Support) },
+                )
+            }
+            composableWithDefaultTransitions<SendRoute.Support> { backStackEntry ->
+                SupportScreen(
+                    onBack = { navController.popBackStack() },
+                    onClose = { navController.navigateToHome() },
+                    navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
                 )
             }
             composableWithDefaultTransitions<SendRoute.AddTag> {
@@ -315,6 +347,15 @@ sealed interface SendRoute {
 
     @Serializable
     data object ReviewAndSend : SendRoute
+
+    @Serializable
+    data object WithdrawConfirm : SendRoute
+
+    @Serializable
+    data object WithdrawError : SendRoute
+
+    @Serializable
+    data object Support : SendRoute
 
     @Serializable
     data object AddTag : SendRoute
