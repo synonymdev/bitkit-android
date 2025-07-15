@@ -338,13 +338,11 @@ class WalletRepo @Inject constructor(
             val minFeeBuffer = 1000uL
             val amountSats = (totalOnchainSats - minFeeBuffer).coerceAtLeast(0uL)
             val fee = lightningRepo.calculateTotalFee(amountSats).getOrThrow()
-
             val maxSendable = (totalOnchainSats - fee).coerceAtLeast(0uL)
 
             return@withContext maxSendable
         } catch (_: Throwable) {
             Logger.debug("Could not calculate max send amount, using as fallback 90% of total", context = TAG)
-
             val fallbackMax = (totalOnchainSats.toDouble() * 0.9).toULong()
             return@withContext fallbackMax
         }
