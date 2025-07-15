@@ -61,7 +61,6 @@ fun ExternalAmountScreen(
 
 @Composable
 private fun Content(
-    maxAmount: Long = 0L,
     amountState: ExternalNodeContract.UiState.Amount = ExternalNodeContract.UiState.Amount(),
     onAmountChange: (Long) -> Unit = {},
     onAmountOverride: (Long) -> Unit = {},
@@ -126,7 +125,7 @@ private fun Content(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        onAmountOverride(maxAmount)
+                        onAmountOverride(amountState.max)
                     },
                 )
             }
