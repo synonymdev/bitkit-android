@@ -33,8 +33,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.ExternalNodeContract
-import to.bitkit.viewmodels.ExternalNodeViewModel
 import kotlin.math.min
 import kotlin.math.roundToLong
 

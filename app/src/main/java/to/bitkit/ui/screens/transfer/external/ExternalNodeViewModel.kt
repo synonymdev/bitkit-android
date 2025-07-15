@@ -1,4 +1,4 @@
-package to.bitkit.viewmodels
+package to.bitkit.ui.screens.transfer.external
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -28,8 +28,8 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.viewmodels.ExternalNodeContract.SideEffect
-import to.bitkit.viewmodels.ExternalNodeContract.UiState
+import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
+import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
 import javax.inject.Inject
 
 @HiltViewModel

@@ -41,7 +41,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.ExternalNodeViewModel
 
 @Composable
 fun ExternalFeeCustomScreen(

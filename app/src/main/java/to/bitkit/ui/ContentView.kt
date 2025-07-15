@@ -142,7 +142,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.ExternalNodeViewModel
+import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SendEvent
