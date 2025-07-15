@@ -906,7 +906,7 @@ class AppViewModel @Inject constructor(
                     title = context.getString(R.string.other__lnurl_withdr_success_title),
                     description = context.getString(R.string.other__lnurl_withdr_success_msg),
                 )
-                //TODO NAVIGATE HOME
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.Home))
             }.onFailure {
                 resetSendState()
                 setSendEffect(SendEffect.NavigateToWithdrawError)
