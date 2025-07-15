@@ -95,7 +95,7 @@ private fun ExternalConfirmContent(
         ) {
             val networkFee = 0L // TODO calculate txFee
             val serviceFee = 0L
-            val totalFee = uiState.localBalance + networkFee
+            val totalFee = uiState.amount.sats + networkFee
 
             Spacer(modifier = Modifier.height(16.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -141,7 +141,7 @@ private fun ExternalConfirmContent(
             ) {
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__amount),
-                    amount = uiState.localBalance,
+                    amount = uiState.amount.sats,
                 )
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__total),
@@ -179,7 +179,7 @@ private fun ExternalConfirmScreenPreview() {
     AppThemeSurface {
         ExternalConfirmContent(
             uiState = ExternalNodeContract.UiState(
-                localBalance = 45_500L,
+                amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
             )
         )
     }
