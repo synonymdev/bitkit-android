@@ -16,7 +16,6 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.LnPeer
@@ -27,9 +26,9 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
+import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
 @HiltViewModel
@@ -136,12 +135,17 @@ class ExternalNodeViewModel @Inject constructor(
         }
     }
 
+    fun onCustomFeeRateChange(feeRate: UInt) {
+        _uiState.update { it.copy(customFeeRate = feeRate) }
+        updateNetworkFee()
+    }
+
     private fun updateNetworkFee() {
         viewModelScope.launch {
             val amountSats = _uiState.value.amount.sats
             val customFeeRate = _uiState.value.customFeeRate
 
-            if (amountSats <= Env.TransactionDefaults.recommendedBaseFee.toLong() || customFeeRate == 0u) {
+            if (amountSats <= 0 || customFeeRate == 0u) {
                 _uiState.update { it.copy(networkFee = 0L) }
                 return@launch
             }
@@ -155,11 +159,6 @@ class ExternalNodeViewModel @Inject constructor(
 
             _uiState.update { it.copy(networkFee = fee.toLong()) }
         }
-    }
-
-    fun onCustomFeeRateChange(feeRate: UInt) {
-        _uiState.update { it.copy(customFeeRate = feeRate) }
-        updateNetworkFee()
     }
 
     fun onConfirm() {
