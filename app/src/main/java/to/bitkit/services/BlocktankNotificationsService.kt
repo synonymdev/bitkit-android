@@ -1,10 +1,8 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import to.bitkit.async.ServiceQueue
-import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.Keychain.Key
 import to.bitkit.di.BgDispatcher
@@ -24,7 +22,6 @@ class BlocktankNotificationsService @Inject constructor(
     private val lightningService: LightningService,
     private val keychain: Keychain,
     private val crypto: Crypto,
-    private val settingsStore: SettingsStore,
 ) {
 
     suspend fun registerDevice(deviceToken: String) = withContext(bgDispatcher) {

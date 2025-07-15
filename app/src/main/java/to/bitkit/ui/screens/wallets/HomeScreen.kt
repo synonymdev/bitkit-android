@@ -88,7 +88,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
-import to.bitkit.ui.navigateToQrScanner
+import to.bitkit.ui.navigateToScanner
 import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
@@ -331,7 +331,7 @@ fun HomeScreen(
         TabBar(
             onSendClick = { appViewModel.showSheet(BottomSheetType.Send()) },
             onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
-            onScanClick = { rootNavController.navigateToQrScanner() },
+            onScanClick = { rootNavController.navigateToScanner() },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .systemBarsPadding()

@@ -14,7 +14,6 @@ import com.synonym.bitkitcore.Scanner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +53,7 @@ import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.ScannerService
 import to.bitkit.services.hasLightingParam
 import to.bitkit.services.lightningParam
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -493,6 +493,12 @@ class AppViewModel @Inject constructor(
                 }
             }
 
+            is Scanner.NodeId -> {
+                hideSheet() // hide scan sheet if opened
+                val nextRoute = Routes.ExternalConnection(scan.url)
+                mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
+            }
+
             null -> {
                 toast(
                     type = Toast.ToastType.ERROR,
@@ -644,7 +650,7 @@ class AppViewModel @Inject constructor(
         val filter = newTransaction.type.toActivityFilter()
         val paymentType = newTransaction.direction.toTxType()
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(bgDispatcher) {
             val activity = coreService.activity.get(filter = filter, txType = paymentType, limit = 1u).firstOrNull()
 
             if (activity == null) {
@@ -652,7 +658,8 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            mainScreenEffect(MainScreenEffect.NavigateActivityDetail(activity.rawId()))
+            val nextRoute = Routes.ActivityDetail(activity.rawId())
+            mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
         }
     }
 
@@ -933,7 +940,7 @@ sealed class SendEffect {
 }
 
 sealed class MainScreenEffect {
-    data class NavigateActivityDetail(val activityId: String) : MainScreenEffect()
+    data class Navigate(val route: Routes) : MainScreenEffect()
     data object WipeWallet : MainScreenEffect()
     data class ProcessClipboardAutoRead(val data: String) : MainScreenEffect()
 }

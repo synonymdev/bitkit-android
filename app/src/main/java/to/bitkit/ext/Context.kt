@@ -12,6 +12,7 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import to.bitkit.R
 import to.bitkit.utils.Logger
 import java.io.File
 import java.io.FileOutputStream
@@ -63,7 +64,7 @@ fun Context.findActivity(): Activity? =
     }
 
 // Clipboard
-fun Context.setClipboardText(text: String, label: String = "") {
+fun Context.setClipboardText(text: String, label: String = getString(R.string.app_name)) {
     this.clipboardManager.setPrimaryClip(
         ClipData.newPlainText(label, text)
     )

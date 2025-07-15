@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
@@ -201,14 +202,8 @@ fun BodyMSB(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 17.sp,
-            lineHeight = 22.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.BodyMSB.merge(
             color = color,
-            textAlign = TextAlign.Start,
         ),
         maxLines = maxLines,
         overflow = overflow,
@@ -305,14 +300,8 @@ fun BodySSB(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.BodySSB.merge(
             color = color,
-            textAlign = TextAlign.Start,
         ),
         modifier = modifier,
         maxLines = maxLines,
