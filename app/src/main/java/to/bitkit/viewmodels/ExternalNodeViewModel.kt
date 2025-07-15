@@ -70,7 +70,7 @@ class ExternalNodeViewModel @Inject constructor(
 
     fun parseNodeUri(uriString: String) {
         viewModelScope.launch {
-            val result = LnPeer.parseUri(uriString)
+            val result = LnPeer.parseUri(uriString.trim())
 
             if (result.isSuccess) {
                 _uiState.update { it.copy(peer = result.getOrNull()) }
