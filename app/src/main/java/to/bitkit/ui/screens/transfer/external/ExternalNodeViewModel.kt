@@ -166,7 +166,8 @@ class ExternalNodeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val result = lightningService.openChannel(
+            // TODO: pass customFeeRate to ldk-node when supported
+            val result = lightningRepo.openChannel(
                 peer = requireNotNull(_uiState.value.peer),
                 channelAmountSats = _uiState.value.amount.sats.toULong(),
             )
