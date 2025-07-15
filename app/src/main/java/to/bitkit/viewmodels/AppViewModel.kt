@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
@@ -344,10 +345,19 @@ class AppViewModel @Inject constructor(
         }
 
         val lnUrlParameters = _sendUiState.value.lnUrlParameters
-        if (lnUrlParameters != null && _sendUiState.value.bolt11.isNullOrEmpty()) {
+        if (lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+            setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+            return
+        }
+
+        if (
+            (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
+            && _sendUiState.value.bolt11.isNullOrEmpty()
+        ) {
             val address = when (lnUrlParameters) {
                 is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
                 is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
+                else -> ""
             }
 
             lightningService.createLnurlInvoice(
@@ -393,6 +403,7 @@ class AppViewModel @Inject constructor(
         val lnUrlParams = _sendUiState.value.lnUrlParameters
 
         val isValidLNAmount = when (lnUrlParams) {
+            null -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlPay -> {
                 lnUrlParams.data.minSendable / 1000u < amount
@@ -400,9 +411,10 @@ class AppViewModel @Inject constructor(
                     && lightningService.canSend(amount)
             }
 
-            null -> lightningService.canSend(amount)
+            is LnUrlParameters.LnUrlWithdraw -> {
+                amount < lnUrlParams.data.maxWithdrawable / 1000u
+            }
         }
-
 
         return when (payMethod) {
             SendMethod.ONCHAIN -> amount > getMinOnchainTx()
@@ -512,6 +524,7 @@ class AppViewModel @Inject constructor(
                             title = context.getString(R.string.other__scan_err_decoding),
                             description = context.getString(R.string.other__scan__error__generic),
                         )
+                        resetSendState()
                     }
                 }.onFailure { e ->
                     Logger.error("Error decoding LnurlAddress. data: $data", e = e, context = "AppViewModel")
@@ -520,6 +533,7 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.other__scan_err_decoding),
                         description = context.getString(R.string.other__scan__error__generic),
                     )
+                    resetSendState()
                 }
             }
 
@@ -536,6 +550,7 @@ class AppViewModel @Inject constructor(
                         title = context.getString(R.string.other__lnurl_pay_error),
                         description = context.getString(R.string.other__lnurl_pay_error_no_capacity)
                     )
+                    resetSendState()
                     return
                 }
                 if (minSendable == maxSendable && minSendable > 0u) {
@@ -563,6 +578,7 @@ class AppViewModel @Inject constructor(
                                 title = context.getString(R.string.other__scan_err_decoding),
                                 description = context.getString(R.string.other__scan__error__generic),
                             )
+                            resetSendState()
                         }
                     }.onFailure { e ->
                         Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
@@ -571,6 +587,7 @@ class AppViewModel @Inject constructor(
                             title = context.getString(R.string.other__scan_err_decoding),
                             description = context.getString(R.string.other__scan__error__generic),
                         )
+                        resetSendState()
                     }
                 } else {
                     val lnUrlParameters = LnUrlParameters.LnUrlPay(
@@ -591,10 +608,44 @@ class AppViewModel @Inject constructor(
                         setSendEffect(SendEffect.NavigateToAmount)
                     }
                 }
-
             }
 
-            is Scanner.LnurlWithdraw -> TODO("Not implemented")
+            is Scanner.LnurlWithdraw -> {
+                val data = scan.data
+
+                val minWithdrawable = (data.minWithdrawable ?: 0uL) / 1000u
+                val maxWithdrawable = data.maxWithdrawable / 1000u
+
+                if (minWithdrawable > maxWithdrawable) {
+                    toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.other__lnurl_withdr_error),
+                        description = context.getString(R.string.other__lnurl_withdr_error_minmax)
+                    )
+                    resetSendState()
+                    return
+                }
+
+                _sendUiState.update {
+                    it.copy(
+                        payMethod = SendMethod.LIGHTNING,
+                        amount = minWithdrawable,
+                        lnUrlParameters = LnUrlParameters.LnUrlWithdraw(data = data, address = uri)
+                    )
+                }
+
+                if (minWithdrawable == maxWithdrawable) {
+                    setSendEffect(SendEffect.NavigateToWithdrawConfirm)
+                    return
+                }
+
+                if (isMainScanner) {
+                    showSheet(BottomSheetType.Send(SendRoute.Amount))
+                } else {
+                    setSendEffect(SendEffect.NavigateToAmount)
+                }
+            }
+
             is Scanner.LnurlAuth -> TODO("Not implemented")
             is Scanner.LnurlChannel -> TODO("Not implemented")
             is Scanner.NodeId -> {
@@ -812,6 +863,58 @@ class AppViewModel @Inject constructor(
                     Logger.error("Error sending lightning payment", result.exceptionOrNull())
                     toast(e)
                 }
+            }
+        }
+    }
+
+    fun onConfirmWithdraw() {
+        _sendUiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch {
+            val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw
+
+            if (lnUrlData == null) {
+                resetSendState()
+                setSendEffect(SendEffect.NavigateToWithdrawError)
+                return@launch
+            }
+
+            _sendUiState.update {
+                it.copy(
+                    amount = it.amount.coerceAtLeast(
+                        (lnUrlData.data.minWithdrawable ?: 0u) / 1000u
+                    )
+                )
+            }
+
+            val invoice = lightningService.createInvoice(
+                amountSats = _sendUiState.value.amount,
+                description = lnUrlData.data.defaultDescription,
+                expirySeconds = 3600u
+            ).getOrNull()
+
+            if (invoice == null) {
+                resetSendState()
+                setSendEffect(SendEffect.NavigateToWithdrawError)
+                return@launch
+            }
+
+            lightningService.handleLnUrlWithdraw(
+                k1 = lnUrlData.data.k1,
+                callback = lnUrlData.data.callback,
+                paymentRequest = invoice
+            ).onSuccess {
+                toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.other__lnurl_withdr_success_title),
+                    description = context.getString(R.string.other__lnurl_withdr_success_msg),
+                )
+                hideSheet()
+                _sendUiState.update { it.copy(isLoading = false) }
+                mainScreenEffect(MainScreenEffect.Navigate(Routes.Home))
+                resetSendState()
+            }.onFailure {
+                _sendUiState.update { it.copy(isLoading = false) }
+                setSendEffect(SendEffect.NavigateToWithdrawError)
             }
         }
     }
@@ -1096,6 +1199,7 @@ data class SendUiState(
     val shouldConfirmPay: Boolean = false,
     val selectedUtxos: List<SpendableUtxo>? = null,
     val lnUrlParameters: LnUrlParameters? = null,
+    val isLoading: Boolean = false
 )
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
@@ -1105,6 +1209,8 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToReview : SendEffect()
+    data object NavigateToWithdrawConfirm : SendEffect()
+    data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()
     data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
@@ -1143,5 +1249,6 @@ sealed class SendEvent {
 sealed interface LnUrlParameters {
     data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
     data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
+    data class LnUrlWithdraw(val data: LnurlWithdrawData, val address: String) : LnUrlParameters
 }
 // endregion

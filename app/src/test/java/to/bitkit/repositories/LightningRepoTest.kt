@@ -28,6 +28,7 @@ import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
+import to.bitkit.services.LnUrlWithdrawService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -47,6 +48,8 @@ class LightningRepoTest : BaseUnitTest() {
     private val keychain: Keychain = mock()
     private val cacheStore: CacheStore = mock()
 
+    private val lnUrlWithdrawService: LnUrlWithdrawService = mock()
+
     @Before
     fun setUp() {
         wheneverBlocking { coreService.shouldBlockLightning() }.thenReturn(false)
@@ -59,6 +62,7 @@ class LightningRepoTest : BaseUnitTest() {
             blocktankNotificationsService = blocktankNotificationsService,
             firebaseMessaging = firebaseMessaging,
             keychain = keychain,
+            lnUrlWithdrawService = lnUrlWithdrawService,
             cacheStore = cacheStore,
         )
     }

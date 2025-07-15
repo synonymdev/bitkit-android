@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.LnurlWithdrawData
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
@@ -43,6 +44,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
+import to.bitkit.viewmodels.LnUrlParameters
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -102,7 +104,13 @@ fun SendAmountContent(
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
-        SheetTopBar(stringResource(R.string.wallet__send_amount)) {
+        val titleRes = if (uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+            R.string.wallet__lnurl_w_title
+        } else {
+            R.string.wallet__send_amount
+        }
+
+        SheetTopBar(stringResource(titleRes)) {
             onEvent(SendEvent.AmountReset)
             onBack()
         }
@@ -144,9 +152,18 @@ private fun SendAmountNodeRunning(
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
 ) {
-    val availableAmount = when (uiState.payMethod) {
-        SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
-        SendMethod.LIGHTNING -> balances.totalLightningSats.toLong()
+    val availableAmount = when {
+        uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
+            uiState.lnUrlParameters.data.maxWithdrawable.toLong().div(1000) //Convert from millisats to sats
+        }
+
+        uiState.payMethod == SendMethod.ONCHAIN -> {
+            balances.totalOnchainSats.toLong()
+        }
+
+        else -> {
+            balances.totalLightningSats.toLong()
+        }
     }
 
     Column(
@@ -166,8 +183,16 @@ private fun SendAmountNodeRunning(
         Spacer(modifier = Modifier.height(24.dp))
         Spacer(modifier = Modifier.weight(1f))
 
+        val textAvailable = when {
+            uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> R.string.wallet__lnurl_w_max
+            uiState.isUnified -> R.string.wallet__send_available
+            uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
+            uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
+            else -> R.string.wallet__send_available
+        }
+
         Text13Up(
-            text = stringResource(R.string.wallet__send_available),
+            text = stringResource(textAvailable),
             color = Colors.White64,
             modifier = Modifier.testTag("available_balance")
         )
@@ -180,7 +205,9 @@ private fun SendAmountNodeRunning(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            PaymentMethodButton(uiState = uiState, onEvent = onEvent)
+            if (uiState.lnUrlParameters !is LnUrlParameters.LnUrlWithdraw) {
+                PaymentMethodButton(uiState = uiState, onEvent = onEvent)
+            }
             Spacer(modifier = Modifier.width(8.dp))
             UnitButton(modifier = Modifier.height(28.dp))
         }
@@ -251,8 +278,9 @@ private fun PreviewRunningLightning() {
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
                 isAmountInputValid = true,
-                isUnified = true
+                isUnified = false
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -276,11 +304,12 @@ private fun PreviewRunningOnchain() {
                 payMethod = SendMethod.ONCHAIN,
                 amountInput = "5000",
                 isAmountInputValid = true,
-                isUnified = true
+                isUnified = false
             ),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             input = "5000",
@@ -304,6 +333,44 @@ private fun PreviewInitializing() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Initializing
             ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            onBack = {},
+            onEvent = {},
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            input = "100",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
+        )
+    }
+}
+
+
+@Preview(showSystemUi = true, name = "Withdraw")
+@Composable
+private fun PreviewWithdraw() {
+    AppThemeSurface {
+        SendAmountContent(
+            uiState = SendUiState(
+                payMethod = SendMethod.LIGHTNING,
+                amountInput = "100",
+                lnUrlParameters = LnUrlParameters.LnUrlWithdraw(
+                    data = LnurlWithdrawData(
+                        uri = "",
+                        callback = "",
+                        k1 = "",
+                        defaultDescription = "Test",
+                        minWithdrawable = 1UL,
+                        maxWithdrawable = 130UL,
+                        tag = ""
+                    ),
+                    address = ""
+                )
+            ),
+            walletUiState = MainUiState(
+                nodeLifecycleState = NodeLifecycleState.Running
+            ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,
