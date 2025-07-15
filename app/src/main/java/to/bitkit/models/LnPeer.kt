@@ -26,15 +26,15 @@ data class LnPeer(
             address = address,
         )
 
-        fun parseUri(string: String): Result<LnPeer> {
-            val uri = string.split("@")
-            val nodeId = uri[0]
+        fun parseUri(uriString: String): Result<LnPeer> {
+            val uriComponents = uriString.split("@")
+            val nodeId = uriComponents[0]
 
-            if (uri.size != 2) {
+            if (uriComponents.size != 2) {
                 return Result.failure(Exception("Invalid peer uri"))
             }
 
-            val address = uri[1].split(":")
+            val address = uriComponents[1].split(":")
 
             if (address.size < 2) {
                 return Result.failure(Exception("Invalid peer uri"))

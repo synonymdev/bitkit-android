@@ -35,7 +35,7 @@ fun OutlinedColorButton(
             disabledContentColor = color,
         ),
         enabled = enabled,
-        shape = AppShapes.smallButton,
+        shape = AppShapes.small,
         contentPadding = PaddingValues(8.dp, 4.dp),
         border = BorderStroke(1.dp, color),
     ) {
