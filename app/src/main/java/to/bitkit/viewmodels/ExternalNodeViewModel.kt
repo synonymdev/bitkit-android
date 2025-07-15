@@ -129,6 +129,7 @@ class ExternalNodeViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     customFeeRate = defaultSatsPerVbyte,
+                    networkFee = 0L,
                 )
             }
             updateNetworkFee()

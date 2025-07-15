@@ -1,5 +1,8 @@
 package to.bitkit.ui.screens.transfer.external
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -117,18 +119,19 @@ private fun Content(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        MoneySSB(sats = networkFee)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            painterResource(R.drawable.ic_pencil_simple),
-                            contentDescription = null,
-                            tint = Colors.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+
+                    AnimatedVisibility(visible = networkFee > 0L, enter = fadeIn(), exit = fadeOut()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MoneySSB(sats = networkFee)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                painterResource(R.drawable.ic_pencil_simple),
+                                contentDescription = null,
+                                tint = Colors.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
@@ -181,6 +184,19 @@ private fun Preview() {
             uiState = ExternalNodeContract.UiState(
                 amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
                 networkFee = 2_100L,
+            )
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewFeeLoading() {
+    AppThemeSurface {
+        Content(
+            uiState = ExternalNodeContract.UiState(
+                amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
+                networkFee = 0L,
             )
         )
     }
