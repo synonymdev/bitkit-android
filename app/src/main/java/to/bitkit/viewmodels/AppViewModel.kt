@@ -868,7 +868,7 @@ class AppViewModel @Inject constructor(
 
     fun onConfirmWithdraw() {
         _sendUiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch { //TODO LOADING SATE
+        viewModelScope.launch {
             val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw
 
             if (lnUrlData == null) {
