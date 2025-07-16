@@ -3,13 +3,11 @@ package to.bitkit.repositories
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,7 +20,6 @@ import to.bitkit.models.HealthState
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class HealthRepo @Inject constructor(
@@ -45,9 +42,17 @@ class HealthRepo @Inject constructor(
     }
 
     private fun collectState() {
+        val internetHealthState = connectivityRepo.isOnline.map { connectivityState ->
+            when (connectivityState) {
+                ConnectivityState.CONNECTED -> HealthState.READY
+                ConnectivityState.CONNECTING -> HealthState.PENDING
+                ConnectivityState.DISCONNECTED -> HealthState.ERROR
+            }
+        }
+
         repoScope.launch {
             combine(
-                createInternetHealthFlow(),
+                internetHealthState,
                 lightningRepo.lightningState,
             ) { internetHealth, lightningState ->
                 val isOnline = internetHealth == HealthState.READY
@@ -94,53 +99,6 @@ class HealthRepo @Inject constructor(
                     )
                 }
             }
-        }
-    }
-
-    private fun createInternetHealthFlow() = flow {
-        var lastState: ConnectivityState? = null
-
-        connectivityRepo.isOnline.collect { newState ->
-            when {
-                // Direct transitions that don't need minimum duration
-                newState == ConnectivityState.DISCONNECTED -> {
-                    lastState = newState
-                    emit(newState)
-                }
-
-                // DISCONNECTED → CONNECTED transition: show CONNECTING first
-                lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTED -> {
-                    lastState = newState
-                    emit(ConnectivityState.CONNECTING) // Show CONNECTING first
-                    delay(1.5.seconds)
-                    emit(ConnectivityState.CONNECTED)
-                }
-
-                // DISCONNECTED → CONNECTING transition: show it immediately
-                lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTING -> {
-                    lastState = newState
-                    emit(ConnectivityState.CONNECTING)
-                    delay(1.5.seconds) // Don't emit again, wait for actual CONNECTED state
-                }
-
-                // CONNECTING → CONNECTED: emit if enough time has passed
-                lastState == ConnectivityState.CONNECTING && newState == ConnectivityState.CONNECTED -> {
-                    lastState = newState
-                    emit(newState)
-                }
-
-                // All other transitions: emit directly
-                else -> {
-                    lastState = newState
-                    emit(newState)
-                }
-            }
-        }
-    }.map { connectivityState ->
-        when (connectivityState) {
-            ConnectivityState.CONNECTED -> HealthState.READY
-            ConnectivityState.CONNECTING -> HealthState.PENDING
-            ConnectivityState.DISCONNECTED -> HealthState.ERROR
         }
     }
 
