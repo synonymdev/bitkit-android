@@ -85,7 +85,7 @@ class HomeViewModel @Inject constructor(
                 walletRepo.balanceState
             ) { settings, balanceState ->
                 _uiState.value.copy(
-                    showEmptyState = settings.showEmptyState && balanceState.totalSats == 0uL
+                    showEmptyState = settings.showEmptyBalanceView && balanceState.totalSats == 0uL
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -182,7 +182,7 @@ class HomeViewModel @Inject constructor(
 
     fun dismissEmptyState() {
         viewModelScope.launch {
-            settingsStore.update { it.copy(showEmptyState = false) }
+            settingsStore.update { it.copy(showEmptyBalanceView = false) }
         }
     }
 
