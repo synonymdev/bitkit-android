@@ -44,6 +44,7 @@ import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.screens.wallets.HomeRoutes
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
@@ -93,6 +94,7 @@ fun DrawerMenu(
             Modifier
                 .fillMaxHeight()
                 .zIndex(11f) // Higher z-index than overlay
+                .blockPointerInputPassthrough()
         )
     ) {
         DrawerContent(
@@ -133,7 +135,7 @@ fun DrawerContent(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__wallet),
             iconRes = R.drawable.ic_coins,
-            modifier = Modifier.clickable {
+            onClick = {
                 scope.launch { drawerState.close() }
             },
         )
@@ -141,7 +143,7 @@ fun DrawerContent(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__activity),
             iconRes = R.drawable.ic_heartbeat,
-            modifier = Modifier.clickable {
+            onClick = {
                 walletNavController.navigate(HomeRoutes.AllActivity)
                 scope.launch { drawerState.close() }
             },
@@ -149,18 +151,20 @@ fun DrawerContent(
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__contacts),
-            iconRes = R.drawable.ic_users // TODO IMPLEMENT CONTACTS
+            iconRes = R.drawable.ic_users,
+            onClick = null, // TODO IMPLEMENT CONTACTS
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__profile),
-            iconRes = R.drawable.ic_user_square, // TODO IMPLEMENT
+            iconRes = R.drawable.ic_user_square,
+            onClick = null, // TODO IMPLEMENT PROFILE
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__widgets),
             iconRes = R.drawable.ic_stack,
-            modifier = Modifier.clickable {
+            onClick = {
                 onClickAddWidget()
                 scope.launch { drawerState.close() }
             }
@@ -169,7 +173,7 @@ fun DrawerContent(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__shop),
             iconRes = R.drawable.ic_store_front,
-            modifier = Modifier.clickable {
+            onClick = {
                 rootNavController.navigate(Routes.ShopDiscover)
                 scope.launch { drawerState.close() }
             }
@@ -178,13 +182,13 @@ fun DrawerContent(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
-            modifier = Modifier.clickable {
+            onClick = {
                 rootNavController.navigateToSettings()
                 scope.launch { drawerState.close() }
             },
         )
 
-        // TODO app state menu component & nav to screen
+        // TODO add app state menu component & nav to screen
     }
 }
 
@@ -193,34 +197,45 @@ private fun DrawerItem(
     label: String,
     @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
-    VerticalSpacer(16.dp)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth()
+    Column(
+        modifier = modifier.then(
+            if (onClick != null) {
+                Modifier.clickable { onClick() }
+            } else {
+                Modifier
+            }
+        )
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            modifier = Modifier.size(24.dp)
-        )
+        VerticalSpacer(16.dp)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
 
-        Text(
-            text = label.uppercase(),
-            style = TextStyle(
-                fontWeight = FontWeight.Black,
-                fontSize = 24.sp,
-                lineHeight = 24.sp,
-                letterSpacing = (-1).sp,
-                fontFamily = InterFontFamily,
-                color = Colors.White,
-            ),
-            modifier = Modifier.weight(1f)
-        )
+            Text(
+                text = label.uppercase(),
+                style = TextStyle(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 24.sp,
+                    lineHeight = 24.sp,
+                    letterSpacing = (-1).sp,
+                    fontFamily = InterFontFamily,
+                    color = Colors.White,
+                ),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        VerticalSpacer(16.dp)
+        HorizontalDivider()
     }
-    VerticalSpacer(16.dp)
-    HorizontalDivider()
 }
 
 @Preview(showSystemUi = true)
