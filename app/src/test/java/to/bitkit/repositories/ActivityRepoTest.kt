@@ -116,7 +116,16 @@ class ActivityRepoTest : BaseUnitTest() {
         val paymentId = "payment123"
 
         wheneverBlocking {
-            coreService.activity.get(any(), any(), any(), any(), any(), any(), any(), any())
+            coreService.activity.get(
+                filter = any(),
+                txType = any(),
+                tags = any(),
+                search = any(),
+                minDate = any(),
+                maxDate = any(),
+                limit = any(),
+                sortDirection = any()
+            )
         }.thenReturn(emptyList())
 
         wheneverBlocking { lightningRepo.sync() }.thenReturn(Result.success(Unit))
@@ -334,6 +343,31 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(coreService.activity, never()).appendTags(any(), any())
+    }
+
+
+    @Test
+    fun `attachTagsToActivity should fail with empty tags`() = test {
+        val result = sut.addTagsToTransaction(
+            paymentHashOrTxId = "txId",
+            type = ActivityFilter.ALL,
+            txType = PaymentType.SENT,
+            tags = emptyList()
+        )
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `attachTagsToActivity should fail with empty paymentHashOrTxId`() = test {
+        val result = sut.addTagsToTransaction(
+            paymentHashOrTxId = "",
+            type = ActivityFilter.ALL,
+            txType = PaymentType.SENT,
+            tags = listOf("tag1")
+        )
+
+        assertTrue(result.isFailure)
     }
 
     @Test

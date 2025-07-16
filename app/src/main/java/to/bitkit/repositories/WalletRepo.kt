@@ -1,15 +1,11 @@
 package to.bitkit.repositories
 
-import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.AddressType
-import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
@@ -41,7 +37,6 @@ import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.seconds
 
 @Singleton
 class WalletRepo @Inject constructor(
@@ -511,92 +506,6 @@ class WalletRepo @Inject constructor(
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
         }
     }
-
-    suspend fun attachTagsToActivity(
-        paymentHashOrTxId: String?,
-        type: ActivityFilter,
-        txType: PaymentType,
-        tags: List<String>,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("attachTagsToActivity $tags", context = TAG)
-
-        when {
-            tags.isEmpty() -> {
-                Logger.debug("selectedTags empty", context = TAG)
-                return@withContext Result.failure(IllegalArgumentException("selectedTags empty"))
-            }
-
-            paymentHashOrTxId == null -> {
-                Logger.error(msg = "null paymentHashOrTxId", context = TAG)
-                return@withContext Result.failure(IllegalArgumentException("null paymentHashOrTxId"))
-            }
-        }
-
-        val activity = findActivityWithRetry(
-            paymentHashOrTxId = paymentHashOrTxId,
-            type = type,
-            txType = txType
-        ) ?: return@withContext Result.failure(IllegalStateException("Activity not found"))
-
-        if (!activity.matchesId(paymentHashOrTxId)) {
-            Logger.error(
-                "ID mismatch. Expected: $paymentHashOrTxId found: ${activity.idValue}",
-                context = TAG
-            )
-            return@withContext Result.failure(IllegalStateException("Activity ID mismatch"))
-        }
-
-        coreService.activity.appendTags(
-            toActivityId = activity.idValue,
-            tags = tags
-        ).fold(
-            onFailure = { error ->
-                Logger.error("Error attaching tags $tags", error, context = TAG)
-                Result.failure(Exception("Error attaching tags $tags", error))
-            },
-            onSuccess = {
-                Logger.info("Success attaching tags $tags to activity ${activity.idValue}", context = TAG)
-                deleteInvoice(txId = paymentHashOrTxId)
-                Result.success(Unit)
-            }
-        )
-    }
-
-    private suspend fun findActivityWithRetry(
-        paymentHashOrTxId: String,
-        type: ActivityFilter,
-        txType: PaymentType,
-    ): Activity? {
-
-        suspend fun findActivity(): Activity? = coreService.activity.get(
-            filter = type,
-            txType = txType,
-            limit = 10u
-        ).firstOrNull { it.matchesId(paymentHashOrTxId) }
-
-        var activity = findActivity()
-        if (activity == null) {
-            Logger.warn(
-                "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after delay",
-                context = TAG
-            )
-            // TODO REFRESH ACTIVITIES
-            delay(5.seconds)
-            activity = findActivity()
-        }
-        return activity
-    }
-
-    private fun Activity.matchesId(paymentHashOrTxId: String): Boolean = when (this) {
-        is Activity.Lightning -> paymentHashOrTxId == v1.id
-        is Activity.Onchain -> paymentHashOrTxId == v1.txId
-    }
-
-    private val Activity.idValue: String
-        get() = when (this) {
-            is Activity.Lightning -> v1.id
-            is Activity.Onchain -> v1.txId
-        }
 
     private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
         val address = this.invoice.address
