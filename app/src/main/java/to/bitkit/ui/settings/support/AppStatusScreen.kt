@@ -21,6 +21,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.BodyMSB
@@ -35,17 +36,10 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
-data class AppStatusUiState(
-    val internetState: StatusUi.State = StatusUi.State.READY,
-    val bitcoinNodeState: StatusUi.State = StatusUi.State.READY,
-    val lightningNodeState: StatusUi.State = StatusUi.State.READY,
-    val lightningConnectionState: StatusUi.State = StatusUi.State.PENDING,
-    val backupState: StatusUi.State = StatusUi.State.ERROR,
-)
-
 @Composable
 fun AppStatusScreen(
     navController: NavController,
+    viewModel: AppStatusViewModel = hiltViewModel(),
 ) {
     Content(
         onBack = { navController.popBackStack() },
