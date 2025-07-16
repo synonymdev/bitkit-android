@@ -36,7 +36,8 @@ class HealthRepo @Inject constructor(
         repoScope.launch {
             var lastState: ConnectivityState? = null
 
-            connectivityRepo.isOnline.transform { newState ->
+            connectivityRepo.isOnline
+                .transform { newState ->
                     when { // Direct transitions that don't need minimum duration
                         newState == ConnectivityState.DISCONNECTED -> {
                             lastState = newState
@@ -84,9 +85,20 @@ class HealthRepo @Inject constructor(
     private fun observeLightningNodeState() {
         repoScope.launch {
             lightningRepo.lightningState.collect { lightningState ->
-                val lightningNodeHealth = lightningState.nodeLifecycleState.asHealth()
+                val nodeLifecycleState = lightningState.nodeLifecycleState
 
-                updateState { it.copy(lightningNodeState = lightningNodeHealth) }
+                val bitcoinNodeHealth = when {
+                    nodeLifecycleState.isRunning() -> HealthState.READY
+                    nodeLifecycleState.canRun() -> HealthState.PENDING
+                    else -> HealthState.ERROR
+                }
+
+                updateState {
+                    it.copy(
+                        lightningNodeState = nodeLifecycleState.asHealth(),
+                        bitcoinNodeState = bitcoinNodeHealth,
+                    )
+                }
             }
         }
     }
