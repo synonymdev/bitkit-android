@@ -14,7 +14,8 @@ sealed class NodeLifecycleState {
     fun isRunning() = this is Running
     fun canRun() = this.isRunningOrStarting() || this is Initializing
 
-    val displayState: String
+    // TODO add missing localized texts
+    val uiText: String
         get() = when (this) {
             is Stopped -> "Stopped"
             is Starting -> "Starting"
@@ -23,4 +24,10 @@ sealed class NodeLifecycleState {
             is ErrorStarting -> "Error starting: ${cause.message}"
             is Initializing -> "Setting up wallet..."
         }
+
+    fun asHealth() = when (this) {
+        Running -> HealthState.READY
+        Starting, Initializing, Stopping -> HealthState.PENDING
+        Stopped, is ErrorStarting -> HealthState.ERROR
+    }
 }

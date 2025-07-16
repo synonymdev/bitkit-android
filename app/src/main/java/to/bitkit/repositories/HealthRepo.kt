@@ -7,13 +7,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.HealthState
-import to.bitkit.models.NodeLifecycleState
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -31,17 +29,15 @@ class HealthRepo @Inject constructor(
 
     init {
         observeNetworkConnectivity()
-        observeOverallState()
+        observeLightningNodeState()
     }
 
     private fun observeNetworkConnectivity() {
         repoScope.launch {
             var lastState: ConnectivityState? = null
 
-            connectivityRepo.isOnline
-                .transform { newState ->
-                    when {
-                        // Direct transitions that don't need minimum duration
+            connectivityRepo.isOnline.transform { newState ->
+                    when { // Direct transitions that don't need minimum duration
                         newState == ConnectivityState.DISCONNECTED -> {
                             lastState = newState
                             emit(newState)
@@ -59,8 +55,7 @@ class HealthRepo @Inject constructor(
                         lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTING -> {
                             lastState = newState
                             emit(ConnectivityState.CONNECTING)
-                            delay(1.5.seconds)
-                            // Don't emit again, wait for actual CONNECTED state
+                            delay(1.5.seconds) // Don't emit again, wait for actual CONNECTED state
                         }
 
                         // CONNECTING → CONNECTED: emit if enough time has passed
@@ -75,65 +70,53 @@ class HealthRepo @Inject constructor(
                             emit(newState)
                         }
                     }
-                }
-                .collect { connectivityState ->
+                }.collect { connectivityState ->
                     val internetState = when (connectivityState) {
                         ConnectivityState.CONNECTED -> HealthState.READY
                         ConnectivityState.CONNECTING -> HealthState.PENDING
                         ConnectivityState.DISCONNECTED -> HealthState.ERROR
                     }
-                    updateInternetState(internetState)
+                    updateState { it.copy(internetState = internetState) }
                 }
         }
     }
 
-    private fun updateInternetState(newState: HealthState) {
-        _healthState.update { it.copy(internetState = newState) }
+    private fun observeLightningNodeState() {
+        repoScope.launch {
+            lightningRepo.lightningState.collect { lightningState ->
+                val lightningNodeHealth = lightningState.nodeLifecycleState.asHealth()
+
+                updateState { it.copy(lightningNodeState = lightningNodeHealth) }
+            }
+        }
     }
 
-    private fun observeOverallState() {
-        repoScope.launch {
-            combine(
-                lightningRepo.lightningState,
-                _healthState,
-            ) { lightningState, healthState ->
-                val overallHealth = when (lightningState.nodeLifecycleState) {
-                    is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
+    private fun updateState(update: (AppHealthState) -> AppHealthState) {
+        _healthState.update { currentState ->
+            val updatedState = update(currentState)
 
-                    NodeLifecycleState.Stopped -> HealthState.ERROR
+            // Compute overall health from all individual states
+            val states = listOf(
+                updatedState.internetState,
+                updatedState.bitcoinNodeState,
+                updatedState.lightningNodeState,
+                updatedState.backupState,
+            )
 
-                    NodeLifecycleState.Starting,
-                    NodeLifecycleState.Stopping,
-                    NodeLifecycleState.Initializing,
-                        -> HealthState.PENDING
-
-                    NodeLifecycleState.Running -> {
-                        val states = listOf(
-                            healthState.internetState,
-                            healthState.bitcoinNodeState,
-                            healthState.lightningNodeState,
-                            healthState.backupState,
-                        )
-
-                        when {
-                            HealthState.ERROR in states -> HealthState.ERROR
-                            HealthState.PENDING in states -> HealthState.PENDING
-                            else -> HealthState.READY
-                        }
-                    }
-                }
-
-                healthState.copy(overallHealth = overallHealth)
-            }.collect { newState ->
-                _healthState.value = newState
+            val overallHealth = when {
+                HealthState.ERROR in states -> HealthState.ERROR
+                HealthState.PENDING in states -> HealthState.PENDING
+                else -> HealthState.READY
             }
+
+            updatedState.copy(overallHealth = overallHealth)
         }
     }
 }
 
 data class AppHealthState(
     val internetState: HealthState = HealthState.READY,
-    val bitcoinNodeState: HealthState = HealthState.PENDING,
+    val bitcoinNodeState: HealthState = HealthState.READY,
     val lightningNodeState: HealthState = HealthState.READY,
     val lightningConnectionState: HealthState = HealthState.READY,
     val backupState: HealthState = HealthState.READY,

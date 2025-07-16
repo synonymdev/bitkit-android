@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -188,7 +187,7 @@ private fun NodeStateSection(
         SectionHeader("Node State")
         SettingsTextButtonRow(
             title = "Node State:",
-            value = nodeLifecycleState.displayState,
+            value = nodeLifecycleState.uiText,
         )
 
         nodeStatus?.let { status ->

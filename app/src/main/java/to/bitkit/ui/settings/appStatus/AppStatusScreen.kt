@@ -48,7 +48,7 @@ fun AppStatusScreen(
     val uiState by app.healthState.collectAsStateWithLifecycle()
 
     Content(
-        uiState = uiState,
+        state = uiState,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
     )
@@ -56,7 +56,7 @@ fun AppStatusScreen(
 
 @Composable
 private fun Content(
-    uiState: AppHealthState = AppHealthState(),
+    state: AppHealthState = AppHealthState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -77,65 +77,65 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__internet__title),
-                    subtitle = when (uiState.internetState) {
+                    subtitle = when (state.internetState) {
                         HealthState.READY -> stringResource(R.string.settings__status__internet__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__internet__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__internet__error)
                     },
                     iconRes = R.drawable.ic_globe,
-                    state = uiState.internetState,
+                    state = state.internetState,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__electrum__title),
-                    subtitle = when (uiState.bitcoinNodeState) {
+                    subtitle = when (state.bitcoinNodeState) {
                         HealthState.READY -> stringResource(R.string.settings__status__electrum__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__electrum__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__electrum__error)
                     },
                     iconRes = R.drawable.ic_bitcoin,
-                    state = uiState.bitcoinNodeState,
+                    state = state.bitcoinNodeState,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_node__title),
-                    subtitle = when (uiState.lightningNodeState) {
+                    subtitle = when (state.lightningNodeState) {
                         HealthState.READY -> stringResource(R.string.settings__status__lightning_node__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
                     },
                     iconRes = R.drawable.ic_broadcast,
-                    state = uiState.lightningNodeState,
+                    state = state.lightningNodeState,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_connection__title),
-                    subtitle = when (uiState.lightningConnectionState) {
+                    subtitle = when (state.lightningConnectionState) {
                         HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
-                    state = uiState.lightningConnectionState,
+                    state = state.lightningConnectionState,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__backup__title),
-                    subtitle = when (uiState.backupState) {
+                    subtitle = when (state.backupState) {
                         HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
                     },
                     iconRes = R.drawable.ic_cloud_check,
-                    state = uiState.backupState,
+                    state = state.backupState,
                 ),
                 showDivider = false,
             )
@@ -218,7 +218,7 @@ private data class StatusUi(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = AppHealthState(
+            state = AppHealthState(
                 internetState = HealthState.PENDING,
                 bitcoinNodeState = HealthState.READY,
                 lightningNodeState = HealthState.READY,
