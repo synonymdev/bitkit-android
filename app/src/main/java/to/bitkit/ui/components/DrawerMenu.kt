@@ -1,0 +1,205 @@
+package to.bitkit.ui.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
+import to.bitkit.R
+import to.bitkit.ui.Routes
+import to.bitkit.ui.navigateToSettings
+import to.bitkit.ui.screens.wallets.HomeRoutes
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+
+@Composable
+fun DrawerMenu(
+    drawerState: DrawerState,
+    walletNavController: NavController,
+    rootNavController: NavController,
+    hasSeenWidgetsIntro: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+
+    // overlay background
+    AnimatedVisibility(
+        visible = drawerState.currentValue == DrawerValue.Open,
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(10f) // Higher z-index than TabBar
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Colors.Black50)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    scope.launch {
+                        drawerState.close()
+                    }
+                }
+        )
+    }
+
+    // Right-side drawer content
+    AnimatedVisibility(
+        visible = drawerState.currentValue == DrawerValue.Open,
+        enter = slideInHorizontally(
+            initialOffsetX = { it }
+        ),
+        exit = slideOutHorizontally(
+            targetOffsetX = { it }
+        ),
+        modifier = modifier.then(
+            Modifier
+                .fillMaxHeight()
+                .zIndex(11f) // Higher z-index than overlay
+        )
+    ) {
+        DrawerContent(
+            walletNavController = walletNavController,
+            rootNavController = rootNavController,
+            drawerState = drawerState,
+            onClickAddWidget = {
+                if (!hasSeenWidgetsIntro) {
+                    rootNavController.navigate(Routes.WidgetsIntro)
+                } else {
+                    rootNavController.navigate(Routes.AddWidget)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun DrawerContent(
+    walletNavController: NavController,
+    rootNavController: NavController,
+    drawerState: DrawerState,
+    onClickAddWidget: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val drawerWidth = 200.dp
+
+    Column(
+        modifier = Modifier
+            .width(drawerWidth)
+            .fillMaxHeight()
+            .background(Colors.Brand)
+    ) {
+        VerticalSpacer(60.dp)
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__wallet),
+            iconRes = R.drawable.ic_coins,
+            modifier = Modifier.clickable {
+                scope.launch { drawerState.close() }
+            },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__activity),
+            iconRes = R.drawable.ic_heartbeat,
+            modifier = Modifier.clickable {
+                walletNavController.navigate(HomeRoutes.AllActivity)
+                scope.launch { drawerState.close() }
+            },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__contacts),
+            iconRes = R.drawable.ic_users // TODO IMPLEMENT CONTACTS
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__profile),
+            iconRes = R.drawable.ic_user_square, // TODO IMPLEMENT
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__widgets),
+            iconRes = R.drawable.ic_stack,
+            modifier = Modifier.clickable {
+                onClickAddWidget()
+                scope.launch { drawerState.close() }
+            },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__shop),
+            iconRes = R.drawable.ic_store_front,
+            modifier = Modifier.clickable {
+                rootNavController.navigate(Routes.ShopDiscover)
+                scope.launch { drawerState.close() }
+            },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        DrawerItem(
+            label = stringResource(R.string.wallet__drawer__settings),
+            iconRes = R.drawable.ic_settings,
+            modifier = Modifier.clickable {
+                rootNavController.navigateToSettings()
+                scope.launch { drawerState.close() }
+            },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        // TODO NAVIGATE TO APP STATE
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        val navController = rememberNavController()
+        Box {
+            DrawerMenu(
+                walletNavController = navController,
+                rootNavController = navController,
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
+                hasSeenWidgetsIntro = false,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+    }
+}

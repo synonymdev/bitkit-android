@@ -6,26 +6,19 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,7 +27,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.VerticalDivider
@@ -57,7 +49,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,18 +69,16 @@ import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
-import to.bitkit.ui.components.DrawerItem
+import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
-import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToScanner
-import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.navigateToTransferSavingsAvailability
@@ -137,7 +126,6 @@ fun HomeScreen(
     val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
         val walletNavController = rememberNavController()
@@ -337,145 +325,13 @@ fun HomeScreen(
                 .systemBarsPadding()
         )
 
-        AnimatedVisibility(
-            visible = drawerState.currentValue == DrawerValue.Open,
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(10f) // Higher z-index than TabBar
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Colors.Black50)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        scope.launch {
-                            drawerState.close()
-                        }
-                    }
-            )
-        }
-
-        // Right-side drawer content
-        AnimatedVisibility(
-            visible = drawerState.currentValue == DrawerValue.Open,
-            enter = slideInHorizontally(
-                initialOffsetX = { it }
-            ),
-            exit = slideOutHorizontally(
-                targetOffsetX = { it }
-            ),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxHeight()
-                .zIndex(11f) // Higher z-index than overlay
-        ) {
-            DrawerContent(
-                walletNavController = walletNavController,
-                rootNavController = rootNavController,
-                drawerState = drawerState,
-                onClickAddWidget = {
-                    if (!hasSeenWidgetsIntro) {
-                        rootNavController.navigate(Routes.WidgetsIntro)
-                    } else {
-                        rootNavController.navigate(Routes.AddWidget)
-                    }
-                }
-            )
-        }
-    }
-}
-
-
-@Composable
-private fun DrawerContent(
-    walletNavController: NavController,
-    rootNavController: NavController,
-    drawerState: DrawerState,
-    onClickAddWidget: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val drawerWidth = 200.dp
-
-    Column(
-        modifier = Modifier
-            .width(drawerWidth)
-            .fillMaxHeight()
-            .background(Colors.Brand)
-    ) {
-        VerticalSpacer(60.dp)
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__wallet),
-            iconRes = R.drawable.ic_coins,
-            modifier = Modifier.clickable {
-                scope.launch { drawerState.close() }
-            },
+        DrawerMenu(
+            drawerState = drawerState,
+            walletNavController = walletNavController,
+            rootNavController = rootNavController,
+            hasSeenWidgetsIntro = hasSeenWidgetsIntro,
+            modifier = Modifier.align(Alignment.TopEnd)
         )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__activity),
-            iconRes = R.drawable.ic_heartbeat,
-            modifier = Modifier.clickable {
-                walletNavController.navigate(HomeRoutes.AllActivity)
-                scope.launch { drawerState.close() }
-            },
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__contacts),
-            iconRes = R.drawable.ic_users // TODO IMPLEMENT CONTACTS
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__profile),
-            iconRes = R.drawable.ic_user_square, // TODO IMPLEMENT
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__widgets),
-            iconRes = R.drawable.ic_stack,
-            modifier = Modifier.clickable {
-                onClickAddWidget()
-                scope.launch { drawerState.close() }
-            },
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__shop),
-            iconRes = R.drawable.ic_store_front,
-            modifier = Modifier.clickable {
-                rootNavController.navigate(Routes.ShopDiscover)
-                scope.launch { drawerState.close() }
-            },
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__settings),
-            iconRes = R.drawable.ic_settings,
-            modifier = Modifier.clickable {
-                rootNavController.navigateToSettings()
-                scope.launch { drawerState.close() }
-            },
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // TODO NAVIGATE TO APP STATE
     }
 }
 
