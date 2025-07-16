@@ -28,30 +28,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.HealthState
-import to.bitkit.models.NodeLifecycleState
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.walletViewModel
 
 @Composable
 fun AppStatus(
-    status: HealthState = rememberAppStatus(),
+    healthStatus: HealthState = rememberHealthState(),
     modifier: Modifier = Modifier,
     showText: Boolean = false,
     showReady: Boolean = false,
     color: Color? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val statusColor = color ?: when (status) {
+    val statusColor = color ?: when (healthStatus) {
         HealthState.READY -> Colors.Green
         HealthState.PENDING -> Colors.Yellow
         HealthState.ERROR -> Colors.Red
     }
 
     // Don't show anything if ready and showReady is false
-    if (status == HealthState.READY && !showReady) {
+    if (healthStatus == HealthState.READY && !showReady) {
         return
     }
 
@@ -63,7 +61,7 @@ fun AppStatus(
         label = "rotation",
     )
     val opacity by infiniteTransition.animateFloat(
-        initialValue = if (status == HealthState.ERROR) 0.3f else 1f,
+        initialValue = if (healthStatus == HealthState.ERROR) 0.3f else 1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "opacity",
@@ -74,7 +72,7 @@ fun AppStatus(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.clickableAlpha(onClick = onClick)
     ) {
-        when (status) {
+        when (healthStatus) {
             HealthState.READY -> {
                 Icon(
                     painter = painterResource(R.drawable.ic_power),
@@ -114,47 +112,14 @@ fun AppStatus(
 }
 
 @Composable
-fun rememberAppStatus(
-    initialState: HealthState = HealthState.READY,
-): HealthState {
+fun rememberHealthState(): HealthState {
     val isPreview = LocalInspectionMode.current
-    if (isPreview) return initialState
+    if (isPreview) return HealthState.READY
 
-    val wallet = requireNotNull(walletViewModel)
     val app = requireNotNull(appViewModel)
-
-    val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
     val healthState by app.healthState.collectAsStateWithLifecycle()
 
-    return remember(walletUiState.nodeLifecycleState, healthState) {
-        // Check node state first, then other states
-        when (walletUiState.nodeLifecycleState) {
-            is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
-
-            NodeLifecycleState.Stopped -> HealthState.ERROR
-
-            NodeLifecycleState.Starting,
-            NodeLifecycleState.Stopping,
-            NodeLifecycleState.Initializing,
-                -> HealthState.PENDING
-
-            // If node is running, check other states
-            NodeLifecycleState.Running -> {
-                val states = listOf(
-                    healthState.internetState,
-                    healthState.bitcoinNodeState,
-                    healthState.lightningNodeState,
-                    healthState.backupState,
-                )
-
-                when {
-                    HealthState.ERROR in states -> HealthState.ERROR
-                    HealthState.PENDING in states -> HealthState.PENDING
-                    else -> HealthState.READY
-                }
-            }
-        }
-    }
+    return healthState.overallHealth
 }
 
 @Composable
@@ -168,6 +133,7 @@ private fun rememberRotationEasing(): Easing {
                     val normalizedFraction = fraction / 0.4f
                     bezierEasing.transform(normalizedFraction) * 0.5f
                 }
+
                 else -> {
                     val normalizedFraction = (fraction - 0.4f) / 0.6f
                     0.5f + bezierEasing.transform(normalizedFraction) * 0.5f
@@ -186,16 +152,16 @@ private fun Preview() {
             modifier = Modifier
         ) {
             AppStatus(
-                status = HealthState.READY,
+                healthStatus = HealthState.READY,
                 showText = true,
                 showReady = true,
             )
             AppStatus(
-                status = HealthState.PENDING,
+                healthStatus = HealthState.PENDING,
                 showText = true,
             )
             AppStatus(
-                status = HealthState.ERROR,
+                healthStatus = HealthState.ERROR,
                 showText = true,
             )
         }

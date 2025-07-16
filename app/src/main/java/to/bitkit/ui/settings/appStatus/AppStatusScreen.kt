@@ -26,7 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.HealthState
-import to.bitkit.repositories.AppStatusState
+import to.bitkit.repositories.AppHealthState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
@@ -56,7 +56,7 @@ fun AppStatusScreen(
 
 @Composable
 private fun Content(
-    uiState: AppStatusState = AppStatusState(),
+    uiState: AppHealthState = AppHealthState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -218,7 +218,7 @@ private data class StatusUi(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = AppStatusState(
+            uiState = AppHealthState(
                 internetState = HealthState.PENDING,
                 bitcoinNodeState = HealthState.READY,
                 lightningNodeState = HealthState.READY,
