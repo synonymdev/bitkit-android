@@ -1,6 +1,8 @@
 package to.bitkit.ui.components
 
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -57,17 +59,13 @@ fun AppStatus(
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        animationSpec = infiniteRepeatable(tween(2000, easing = rememberRotationEasing())),
         label = "rotation",
     )
-
     val opacity by infiniteTransition.animateFloat(
         initialValue = if (status == HealthState.ERROR) 0.3f else 1f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(animation = tween(600), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "opacity",
     )
 
@@ -153,6 +151,26 @@ fun rememberAppStatus(
                     HealthState.ERROR in states -> HealthState.ERROR
                     HealthState.PENDING in states -> HealthState.PENDING
                     else -> HealthState.READY
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberRotationEasing(): Easing {
+    val bezierEasing = remember { CubicBezierEasing(0.4f, 0f, 0.2f, 1f) }
+
+    return remember {
+        Easing { fraction ->
+            when {
+                fraction <= 0.4f -> {
+                    val normalizedFraction = fraction / 0.4f
+                    bezierEasing.transform(normalizedFraction) * 0.5f
+                }
+                else -> {
+                    val normalizedFraction = (fraction - 0.4f) / 0.6f
+                    0.5f + bezierEasing.transform(normalizedFraction) * 0.5f
                 }
             }
         }
