@@ -987,7 +987,6 @@ class AppViewModel @Inject constructor(
     }
 
     private fun getMinOnchainTx(): ULong {
-        // TODO implement min tx size
         return Env.minOnChainSendLimit
     }
 
