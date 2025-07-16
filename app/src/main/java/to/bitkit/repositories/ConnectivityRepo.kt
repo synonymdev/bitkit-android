@@ -13,11 +13,13 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.launch
+
+enum class ConnectivityState { CONNECTED, CONNECTING, DISCONNECTED, }
 
 @Singleton
 class ConnectivityRepo @Inject constructor(
@@ -30,9 +32,9 @@ class ConnectivityRepo @Inject constructor(
 
     /**
      * Observes network connectivity status as a Flow.
-     * Emits true when connected to internet, false otherwise.
+     * Emits CONNECTED when internet is available, CONNECTING when transitioning, DISCONNECTED when offline.
      */
-    val isOnline: Flow<Boolean> = callbackFlow {
+    val isOnline: Flow<ConnectivityState> = callbackFlow {
         val networkRequest = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -42,30 +44,37 @@ class ConnectivityRepo @Inject constructor(
             override fun onAvailable(network: Network) {
                 Logger.info("Network connection restored")
                 repoScope.launch {
-                    send(true)
+                    send(if (isConnected()) ConnectivityState.CONNECTED else ConnectivityState.CONNECTING)
                 }
             }
 
             override fun onLost(network: Network) {
                 Logger.debug("Network connection lost")
                 repoScope.launch {
-                    send(false)
+                    send(ConnectivityState.DISCONNECTED)
                 }
             }
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                val isConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                Logger.debug("Network capabilities changed, connected: $isConnected")
+                val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+                val state = when {
+                    hasInternet && isValidated -> ConnectivityState.CONNECTED
+                    hasInternet && !isValidated -> ConnectivityState.CONNECTING
+                    else -> ConnectivityState.DISCONNECTED
+                }
+
+                Logger.debug("Network capabilities changed, state: $state")
                 repoScope.launch {
-                    send(isConnected)
+                    send(state)
                 }
             }
         }
 
         // Send initial state
         repoScope.launch {
-            send(getCurrentConnectivityStatus())
+            send(if (isConnected()) ConnectivityState.CONNECTED else ConnectivityState.DISCONNECTED)
         }
 
         // Register network callback
@@ -77,14 +86,13 @@ class ConnectivityRepo @Inject constructor(
         }
     }.distinctUntilChanged()
 
-    /**
-     * Get current connectivity status synchronously.
-     */
-    private fun getCurrentConnectivityStatus(): Boolean {
+    private fun isConnected(): Boolean {
         val activeNetwork = connectivityManager.activeNetwork ?: return false
         val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
 
-        return networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-               networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+        return hasInternet && isValidated
     }
 }

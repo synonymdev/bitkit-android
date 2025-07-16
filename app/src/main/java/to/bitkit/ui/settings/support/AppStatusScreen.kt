@@ -219,7 +219,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = AppStatusUiState(
-                internetState = StatusUi.State.READY,
+                internetState = StatusUi.State.PENDING,
                 bitcoinNodeState = StatusUi.State.READY,
                 lightningNodeState = StatusUi.State.READY,
                 lightningConnectionState = StatusUi.State.PENDING,
