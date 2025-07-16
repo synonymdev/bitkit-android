@@ -23,15 +23,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.HealthState
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.ui.settings.appStatus.AppStatusViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.walletViewModel
 
 @Composable
@@ -124,12 +123,12 @@ fun rememberAppStatus(
     if (isPreview) return initialState
 
     val wallet = requireNotNull(walletViewModel)
-    val appStatus = hiltViewModel<AppStatusViewModel>()
+    val app = requireNotNull(appViewModel)
 
     val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
-    val appStatusUiState by appStatus.uiState.collectAsStateWithLifecycle()
+    val healthState by app.healthState.collectAsStateWithLifecycle()
 
-    return remember(walletUiState.nodeLifecycleState, appStatusUiState) {
+    return remember(walletUiState.nodeLifecycleState, healthState) {
         // Check node state first, then other states
         when (walletUiState.nodeLifecycleState) {
             is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
@@ -144,10 +143,10 @@ fun rememberAppStatus(
             // If node is running, check other states
             NodeLifecycleState.Running -> {
                 val states = listOf(
-                    appStatusUiState.internetState,
-                    appStatusUiState.bitcoinNodeState,
-                    appStatusUiState.lightningNodeState,
-                    appStatusUiState.backupState,
+                    healthState.internetState,
+                    healthState.bitcoinNodeState,
+                    healthState.lightningNodeState,
+                    healthState.backupState,
                 )
 
                 when {

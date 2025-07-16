@@ -1,41 +1,41 @@
-package to.bitkit.ui.settings.appStatus
+package to.bitkit.repositories
 
 import android.content.Context
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.HealthState
-import to.bitkit.repositories.ConnectivityRepo
-import to.bitkit.repositories.ConnectivityState
+import to.bitkit.utils.Logger
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 
-@HiltViewModel
-class AppStatusViewModel @Inject constructor(
+@Singleton
+class HealthRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val connectivityRepo: ConnectivityRepo,
-) : ViewModel() {
+) {
+    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
-    private val _uiState = MutableStateFlow(AppStatusUiState())
-    val uiState: StateFlow<AppStatusUiState> = _uiState.asStateFlow()
+    private val _appStatusState = MutableStateFlow(AppStatusState())
+    val healthState: StateFlow<AppStatusState> = _appStatusState.asStateFlow()
 
     init {
         observeNetworkConnectivity()
     }
 
     private fun observeNetworkConnectivity() {
-        viewModelScope.launch(bgDispatcher) {
+        repoScope.launch {
             var lastState: ConnectivityState? = null
 
             connectivityRepo.isOnline
@@ -88,14 +88,14 @@ class AppStatusViewModel @Inject constructor(
     }
 
     private fun updateInternetState(newState: HealthState) {
-        _uiState.update { it.copy(internetState = newState) }
+        _appStatusState.update { it.copy(internetState = newState) }
     }
 }
 
-data class AppStatusUiState(
+data class AppStatusState(
     val internetState: HealthState = HealthState.READY,
-    val bitcoinNodeState: HealthState = HealthState.READY,
-    val lightningNodeState: HealthState = HealthState.READY,
+    val bitcoinNodeState: HealthState = HealthState.PENDING,
+    val lightningNodeState: HealthState = HealthState.PENDING,
     val lightningConnectionState: HealthState = HealthState.READY,
     val backupState: HealthState = HealthState.READY,
 )

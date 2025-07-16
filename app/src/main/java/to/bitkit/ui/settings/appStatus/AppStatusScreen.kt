@@ -22,11 +22,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.HealthState
+import to.bitkit.repositories.AppStatusState
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -42,9 +43,9 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun AppStatusScreen(
     navController: NavController,
-    viewModel: AppStatusViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val app = requireNotNull(appViewModel)
+    val uiState by app.healthState.collectAsStateWithLifecycle()
 
     Content(
         uiState = uiState,
@@ -55,7 +56,7 @@ fun AppStatusScreen(
 
 @Composable
 private fun Content(
-    uiState: AppStatusUiState = AppStatusUiState(),
+    uiState: AppStatusState = AppStatusState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -217,7 +218,7 @@ private data class StatusUi(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = AppStatusUiState(
+            uiState = AppStatusState(
                 internetState = HealthState.PENDING,
                 bitcoinNodeState = HealthState.READY,
                 lightningNodeState = HealthState.READY,
