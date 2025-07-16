@@ -16,6 +16,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -45,6 +46,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val blocktankNotificationsService: BlocktankNotificationsService = mock()
     private val firebaseMessaging: FirebaseMessaging = mock()
     private val keychain: Keychain = mock()
+    private val cacheStore: CacheStore = mock()
 
     private val lnUrlWithdrawService: LnUrlWithdrawService = mock()
 
@@ -60,7 +62,8 @@ class LightningRepoTest : BaseUnitTest() {
             blocktankNotificationsService = blocktankNotificationsService,
             firebaseMessaging = firebaseMessaging,
             keychain = keychain,
-            lnUrlWithdrawService = lnUrlWithdrawService
+            lnUrlWithdrawService = lnUrlWithdrawService,
+            cacheStore = cacheStore,
         )
     }
 

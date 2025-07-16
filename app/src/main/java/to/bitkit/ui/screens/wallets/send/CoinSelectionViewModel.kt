@@ -143,8 +143,8 @@ class CoinSelectionViewModel @Inject constructor(
     ): ULong {
         return lightningRepo
             .calculateTotalFee(
-                address = address,
                 amountSats = amountSats,
+                address = address,
                 utxosToSpend = utxosToSpend,
             )
             .map { fee -> amountSats + fee }

@@ -142,7 +142,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.ExternalNodeViewModel
+import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SendEvent
@@ -615,9 +615,13 @@ private fun RootNavHost(
                     )
                 }
                 composableWithDefaultTransitions<Routes.ExternalFeeCustom> {
+                    val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
+                    val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
+
                     ExternalFeeCustomScreen(
-                        onBackClick = { navController.popBackStack() },
-                        onCloseClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                        onClose = { navController.navigateToHome() },
                     )
                 }
             }

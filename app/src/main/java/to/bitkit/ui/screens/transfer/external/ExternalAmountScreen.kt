@@ -11,16 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
@@ -37,7 +33,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.ExternalNodeViewModel
+import kotlin.math.min
 import kotlin.math.roundToLong
 
 @Composable
@@ -47,9 +43,14 @@ fun ExternalAmountScreen(
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
-    ExternalAmountContent(
-        onContinueClick = { satsAmount ->
-            viewModel.onAmountContinue(satsAmount)
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    Content(
+        amountState = uiState.amount,
+        onAmountChange = { sats -> viewModel.onAmountChange(sats) },
+        onAmountOverride = { sats -> viewModel.onAmountOverride(sats) },
+        onContinueClick = {
+            viewModel.onAmountContinue()
             onContinue()
         },
         onBackClick = onBackClick,
@@ -58,8 +59,11 @@ fun ExternalAmountScreen(
 }
 
 @Composable
-private fun ExternalAmountContent(
-    onContinueClick: (Long) -> Unit = {},
+private fun Content(
+    amountState: ExternalNodeContract.UiState.Amount = ExternalNodeContract.UiState.Amount(),
+    onAmountChange: (Long) -> Unit = {},
+    onAmountOverride: (Long) -> Unit = {},
+    onContinueClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
 ) {
@@ -75,10 +79,7 @@ private fun ExternalAmountContent(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var satsAmount by rememberSaveable { mutableLongStateOf(0) }
-            var overrideSats: Long? by remember { mutableStateOf(null) }
-
-            val availableAmount = LocalBalances.current.totalOnchainSats
+            val totalOnchainSats = LocalBalances.current.totalOnchainSats
 
             Spacer(modifier = Modifier.height(16.dp))
             Display(stringResource(R.string.lightning__external_amount__title).withAccent(accentColor = Colors.Purple))
@@ -86,10 +87,9 @@ private fun ExternalAmountContent(
 
             AmountInput(
                 primaryDisplay = LocalCurrencies.current.primaryDisplay,
-                overrideSats = overrideSats,
+                overrideSats = amountState.overrideSats,
             ) { sats ->
-                satsAmount = sats
-                overrideSats = null
+                onAmountChange(sats)
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -106,7 +106,7 @@ private fun ExternalAmountContent(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = availableAmount.toLong())
+                    MoneySSB(sats = amountState.max)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(color = Colors.Purple)
@@ -115,8 +115,9 @@ private fun ExternalAmountContent(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = (availableAmount.toDouble() / 4.0).roundToLong()
-                        overrideSats = quarter
+                        val quarterOfTotal = (totalOnchainSats.toDouble() / 4.0).roundToLong()
+                        val cappedQuarter = min(quarterOfTotal, amountState.max)
+                        onAmountOverride(cappedQuarter)
                     },
                 )
                 // Max Button
@@ -124,8 +125,7 @@ private fun ExternalAmountContent(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        val max = (availableAmount.toDouble() * 0.9).toLong() // TODO calc max amount
-                        overrideSats = max
+                        onAmountOverride(amountState.max)
                     },
                 )
             }
@@ -134,8 +134,8 @@ private fun ExternalAmountContent(
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                onClick = { onContinueClick(satsAmount) },
-                enabled = satsAmount != 0L,
+                onClick = { onContinueClick() },
+                enabled = amountState.sats != 0L,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -143,11 +143,10 @@ private fun ExternalAmountContent(
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ExternalAmountContent(
-        )
+        Content()
     }
 }

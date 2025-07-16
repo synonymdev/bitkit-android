@@ -328,6 +328,27 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    suspend fun getMaxSendAmount(): ULong = withContext(bgDispatcher) {
+        val totalOnchainSats = balanceState.value.totalOnchainSats
+        if (totalOnchainSats == 0uL) {
+            return@withContext 0uL
+        }
+
+        try {
+            val minFeeBuffer = 1000uL
+            val amountSats = (totalOnchainSats - minFeeBuffer).coerceAtLeast(0uL)
+            val fee = lightningRepo.calculateTotalFee(amountSats).getOrThrow()
+            val maxSendable = (totalOnchainSats - fee).coerceAtLeast(0uL)
+
+            return@withContext maxSendable
+        } catch (_: Throwable) {
+            Logger.debug("Could not calculate max send amount, using as fallback 90% of total", context = TAG)
+            val fallbackMax = (totalOnchainSats.toDouble() * 0.9).toULong()
+            return@withContext fallbackMax
+        }
+    }
+
+
     // Settings
     suspend fun setShowEmptyState(show: Boolean) {
         settingsStore.update { it.copy(showEmptyState = show) }
@@ -488,35 +509,6 @@ class WalletRepo @Inject constructor(
             db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysAgoMillis)
         } catch (e: Throwable) {
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
-        }
-    }
-
-    suspend fun deleteActivityById(id: String) = withContext(bgDispatcher) {
-        runCatching {
-            coreService.activity.delete(id)
-        }.onFailure { e ->
-            Logger.error(msg = "Error deleteActivityById. id:$id", e = e, context = TAG)
-        }
-    }
-
-
-    suspend fun getOnChainActivityByTxId(txId: String, txType: PaymentType): Result<Activity> {
-        return runCatching {
-            findActivityWithRetry(
-                paymentHashOrTxId = txId,
-                txType = txType,
-                type = ActivityFilter.ONCHAIN
-            ) ?: return Result.failure(Exception("Activity not found"))
-        }.onFailure { e ->
-            Logger.error(msg = "Error getOnChainActivityByTxId. txId:$txId, txType:$txType", e = e, context = TAG)
-        }
-    }
-
-    suspend fun updateActivity(id: String, updatedActivity: Activity): Result<Unit> {
-        return runCatching {
-            coreService.activity.update(id, updatedActivity)
-        }.onFailure { e ->
-            Logger.error(msg = "Error updateActivity. id:$id, updatedActivity:$updatedActivity", e = e, context = TAG)
         }
     }
 

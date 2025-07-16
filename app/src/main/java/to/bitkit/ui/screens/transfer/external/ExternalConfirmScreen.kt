@@ -1,5 +1,8 @@
 package to.bitkit.ui.screens.transfer.external
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,9 +43,7 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.ExternalNodeContract
-import to.bitkit.viewmodels.ExternalNodeContract.SideEffect
-import to.bitkit.viewmodels.ExternalNodeViewModel
+import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 
 @Composable
 fun ExternalConfirmScreen(
@@ -64,7 +64,7 @@ fun ExternalConfirmScreen(
         }
     }
 
-    ExternalConfirmContent(
+    Content(
         uiState = uiState,
         onConfirm = { viewModel.onConfirm() },
         onNetworkFeeClick = onNetworkFeeClick,
@@ -74,7 +74,7 @@ fun ExternalConfirmScreen(
 }
 
 @Composable
-private fun ExternalConfirmContent(
+private fun Content(
     uiState: ExternalNodeContract.UiState,
     onConfirm: () -> Unit = {},
     onNetworkFeeClick: () -> Unit = {},
@@ -93,9 +93,9 @@ private fun ExternalConfirmContent(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            val networkFee = 0L // TODO calculate txFee
+            val networkFee = uiState.networkFee
             val serviceFee = 0L
-            val totalFee = uiState.localBalance + networkFee
+            val totalFee = uiState.amount.sats + networkFee
 
             Spacer(modifier = Modifier.height(16.dp))
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -117,18 +117,19 @@ private fun ExternalConfirmContent(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        MoneySSB(sats = networkFee)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            painterResource(R.drawable.ic_pencil_simple),
-                            contentDescription = null,
-                            tint = Colors.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+
+                    AnimatedVisibility(visible = networkFee > 0L, enter = fadeIn(), exit = fadeOut()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MoneySSB(sats = networkFee)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                painterResource(R.drawable.ic_pencil_simple),
+                                contentDescription = null,
+                                tint = Colors.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
                 }
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
@@ -141,7 +142,7 @@ private fun ExternalConfirmContent(
             ) {
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__amount),
-                    amount = uiState.localBalance,
+                    amount = uiState.amount.sats,
                 )
                 FeeInfo(
                     label = stringResource(R.string.lightning__spending_confirm__total),
@@ -173,13 +174,27 @@ private fun ExternalConfirmContent(
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
-private fun ExternalConfirmScreenPreview() {
+private fun Preview() {
     AppThemeSurface {
-        ExternalConfirmContent(
+        Content(
             uiState = ExternalNodeContract.UiState(
-                localBalance = 45_500L,
+                amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
+                networkFee = 2_100L,
+            )
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewFeeLoading() {
+    AppThemeSurface {
+        Content(
+            uiState = ExternalNodeContract.UiState(
+                amount = ExternalNodeContract.UiState.Amount(sats = 45_500L),
+                networkFee = 0L,
             )
         )
     }

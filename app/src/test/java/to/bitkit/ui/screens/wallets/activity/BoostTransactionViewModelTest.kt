@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets.activity
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.test.runTest
@@ -35,7 +34,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     // Test data
     private val mockTxId = "test_txid_123"
     private val mockNewTxId = "new_txid_456"
-    private val mockAddress = "bc1qtest123"
+    private val mockAddress = "bc1rt1test123"
     private val testFeeRate = 10UL
     private val testTotalFee = 1000UL
     private val testValue = 50000UL
@@ -89,7 +88,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     fun `setupActivity should set loading state initially`() = runTest {
         whenever(lightningRepo.getFeeRateForSpeed(any()))
             .thenReturn(Result.success(testFeeRate))
-        whenever(lightningRepo.calculateTotalFee(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(testTotalFee))
 
         sut.uiState.test {
@@ -106,15 +105,13 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     fun `setupActivity should call correct repository methods for sent transaction`() = runTest {
         whenever(lightningRepo.getFeeRateForSpeed(TransactionSpeed.Fast))
             .thenReturn(Result.success(testFeeRate))
-        whenever(walletRepo.getOnchainAddress())
-            .thenReturn(mockAddress)
-        whenever(lightningRepo.calculateTotalFee(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(testTotalFee))
 
         sut.setupActivity(mockActivitySent)
 
         verify(lightningRepo).getFeeRateForSpeed(TransactionSpeed.Fast)
-        verify(lightningRepo).calculateTotalFee(any(), any(), anyOrNull(), anyOrNull())
+        verify(lightningRepo).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -155,9 +152,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     fun `onChangeAmount should emit OnMaxFee when at maximum rate`() = runTest {
         whenever(lightningRepo.getFeeRateForSpeed(any()))
             .thenReturn(Result.success(100UL)) // MAX_FEE_RATE
-        whenever(walletRepo.getOnchainAddress())
-            .thenReturn(mockAddress)
-        whenever(lightningRepo.calculateTotalFee(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(testTotalFee))
 
         sut.setupActivity(mockActivitySent)
@@ -172,9 +167,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
     fun `onChangeAmount should emit OnMinFee when at minimum rate`() = runTest {
         whenever(lightningRepo.getFeeRateForSpeed(any()))
             .thenReturn(Result.success(1UL)) // MIN_FEE_RATE
-        whenever(walletRepo.getOnchainAddress())
-            .thenReturn(mockAddress)
-        whenever(lightningRepo.calculateTotalFee(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(testTotalFee))
 
         sut.setupActivity(mockActivitySent)
@@ -204,7 +197,7 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
 
         whenever(lightningRepo.calculateCpfpFeeRate(any()))
             .thenReturn(Result.success(testFeeRate))
-        whenever(lightningRepo.calculateTotalFee(any(), any(), anyOrNull(), anyOrNull()))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(testTotalFee))
         whenever(walletRepo.getOnchainAddress())
             .thenReturn(mockAddress)
@@ -225,7 +218,6 @@ class BoostTransactionViewModelSimplifiedTest : BaseUnitTest() {
             )
         ).thenReturn(Result.success(Activity.Onchain(v1 = newActivity)))
 
-        // Fix: Mock updateActivity with 3 parameters (likely id, activity, and a third parameter)
         whenever(activityRepo.updateActivity(any(), any(), any()))
             .thenReturn(Result.success(Unit))
 
