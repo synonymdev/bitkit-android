@@ -128,7 +128,7 @@ import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
-import to.bitkit.ui.settings.support.AppStatusScreen
+import to.bitkit.ui.settings.appStatus.AppStatusScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen

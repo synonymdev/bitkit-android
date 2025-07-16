@@ -1,4 +1,4 @@
-package to.bitkit.ui.settings.support
+package to.bitkit.ui.settings.appStatus
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
