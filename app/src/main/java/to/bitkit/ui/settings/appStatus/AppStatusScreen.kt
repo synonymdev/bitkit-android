@@ -25,13 +25,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.HealthState
 import to.bitkit.ui.Routes
 import to.bitkit.repositories.AppHealthState
-import to.bitkit.ui.appViewModel
+import to.bitkit.viewmodels.AppStatusViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -48,12 +49,13 @@ import to.bitkit.ui.theme.Colors
 fun AppStatusScreen(
     navController: NavController,
 ) {
-    val app = requireNotNull(appViewModel)
-    val uiState by app.healthState.collectAsStateWithLifecycle()
+    val viewModel: AppStatusViewModel = hiltViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     Content(
-        state = uiState,
+        state = uiState.healthState,
+        backupSubtitle = uiState.backupSubtitle,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
         onInternetClick = {
@@ -70,6 +72,7 @@ fun AppStatusScreen(
 @Composable
 private fun Content(
     state: AppHealthState = AppHealthState(),
+    backupSubtitle: String = "",
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
     onInternetClick: () -> Unit = {},
@@ -151,10 +154,12 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__backup__title),
-                    subtitle = when (state.backups) {
-                        HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
-                        HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
-                        HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
+                    subtitle = backupSubtitle.ifEmpty {
+                        when (state.backups) {
+                            HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
+                            HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
+                            HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
+                        }
                     },
                     iconRes = R.drawable.ic_cloud_check,
                     state = state.backups,
@@ -246,8 +251,9 @@ private fun Preview() {
                 electrum = HealthState.READY,
                 node = HealthState.READY,
                 channels = HealthState.PENDING,
-                backups = HealthState.ERROR,
+                backups = HealthState.READY,
             ),
+            backupSubtitle = "December 23, 2024, 3:45 PM",
         )
     }
 }
