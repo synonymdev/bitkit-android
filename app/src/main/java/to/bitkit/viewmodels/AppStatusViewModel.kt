@@ -18,12 +18,14 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.HealthState
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class AppStatusViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val healthRepo: HealthRepo,
+    private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
 ) : ViewModel() {
 
@@ -39,11 +41,12 @@ class AppStatusViewModel @Inject constructor(
             combine(
                 healthRepo.healthState,
                 cacheStore.backupStatuses,
-            ) { healthState, backupStatuses ->
-                val backupSubtitle = generateBackupSubtitle(healthState.backups, backupStatuses)
+                lightningRepo.lightningState,
+            ) { healthState, backupStatuses, lightningState ->
                 AppStatusUiState(
-                    healthState = healthState,
-                    backupSubtitle = backupSubtitle,
+                    health = healthState,
+                    backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
+                    nodeSubtitle = lightningState.nodeLifecycleState.uiText,
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -51,7 +54,7 @@ class AppStatusViewModel @Inject constructor(
         }
     }
 
-    private fun generateBackupSubtitle(
+    private fun computeBackupSubtitle(
         backupHealthState: HealthState,
         backupStatuses: Map<BackupCategory, BackupItemStatus>,
     ): String {
@@ -75,6 +78,7 @@ class AppStatusViewModel @Inject constructor(
 }
 
 data class AppStatusUiState(
-    val healthState: AppHealthState = AppHealthState(),
+    val health: AppHealthState = AppHealthState(),
     val backupSubtitle: String = "",
+    val nodeSubtitle: String = "",
 )

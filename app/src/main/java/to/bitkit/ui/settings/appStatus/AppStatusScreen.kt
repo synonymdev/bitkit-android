@@ -1,8 +1,8 @@
 package to.bitkit.ui.settings.appStatus
 
-import androidx.annotation.DrawableRes
 import android.content.Intent
 import android.provider.Settings
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +28,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.datetime.Clock
 import to.bitkit.R
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.HealthState
-import to.bitkit.ui.Routes
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.AppHealthState
-import to.bitkit.viewmodels.AppStatusViewModel
+import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -44,6 +46,9 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.AppStatusUiState
+import to.bitkit.viewmodels.AppStatusViewModel
+import kotlin.time.Duration.Companion.minutes
 
 @Composable
 fun AppStatusScreen(
@@ -54,8 +59,7 @@ fun AppStatusScreen(
     val context = LocalContext.current
 
     Content(
-        state = uiState.healthState,
-        backupSubtitle = uiState.backupSubtitle,
+        uiState = uiState,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
         onInternetClick = {
@@ -71,8 +75,7 @@ fun AppStatusScreen(
 
 @Composable
 private fun Content(
-    state: AppHealthState = AppHealthState(),
-    backupSubtitle: String = "",
+    uiState: AppStatusUiState = AppStatusUiState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
     onInternetClick: () -> Unit = {},
@@ -98,13 +101,13 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__internet__title),
-                    subtitle = when (state.internet) {
+                    subtitle = when (uiState.health.internet) {
                         HealthState.READY -> stringResource(R.string.settings__status__internet__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__internet__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__internet__error)
                     },
                     iconRes = R.drawable.ic_globe,
-                    state = state.internet,
+                    state = uiState.health.internet,
                 ),
                 onClick = onInternetClick,
             )
@@ -112,13 +115,13 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__electrum__title),
-                    subtitle = when (state.electrum) {
+                    subtitle = when (uiState.health.electrum) {
                         HealthState.READY -> stringResource(R.string.settings__status__electrum__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__electrum__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__electrum__error)
                     },
                     iconRes = R.drawable.ic_bitcoin,
-                    state = state.electrum,
+                    state = uiState.health.electrum,
                 ),
                 onClick = onElectrumClick,
             )
@@ -126,13 +129,15 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_node__title),
-                    subtitle = when (state.node) {
-                        HealthState.READY -> stringResource(R.string.settings__status__lightning_node__ready)
-                        HealthState.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
-                        HealthState.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
+                    subtitle = uiState.nodeSubtitle.ifEmpty {
+                        when (uiState.health.node) {
+                            HealthState.READY -> stringResource(R.string.settings__status__lightning_node__ready)
+                            HealthState.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
+                            HealthState.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
+                        }
                     },
                     iconRes = R.drawable.ic_broadcast,
-                    state = state.node,
+                    state = uiState.health.node,
                 ),
                 onClick = onNodeClick,
             )
@@ -140,13 +145,13 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_connection__title),
-                    subtitle = when (state.channels) {
+                    subtitle = when (uiState.health.channels) {
                         HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
-                    state = state.channels,
+                    state = uiState.health.channels,
                 ),
                 onClick = onChannelsClick,
             )
@@ -154,15 +159,15 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__backup__title),
-                    subtitle = backupSubtitle.ifEmpty {
-                        when (state.backups) {
+                    subtitle = uiState.backupSubtitle.ifEmpty {
+                        when (uiState.health.backups) {
                             HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
                             HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
                             HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
                         }
                     },
                     iconRes = R.drawable.ic_cloud_check,
-                    state = state.backups,
+                    state = uiState.health.backups,
                 ),
                 showDivider = false,
                 onClick = onBackupClick,
@@ -246,14 +251,17 @@ private data class StatusUi(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            state = AppHealthState(
-                internet = HealthState.PENDING,
-                electrum = HealthState.READY,
-                node = HealthState.READY,
-                channels = HealthState.PENDING,
-                backups = HealthState.READY,
+            uiState = AppStatusUiState(
+                health = AppHealthState(
+                    internet = HealthState.PENDING,
+                    electrum = HealthState.READY,
+                    node = HealthState.READY,
+                    channels = HealthState.PENDING,
+                    backups = HealthState.READY,
+                ),
+                backupSubtitle = Clock.System.now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
+                nodeSubtitle = NodeLifecycleState.Running.uiText,
             ),
-            backupSubtitle = "December 23, 2024, 3:45 PM",
         )
     }
 }
