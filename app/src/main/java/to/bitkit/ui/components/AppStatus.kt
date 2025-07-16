@@ -119,7 +119,7 @@ fun rememberHealthState(): HealthState {
     val app = requireNotNull(appViewModel)
     val healthState by app.healthState.collectAsStateWithLifecycle()
 
-    return healthState.overallHealth
+    return healthState.app
 }
 
 @Composable

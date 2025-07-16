@@ -77,65 +77,65 @@ private fun Content(
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__internet__title),
-                    subtitle = when (state.internetState) {
+                    subtitle = when (state.internet) {
                         HealthState.READY -> stringResource(R.string.settings__status__internet__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__internet__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__internet__error)
                     },
                     iconRes = R.drawable.ic_globe,
-                    state = state.internetState,
+                    state = state.internet,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__electrum__title),
-                    subtitle = when (state.bitcoinNodeState) {
+                    subtitle = when (state.electrum) {
                         HealthState.READY -> stringResource(R.string.settings__status__electrum__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__electrum__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__electrum__error)
                     },
                     iconRes = R.drawable.ic_bitcoin,
-                    state = state.bitcoinNodeState,
+                    state = state.electrum,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_node__title),
-                    subtitle = when (state.lightningNodeState) {
+                    subtitle = when (state.node) {
                         HealthState.READY -> stringResource(R.string.settings__status__lightning_node__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
                     },
                     iconRes = R.drawable.ic_broadcast,
-                    state = state.lightningNodeState,
+                    state = state.node,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_connection__title),
-                    subtitle = when (state.lightningConnectionState) {
+                    subtitle = when (state.channels) {
                         HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
-                    state = state.lightningConnectionState,
+                    state = state.channels,
                 ),
             )
 
             StatusItem(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__backup__title),
-                    subtitle = when (state.backupState) {
+                    subtitle = when (state.backups) {
                         HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
                         HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
                         HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
                     },
                     iconRes = R.drawable.ic_cloud_check,
-                    state = state.backupState,
+                    state = state.backups,
                 ),
                 showDivider = false,
             )
@@ -219,11 +219,11 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             state = AppHealthState(
-                internetState = HealthState.PENDING,
-                bitcoinNodeState = HealthState.READY,
-                lightningNodeState = HealthState.READY,
-                lightningConnectionState = HealthState.PENDING,
-                backupState = HealthState.ERROR,
+                internet = HealthState.PENDING,
+                electrum = HealthState.READY,
+                node = HealthState.READY,
+                channels = HealthState.PENDING,
+                backups = HealthState.ERROR,
             )
         )
     }

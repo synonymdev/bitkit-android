@@ -80,7 +80,7 @@ class HealthRepo @Inject constructor(
                     ConnectivityState.CONNECTING -> HealthState.PENDING
                     ConnectivityState.DISCONNECTED -> HealthState.ERROR
                 }
-                updateState { it.copy(internetState = internetState) }
+                updateState { it.copy(internet = internetState) }
             }
         }
     }
@@ -91,19 +91,19 @@ class HealthRepo @Inject constructor(
                 val nodeLifecycleState = lightningState.nodeLifecycleState
 
                 updateState { currentState ->
-                    val lightningNodeState = when {
+                    val nodeStatus = when {
                         !currentState.isOnline() -> HealthState.ERROR
                         else -> nodeLifecycleState.asHealth()
                     }
 
-                    val bitcoinNodeHealth = when {
+                    val electrumStatus = when {
                         !currentState.isOnline() -> HealthState.ERROR
                         nodeLifecycleState.isRunning() -> HealthState.READY
                         nodeLifecycleState.canRun() -> HealthState.PENDING
                         else -> HealthState.ERROR
                     }
 
-                    val lightningConnectionHealth = when {
+                    val channelsStatus = when {
                         !currentState.isOnline() -> HealthState.ERROR
                         else -> {
                             val channels = lightningState.channels
@@ -119,9 +119,9 @@ class HealthRepo @Inject constructor(
                     }
 
                     currentState.copy(
-                        lightningNodeState = lightningNodeState,
-                        bitcoinNodeState = bitcoinNodeHealth,
-                        lightningConnectionState = lightningConnectionHealth,
+                        node = nodeStatus,
+                        electrum = electrumStatus,
+                        channels = channelsStatus,
                     )
                 }
             }
@@ -132,14 +132,14 @@ class HealthRepo @Inject constructor(
         repoScope.launch {
             blocktankRepo.blocktankState.map { it.paidOrders }.distinctUntilChanged().collect { paidOrders ->
                 if (paidOrders.isNotEmpty()) {
-                    updateState { currentState -> // Only override lightning connection to PENDING if it's currently ERROR
-                        val updatedConnectionState = if (currentState.lightningConnectionState == HealthState.ERROR) {
-                            HealthState.PENDING
-                        } else {
-                            currentState.lightningConnectionState
+                    updateState { currentState ->
+                        // only override lightning connection to PENDING if it's currently ERROR
+                        val channelsStatus = when (currentState.channels) {
+                            HealthState.ERROR -> HealthState.PENDING
+                            else -> currentState.channels
                         }
 
-                        currentState.copy(lightningConnectionState = updatedConnectionState)
+                        currentState.copy(channels = channelsStatus)
                     }
                 }
             }
@@ -150,32 +150,32 @@ class HealthRepo @Inject constructor(
         _healthState.update { currentState ->
             val updatedState = update(currentState)
 
-            // Compute overall health from all individual states
+            // Compute app health status from all individual states
             val states = listOf(
-                updatedState.internetState,
-                updatedState.bitcoinNodeState,
-                updatedState.lightningNodeState,
-                updatedState.backupState,
+                updatedState.internet,
+                updatedState.electrum,
+                updatedState.node,
+                updatedState.backups,
             )
 
-            val overallHealth = when {
+            val appStatus = when {
                 HealthState.ERROR in states -> HealthState.ERROR
                 HealthState.PENDING in states -> HealthState.PENDING
                 else -> HealthState.READY
             }
 
-            updatedState.copy(overallHealth = overallHealth)
+            updatedState.copy(app = appStatus)
         }
     }
 }
 
 data class AppHealthState(
-    val internetState: HealthState = HealthState.READY,
-    val bitcoinNodeState: HealthState = HealthState.READY,
-    val lightningNodeState: HealthState = HealthState.READY,
-    val lightningConnectionState: HealthState = HealthState.READY,
-    val backupState: HealthState = HealthState.READY,
-    val overallHealth: HealthState = HealthState.READY,
+    val internet: HealthState = HealthState.READY,
+    val electrum: HealthState = HealthState.READY,
+    val node: HealthState = HealthState.READY,
+    val channels: HealthState = HealthState.READY,
+    val backups: HealthState = HealthState.READY,
+    val app: HealthState = HealthState.READY,
 ) {
-    fun isOnline() = internetState == HealthState.READY
+    fun isOnline() = internet == HealthState.READY
 }
