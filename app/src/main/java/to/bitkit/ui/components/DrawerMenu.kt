@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -112,6 +113,8 @@ fun DrawerContent(
             .width(drawerWidth)
             .fillMaxHeight()
             .background(Colors.Brand)
+            .padding(horizontal = 16.dp)
+            .systemBarsPadding()
     ) {
         VerticalSpacer(60.dp)
 
