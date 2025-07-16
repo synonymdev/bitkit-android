@@ -12,10 +12,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.BackupCategory
+import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.HealthState
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -24,6 +29,8 @@ class HealthRepo @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val cacheStore: CacheStore,
+    private val clock: Clock,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -34,6 +41,7 @@ class HealthRepo @Inject constructor(
         observeNetworkConnectivity()
         observeLightningNodeState()
         observePaidOrdersState()
+        observeBackupStatus()
     }
 
     private fun observeNetworkConnectivity() {
@@ -142,6 +150,32 @@ class HealthRepo @Inject constructor(
                         currentState.copy(channels = channelsStatus)
                     }
                 }
+            }
+        }
+    }
+
+    private fun observeBackupStatus() {
+        repoScope.launch {
+            cacheStore.backupStatuses.collect { backupStatuses ->
+                val now = clock.now().toEpochMilliseconds()
+
+                fun isSyncOk (synced: Long, required: Long) =
+                    synced > required || (now - required) < 5.minutes.inWholeMilliseconds
+
+                val isBackupSyncOk = BackupCategory.entries
+                    .filter { it != BackupCategory.LIGHTNING_CONNECTIONS }
+                    .all { category ->
+                        val status: BackupItemStatus? = backupStatuses[category]
+                        if (status != null) {
+                            isSyncOk(status.synced, status.required)
+                        } else {
+                            true // no status means no backup required yet
+                        }
+                    }
+
+                val backupStatus = if (isBackupSyncOk) HealthState.READY else HealthState.ERROR
+
+                updateState { it.copy(backups = backupStatus) }
             }
         }
     }
