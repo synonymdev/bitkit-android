@@ -35,6 +35,14 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+data class AppStatusUiState(
+    val internetState: StatusUi.State = StatusUi.State.READY,
+    val bitcoinNodeState: StatusUi.State = StatusUi.State.READY,
+    val lightningNodeState: StatusUi.State = StatusUi.State.READY,
+    val lightningConnectionState: StatusUi.State = StatusUi.State.PENDING,
+    val backupState: StatusUi.State = StatusUi.State.ERROR,
+)
+
 @Composable
 fun AppStatusScreen(
     navController: NavController,
@@ -47,7 +55,7 @@ fun AppStatusScreen(
 
 @Composable
 private fun Content(
-    statuses: List<StatusUi> = emptyList(),
+    uiState: AppStatusUiState = AppStatusUiState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -65,12 +73,55 @@ private fun Content(
         ) {
             VerticalSpacer(16.dp)
 
-            statuses.forEachIndexed { index, statusUi ->
-                StatusItem(
-                    statusUi = statusUi,
-                    showDivider = index < statuses.size - 1,
-                )
-            }
+            StatusItem(
+                statusUi = StatusUi(
+                    title = "Internet",
+                    subtitle = "Connected",
+                    iconRes = R.drawable.ic_globe,
+                    state = uiState.internetState,
+                ),
+                showDivider = true,
+            )
+
+            StatusItem(
+                statusUi = StatusUi(
+                    title = "Bitcoin Node",
+                    subtitle = "Connected",
+                    iconRes = R.drawable.ic_bitcoin,
+                    state = uiState.bitcoinNodeState,
+                ),
+                showDivider = true,
+            )
+
+            StatusItem(
+                statusUi = StatusUi(
+                    title = "Lightning Node",
+                    subtitle = "Synced",
+                    iconRes = R.drawable.ic_broadcast,
+                    state = uiState.lightningNodeState,
+                ),
+                showDivider = true,
+            )
+
+            StatusItem(
+                statusUi = StatusUi(
+                    title = "Lightning Connection",
+                    subtitle = "Open",
+                    iconRes = R.drawable.ic_lightning,
+                    state = uiState.lightningConnectionState,
+                ),
+                showDivider = true,
+            )
+
+            StatusItem(
+                statusUi = StatusUi(
+                    title = "Latest Full Data Backup",
+                    subtitle = "Failed to complete a full backup",
+                    iconRes = R.drawable.ic_cloud_check,
+                    state = uiState.backupState,
+                ),
+                showDivider = false,
+            )
 
             VerticalSpacer(16.dp)
         }
@@ -151,38 +202,14 @@ data class StatusUi(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        val dummyStatuses = listOf(
-            StatusUi(
-                "Internet",
-                "Connected",
-                R.drawable.ic_globe,
-                StatusUi.State.READY,
-            ),
-            StatusUi(
-                "Bitcoin Node",
-                "Connected",
-                R.drawable.ic_bitcoin,
-                StatusUi.State.READY,
-            ),
-            StatusUi(
-                "Lightning Node",
-                "Synced",
-                R.drawable.ic_broadcast,
-                StatusUi.State.READY,
-            ),
-            StatusUi(
-                "Lightning Connection",
-                "Open",
-                R.drawable.ic_lightning,
-                StatusUi.State.PENDING,
-            ),
-            StatusUi(
-                "Latest Full Data Backup",
-                "Failed to complete a full backup",
-                R.drawable.ic_cloud_check,
-                StatusUi.State.ERROR,
-            ),
+        Content(
+            uiState = AppStatusUiState(
+                internetState = StatusUi.State.READY,
+                bitcoinNodeState = StatusUi.State.READY,
+                lightningNodeState = StatusUi.State.READY,
+                lightningConnectionState = StatusUi.State.PENDING,
+                backupState = StatusUi.State.ERROR,
+            )
         )
-        Content(statuses = dummyStatuses)
     }
 }
