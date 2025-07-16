@@ -22,7 +22,6 @@ import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -139,8 +138,6 @@ fun DrawerContent(
             },
         )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__activity),
             iconRes = R.drawable.ic_heartbeat,
@@ -150,21 +147,15 @@ fun DrawerContent(
             },
         )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users // TODO IMPLEMENT CONTACTS
         )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square, // TODO IMPLEMENT
         )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__widgets),
@@ -172,10 +163,8 @@ fun DrawerContent(
             modifier = Modifier.clickable {
                 onClickAddWidget()
                 scope.launch { drawerState.close() }
-            },
+            }
         )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__shop),
@@ -183,10 +172,8 @@ fun DrawerContent(
             modifier = Modifier.clickable {
                 rootNavController.navigate(Routes.ShopDiscover)
                 scope.launch { drawerState.close() }
-            },
+            }
         )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__settings),
@@ -197,9 +184,7 @@ fun DrawerContent(
             },
         )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // TODO NAVIGATE TO APP STATE
+        // TODO app state menu component & nav to screen
     }
 }
 
@@ -207,16 +192,14 @@ fun DrawerContent(
 private fun DrawerItem(
     label: String,
     @DrawableRes iconRes: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    VerticalSpacer(16.dp)
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(NavigationDrawerItemDefaults.ItemPadding),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth()
     ) {
-
         Icon(
             painter = painterResource(iconRes),
             contentDescription = null,
@@ -224,7 +207,7 @@ private fun DrawerItem(
         )
 
         Text(
-            text = label,
+            text = label.uppercase(),
             style = TextStyle(
                 fontWeight = FontWeight.Black,
                 fontSize = 24.sp,
@@ -236,6 +219,8 @@ private fun DrawerItem(
             modifier = Modifier.weight(1f)
         )
     }
+    VerticalSpacer(16.dp)
+    HorizontalDivider()
 }
 
 @Preview(showSystemUi = true)
