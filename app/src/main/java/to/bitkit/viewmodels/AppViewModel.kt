@@ -987,7 +987,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun getMinOnchainTx(): ULong {
-        return Env.minOnChainSendLimit
+        return Env.TransactionDefaults.dustLimit.toULong()
     }
 
     fun resetSendState() {
