@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -59,7 +60,7 @@ fun DrawerMenu(
 ) {
     val scope = rememberCoroutineScope()
 
-    // overlay background
+    // backdrop
     AnimatedVisibility(
         visible = drawerState.currentValue == DrawerValue.Open,
         modifier = Modifier
@@ -129,7 +130,7 @@ fun DrawerContent(
             .background(Colors.Brand)
             .systemBarsPadding()
     ) {
-        VerticalSpacer(60.dp)
+        VerticalSpacer(16.dp)
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__wallet),
