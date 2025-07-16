@@ -20,7 +20,6 @@ internal object Env {
     val walletSyncIntervalSecs = 10_uL // TODO review
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
