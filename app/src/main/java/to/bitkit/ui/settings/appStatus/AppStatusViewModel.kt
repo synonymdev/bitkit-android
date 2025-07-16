@@ -1,4 +1,4 @@
-package to.bitkit.viewmodels
+package to.bitkit.ui.settings.appStatus
 
 import android.content.Context
 import androidx.lifecycle.ViewModel

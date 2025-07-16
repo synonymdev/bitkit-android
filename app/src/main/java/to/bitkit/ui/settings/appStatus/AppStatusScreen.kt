@@ -46,17 +46,15 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.AppStatusUiState
-import to.bitkit.viewmodels.AppStatusViewModel
 import kotlin.time.Duration.Companion.minutes
 
 @Composable
 fun AppStatusScreen(
     navController: NavController,
+    viewModel: AppStatusViewModel = hiltViewModel(),
 ) {
-    val viewModel: AppStatusViewModel = hiltViewModel()
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Content(
         uiState = uiState,
