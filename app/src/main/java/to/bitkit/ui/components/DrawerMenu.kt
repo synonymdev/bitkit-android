@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -188,7 +187,20 @@ fun DrawerContent(
             },
         )
 
-        // TODO add app state menu component & nav to screen
+        FillHeight()
+
+        AppStatus(
+            showText = true,
+            showReady = true,
+            color = Colors.Black,
+            modifier = Modifier
+                .padding(vertical = 16.dp)
+                .align(Alignment.CenterHorizontally)
+        ) {
+            rootNavController.navigate(Routes.AppStatus)
+            scope.launch { drawerState.close() }
+        }
+
     }
 }
 

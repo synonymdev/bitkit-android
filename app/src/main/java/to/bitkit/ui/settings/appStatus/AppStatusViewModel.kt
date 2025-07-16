@@ -95,6 +95,6 @@ data class AppStatusUiState(
     val internetState: StatusUi.State = StatusUi.State.READY,
     val bitcoinNodeState: StatusUi.State = StatusUi.State.READY,
     val lightningNodeState: StatusUi.State = StatusUi.State.READY,
-    val lightningConnectionState: StatusUi.State = StatusUi.State.PENDING,
-    val backupState: StatusUi.State = StatusUi.State.ERROR,
+    val lightningConnectionState: StatusUi.State = StatusUi.State.READY,
+    val backupState: StatusUi.State = StatusUi.State.READY,
 )
