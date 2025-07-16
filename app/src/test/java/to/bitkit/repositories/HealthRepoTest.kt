@@ -277,6 +277,38 @@ class HealthRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `node and electrum immediately update when connectivity changes`() = test {
+        val connectivityFlow = MutableStateFlow(ConnectivityState.CONNECTED)
+        whenever(connectivityRepo.isOnline).thenReturn(connectivityFlow)
+
+        val lightningState = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(lightningState))
+        whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
+
+        sut = createSut()
+
+        sut.healthState.test {
+            // Initial state - all should be READY when connected
+            val initialState = awaitItem()
+            assertEquals(HealthState.READY, initialState.internet)
+            assertEquals(HealthState.READY, initialState.node)
+            assertEquals(HealthState.READY, initialState.electrum)
+
+            // Disconnect internet
+            connectivityFlow.value = ConnectivityState.DISCONNECTED
+
+            // All should immediately become ERROR
+            val disconnectedState = awaitItem()
+            assertEquals(HealthState.ERROR, disconnectedState.internet)
+            assertEquals(HealthState.ERROR, disconnectedState.node)
+            assertEquals(HealthState.ERROR, disconnectedState.electrum)
+            assertEquals(HealthState.ERROR, disconnectedState.channels)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `internet status maps to error when disconnected`() = test {
         whenever(connectivityRepo.isOnline).thenReturn(flowOf(ConnectivityState.DISCONNECTED))
 

@@ -7,9 +7,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -38,101 +39,108 @@ class HealthRepo @Inject constructor(
     val healthState: StateFlow<AppHealthState> = _healthState.asStateFlow()
 
     init {
-        observeNetworkConnectivity()
-        observeLightningNodeState()
+        collectState()
         observePaidOrdersState()
         observeBackupStatus()
     }
 
-    private fun observeNetworkConnectivity() {
+    private fun collectState() {
         repoScope.launch {
-            var lastState: ConnectivityState? = null
+            combine(
+                createInternetHealthFlow(),
+                lightningRepo.lightningState,
+            ) { internetHealth, lightningState ->
+                val isOnline = internetHealth == HealthState.READY
+                val nodeLifecycleState = lightningState.nodeLifecycleState
 
-            connectivityRepo.isOnline.transform { newState ->
-                when { // Direct transitions that don't need minimum duration
-                    newState == ConnectivityState.DISCONNECTED -> {
-                        lastState = newState
-                        emit(newState)
-                    }
+                val nodeHealth = when {
+                    !isOnline -> HealthState.ERROR
+                    else -> nodeLifecycleState.asHealth()
+                }
 
-                    // DISCONNECTED → CONNECTED transition: show CONNECTING first
-                    lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTED -> {
-                        lastState = newState
-                        emit(ConnectivityState.CONNECTING) // Show PENDING first
-                        delay(1.5.seconds)
-                        emit(ConnectivityState.CONNECTED)
-                    }
+                val electrumHealth = when {
+                    !isOnline -> HealthState.ERROR
+                    nodeLifecycleState.isRunning() -> HealthState.READY
+                    nodeLifecycleState.canRun() -> HealthState.PENDING
+                    else -> HealthState.ERROR
+                }
 
-                    // DISCONNECTED → CONNECTING transition: show it immediately
-                    lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTING -> {
-                        lastState = newState
-                        emit(ConnectivityState.CONNECTING)
-                        delay(1.5.seconds) // Don't emit again, wait for actual CONNECTED state
-                    }
-
-                    // CONNECTING → CONNECTED: emit if enough time has passed
-                    lastState == ConnectivityState.CONNECTING && newState == ConnectivityState.CONNECTED -> {
-                        lastState = newState
-                        emit(newState)
-                    }
-
-                    // All other transitions: emit directly
+                val channelsHealth = when {
+                    !isOnline -> HealthState.ERROR
                     else -> {
-                        lastState = newState
-                        emit(newState)
+                        val channels = lightningState.channels
+                        val hasOpenChannels = channels.any { it.isChannelReady }
+                        val hasPendingChannels = channels.any { !it.isChannelReady }
+
+                        when {
+                            hasOpenChannels -> HealthState.READY
+                            hasPendingChannels -> HealthState.PENDING
+                            else -> HealthState.ERROR
+                        }
                     }
                 }
-            }.collect { connectivityState ->
-                val internetState = when (connectivityState) {
-                    ConnectivityState.CONNECTED -> HealthState.READY
-                    ConnectivityState.CONNECTING -> HealthState.PENDING
-                    ConnectivityState.DISCONNECTED -> HealthState.ERROR
+
+                AppHealthState(
+                    internet = internetHealth,
+                    electrum = electrumHealth,
+                    node = nodeHealth,
+                    channels = channelsHealth,
+                )
+            }.collect { newHealthState ->
+                updateState { currentState ->
+                    newHealthState.copy(
+                        backups = currentState.backups,
+                        app = currentState.app,
+                    )
                 }
-                updateState { it.copy(internet = internetState) }
             }
         }
     }
 
-    private fun observeLightningNodeState() {
-        repoScope.launch {
-            lightningRepo.lightningState.collect { lightningState ->
-                val nodeLifecycleState = lightningState.nodeLifecycleState
+    private fun createInternetHealthFlow() = flow {
+        var lastState: ConnectivityState? = null
 
-                updateState { currentState ->
-                    val nodeStatus = when {
-                        !currentState.isOnline() -> HealthState.ERROR
-                        else -> nodeLifecycleState.asHealth()
-                    }
+        connectivityRepo.isOnline.collect { newState ->
+            when {
+                // Direct transitions that don't need minimum duration
+                newState == ConnectivityState.DISCONNECTED -> {
+                    lastState = newState
+                    emit(newState)
+                }
 
-                    val electrumStatus = when {
-                        !currentState.isOnline() -> HealthState.ERROR
-                        nodeLifecycleState.isRunning() -> HealthState.READY
-                        nodeLifecycleState.canRun() -> HealthState.PENDING
-                        else -> HealthState.ERROR
-                    }
+                // DISCONNECTED → CONNECTED transition: show CONNECTING first
+                lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTED -> {
+                    lastState = newState
+                    emit(ConnectivityState.CONNECTING) // Show CONNECTING first
+                    delay(1.5.seconds)
+                    emit(ConnectivityState.CONNECTED)
+                }
 
-                    val channelsStatus = when {
-                        !currentState.isOnline() -> HealthState.ERROR
-                        else -> {
-                            val channels = lightningState.channels
-                            val hasOpenChannels = channels.any { it.isChannelReady }
-                            val hasPendingChannels = channels.any { !it.isChannelReady }
+                // DISCONNECTED → CONNECTING transition: show it immediately
+                lastState == ConnectivityState.DISCONNECTED && newState == ConnectivityState.CONNECTING -> {
+                    lastState = newState
+                    emit(ConnectivityState.CONNECTING)
+                    delay(1.5.seconds) // Don't emit again, wait for actual CONNECTED state
+                }
 
-                            when {
-                                hasOpenChannels -> HealthState.READY
-                                hasPendingChannels -> HealthState.PENDING
-                                else -> HealthState.ERROR
-                            }
-                        }
-                    }
+                // CONNECTING → CONNECTED: emit if enough time has passed
+                lastState == ConnectivityState.CONNECTING && newState == ConnectivityState.CONNECTED -> {
+                    lastState = newState
+                    emit(newState)
+                }
 
-                    currentState.copy(
-                        node = nodeStatus,
-                        electrum = electrumStatus,
-                        channels = channelsStatus,
-                    )
+                // All other transitions: emit directly
+                else -> {
+                    lastState = newState
+                    emit(newState)
                 }
             }
+        }
+    }.map { connectivityState ->
+        when (connectivityState) {
+            ConnectivityState.CONNECTED -> HealthState.READY
+            ConnectivityState.CONNECTING -> HealthState.PENDING
+            ConnectivityState.DISCONNECTED -> HealthState.ERROR
         }
     }
 
@@ -159,7 +167,7 @@ class HealthRepo @Inject constructor(
             cacheStore.backupStatuses.collect { backupStatuses ->
                 val now = clock.now().toEpochMilliseconds()
 
-                fun isSyncOk (synced: Long, required: Long) =
+                fun isSyncOk(synced: Long, required: Long) =
                     synced > required || (now - required) < 5.minutes.inWholeMilliseconds
 
                 val isBackupSyncOk = BackupCategory.entries
