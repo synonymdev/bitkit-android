@@ -523,7 +523,6 @@ data class WalletState(
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
     val receiveOnSpendingBalance: Boolean = true,
-    val showEmptyState: Boolean = true,
     val walletExists: Boolean = false,
     val isRestoringWallet: Boolean = false,
     val balanceDetails: BalanceDetails? = null, // TODO KEEP ONLY BalanceState IF POSSIBLE
