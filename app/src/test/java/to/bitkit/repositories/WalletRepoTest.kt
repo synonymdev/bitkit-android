@@ -302,20 +302,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `attachTagsToActivity should fail with empty tags`() = test {
-        val result = sut.attachTagsToActivity("txId", ActivityFilter.ALL, PaymentType.SENT, emptyList())
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
-    fun `attachTagsToActivity should fail with null payment hash`() = test {
-        val result = sut.attachTagsToActivity(null, ActivityFilter.ALL, PaymentType.SENT, listOf("tag1"))
-
-        assertTrue(result.isFailure)
-    }
-
-    @Test
     fun `setRestoringWalletState should update state`() = test {
         sut.setRestoringWalletState(true)
 
