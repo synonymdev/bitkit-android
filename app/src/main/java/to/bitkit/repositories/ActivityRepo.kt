@@ -99,6 +99,7 @@ class ActivityRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType,
     ): Result<Activity> = withContext(bgDispatcher) {
+        if (paymentHashOrTxId.isEmpty()) return@withContext Result.failure(IllegalArgumentException("paymentHashOrTxId is empty"))
 
         return@withContext try {
             suspend fun findActivity(): Activity? = getActivities(
@@ -343,6 +344,28 @@ class ActivityRepo @Inject constructor(
         }.onFailure { e ->
             Logger.error("addTagsToActivity error for activity $activityId", e, context = TAG)
         }
+    }
+
+    /**
+     * Adds tags to an activity with business logic validation
+     */
+    suspend fun addTagsToTransaction(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType,
+        tags: List<String>
+    ): Result<Unit> = withContext(bgDispatcher) {
+
+        if (tags.isEmpty()) return@withContext Result.failure(IllegalArgumentException("No tags selected"))
+        return@withContext findActivityByPaymentId(
+            paymentHashOrTxId = paymentHashOrTxId,
+            type = type,
+            txType = txType
+        ).onSuccess { activity ->
+            return@withContext addTagsToActivity(activity.rawId(), tags = tags)
+        }.onFailure { e ->
+            return@withContext Result.failure(e)
+        }.map { Unit }
     }
 
     /**
