@@ -56,7 +56,7 @@ class HomeViewModel @Inject constructor(
                 settingsStore.data,
                 widgetsRepo.widgetsDataFlow,
                 _currentArticle,
-                _currentFact
+                _currentFact,
             ) { suggestions, settings, widgetsData, currentArticle, currentFact ->
                 _uiState.value.copy(
                     suggestions = suggestions,
@@ -73,6 +73,19 @@ class HomeViewModel @Inject constructor(
                     currentBlock = widgetsData.block?.toBlockModel(),
                     currentWeather = widgetsData.weather?.toWeatherModel(),
                     currentPrice = widgetsData.price,
+                )
+            }.collect { newState ->
+                _uiState.update { newState }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                settingsStore.data,
+                walletRepo.balanceState
+            ) { settings, balanceState ->
+                _uiState.value.copy(
+                    showEmptyState = settings.showEmptyState && balanceState.totalSats == 0uL
                 )
             }.collect { newState ->
                 _uiState.update { newState }
@@ -165,6 +178,12 @@ class HomeViewModel @Inject constructor(
     private fun satsToUsd(sats: ULong): BigDecimal? {
         val converted = currencyRepo.convertSatsToFiat(sats = sats.toLong(), currency = "USD").getOrNull()
         return converted?.value
+    }
+
+    fun dismissEmptyState() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(showEmptyState = false) }
+        }
     }
 
     fun dismissHighBalanceSheet() {
