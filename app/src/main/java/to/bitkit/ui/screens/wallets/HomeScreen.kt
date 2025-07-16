@@ -256,6 +256,7 @@ fun HomeScreen(
                         homeViewModel.moveWidget(fromIndex, toIndex)
                     },
                     onDismissHighBalanceSheet = { homeViewModel.dismissHighBalanceSheet() },
+                    onDismissEmptyState = homeViewModel::dismissEmptyState
                 )
             }
             composable<HomeRoutes.Savings>(
@@ -497,6 +498,7 @@ private fun HomeContentView(
     drawerState: DrawerState,
     onRefresh: () -> Unit,
     onDismissHighBalanceSheet: () -> Unit,
+    onDismissEmptyState: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -518,13 +520,6 @@ private fun HomeContentView(
         RequestNotificationPermissions()
         val balances = LocalBalances.current
         val app = appViewModel ?: return@AppScaffold
-        val settings = settingsViewModel ?: return@AppScaffold
-        val showEmptyStateSetting by settings.showEmptyState.collectAsStateWithLifecycle()
-        val showEmptyState by remember(balances.totalSats, showEmptyStateSetting) {
-            derivedStateOf {
-                showEmptyStateSetting && balances.totalSats == 0uL
-            }
-        }
         PullToRefreshBox(
             isRefreshing = mainUiState.isRefreshing,
             onRefresh = onRefresh,
@@ -542,7 +537,7 @@ private fun HomeContentView(
                     showEyeIcon = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!showEmptyState) {
+                if (!homeUiState.showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))
                     Row(
                         modifier = Modifier
@@ -773,10 +768,10 @@ private fun HomeContentView(
                     Spacer(modifier = Modifier.height(120.dp))
                 }
             }
-            if (showEmptyState) {
+            if (homeUiState.showEmptyState) {
                 EmptyStateView(
                     text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
-                    onClose = { settings.setShowEmptyState(false) },
+                    onClose = onDismissEmptyState,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                 )
@@ -852,6 +847,7 @@ private fun HomeContentViewPreview() {
             onClickDeleteWidget = {},
             onDismissHighBalanceSheet = {},
             onMoveWidget = { _, _ -> },
+            onDismissEmptyState = {},
         )
     }
 }

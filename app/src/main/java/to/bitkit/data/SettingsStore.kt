@@ -71,7 +71,7 @@ data class SettingsData(
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val selectedCurrency: String = "USD",
     val defaultTransactionSpeed: TransactionSpeed = TransactionSpeed.Medium,
-    val showEmptyState: Boolean = false,
+    val showEmptyBalanceView: Boolean = true,
     val hasSeenSpendingIntro: Boolean = false,
     val hasSeenWidgetsIntro: Boolean = false,
     val hasSeenTransferIntro: Boolean = false,

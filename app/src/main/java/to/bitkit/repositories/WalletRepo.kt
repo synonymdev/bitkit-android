@@ -167,8 +167,6 @@ class WalletRepo @Inject constructor(
             _balanceState.update { newBalance }
             _walletState.update { it.copy(balanceDetails = lightningRepo.getBalances()) }
             saveBalanceState(newBalance)
-
-            setShowEmptyState(totalSats <= 0u)
         }
     }
 
@@ -317,10 +315,6 @@ class WalletRepo @Inject constructor(
     suspend fun saveBalanceState(balanceState: BalanceState) {
         runCatching { cacheStore.cacheBalance(balanceState) }
         _balanceState.update { balanceState }
-
-        if (balanceState.totalSats > 0u) {
-            setShowEmptyState(false)
-        }
     }
 
     suspend fun getMaxSendAmount(): ULong = withContext(bgDispatcher) {
@@ -341,13 +335,6 @@ class WalletRepo @Inject constructor(
             val fallbackMax = (totalOnchainSats.toDouble() * 0.9).toULong()
             return@withContext fallbackMax
         }
-    }
-
-
-    // Settings
-    suspend fun setShowEmptyState(show: Boolean) {
-        settingsStore.update { it.copy(showEmptyState = show) }
-        _walletState.update { it.copy(showEmptyState = show) }
     }
 
     // BIP21 state management
@@ -536,7 +523,6 @@ data class WalletState(
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
     val receiveOnSpendingBalance: Boolean = true,
-    val showEmptyState: Boolean = true,
     val walletExists: Boolean = false,
     val isRestoringWallet: Boolean = false,
     val balanceDetails: BalanceDetails? = null, // TODO KEEP ONLY BalanceState IF POSSIBLE
