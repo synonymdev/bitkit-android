@@ -45,6 +45,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.screens.wallets.HomeRoutes
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
@@ -189,18 +190,22 @@ fun DrawerContent(
 
         FillHeight()
 
-        AppStatus(
-            showText = true,
-            showReady = true,
-            color = Colors.Black,
-            onClick = {
-                rootNavController.navigate(Routes.AppStatus)
-                scope.launch { drawerState.close() }
-            },
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .padding(vertical = 16.dp)
-                .align(Alignment.CenterHorizontally)
-        )
+                .fillMaxWidth()
+                .clickableAlpha {
+                    rootNavController.navigate(Routes.AppStatus)
+                    scope.launch { drawerState.close() }
+                }
+        ) {
+            AppStatus(
+                showText = true,
+                showReady = true,
+                color = Colors.Black,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+        }
     }
 }
 
