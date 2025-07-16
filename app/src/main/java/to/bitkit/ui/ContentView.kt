@@ -64,6 +64,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen
 import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
+import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
@@ -127,6 +128,7 @@ import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
+import to.bitkit.ui.settings.support.AppStatusScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -142,7 +144,6 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
 import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SendEvent
@@ -430,6 +431,7 @@ private fun RootNavHost(
         authCheck(navController)
         logs(navController)
         suggestions(navController)
+        support(navController)
         widgets(navController, settingsViewModel, currencyViewModel)
 
         // TODO extract transferNavigation
@@ -1005,12 +1007,17 @@ private fun NavGraphBuilder.suggestions(
             onBackClick = { navController.popBackStack() }
         )
     }
+}
+
+private fun NavGraphBuilder.support(
+    navController: NavHostController,
+) {
     composableWithDefaultTransitions<Routes.Support> {
-        SupportScreen(
-            onBack = { navController.popBackStack() },
-            onClose = { navController.navigateToHome() },
-            navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
-        )
+        SupportScreen(navController)
+    }
+
+    composableWithDefaultTransitions<Routes.AppStatus> {
+        AppStatusScreen(navController)
     }
 
     composableWithDefaultTransitions<Routes.ReportIssue> {
@@ -1643,4 +1650,7 @@ sealed interface Routes {
 
     @Serializable
     data object CalculatorPreview : Routes
+
+    @Serializable
+    data object AppStatus : Routes
 }

@@ -152,7 +152,7 @@ fun SendOptionsView(
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.WithdrawConfirm> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.WithdrawConfirm> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 WithdrawConfirmScreen(
                     uiState = uiState,
@@ -160,7 +160,7 @@ fun SendOptionsView(
                     onConfirm = { appViewModel.onConfirmWithdraw() },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.WithdrawError> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.WithdrawError> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 WithDrawErrorScreen(
                     uiState = uiState,
@@ -169,12 +169,9 @@ fun SendOptionsView(
                     onClickSupport = { navController.navigate(SendRoute.Support) },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.Support> { backStackEntry ->
-                SupportScreen(
-                    onBack = { navController.popBackStack() },
-                    onClose = { navController.navigateToHome() },
-                    navigateReportIssue = { navController.navigate(Routes.ReportIssue) }
-                )
+            // TODO navigate to main support screen, not inside SEND sheet
+            composableWithDefaultTransitions<SendRoute.Support> {
+                SupportScreen(navController)
             }
             composableWithDefaultTransitions<SendRoute.AddTag> {
                 AddTagScreen(
