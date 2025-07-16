@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.models.HealthState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.ui.settings.appStatus.AppStatusViewModel
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -38,15 +39,10 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import kotlin.time.Duration.Companion.seconds
 
-enum class AppStatusState { READY, PENDING, ERROR, }
-
-/**
- * Determines the overall app status based on node lifecycle state and other factors.
- */
 @Composable
 fun rememberAppStatus(
-    initialState: AppStatusState = AppStatusState.READY,
-): AppStatusState {
+    initialState: HealthState = HealthState.READY,
+): HealthState {
     val isPreview = LocalInspectionMode.current
     if (isPreview) return initialState
 
@@ -69,14 +65,16 @@ fun rememberAppStatus(
         return initialState
     }
 
-    // Priority order: Check node state first, then other states
+    // Check node state first, then other states
     return when (walletUiState.nodeLifecycleState) {
-        is NodeLifecycleState.ErrorStarting -> AppStatusState.ERROR
-        NodeLifecycleState.Stopped -> AppStatusState.ERROR
+        is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
+
+        NodeLifecycleState.Stopped -> HealthState.ERROR
+
         NodeLifecycleState.Starting,
         NodeLifecycleState.Stopping,
         NodeLifecycleState.Initializing,
-            -> AppStatusState.PENDING
+            -> HealthState.PENDING
 
         NodeLifecycleState.Running -> {
             // If node is running, check other states
@@ -88,9 +86,9 @@ fun rememberAppStatus(
             )
 
             when {
-                states.any { it == to.bitkit.ui.settings.appStatus.StatusUi.State.ERROR } -> AppStatusState.ERROR
-                states.any { it == to.bitkit.ui.settings.appStatus.StatusUi.State.PENDING } -> AppStatusState.PENDING
-                else -> AppStatusState.READY
+                states.any { it == HealthState.ERROR } -> HealthState.ERROR
+                states.any { it == HealthState.PENDING } -> HealthState.PENDING
+                else -> HealthState.READY
             }
         }
     }
@@ -98,7 +96,7 @@ fun rememberAppStatus(
 
 @Composable
 fun AppStatus(
-    status: AppStatusState = rememberAppStatus(),
+    status: HealthState = rememberAppStatus(),
     modifier: Modifier = Modifier,
     showText: Boolean = false,
     showReady: Boolean = false,
@@ -106,13 +104,13 @@ fun AppStatus(
     onClick: (() -> Unit)? = null,
 ) {
     val statusColor = color ?: when (status) {
-        AppStatusState.READY -> Colors.Green
-        AppStatusState.PENDING -> Colors.Yellow
-        AppStatusState.ERROR -> Colors.Red
+        HealthState.READY -> Colors.Green
+        HealthState.PENDING -> Colors.Yellow
+        HealthState.ERROR -> Colors.Red
     }
 
     // Don't show anything if ready and showReady is false
-    if (status == AppStatusState.READY && !showReady) {
+    if (status == HealthState.READY && !showReady) {
         return
     }
 
@@ -128,7 +126,7 @@ fun AppStatus(
     )
 
     val opacity by infiniteTransition.animateFloat(
-        initialValue = if (status == AppStatusState.ERROR) 0.3f else 1f,
+        initialValue = if (status == HealthState.ERROR) 0.3f else 1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(animation = tween(600), repeatMode = RepeatMode.Reverse),
         label = "opacity",
@@ -140,7 +138,7 @@ fun AppStatus(
         modifier = modifier.clickableAlpha(onClick = onClick)
     ) {
         when (status) {
-            AppStatusState.READY -> {
+            HealthState.READY -> {
                 Icon(
                     painter = painterResource(R.drawable.ic_power),
                     contentDescription = null,
@@ -149,7 +147,7 @@ fun AppStatus(
                 )
             }
 
-            AppStatusState.PENDING -> {
+            HealthState.PENDING -> {
                 Icon(
                     painter = painterResource(R.drawable.ic_arrow_clockwise),
                     contentDescription = null,
@@ -160,7 +158,7 @@ fun AppStatus(
                 )
             }
 
-            AppStatusState.ERROR -> {
+            HealthState.ERROR -> {
                 Icon(
                     painter = painterResource(R.drawable.ic_warning),
                     contentDescription = null,
@@ -187,16 +185,16 @@ private fun Preview() {
             modifier = Modifier
         ) {
             AppStatus(
-                status = AppStatusState.READY,
+                status = HealthState.READY,
                 showText = true,
                 showReady = true,
             )
             AppStatus(
-                status = AppStatusState.PENDING,
+                status = HealthState.PENDING,
                 showText = true,
             )
             AppStatus(
-                status = AppStatusState.ERROR,
+                status = HealthState.ERROR,
                 showText = true,
             )
         }

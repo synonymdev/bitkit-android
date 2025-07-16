@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.HealthState
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import javax.inject.Inject
@@ -77,24 +78,24 @@ class AppStatusViewModel @Inject constructor(
                 }
                 .collect { connectivityState ->
                     val internetState = when (connectivityState) {
-                        ConnectivityState.CONNECTED -> StatusUi.State.READY
-                        ConnectivityState.CONNECTING -> StatusUi.State.PENDING
-                        ConnectivityState.DISCONNECTED -> StatusUi.State.ERROR
+                        ConnectivityState.CONNECTED -> HealthState.READY
+                        ConnectivityState.CONNECTING -> HealthState.PENDING
+                        ConnectivityState.DISCONNECTED -> HealthState.ERROR
                     }
                     updateInternetState(internetState)
                 }
         }
     }
 
-    private fun updateInternetState(newState: StatusUi.State) {
+    private fun updateInternetState(newState: HealthState) {
         _uiState.update { it.copy(internetState = newState) }
     }
 }
 
 data class AppStatusUiState(
-    val internetState: StatusUi.State = StatusUi.State.READY,
-    val bitcoinNodeState: StatusUi.State = StatusUi.State.READY,
-    val lightningNodeState: StatusUi.State = StatusUi.State.READY,
-    val lightningConnectionState: StatusUi.State = StatusUi.State.READY,
-    val backupState: StatusUi.State = StatusUi.State.READY,
+    val internetState: HealthState = HealthState.READY,
+    val bitcoinNodeState: HealthState = HealthState.READY,
+    val lightningNodeState: HealthState = HealthState.READY,
+    val lightningConnectionState: HealthState = HealthState.READY,
+    val backupState: HealthState = HealthState.READY,
 )

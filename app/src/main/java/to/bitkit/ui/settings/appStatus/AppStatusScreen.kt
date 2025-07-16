@@ -26,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
+import to.bitkit.models.HealthState
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
@@ -76,9 +77,9 @@ private fun Content(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__internet__title),
                     subtitle = when (uiState.internetState) {
-                        StatusUi.State.READY -> stringResource(R.string.settings__status__internet__ready)
-                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__internet__pending)
-                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__internet__error)
+                        HealthState.READY -> stringResource(R.string.settings__status__internet__ready)
+                        HealthState.PENDING -> stringResource(R.string.settings__status__internet__pending)
+                        HealthState.ERROR -> stringResource(R.string.settings__status__internet__error)
                     },
                     iconRes = R.drawable.ic_globe,
                     state = uiState.internetState,
@@ -89,9 +90,9 @@ private fun Content(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__electrum__title),
                     subtitle = when (uiState.bitcoinNodeState) {
-                        StatusUi.State.READY -> stringResource(R.string.settings__status__electrum__ready)
-                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__electrum__pending)
-                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__electrum__error)
+                        HealthState.READY -> stringResource(R.string.settings__status__electrum__ready)
+                        HealthState.PENDING -> stringResource(R.string.settings__status__electrum__pending)
+                        HealthState.ERROR -> stringResource(R.string.settings__status__electrum__error)
                     },
                     iconRes = R.drawable.ic_bitcoin,
                     state = uiState.bitcoinNodeState,
@@ -102,9 +103,9 @@ private fun Content(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_node__title),
                     subtitle = when (uiState.lightningNodeState) {
-                        StatusUi.State.READY -> stringResource(R.string.settings__status__lightning_node__ready)
-                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
-                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
+                        HealthState.READY -> stringResource(R.string.settings__status__lightning_node__ready)
+                        HealthState.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
+                        HealthState.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
                     },
                     iconRes = R.drawable.ic_broadcast,
                     state = uiState.lightningNodeState,
@@ -115,9 +116,9 @@ private fun Content(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__lightning_connection__title),
                     subtitle = when (uiState.lightningConnectionState) {
-                        StatusUi.State.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
-                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
-                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
+                        HealthState.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
+                        HealthState.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
+                        HealthState.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
                     },
                     iconRes = R.drawable.ic_lightning,
                     state = uiState.lightningConnectionState,
@@ -128,9 +129,9 @@ private fun Content(
                 statusUi = StatusUi(
                     title = stringResource(R.string.settings__status__backup__title),
                     subtitle = when (uiState.backupState) {
-                        StatusUi.State.READY -> stringResource(R.string.settings__status__backup__ready)
-                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__backup__pending)
-                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__backup__error)
+                        HealthState.READY -> stringResource(R.string.settings__status__backup__ready)
+                        HealthState.PENDING -> stringResource(R.string.settings__status__backup__pending)
+                        HealthState.ERROR -> stringResource(R.string.settings__status__backup__error)
                     },
                     iconRes = R.drawable.ic_cloud_check,
                     state = uiState.backupState,
@@ -150,14 +151,14 @@ private fun StatusItem(
     onClick: () -> Unit = {},
 ) {
     val bgColor = when (statusUi.state) {
-        StatusUi.State.READY -> Colors.Green16
-        StatusUi.State.PENDING -> Colors.Yellow16
-        StatusUi.State.ERROR -> Colors.Red16
+        HealthState.READY -> Colors.Green16
+        HealthState.PENDING -> Colors.Yellow16
+        HealthState.ERROR -> Colors.Red16
     }
     val fgColor = when (statusUi.state) {
-        StatusUi.State.READY -> Colors.Green
-        StatusUi.State.PENDING -> Colors.Yellow
-        StatusUi.State.ERROR -> Colors.Red
+        HealthState.READY -> Colors.Green
+        HealthState.PENDING -> Colors.Yellow
+        HealthState.ERROR -> Colors.Red
     }
 
     Column {
@@ -204,14 +205,12 @@ private fun StatusItem(
     }
 }
 
-data class StatusUi(
+private data class StatusUi(
     val title: String,
     val subtitle: String,
     @DrawableRes val iconRes: Int,
-    val state: State,
-) {
-    enum class State { READY, PENDING, ERROR, }
-}
+    val state: HealthState,
+)
 
 @Preview(showSystemUi = true)
 @Composable
@@ -219,11 +218,11 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = AppStatusUiState(
-                internetState = StatusUi.State.PENDING,
-                bitcoinNodeState = StatusUi.State.READY,
-                lightningNodeState = StatusUi.State.READY,
-                lightningConnectionState = StatusUi.State.PENDING,
-                backupState = StatusUi.State.ERROR,
+                internetState = HealthState.PENDING,
+                bitcoinNodeState = HealthState.READY,
+                lightningNodeState = HealthState.READY,
+                lightningConnectionState = HealthState.PENDING,
+                backupState = HealthState.ERROR,
             )
         )
     }

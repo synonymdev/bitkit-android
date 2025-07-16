@@ -42,7 +42,7 @@ class ConnectivityRepo @Inject constructor(
 
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Logger.info("Network connection restored")
+                Logger.info("Network connection available")
                 repoScope.launch {
                     send(if (isConnected()) ConnectivityState.CONNECTED else ConnectivityState.CONNECTING)
                 }
