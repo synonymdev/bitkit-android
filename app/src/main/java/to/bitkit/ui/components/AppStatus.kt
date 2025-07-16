@@ -49,9 +49,7 @@ fun AppStatus(
     }
 
     // Don't show anything if ready and showReady is false
-    if (healthStatus == HealthState.READY && !showReady) {
-        return
-    }
+    if (healthStatus == HealthState.READY && !showReady) return
 
     val infiniteTransition = rememberInfiniteTransition(label = "AppStatus")
     val rotation by infiniteTransition.animateFloat(

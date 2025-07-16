@@ -1,6 +1,8 @@
 package to.bitkit.ui.settings.appStatus
 
 import androidx.annotation.DrawableRes
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.HealthState
+import to.bitkit.ui.Routes
 import to.bitkit.repositories.AppHealthState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
@@ -46,11 +50,20 @@ fun AppStatusScreen(
 ) {
     val app = requireNotNull(appViewModel)
     val uiState by app.healthState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Content(
         state = uiState,
         onBack = { navController.popBackStack() },
         onClose = { navController.navigateToHome() },
+        onInternetClick = {
+            val intent = Intent(Settings.ACTION_SETTINGS)
+            context.startActivity(intent)
+        },
+        onElectrumClick = { navController.navigate(Routes.ElectrumConfig) },
+        onNodeClick = { navController.navigate(Routes.NodeInfo) },
+        onChannelsClick = { navController.navigate(Routes.LightningConnections) },
+        onBackupClick = { navController.navigate(Routes.BackupSettings) },
     )
 }
 
@@ -59,6 +72,11 @@ private fun Content(
     state: AppHealthState = AppHealthState(),
     onBack: () -> Unit = {},
     onClose: () -> Unit = {},
+    onInternetClick: () -> Unit = {},
+    onElectrumClick: () -> Unit = {},
+    onNodeClick: () -> Unit = {},
+    onChannelsClick: () -> Unit = {},
+    onBackupClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -85,6 +103,7 @@ private fun Content(
                     iconRes = R.drawable.ic_globe,
                     state = state.internet,
                 ),
+                onClick = onInternetClick,
             )
 
             StatusItem(
@@ -98,6 +117,7 @@ private fun Content(
                     iconRes = R.drawable.ic_bitcoin,
                     state = state.electrum,
                 ),
+                onClick = onElectrumClick,
             )
 
             StatusItem(
@@ -111,6 +131,7 @@ private fun Content(
                     iconRes = R.drawable.ic_broadcast,
                     state = state.node,
                 ),
+                onClick = onNodeClick,
             )
 
             StatusItem(
@@ -124,6 +145,7 @@ private fun Content(
                     iconRes = R.drawable.ic_lightning,
                     state = state.channels,
                 ),
+                onClick = onChannelsClick,
             )
 
             StatusItem(
@@ -138,6 +160,7 @@ private fun Content(
                     state = state.backups,
                 ),
                 showDivider = false,
+                onClick = onBackupClick,
             )
 
             VerticalSpacer(16.dp)
@@ -224,7 +247,7 @@ private fun Preview() {
                 node = HealthState.READY,
                 channels = HealthState.PENDING,
                 backups = HealthState.ERROR,
-            )
+            ),
         )
     }
 }
