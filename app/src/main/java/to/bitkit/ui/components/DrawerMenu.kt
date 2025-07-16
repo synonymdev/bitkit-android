@@ -127,7 +127,6 @@ fun DrawerContent(
             .width(drawerWidth)
             .fillMaxHeight()
             .background(Colors.Brand)
-            .padding(horizontal = 16.dp)
             .systemBarsPadding()
     ) {
         VerticalSpacer(60.dp)
@@ -200,13 +199,15 @@ private fun DrawerItem(
     onClick: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier.then(
-            if (onClick != null) {
-                Modifier.clickable { onClick() }
-            } else {
-                Modifier
-            }
-        )
+        modifier = modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable { onClick() }
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(16.dp)
         Row(
