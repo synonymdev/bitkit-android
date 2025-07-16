@@ -75,48 +75,64 @@ private fun Content(
 
             StatusItem(
                 statusUi = StatusUi(
-                    title = "Internet",
-                    subtitle = "Connected",
+                    title = stringResource(R.string.settings__status__internet__title),
+                    subtitle = when (uiState.internetState) {
+                        StatusUi.State.READY -> stringResource(R.string.settings__status__internet__ready)
+                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__internet__pending)
+                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__internet__error)
+                    },
                     iconRes = R.drawable.ic_globe,
                     state = uiState.internetState,
                 ),
-                showDivider = true,
             )
 
             StatusItem(
                 statusUi = StatusUi(
-                    title = "Bitcoin Node",
-                    subtitle = "Connected",
+                    title = stringResource(R.string.settings__status__electrum__title),
+                    subtitle = when (uiState.bitcoinNodeState) {
+                        StatusUi.State.READY -> stringResource(R.string.settings__status__electrum__ready)
+                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__electrum__pending)
+                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__electrum__error)
+                    },
                     iconRes = R.drawable.ic_bitcoin,
                     state = uiState.bitcoinNodeState,
                 ),
-                showDivider = true,
             )
 
             StatusItem(
                 statusUi = StatusUi(
-                    title = "Lightning Node",
-                    subtitle = "Synced",
+                    title = stringResource(R.string.settings__status__lightning_node__title),
+                    subtitle = when (uiState.lightningNodeState) {
+                        StatusUi.State.READY -> stringResource(R.string.settings__status__lightning_node__ready)
+                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__lightning_node__pending)
+                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__lightning_node__error)
+                    },
                     iconRes = R.drawable.ic_broadcast,
                     state = uiState.lightningNodeState,
                 ),
-                showDivider = true,
             )
 
             StatusItem(
                 statusUi = StatusUi(
-                    title = "Lightning Connection",
-                    subtitle = "Open",
+                    title = stringResource(R.string.settings__status__lightning_connection__title),
+                    subtitle = when (uiState.lightningConnectionState) {
+                        StatusUi.State.READY -> stringResource(R.string.settings__status__lightning_connection__ready)
+                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__lightning_connection__pending)
+                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__lightning_connection__error)
+                    },
                     iconRes = R.drawable.ic_lightning,
                     state = uiState.lightningConnectionState,
                 ),
-                showDivider = true,
             )
 
             StatusItem(
                 statusUi = StatusUi(
-                    title = "Latest Full Data Backup",
-                    subtitle = "Failed to complete a full backup",
+                    title = stringResource(R.string.settings__status__backup__title),
+                    subtitle = when (uiState.backupState) {
+                        StatusUi.State.READY -> stringResource(R.string.settings__status__backup__ready)
+                        StatusUi.State.PENDING -> stringResource(R.string.settings__status__backup__pending)
+                        StatusUi.State.ERROR -> stringResource(R.string.settings__status__backup__error)
+                    },
                     iconRes = R.drawable.ic_cloud_check,
                     state = uiState.backupState,
                 ),
@@ -131,7 +147,7 @@ private fun Content(
 @Composable
 private fun StatusItem(
     statusUi: StatusUi,
-    showDivider: Boolean,
+    showDivider: Boolean = true,
     onClick: () -> Unit = {},
 ) {
     val bgColor = when (statusUi.state) {
