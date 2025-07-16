@@ -67,10 +67,12 @@ import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.EmptyStateView
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
@@ -359,11 +361,9 @@ private fun HomeContentView(
     AppScaffold(
         titleText = stringResource(R.string.slashtags__your_name_capital),
         actions = {
-            IconButton(onClick = {
-                scope.launch {
-                    drawerState.open()
-                }
-            }) {
+            AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
+            HorizontalSpacer(4.dp)
+            IconButton(onClick = { scope.launch { drawerState.open() } }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_list),
                     contentDescription = stringResource(R.string.settings__settings),
@@ -384,8 +384,7 @@ private fun HomeContentView(
         PullToRefreshBox(
             isRefreshing = mainUiState.isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             Column(
                 modifier = Modifier

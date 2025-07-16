@@ -193,14 +193,14 @@ fun DrawerContent(
             showText = true,
             showReady = true,
             color = Colors.Black,
+            onClick = {
+                rootNavController.navigate(Routes.AppStatus)
+                scope.launch { drawerState.close() }
+            },
             modifier = Modifier
                 .padding(vertical = 16.dp)
                 .align(Alignment.CenterHorizontally)
-        ) {
-            rootNavController.navigate(Routes.AppStatus)
-            scope.launch { drawerState.close() }
-        }
-
+        )
     }
 }
 

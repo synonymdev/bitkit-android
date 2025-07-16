@@ -11,11 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -28,7 +25,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.HealthState
 import to.bitkit.models.NodeLifecycleState
@@ -37,62 +33,6 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
-import kotlin.time.Duration.Companion.seconds
-
-@Composable
-fun rememberAppStatus(
-    initialState: HealthState = HealthState.READY,
-): HealthState {
-    val isPreview = LocalInspectionMode.current
-    if (isPreview) return initialState
-
-    val wallet = requireNotNull(walletViewModel)
-    val appStatus = hiltViewModel<AppStatusViewModel>()
-
-    val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
-    val appStatusUiState by appStatus.uiState.collectAsStateWithLifecycle()
-
-    var showStatus by remember { mutableStateOf(false) }
-
-    // Give the app some time to initialize before showing the status
-    LaunchedEffect(Unit) {
-        delay(5.seconds)
-        showStatus = true
-    }
-
-    // During init, return READY instead of error
-    if (!showStatus) {
-        return initialState
-    }
-
-    // Check node state first, then other states
-    return when (walletUiState.nodeLifecycleState) {
-        is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
-
-        NodeLifecycleState.Stopped -> HealthState.ERROR
-
-        NodeLifecycleState.Starting,
-        NodeLifecycleState.Stopping,
-        NodeLifecycleState.Initializing,
-            -> HealthState.PENDING
-
-        NodeLifecycleState.Running -> {
-            // If node is running, check other states
-            val states = listOf(
-                appStatusUiState.internetState,
-                appStatusUiState.bitcoinNodeState,
-                appStatusUiState.lightningNodeState,
-                appStatusUiState.backupState,
-            )
-
-            when {
-                states.any { it == HealthState.ERROR } -> HealthState.ERROR
-                states.any { it == HealthState.PENDING } -> HealthState.PENDING
-                else -> HealthState.READY
-            }
-        }
-    }
-}
 
 @Composable
 fun AppStatus(
@@ -172,6 +112,50 @@ fun AppStatus(
 
         if (showText) {
             BodyMSB(stringResource(R.string.wallet__drawer__status), color = statusColor)
+        }
+    }
+}
+
+@Composable
+fun rememberAppStatus(
+    initialState: HealthState = HealthState.READY,
+): HealthState {
+    val isPreview = LocalInspectionMode.current
+    if (isPreview) return initialState
+
+    val wallet = requireNotNull(walletViewModel)
+    val appStatus = hiltViewModel<AppStatusViewModel>()
+
+    val walletUiState by wallet.uiState.collectAsStateWithLifecycle()
+    val appStatusUiState by appStatus.uiState.collectAsStateWithLifecycle()
+
+    return remember(walletUiState.nodeLifecycleState, appStatusUiState) {
+        // Check node state first, then other states
+        when (walletUiState.nodeLifecycleState) {
+            is NodeLifecycleState.ErrorStarting -> HealthState.ERROR
+
+            NodeLifecycleState.Stopped -> HealthState.ERROR
+
+            NodeLifecycleState.Starting,
+            NodeLifecycleState.Stopping,
+            NodeLifecycleState.Initializing,
+                -> HealthState.PENDING
+
+            // If node is running, check other states
+            NodeLifecycleState.Running -> {
+                val states = listOf(
+                    appStatusUiState.internetState,
+                    appStatusUiState.bitcoinNodeState,
+                    appStatusUiState.lightningNodeState,
+                    appStatusUiState.backupState,
+                )
+
+                when {
+                    HealthState.ERROR in states -> HealthState.ERROR
+                    HealthState.PENDING in states -> HealthState.PENDING
+                    else -> HealthState.READY
+                }
+            }
         }
     }
 }
