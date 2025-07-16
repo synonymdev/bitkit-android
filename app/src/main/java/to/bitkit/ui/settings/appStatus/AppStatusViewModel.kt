@@ -46,7 +46,10 @@ class AppStatusViewModel @Inject constructor(
                 AppStatusUiState(
                     health = healthState,
                     backupSubtitle = computeBackupSubtitle(healthState.backups, backupStatuses),
-                    nodeSubtitle = lightningState.nodeLifecycleState.uiText,
+                    nodeSubtitle = when (healthState.node) {
+                        HealthState.ERROR -> context.getString(R.string.settings__status__lightning_node__error)
+                        else -> lightningState.nodeLifecycleState.uiText
+                    },
                 )
             }.collect { newState ->
                 _uiState.value = newState
