@@ -88,7 +88,7 @@ fun AppStatus(
 
             HealthState.PENDING -> {
                 Icon(
-                    painter = painterResource(R.drawable.ic_arrow_clockwise),
+                    painter = painterResource(R.drawable.ic_arrows_clockwise),
                     contentDescription = null,
                     tint = statusColor,
                     modifier = Modifier
