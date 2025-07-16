@@ -1,30 +1,42 @@
 package to.bitkit.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
@@ -35,6 +47,7 @@ import to.bitkit.ui.navigateToSettings
 import to.bitkit.ui.screens.wallets.HomeRoutes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.InterFontFamily
 
 @Composable
 fun DrawerMenu(
@@ -187,6 +200,41 @@ fun DrawerContent(
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
         // TODO NAVIGATE TO APP STATE
+    }
+}
+
+@Composable
+private fun DrawerItem(
+    label: String,
+    @DrawableRes iconRes: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(NavigationDrawerItemDefaults.ItemPadding),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+
+        Text(
+            text = label,
+            style = TextStyle(
+                fontWeight = FontWeight.Black,
+                fontSize = 24.sp,
+                lineHeight = 24.sp,
+                letterSpacing = (-1).sp,
+                fontFamily = InterFontFamily,
+                color = Colors.White,
+            ),
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
