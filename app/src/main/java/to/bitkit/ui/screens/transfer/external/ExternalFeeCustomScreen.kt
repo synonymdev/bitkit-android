@@ -131,7 +131,7 @@ private fun Content(
             VerticalSpacer(16.dp)
             Display(stringResource(R.string.lightning__transfer__custom_fee).withAccent(accentColor = Colors.Purple))
 
-            FillHeight(1f)
+            FillHeight()
 
             Column {
                 Caption13Up(stringResource(R.string.common__sat_vbyte), color = Colors.White64)
@@ -156,7 +156,7 @@ private fun Content(
                 }
             }
 
-            FillHeight(1f)
+            FillHeight()
 
             NumberPadSimple(
                 onPress = onKeyPress,

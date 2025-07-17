@@ -25,6 +25,7 @@ import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.ForgotPinSheet
 import to.bitkit.ui.components.InactivityTracker
+import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -65,7 +66,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         initNotificationChannel()
-        initNotificationChannel( //TODO EXTRACT TO Strings
+        initNotificationChannel( // TODO EXTRACT TO Strings
             id = CHANNEL_ID_NODE,
             name = "Lightning node notification",
             desc = "Channel for LightningNodeService",
@@ -190,17 +191,19 @@ class MainActivity : FragmentActivity() {
                 } else {
                     val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
 
-                    InactivityTracker(appViewModel, settingsViewModel) {
-                        ContentView(
-                            appViewModel = appViewModel,
-                            walletViewModel = walletViewModel,
-                            blocktankViewModel = blocktankViewModel,
-                            currencyViewModel = currencyViewModel,
-                            activityListViewModel = activityListViewModel,
-                            transferViewModel = transferViewModel,
-                            settingsViewModel = settingsViewModel,
-                            backupsViewModel = backupsViewModel,
-                        )
+                    IsOnlineTracker(appViewModel) {
+                        InactivityTracker(appViewModel, settingsViewModel) {
+                            ContentView(
+                                appViewModel = appViewModel,
+                                walletViewModel = walletViewModel,
+                                blocktankViewModel = blocktankViewModel,
+                                currencyViewModel = currencyViewModel,
+                                activityListViewModel = activityListViewModel,
+                                transferViewModel = transferViewModel,
+                                settingsViewModel = settingsViewModel,
+                                backupsViewModel = backupsViewModel,
+                            )
+                        }
                     }
 
                     AnimatedVisibility(
