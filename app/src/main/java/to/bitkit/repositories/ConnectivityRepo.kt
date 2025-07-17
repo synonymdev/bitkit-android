@@ -112,22 +112,20 @@ class ConnectivityRepo @Inject constructor(
         // Register NetworkCallback
         runCatching {
             connectivityManager.registerDefaultNetworkCallback(networkCallback)
-            Logger.debug("Network monitor registered")
+            Logger.debug("Network callback registered")
         }.onFailure {
-            Logger.error("Failed to register network monitor: ${it.message}")
+            Logger.error("Error registering network callback: ${it.message}")
         }
 
         awaitClose {
             runCatching {
                 connectivityManager.unregisterNetworkCallback(networkCallback)
-                Logger.debug("Network monitor unregistered")
+                Logger.debug("Network callback unregistered")
             }.onFailure {
-                Logger.warn("Error unregistering network monitor: ${it.message}")
+                Logger.warn("Error unregistering network callback: ${it.message}")
             }
 
-            // Clean up handler callbacks
             mainHandler.removeCallbacksAndMessages(null)
-            Logger.debug("Network monitoring stopped")
         }
     }.distinctUntilChanged().onEach { state ->
         Logger.debug("New network state: $state")

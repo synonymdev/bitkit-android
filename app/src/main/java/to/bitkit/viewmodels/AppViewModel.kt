@@ -49,6 +49,8 @@ import to.bitkit.models.Toast
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.ConnectivityRepo
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
@@ -81,9 +83,13 @@ class AppViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
     private val activityRepo: ActivityRepo,
+    connectivityRepo: ConnectivityRepo,
     healthRepo: HealthRepo,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
+
+    val isOnline = connectivityRepo.isOnline
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectivityState.CONNECTED)
 
     var splashVisible by mutableStateOf(true)
         private set
