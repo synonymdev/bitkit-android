@@ -4,10 +4,10 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
@@ -32,7 +32,7 @@ class ConnectivityRepo @Inject constructor(
 
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    @OptIn(FlowPreview::class)
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val isOnline: Flow<ConnectivityState> = callbackFlow {
         Logger.debug("Network connectivity monitor starting")
 
@@ -72,14 +72,7 @@ class ConnectivityRepo @Inject constructor(
             send(initialState)
         }
 
-
-        connectivityManager.registerNetworkCallback(
-            NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                .build(),
-            networkCallback,
-        )
+        connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
         awaitClose {
             connectivityManager.unregisterNetworkCallback(networkCallback)
