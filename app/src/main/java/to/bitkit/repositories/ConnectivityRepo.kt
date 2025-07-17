@@ -11,15 +11,18 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
 
 enum class ConnectivityState { CONNECTED, CONNECTING, DISCONNECTED, }
 
@@ -38,13 +41,15 @@ class ConnectivityRepo @Inject constructor(
 
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
 
-            // Ignored, onCapabilitiesChanged is always called immediately after
-            override fun onAvailable(network: Network) = Unit
+            override fun onAvailable(network: Network) {
+                // onCapabilitiesChanged is always called immediately after
+                Logger.verbose("Network available, skipping state update")
+            }
 
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 repoScope.launch {
                     val state = capabilities.asState()
-                    Logger.debug("Network capabilities changed, sent: $state")
+                    Logger.verbose("Network capabilities changed, sent: $state")
                     send(state)
                 }
             }
@@ -78,9 +83,21 @@ class ConnectivityRepo @Inject constructor(
             connectivityManager.unregisterNetworkCallback(networkCallback)
             Logger.debug("Network monitoring stopped")
         }
-    }.distinctUntilChanged().onEach {
-        Logger.debug("New network state: $it")
-    }
+    }.distinctUntilChanged()
+        .transformLatest { state ->
+            when (state) {
+                ConnectivityState.DISCONNECTED -> {
+                    val delay = 200.milliseconds
+                    Logger.verbose("Network state $state delayed by $delay")
+                    delay(200)
+                    emit(state)
+                }
+
+                else -> emit(state)
+            }
+        }.onEach {
+            Logger.debug("New network state: $it")
+        }
 
     private fun getCurrentNetworkState(): ConnectivityState {
         val activeNetwork = connectivityManager.activeNetwork
