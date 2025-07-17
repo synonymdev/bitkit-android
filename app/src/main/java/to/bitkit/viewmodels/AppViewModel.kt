@@ -814,6 +814,14 @@ class AppViewModel @Inject constructor(
         ).getOrNull() ?: return
 
 
+        if (totalFee > BigDecimal.valueOf(amountSats.toLong())
+                .times(BigDecimal(0.5)).toLong().toUInt()
+        ) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.FEE_OVER_HALF_VALUE)
+            }
+            return
+        }
 
         _sendUiState.update {
             it.copy(showAmountWarningDialog = null)
