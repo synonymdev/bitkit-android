@@ -39,7 +39,7 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
-import to.bitkit.ui.screens.DevSettingsScreen
+import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -424,8 +424,6 @@ private fun RootNavHost(
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
         lightningConnections(navController)
-        devSettings(walletViewModel, navController)
-        regtestSettings(navController)
         activityItem(activityListViewModel, navController)
         qrScanner(appViewModel, navController)
         authCheck(navController)
@@ -673,6 +671,12 @@ private fun NavGraphBuilder.settings(
             onClose = { navController.navigateToHome() },
         )
     }
+    composableWithDefaultTransitions<Routes.DevSettings> {
+        DevSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.RegtestSettings> {
+        BlocktankRegtestScreen(navController)
+    }
 }
 
 private fun NavGraphBuilder.profile(
@@ -908,24 +912,6 @@ private fun NavGraphBuilder.lightningConnections(
                 viewModel = viewModel,
             )
         }
-    }
-}
-
-private fun NavGraphBuilder.devSettings(
-    viewModel: WalletViewModel,
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.DevSettings> {
-        DevSettingsScreen(viewModel, navController)
-    }
-}
-
-private fun NavGraphBuilder.regtestSettings(
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.RegtestSettings> {
-        val viewModel = hiltViewModel<BlocktankRegtestViewModel>()
-        BlocktankRegtestScreen(viewModel, navController)
     }
 }
 
