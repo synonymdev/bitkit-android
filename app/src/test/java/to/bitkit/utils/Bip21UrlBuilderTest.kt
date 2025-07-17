@@ -80,6 +80,25 @@ class Bip21UrlBuilderTest {
     }
 
     @Test
+    fun `address with blank lightning invoice`() {
+        val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+        val expected = expectedUrl(
+            "bitcoin:$address",
+            "label" to "Donation",
+            "message" to "Thanks for your work!"
+        )
+        Assert.assertEquals(
+            expected,
+            buildBip21Url(
+                address,
+                label = "Donation",
+                message = "Thanks for your work!",
+                lightningInvoice = " "
+            )
+        )
+    }
+
+    @Test
     fun `address with invalid lightning invoice`() {
         val address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
         val expected = expectedUrl(
