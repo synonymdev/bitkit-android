@@ -788,7 +788,7 @@ class AppViewModel @Inject constructor(
 
         val settings = settingsStore.data.first()
         val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
-        if (amountInUsd.value <= BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) && settings.enableSendAmountWarning) {
+        if (amountInUsd.value > BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) && settings.enableSendAmountWarning) {
             _sendUiState.update {
                 it.copy(showAmountWarningDialog = AmountWarning.VALUE_OVER_100_USD)
             }
@@ -823,10 +823,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val feeInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
+        if (feeInUsd.value > BigDecimal(10)) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.FEE_OVER_10_USD)
+            }
+            return
+        }
+
         _sendUiState.update {
             it.copy(showAmountWarningDialog = null)
         }
-
     }
 
     private suspend fun proceedWithPayment() {
@@ -1241,7 +1248,7 @@ enum class AmountWarning(@StringRes val message: Int) {
     VALUE_OVER_100_USD(R.string.wallet__send_dialog1),
     OVER_HALF_BALANCE(R.string.wallet__send_dialog2),
     FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3),
-    FEE_OVER_10_USD(R.string.wallet__send_dialog3),
+    FEE_OVER_10_USD(R.string.wallet__send_dialog4),
 }
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
