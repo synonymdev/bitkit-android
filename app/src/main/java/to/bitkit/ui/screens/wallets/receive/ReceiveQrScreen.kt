@@ -442,7 +442,6 @@ private fun ReceiveQrSlide(
     val qrButtonTooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
 
-    // State to hold the generated QR code bitmap
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     Column(
