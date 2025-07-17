@@ -1,10 +1,14 @@
 package to.bitkit.repositories
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -15,12 +19,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Duration.Companion.milliseconds
 
 enum class ConnectivityState { CONNECTED, CONNECTING, DISCONNECTED, }
 
@@ -35,32 +39,40 @@ class ConnectivityRepo @Inject constructor(
 
     @OptIn(FlowPreview::class)
     val isOnline: Flow<ConnectivityState> = callbackFlow {
-        val networkRequest = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-            .build()
+        Logger.debug("Network connectivity monitor starting")
+
+        val airplaneModeReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                repoScope.launch {
+                    if (intent?.action == Intent.ACTION_AIRPLANE_MODE_CHANGED) {
+                        val isAirplaneModeOn = intent.getBooleanExtra("state", false)
+
+                        if (isAirplaneModeOn) {
+                            val state = ConnectivityState.DISCONNECTED
+                            Logger.debug("Airplane mode on, sent: $state")
+                            send(state)
+                        } else {
+                            // TODO emit CONNECTING if reliable solution
+                        }
+                    }
+                }
+            }
+        }
 
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 repoScope.launch {
                     val state = ConnectivityState.CONNECTING
-                    Logger.debug("Network connection available, state: $state")
-                    send(ConnectivityState.CONNECTING)
+                    Logger.debug("Network connection available, sent: $state")
+                    send(state)
                 }
             }
 
             override fun onLost(network: Network) {
                 repoScope.launch {
-                    val hasActiveNetwork = connectivityManager.activeNetwork != null &&
-                        getCurrentNetworkState() != ConnectivityState.DISCONNECTED
-
-                    if (hasActiveNetwork) {
-                        Logger.debug("Lost a connection while having another active, skipping state update")
-                    } else {
-                        val state = ConnectivityState.DISCONNECTED
-                        Logger.debug("Network connection lost, state: $state")
-                        send(state)
-                    }
+                    val state = ConnectivityState.DISCONNECTED
+                    Logger.debug("Network connection lost, sent: $state")
+                    send(state)
                 }
             }
 
@@ -75,7 +87,7 @@ class ConnectivityRepo @Inject constructor(
                         else -> ConnectivityState.DISCONNECTED
                     }
 
-                    Logger.debug("Network capabilities changed, state: $state")
+                    Logger.debug("Network capabilities changed, sent: $state")
                     send(state)
                 }
             }
@@ -83,28 +95,49 @@ class ConnectivityRepo @Inject constructor(
             override fun onUnavailable() {
                 repoScope.launch {
                     val state = ConnectivityState.DISCONNECTED
-                    Logger.debug("Network unavailable, state: $state")
+                    Logger.debug("Network unavailable, sent: $state")
                     send(state)
                 }
             }
         }
 
         val initialState = getCurrentNetworkState()
-        Logger.debug("Network monitoring started, state: $initialState")
-
         repoScope.launch {
+            Logger.debug("Network initial state: $initialState")
             send(initialState)
         }
 
-        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+        // registering monitors
+        connectivityManager.registerNetworkCallback(
+            NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                .build(),
+            networkCallback,
+        )
+        ContextCompat.registerReceiver(
+            context,
+            airplaneModeReceiver,
+            IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         awaitClose {
+            runCatching { context.unregisterReceiver(airplaneModeReceiver) }
             connectivityManager.unregisterNetworkCallback(networkCallback)
             Logger.debug("Network monitoring stopped")
         }
-    }
-        .debounce(300.milliseconds)
-        .distinctUntilChanged()
+    }.distinctUntilChanged()
+        .debounce { state ->
+            when (state) {
+                ConnectivityState.CONNECTED -> 150
+                else -> 0
+            }
+        }
+        .onEach {
+            Logger.debug("New network state: $it")
+        }
+
 
     private fun getCurrentNetworkState(): ConnectivityState {
         val activeNetwork = connectivityManager.activeNetwork
