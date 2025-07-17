@@ -56,6 +56,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.viewmodels.AmountWarning
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -223,10 +224,10 @@ private fun SendAndReviewContent(
             )
         }
 
-        if (uiState.showAmountWarningDialog) {
+        uiState.showAmountWarningDialog?.let { dialog ->
             AppAlertDialog(
                 title = stringResource(R.string.common__are_you_sure),
-                text = stringResource(R.string.wallet__send_dialog1),
+                text = stringResource(dialog.message),
                 confirmText = stringResource(R.string.wallet__send_yes),
                 dismissText = stringResource(R.string.common__cancel),
                 onConfirm = { onEvent(SendEvent.ConfirmAmountWarning) },
@@ -505,7 +506,7 @@ private fun PreviewDialog() {
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
                 decodedInvoice = null,
-                showAmountWarningDialog = true,
+                showAmountWarningDialog = AmountWarning.VALUE_OVER_100_USD,
             ),
             isLoading = false,
             showBiometrics = true,

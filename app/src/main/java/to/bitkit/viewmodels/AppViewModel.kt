@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -46,6 +47,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -774,27 +776,64 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             val amount = _sendUiState.value.amount
 
-            val sendAmountWarningHandled = handleSendAmountWarningIfApplicable(amount)
-            if (sendAmountWarningHandled) return@launch // await for dialog UI interaction
+            handleSanityChecks(amount)
+            if (_sendUiState.value.showAmountWarningDialog != null) return@launch // await for dialog UI interaction
 
             _sendUiState.update { it.copy(shouldConfirmPay = true) }
         }
     }
 
-    private suspend fun handleSendAmountWarningIfApplicable(amountSats: ULong): Boolean {
+    private suspend fun handleSanityChecks(amountSats: ULong) {
+        if (_sendUiState.value.showAmountWarningDialog != null) return
+
         val settings = settingsStore.data.first()
-        if (!settings.enableSendAmountWarning || _sendUiState.value.showAmountWarningDialog) return false
-
-        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return false
-        if (amountInUsd.value <= BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD)) return false
-
-        Logger.debug("Showing send amount warning for $amountSats sats = $$amountInUsd USD")
-
-        _sendUiState.update {
-            it.copy(showAmountWarningDialog = true)
+        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
+        if (amountInUsd.value > BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) && settings.enableSendAmountWarning) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.VALUE_OVER_100_USD)
+            }
+            return
         }
 
-        return true
+        if (amountSats > BigDecimal.valueOf(walletRepo.balanceState.value.totalSats.toLong())
+                .times(BigDecimal(0.5)).toLong().toUInt()
+        ) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.OVER_HALF_BALANCE)
+            }
+            return
+        }
+
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
+
+        val totalFee = lightningService.calculateTotalFee(
+            amountSats = amountSats,
+            address = _sendUiState.value.address,
+            speed = _sendUiState.value.speed,
+            utxosToSpend = _sendUiState.value.utxosToSpend
+        ).getOrNull() ?: return
+
+
+        if (totalFee > BigDecimal.valueOf(amountSats.toLong())
+                .times(BigDecimal(0.5)).toLong().toUInt()
+        ) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.FEE_OVER_HALF_VALUE)
+            }
+            return
+        }
+
+        val feeInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
+        if (feeInUsd.value > BigDecimal(10)) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.FEE_OVER_10_USD)
+            }
+            return
+        }
+
+        _sendUiState.update {
+            it.copy(showAmountWarningDialog = null)
+        }
     }
 
     private suspend fun proceedWithPayment() {
@@ -1160,7 +1199,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             _sendUiState.update {
                 it.copy(
-                    showAmountWarningDialog = false,
+                    showAmountWarningDialog = null,
                     shouldConfirmPay = true,
                 )
             }
@@ -1169,7 +1208,7 @@ class AppViewModel @Inject constructor(
 
     private fun onDismissAmountWarning() {
         _sendUiState.update {
-            it.copy(showAmountWarningDialog = false)
+            it.copy(showAmountWarningDialog = null)
         }
     }
 
@@ -1196,12 +1235,21 @@ data class SendUiState(
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: List<String> = listOf(),
     val decodedInvoice: LightningInvoice? = null,
-    val showAmountWarningDialog: Boolean = false,
+    val showAmountWarningDialog: AmountWarning? = null,
     val shouldConfirmPay: Boolean = false,
     val selectedUtxos: List<SpendableUtxo>? = null,
     val lnUrlParameters: LnUrlParameters? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val speed: TransactionSpeed? = null,
+    val utxosToSpend: List<SpendableUtxo>? = null,
 )
+
+enum class AmountWarning(@StringRes val message: Int) {
+    VALUE_OVER_100_USD(R.string.wallet__send_dialog1),
+    OVER_HALF_BALANCE(R.string.wallet__send_dialog2),
+    FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3),
+    FEE_OVER_10_USD(R.string.wallet__send_dialog4),
+}
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
 
