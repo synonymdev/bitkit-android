@@ -56,6 +56,7 @@ fun QrCodeImage(
     logoPainter: Painter? = null,
     tipMessage: String = "",
     size: Dp = LocalConfiguration.current.screenWidthDp.dp,
+    onBitmapGenerated: (Bitmap?) -> Unit = {}
 ) {
     val clipboard = LocalClipboardManager.current
     val tooltipState = rememberTooltipState()
@@ -69,6 +70,10 @@ fun QrCodeImage(
             .padding(8.dp)
     ) {
         val bitmap = rememberQrBitmap(content, size)
+
+        LaunchedEffect(bitmap) {
+            onBitmapGenerated(bitmap)
+        }
 
         if (bitmap != null) {
             val imageComposable = @Composable {

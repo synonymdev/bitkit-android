@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -68,6 +70,7 @@ import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.components.PagerWithIndicator
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.shared.util.shareQrCode
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppSwitchDefaults
@@ -439,6 +442,8 @@ private fun ReceiveQrSlide(
     val qrButtonTooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
 
+    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -448,6 +453,9 @@ private fun ReceiveQrSlide(
             logoPainter = qrLogoPainter,
             tipMessage = stringResource(R.string.wallet__receive_copied),
             modifier = Modifier.weight(1f, fill = false),
+            onBitmapGenerated = { bitmap ->
+                qrBitmap = bitmap
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -496,7 +504,11 @@ private fun ReceiveQrSlide(
             PrimaryButton(
                 text = stringResource(R.string.common__share),
                 size = ButtonSize.Small,
-                onClick = { shareText(context, uri) },
+                onClick = {
+                    qrBitmap?.let { bitmap ->
+                        shareQrCode(context, bitmap, uri)
+                    } ?: shareText(context, uri)
+                },
                 fullWidth = false,
                 color = Colors.White10,
                 icon = {
