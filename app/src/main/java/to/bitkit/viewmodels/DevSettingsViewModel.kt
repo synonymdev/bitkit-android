@@ -10,14 +10,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import to.bitkit.data.WidgetsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -27,6 +28,8 @@ class DevSettingsViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val firebaseMessaging: FirebaseMessaging,
     private val lightningRepo: LightningRepo,
+    private val widgetsStore: WidgetsStore,
+    private val currencyRepo: CurrencyRepo,
 ) : ViewModel() {
 
     fun openChannel() {
@@ -86,4 +89,15 @@ class DevSettingsViewModel @Inject constructor(
         }
     }
 
+    fun resetWidgetsState() {
+        viewModelScope.launch {
+            widgetsStore.reset()
+        }
+    }
+
+    fun refreshCurrencyRates() {
+        viewModelScope.launch {
+            currencyRepo.triggerRefresh()
+        }
+    }
 }

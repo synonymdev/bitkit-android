@@ -20,7 +20,6 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
-import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -35,7 +34,6 @@ fun DevSettingsScreen(
 ) {
     val app = appViewModel ?: return
     val activity = activityListViewModel ?: return
-    val currency = currencyViewModel ?: return
     val settings = settingsViewModel ?: return
 
     ScreenColumn {
@@ -53,33 +51,52 @@ fun DevSettingsScreen(
             SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
 
             if (Env.network == Network.REGTEST) {
-                SectionHeader(title = "REGTEST")
+                SectionHeader("REGTEST")
 
                 SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
                 SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
             }
 
-            SectionHeader(title = "APP CACHE")
-            SettingsTextButtonRow("Reset Settings Store") {
-                settings.reset()
-                app.toast(type = Toast.ToastType.SUCCESS, title = "Settings store reset")
-            }
-            SettingsTextButtonRow("Reset All Activities") {
-                activity.removeAllActivities()
-                app.toast(type = Toast.ToastType.SUCCESS, title = "Activities removed")
-            }
-            SettingsTextButtonRow("Refresh Currency Rates") {
-                currency.triggerRefresh()
-                app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
-            }
+            SectionHeader("APP CACHE")
 
-            SectionHeader(title = "DEBUG")
-            SettingsTextButtonRow("Fake BG Transaction", onClick = viewModel::fakeBgTransaction)
-            SettingsTextButtonRow("Open channel to trusted peer", onClick = viewModel::openChannel)
+            SettingsTextButtonRow(
+                title = "Reset Settings Store",
+                onClick = {
+                    settings.reset()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Settings store reset")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Reset All Activities",
+                onClick = {
+                    activity.removeAllActivities()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Activities removed")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Reset Widgets State",
+                onClick = {
+                    viewModel.resetWidgetsState()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Widgets state reset")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Refresh Currency Rates",
+                onClick = {
+                    viewModel.refreshCurrencyRates()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
+                }
+            )
+
+            SectionHeader("DEBUG")
+
+            SettingsTextButtonRow("Fake New BG Transaction", onClick = viewModel::fakeBgTransaction)
+            SettingsTextButtonRow("Open Channel To Trusted Peer", onClick = viewModel::openChannel)
 
             SectionHeader("NOTIFICATIONS")
-            SettingsTextButtonRow("Register for LSP notifications", onClick = viewModel::registerForNotifications)
-            SettingsTextButtonRow("Test notification from LSP ", onClick = viewModel::testLspNotification)
+
+            SettingsTextButtonRow("Register For LSP Notifications", onClick = viewModel::registerForNotifications)
+            SettingsTextButtonRow("Test LSP Notification ", onClick = viewModel::testLspNotification)
         }
     }
 }
