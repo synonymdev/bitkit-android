@@ -47,6 +47,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -803,6 +804,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
+
+        val totalFee = lightningService.calculateTotalFee(
+            amountSats = amountSats,
+            address = _sendUiState.value.address,
+            speed = _sendUiState.value.speed,
+            utxosToSpend = _sendUiState.value.utxosToSpend
+        ).getOrNull() ?: return
+
+
+
         _sendUiState.update {
             it.copy(showAmountWarningDialog = null)
         }
@@ -1212,7 +1224,9 @@ data class SendUiState(
     val shouldConfirmPay: Boolean = false,
     val selectedUtxos: List<SpendableUtxo>? = null,
     val lnUrlParameters: LnUrlParameters? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val speed: TransactionSpeed? = null,
+    val utxosToSpend: List<SpendableUtxo>? = null,
 )
 
 enum class AmountWarning(@StringRes val message: Int) {
