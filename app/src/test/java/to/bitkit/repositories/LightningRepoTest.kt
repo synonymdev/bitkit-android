@@ -73,7 +73,8 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
-        sut.start().let { assertTrue(it.isSuccess) }
+        val result = sut.start()
+        assertTrue(result.isSuccess)
     }
 
     @Test
@@ -342,12 +343,6 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `registerForNotifications should fail when node is not running`() = test {
         val result = sut.registerForNotifications()
-        assertTrue(result.isFailure)
-    }
-
-    @Test
-    fun `testNotification should fail when node is not running`() = test {
-        val result = sut.testNotification()
         assertTrue(result.isFailure)
     }
 

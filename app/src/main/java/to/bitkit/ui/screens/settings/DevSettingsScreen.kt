@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
@@ -25,17 +26,17 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
-import to.bitkit.ui.walletViewModel
+import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
 fun DevSettingsScreen(
     navController: NavController,
+    viewModel: DevSettingsViewModel = hiltViewModel(),
 ) {
-    val wallet = walletViewModel ?: return
+    val app = appViewModel ?: return
     val activity = activityListViewModel ?: return
     val currency = currencyViewModel ?: return
     val settings = settingsViewModel ?: return
-    val app = appViewModel ?: return
 
     ScreenColumn {
         AppTopBar(
@@ -49,7 +50,7 @@ fun DevSettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
-            SettingsButtonRow("Channel Orders") { Routes.ChannelOrdersSettings }
+            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
 
             if (Env.network == Network.REGTEST) {
                 SectionHeader(title = "REGTEST")
@@ -73,15 +74,12 @@ fun DevSettingsScreen(
             }
 
             SectionHeader(title = "DEBUG")
-            SettingsTextButtonRow("Log FCM Token") { wallet.debugFcmToken() }
-            SettingsTextButtonRow("Log Blocktank Info") { wallet.debugBlocktankInfo() }
-            SettingsTextButtonRow("Fake New BG Transaction") { wallet.debugTransactionSheet() }
-            SettingsTextButtonRow("Open channel to trusted peer", onClick = wallet::openChannel)
+            SettingsTextButtonRow("Fake BG Transaction", onClick = viewModel::fakeBgTransaction)
+            SettingsTextButtonRow("Open channel to trusted peer", onClick = viewModel::openChannel)
 
             SectionHeader("NOTIFICATIONS")
-            SettingsTextButtonRow("Register for notifications with LSP", onClick = wallet::manualRegisterForNotifications)
-            SettingsTextButtonRow("Self test notification from LSP", onClick = wallet::debugLspNotifications)
-
+            SettingsTextButtonRow("Register for LSP notifications", onClick = viewModel::registerForNotifications)
+            SettingsTextButtonRow("Test notification from LSP ", onClick = viewModel::testLspNotification)
         }
     }
 }

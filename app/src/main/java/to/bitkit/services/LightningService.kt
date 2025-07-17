@@ -20,6 +20,7 @@ import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
@@ -652,6 +653,7 @@ class LightningService @Inject constructor(
     val nodeId: String? get() = node?.nodeId()
     val balances: BalanceDetails? get() = node?.listBalances()
     val status: NodeStatus? get() = node?.status()
+    val config: Config? get() = node?.config()
     val peers: List<LnPeer>? get() = node?.listPeers()?.map { it.toLnPeer() }
     val channels: List<ChannelDetails>? get() = node?.listChannels()
     val payments: List<PaymentDetails>? get() = node?.listPayments()

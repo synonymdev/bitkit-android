@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +39,6 @@ class WalletViewModelTest : BaseUnitTest() {
     private val lightningRepo: LightningRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val backupsRepo: BackupsRepo = mock()
-    private val context: Context = mock()
     private val mockLightningState = MutableStateFlow(LightningState())
     private val mockWalletState = MutableStateFlow(WalletState())
 
@@ -52,7 +50,6 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut = WalletViewModel(
             bgDispatcher = Dispatchers.Unconfined,
-            appContext = context,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
@@ -122,17 +119,6 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `openChannel should send a toast if there are no peers`() = test {
-        val peersFlow = MutableStateFlow(emptyList<LnPeer>())
-        whenever(lightningRepo.getPeers()).thenReturn(peersFlow.value)
-
-        sut.openChannel()
-
-        verify(lightningRepo, never()).openChannel(any(), any(), any())
-        // Add verification for ToastEventBus.send
-    }
-
-    @Test
     fun `wipeWallet should call walletRepo wipeWallet`() =
         test {
             whenever(walletRepo.wipeWallet(walletIndex = 0)).thenReturn(Result.success(Unit))
@@ -161,35 +147,6 @@ class WalletViewModelTest : BaseUnitTest() {
 
         verify(walletRepo).restoreWallet(any(), anyOrNull())
         // Add verification for ToastEventBus.send
-    }
-
-    @Test
-    fun `manualRegisterForNotifications should call lightningRepo registerForNotifications and send appropriate toasts`() =
-        test {
-            whenever(lightningRepo.registerForNotifications()).thenReturn(Result.success(Unit))
-
-            sut.manualRegisterForNotifications()
-
-            verify(lightningRepo).registerForNotifications()
-            // Add verification for ToastEventBus.send
-        }
-
-    @Test
-    fun `debugFcmToken should call lightningRepo getFcmToken`() = test {
-        whenever(lightningRepo.getFcmToken()).thenReturn(Result.success("test_token"))
-
-        sut.debugFcmToken()
-
-        verify(lightningRepo).getFcmToken()
-    }
-
-    @Test
-    fun `debugLspNotifications should call lightningRepo testNotification`() = test {
-        whenever(lightningRepo.testNotification()).thenReturn(Result.success(Unit))
-
-        sut.debugLspNotifications()
-
-        verify(lightningRepo).testNotification()
     }
 
     @Test
