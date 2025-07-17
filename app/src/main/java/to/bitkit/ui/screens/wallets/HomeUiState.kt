@@ -34,4 +34,5 @@ data class HomeUiState(
     val isEditingWidgets: Boolean = false,
     val deleteWidgetAlert: WidgetType? = null,
     val highBalanceSheetVisible: Boolean = false,
+    val showEmptyState: Boolean = false,
 )

@@ -225,32 +225,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncBalances should set showEmptyState to false when balance is positive`() = test {
-        val balanceDetails = mock<BalanceDetails> {
-            on { totalLightningBalanceSats } doReturn 500uL
-            on { totalOnchainBalanceSats } doReturn 1000uL
-        }
-        whenever(lightningRepo.getBalances()).thenReturn(balanceDetails)
-
-        sut.syncBalances()
-
-        assertFalse(sut.walletState.value.showEmptyState)
-    }
-
-    @Test
-    fun `syncBalances should set showEmptyState to true when balance is zero`() = test {
-        val balanceDetails = mock<BalanceDetails> {
-            on { totalLightningBalanceSats } doReturn 0uL
-            on { totalOnchainBalanceSats } doReturn 0uL
-        }
-        whenever(lightningRepo.getBalances()).thenReturn(balanceDetails)
-
-        sut.syncBalances()
-
-        assertTrue(sut.walletState.value.showEmptyState)
-    }
-
-    @Test
     fun `refreshBip21ForEvent should not refresh for other events`() = test {
         sut.refreshBip21ForEvent(
             Event.PaymentSuccessful(

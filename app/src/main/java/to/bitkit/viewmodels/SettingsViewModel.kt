@@ -19,15 +19,6 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     fun reset() = viewModelScope.launch { settingsStore.reset() }
 
-    val showEmptyState = settingsStore.data.map { it.showEmptyState }
-        .asStateFlow(initialValue = false)
-
-    fun setShowEmptyState(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(showEmptyState = value) }
-        }
-    }
-
     val hasSeenSpendingIntro = settingsStore.data.map { it.hasSeenSpendingIntro }
         .asStateFlow(initialValue = false)
 
