@@ -73,7 +73,7 @@ class ConnectivityRepo @Inject constructor(
 
         val initialState = getCurrentNetworkState()
         repoScope.launch {
-            Logger.debug("Network initial state: $initialState")
+            Logger.verbose("Network initial state: $initialState")
             send(initialState)
         }
 
