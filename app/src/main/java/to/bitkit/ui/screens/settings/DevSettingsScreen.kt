@@ -77,6 +77,13 @@ fun DevSettingsScreen(
                 }
             )
             SettingsTextButtonRow(
+                title = "Reset Backup State",
+                onClick = {
+                    viewModel.resetBackupState()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Backup state reset")
+                }
+            )
+            SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
                     viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }

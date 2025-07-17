@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import to.bitkit.R
+import to.bitkit.data.CacheStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -40,6 +41,7 @@ class DevSettingsViewModel @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val currencyRepo: CurrencyRepo,
     private val logsRepo: LogsRepo,
+    private val cacheStore: CacheStore,
 ) : ViewModel() {
 
     fun openChannel() {
@@ -122,6 +124,12 @@ class DevSettingsViewModel @Inject constructor(
                         description = context.getString(R.string.lightning__error_logs_description),
                     )
                 }
+        }
+    }
+
+    fun resetBackupState() {
+        viewModelScope.launch {
+            cacheStore.update { it.copy(backupStatuses = mapOf()) }
         }
     }
 }
