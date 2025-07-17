@@ -61,39 +61,14 @@ class ConnectivityRepo @Inject constructor(
         }
 
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                repoScope.launch {
-                    if (isAirplaneModeOn) {
-                        Logger.debug("Network connection available ignored (airplane mode)")
-                        return@launch
-                    }
 
-                    val state = ConnectivityState.CONNECTING
-                    Logger.debug("Network connection available, sent: $state")
-                    send(state)
-                }
-            }
-
-            override fun onLost(network: Network) {
-                repoScope.launch {
-                    if (isAirplaneModeOn) {
-                        Logger.debug("Network connection lost ignored (airplane mode)")
-                        return@launch
-                    }
-
-                    val state = ConnectivityState.DISCONNECTED
-                    Logger.debug("Network connection lost, sent: $state")
-                    send(state)
-                }
-            }
+            // Ignored, onCapabilitiesChanged is always called immediately after
+            override fun onAvailable(network: Network) = Unit
 
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                repoScope.launch {
-                    if (isAirplaneModeOn) {
-                        Logger.debug("Network capabilities changed ignored (airplane mode)")
-                        return@launch
-                    }
+                if (isAirplaneModeOn) return Logger.debug("Network capabilities changed ignored in airplane mode")
 
+                repoScope.launch {
                     val state = capabilities.asState()
                     Logger.debug("Network capabilities changed, sent: $state")
                     send(state)
@@ -101,22 +76,29 @@ class ConnectivityRepo @Inject constructor(
             }
 
             override fun onUnavailable() {
+                if (isAirplaneModeOn) return Logger.debug("Network unavailable ignored in airplane mode")
                 repoScope.launch {
-                    if (isAirplaneModeOn) {
-                        Logger.debug("Network unavailable ignored (airplane mode)")
-                        return@launch
-                    }
 
                     val state = ConnectivityState.DISCONNECTED
                     Logger.debug("Network unavailable, sent: $state")
                     send(state)
                 }
             }
+
+            override fun onLost(network: Network) {
+                if (isAirplaneModeOn) return Logger.debug("Network connection lost ignored in airplane mode")
+
+                repoScope.launch {
+                    val state = ConnectivityState.DISCONNECTED
+                    Logger.debug("Network connection lost, sent: $state")
+                    send(state)
+                }
+            }
         }
 
         // Init airplane mode flag
-        val airplaneModeIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
-        isAirplaneModeOn = airplaneModeIntent?.getBooleanExtra("state", false) ?: false
+        isAirplaneModeOn = context.registerReceiver(null, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
+            ?.getBooleanExtra("state", false) == true
 
         val initialState = getCurrentNetworkState()
         repoScope.launch {
