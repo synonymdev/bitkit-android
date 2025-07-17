@@ -794,6 +794,15 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (amountSats > BigDecimal.valueOf(walletRepo.balanceState.value.totalSats.toLong())
+                .times(BigDecimal(0.5)).toLong().toUInt()
+        ) {
+            _sendUiState.update {
+                it.copy(showAmountWarningDialog = AmountWarning.OVER_HALF_BALANCE)
+            }
+            return
+        }
+
         _sendUiState.update {
             it.copy(showAmountWarningDialog = null)
         }
