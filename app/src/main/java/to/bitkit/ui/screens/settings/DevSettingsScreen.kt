@@ -63,10 +63,10 @@ fun DevSettingsScreen(
             SectionHeader("APP CACHE")
 
             SettingsTextButtonRow(
-                title = "Reset Settings Store",
+                title = "Reset Settings State",
                 onClick = {
                     settings.reset()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Settings store reset")
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Settings state reset")
                 }
             )
             SettingsTextButtonRow(
@@ -101,6 +101,12 @@ fun DevSettingsScreen(
                 onClick = {
                     viewModel.refreshCurrencyRates()
                     app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Wipe App",
+                onClick = {
+                    viewModel.wipeWallet()
                 }
             )
 
