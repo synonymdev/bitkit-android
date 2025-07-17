@@ -17,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -41,11 +40,13 @@ class ConnectivityRepo @Inject constructor(
     val isOnline: Flow<ConnectivityState> = callbackFlow {
         Logger.debug("Network connectivity monitor starting")
 
+        var isAirplaneModeOn = false
+
         val airplaneModeReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 repoScope.launch {
                     if (intent?.action == Intent.ACTION_AIRPLANE_MODE_CHANGED) {
-                        val isAirplaneModeOn = intent.getBooleanExtra("state", false)
+                        isAirplaneModeOn = intent.getBooleanExtra("state", false)
 
                         if (isAirplaneModeOn) {
                             val state = ConnectivityState.DISCONNECTED
@@ -62,6 +63,11 @@ class ConnectivityRepo @Inject constructor(
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 repoScope.launch {
+                    if (isAirplaneModeOn) {
+                        Logger.debug("Network connection available ignored (airplane mode)")
+                        return@launch
+                    }
+
                     val state = ConnectivityState.CONNECTING
                     Logger.debug("Network connection available, sent: $state")
                     send(state)
@@ -70,23 +76,25 @@ class ConnectivityRepo @Inject constructor(
 
             override fun onLost(network: Network) {
                 repoScope.launch {
+                    if (isAirplaneModeOn) {
+                        Logger.debug("Network connection lost ignored (airplane mode)")
+                        return@launch
+                    }
+
                     val state = ConnectivityState.DISCONNECTED
                     Logger.debug("Network connection lost, sent: $state")
                     send(state)
                 }
             }
 
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 repoScope.launch {
-                    val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-
-                    val state = when {
-                        hasInternet && isValidated -> ConnectivityState.CONNECTED
-                        hasInternet && !isValidated -> ConnectivityState.CONNECTING
-                        else -> ConnectivityState.DISCONNECTED
+                    if (isAirplaneModeOn) {
+                        Logger.debug("Network capabilities changed ignored (airplane mode)")
+                        return@launch
                     }
 
+                    val state = capabilities.asState()
                     Logger.debug("Network capabilities changed, sent: $state")
                     send(state)
                 }
@@ -94,6 +102,11 @@ class ConnectivityRepo @Inject constructor(
 
             override fun onUnavailable() {
                 repoScope.launch {
+                    if (isAirplaneModeOn) {
+                        Logger.debug("Network unavailable ignored (airplane mode)")
+                        return@launch
+                    }
+
                     val state = ConnectivityState.DISCONNECTED
                     Logger.debug("Network unavailable, sent: $state")
                     send(state)
@@ -101,11 +114,16 @@ class ConnectivityRepo @Inject constructor(
             }
         }
 
+        // Init airplane mode flag
+        val airplaneModeIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED))
+        isAirplaneModeOn = airplaneModeIntent?.getBooleanExtra("state", false) ?: false
+
         val initialState = getCurrentNetworkState()
         repoScope.launch {
             Logger.debug("Network initial state: $initialState")
             send(initialState)
         }
+
 
         // registering monitors
         connectivityManager.registerNetworkCallback(
@@ -127,16 +145,9 @@ class ConnectivityRepo @Inject constructor(
             connectivityManager.unregisterNetworkCallback(networkCallback)
             Logger.debug("Network monitoring stopped")
         }
-    }.distinctUntilChanged()
-        .debounce { state ->
-            when (state) {
-                ConnectivityState.CONNECTED -> 150
-                else -> 0
-            }
-        }
-        .onEach {
-            Logger.debug("New network state: $it")
-        }
+    }.distinctUntilChanged().onEach {
+        Logger.debug("New network state: $it")
+    }
 
 
     private fun getCurrentNetworkState(): ConnectivityState {
@@ -146,12 +157,18 @@ class ConnectivityRepo @Inject constructor(
         val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
         if (capabilities == null) return ConnectivityState.DISCONNECTED
 
-        val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        val isValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return capabilities.asState()
+    }
+
+    private fun NetworkCapabilities.asState(): ConnectivityState {
+        val hasInternet = hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val isValidated = hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        val hasTransport = hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
 
         return when {
             hasInternet && isValidated -> ConnectivityState.CONNECTED
-            hasInternet && !isValidated -> ConnectivityState.CONNECTING
+            hasInternet && hasTransport -> ConnectivityState.CONNECTING
             else -> ConnectivityState.DISCONNECTED
         }
     }
