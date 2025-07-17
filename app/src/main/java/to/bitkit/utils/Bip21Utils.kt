@@ -30,9 +30,12 @@ object Bip21Utils {
         }
 
         // Add lightning parameter if invoice exists
-        lightningInvoice?.let { invoice ->
+        if (!lightningInvoice.isNullOrBlank()) {
             val separator = if (queryParams.isEmpty()) "?" else "&"
-            builder.append("${separator}lightning=${invoice.encodeToUrl()}")
+            val encodedInvoice = lightningInvoice.encodeToUrl()
+            if (encodedInvoice.isNotBlank()) {
+                builder.append("${separator}lightning=${lightningInvoice.encodeToUrl()}")
+            }
         }
 
         return builder.toString()
