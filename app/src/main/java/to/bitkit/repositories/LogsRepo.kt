@@ -1,11 +1,18 @@
 package to.bitkit.repositories
 
+import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.data.ChatwootHttpClient
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.fromBase64
 import to.bitkit.ext.getEnumValueOf
+import to.bitkit.ext.toBase64
 import to.bitkit.models.ChatwootMessage
 import to.bitkit.utils.Logger
 import java.io.BufferedReader
@@ -13,7 +20,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileReader
-import java.util.Base64
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
@@ -21,8 +27,10 @@ import javax.inject.Singleton
 
 @Singleton
 class LogsRepo @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val chatwootHttpClient: ChatwootHttpClient
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val chatwootHttpClient: ChatwootHttpClient,
 ) {
     suspend fun postQuestion(email: String, message: String): Result<Unit> = withContext(bgDispatcher) {
         return@withContext try {
@@ -46,7 +54,7 @@ class LogsRepo @Inject constructor(
         }
     }
 
-    /** * Lists log files sorted by newest first */
+    /** Lists log files sorted by newest first */
     suspend fun getLogs(): Result<List<LogFile>> = withContext(bgDispatcher) {
         try {
             val logDir = File(Env.logDir)
@@ -102,20 +110,46 @@ class LogsRepo @Inject constructor(
         }
     }
 
-    /** Zips up the most recent logs and returns base64 of zip file */
+    /** Zips and saves the most recent logs returning the content uri */
+    suspend fun zipLogsForSharing(
+        limit: Int = 20,
+        source: LogSource? = null,
+    ): Result<Uri> = withContext(bgDispatcher) {
+        zipLogs(limit, source).mapCatching { base64String ->
+            val file = withContext(ioDispatcher) {
+                val tempDir = context.cacheDir.resolve("logs").apply { mkdirs() }
+
+                val zipFileName = "bitkit_logs_${System.currentTimeMillis()}.zip"
+                val tempFile = File(tempDir, zipFileName)
+
+                // Convert base64 back to bytes and write to file
+                val zipBytes = base64String.fromBase64()
+                tempFile.writeBytes(zipBytes)
+                return@withContext tempFile
+            }
+            val contentUri = FileProvider.getUriForFile(context, Env.FILE_PROVIDER_AUTHORITY, file)
+            if (contentUri == null) error("Failed to create content uri")
+
+            return@mapCatching contentUri
+        }.onFailure {
+            Logger.error("Error preparing logs for sharing", it)
+        }
+    }
+
+
+    /** Zips the most recent logs and returns base64 of zip file */
     suspend fun zipLogs(
         limit: Int = 20,
-        includeAllSources: Boolean = false
+        source: LogSource? = null,
     ): Result<String> = withContext(bgDispatcher) {
         return@withContext try {
-            val logsResult = getLogs()
-            if (logsResult.isFailure) {
-                return@withContext Result.failure(logsResult.exceptionOrNull() ?: Exception("Failed to get logs"))
+            val logsResult = getLogs().onFailure {
+                return@withContext Result.failure(it)
             }
 
-            val allLogs = logsResult.getOrNull()?.filter { it.source != LogSource.Unknown } ?: emptyList()
-            val logsToZip = if (includeAllSources) {
-                allLogs.take(limit)
+            val allLogs = logsResult.getOrDefault(emptyList()).filter { it.source != LogSource.Unknown }
+            val logsToZip = if (source != null) {
+                allLogs.filter { it.source == source }.take(limit)
             } else {
                 // Group by source and take most recent from each
                 allLogs.groupBy { it.source }
@@ -157,7 +191,7 @@ class LogsRepo @Inject constructor(
             byteArrayOut.toByteArray()
         }
 
-        return Base64.getEncoder().encodeToString(zipBytes)
+        return zipBytes.toBase64()
     }
 
     private companion object {

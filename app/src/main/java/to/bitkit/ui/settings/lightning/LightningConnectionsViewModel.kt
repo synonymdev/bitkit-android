@@ -1,28 +1,25 @@
 package to.bitkit.ui.settings.lightning
 
-import android.app.Application
+import android.content.Context
 import android.net.Uri
-import androidx.core.content.FileProvider
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
-import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.Toast
@@ -37,21 +34,19 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TxDetails
-import java.io.File
-import java.util.Base64
 import javax.inject.Inject
 
 @HiltViewModel
 class LightningConnectionsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val application: Application,
     private val lightningRepo: LightningRepo,
     internal val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
     private val addressChecker: AddressChecker,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val walletRepo: WalletRepo,
-) : AndroidViewModel(application) {
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LightningConnectionsUiState())
     val uiState = _uiState.asStateFlow()
@@ -194,7 +189,7 @@ class LightningConnectionsViewModel @Inject constructor(
         // TODO: sort channels to get consistent index; node.listChannels returns a list in random order
         val channelIndex = channels.indexOfFirst { channel.channelId == it.channelId }
 
-        val connectionText = application.getString(R.string.lightning__connection)
+        val connectionText = context.getString(R.string.lightning__connection)
 
         return when {
             channelIndex == -1 -> {
@@ -274,43 +269,17 @@ class LightningConnectionsViewModel @Inject constructor(
             .sumOf { it.inboundCapacityMsat / 1000u }
     }
 
-    fun zipAndShareLogs(onReady: (Uri) -> Unit, onError: () -> Unit) {
+    fun zipLogsForSharing(onReady: (Uri) -> Unit) {
         viewModelScope.launch {
-            try {
-                val result = logsRepo.zipLogs()
-                if (result.isFailure) {
-                    Logger.error("Failed to zip logs", result.exceptionOrNull())
-                    onError()
-                    return@launch
-                }
-
-                val base64String = requireNotNull(result.getOrNull())
-
-                withContext(Dispatchers.IO) {
-                    val tempDir = application.externalCacheDir?.resolve("logs")?.apply { mkdirs() }
-                        ?: error("External cache dir is not available")
-
-                    val zipFileName = "bitkit_logs_${System.currentTimeMillis()}.zip"
-                    val tempFile = File(tempDir, zipFileName)
-
-                    // Convert base64 back to bytes and write to file
-                    val zipBytes = Base64.getDecoder().decode(base64String)
-                    tempFile.writeBytes(zipBytes)
-
-                    val contentUri = FileProvider.getUriForFile(
-                        application,
-                        Env.FILE_PROVIDER_AUTHORITY,
-                        tempFile
+            logsRepo.zipLogsForSharing()
+                .onSuccess { uri -> onReady(uri) }
+                .onFailure { err ->
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.lightning__error_logs),
+                        description = context.getString(R.string.lightning__error_logs_description),
                     )
-
-                    withContext(Dispatchers.Main) {
-                        onReady(contentUri)
-                    }
                 }
-            } catch (e: Exception) {
-                Logger.error("Error preparing logs for sharing", e)
-                onError()
-            }
         }
     }
 
@@ -355,8 +324,8 @@ class LightningConnectionsViewModel @Inject constructor(
 
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,
-                        title = application.getString(R.string.lightning__close_success_title),
-                        description = application.getString(R.string.lightning__close_success_msg),
+                        title = context.getString(R.string.lightning__close_success_title),
+                        description = context.getString(R.string.lightning__close_success_msg),
                     )
 
                     _closeConnectionUiState.update {
@@ -371,8 +340,8 @@ class LightningConnectionsViewModel @Inject constructor(
 
                     ToastEventBus.send(
                         type = Toast.ToastType.WARNING,
-                        title = application.getString(R.string.lightning__close_error),
-                        description = application.getString(R.string.lightning__close_error_msg),
+                        title = context.getString(R.string.lightning__close_error),
+                        description = context.getString(R.string.lightning__close_error_msg),
                     )
 
                     _closeConnectionUiState.update { it.copy(isLoading = false) }

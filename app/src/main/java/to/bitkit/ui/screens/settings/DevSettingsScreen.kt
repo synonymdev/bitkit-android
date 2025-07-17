@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -25,6 +26,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.viewmodels.DevSettingsViewModel
 
 @Composable
@@ -35,6 +37,7 @@ fun DevSettingsScreen(
     val app = appViewModel ?: return
     val activity = activityListViewModel ?: return
     val settings = settingsViewModel ?: return
+    val context = LocalContext.current
 
     ScreenColumn {
         AppTopBar(
@@ -71,6 +74,12 @@ fun DevSettingsScreen(
                 onClick = {
                     activity.removeAllActivities()
                     app.toast(type = Toast.ToastType.SUCCESS, title = "Activities removed")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Export Logs",
+                onClick = {
+                    viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
                 }
             )
             SettingsTextButtonRow(

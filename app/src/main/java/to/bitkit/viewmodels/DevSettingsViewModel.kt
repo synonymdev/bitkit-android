@@ -1,6 +1,8 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.messaging.FirebaseMessaging
@@ -8,18 +10,25 @@ import com.synonym.bitkitcore.testNotification
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import to.bitkit.R
 import to.bitkit.data.WidgetsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.fromBase64
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LogsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -30,6 +39,7 @@ class DevSettingsViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val widgetsStore: WidgetsStore,
     private val currencyRepo: CurrencyRepo,
+    private val logsRepo: LogsRepo,
 ) : ViewModel() {
 
     fun openChannel() {
@@ -98,6 +108,20 @@ class DevSettingsViewModel @Inject constructor(
     fun refreshCurrencyRates() {
         viewModelScope.launch {
             currencyRepo.triggerRefresh()
+        }
+    }
+
+    fun zipLogsForSharing(onReady: (Uri) -> Unit) {
+        viewModelScope.launch {
+            logsRepo.zipLogsForSharing()
+                .onSuccess { uri -> onReady(uri) }
+                .onFailure { err ->
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.lightning__error_logs),
+                        description = context.getString(R.string.lightning__error_logs_description),
+                    )
+                }
         }
     }
 }

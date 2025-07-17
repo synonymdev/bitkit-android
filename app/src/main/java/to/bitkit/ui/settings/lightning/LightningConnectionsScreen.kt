@@ -1,6 +1,5 @@
 package to.bitkit.ui.settings.lightning
 
-import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,10 +42,8 @@ import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
-import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
@@ -62,6 +59,7 @@ import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.util.shareZipFile
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -80,7 +78,6 @@ fun LightningConnectionsScreen(
     viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
-    val app = appViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
@@ -93,25 +90,7 @@ fun LightningConnectionsScreen(
         onBack = { navController.popBackStack() },
         onClickAddConnection = { navController.navigateToTransferFunding() },
         onClickExportLogs = {
-            viewModel.zipAndShareLogs(
-                onReady = { uri ->
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/zip"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(
-                        Intent.createChooser(intent, context.getString(R.string.lightning__export_logs))
-                    )
-                },
-                onError = {
-                    app.toast(
-                        type = Toast.ToastType.WARNING,
-                        title = context.getString(R.string.lightning__error_logs),
-                        description = context.getString(R.string.lightning__error_logs_description),
-                    )
-                }
-            )
+            viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
         onClickChannel = { channelUi ->
             viewModel.setSelectedChannel(channelUi)
