@@ -20,14 +20,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun AppTopBar(
-    titleText: String,
+    titleText: String?,
     onBackClick: (() -> Unit)?,
     icon: Painter? = null,
     actions: @Composable (RowScope.() -> Unit) = {},
@@ -39,21 +41,23 @@ fun AppTopBar(
             }
         },
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                icon?.let { painter ->
-                    Icon(
-                        painter = painter,
-                        contentDescription = null,
-                        tint = Color.Unspecified,
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(32.dp)
-                    )
+            if (titleText != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    icon?.let { painter ->
+                        Icon(
+                            painter = painter,
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(32.dp)
+                        )
+                    }
+                    Title(text = titleText)
                 }
-                Title(text = titleText)
             }
         },
         actions = actions,
@@ -92,6 +96,65 @@ fun ScanNavIcon(onClick: () -> Unit) {
             painter = painterResource(id = R.drawable.ic_scan),
             contentDescription = stringResource(R.string.other__qr_scan),
             modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        AppTopBar(
+            titleText = "Title And Back",
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview2() {
+    AppThemeSurface {
+        AppTopBar(
+            titleText = "Title And Icon",
+            onBackClick = {},
+            icon = painterResource(R.drawable.ic_ln_circle),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview3() {
+    AppThemeSurface {
+        AppTopBar(
+            titleText = "Title and Action",
+            onBackClick = {},
+            actions = {
+                CloseNavIcon(onClick = {})
+            }
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview4() {
+    AppThemeSurface {
+        AppTopBar(
+            titleText = "Title Only",
+            onBackClick = null,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewNoTitle() {
+    AppThemeSurface {
+        AppTopBar(
+            titleText = null,
+            onBackClick = {},
         )
     }
 }
