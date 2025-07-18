@@ -1,13 +1,11 @@
 package to.bitkit.viewmodels
 
-import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,9 +21,6 @@ import org.lightningdevkit.ldknode.NodeStatus
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
-import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupsRepo
@@ -40,7 +35,6 @@ import javax.inject.Inject
 @HiltViewModel
 class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @ApplicationContext private val appContext: Context,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
@@ -258,31 +252,6 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun openChannel() {
-        viewModelScope.launch(bgDispatcher) {
-            val peer = lightningRepo.getPeers()?.firstOrNull()
-
-            if (peer == null) {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Error",
-                    description = "No connected peer available for opening a channel"
-                )
-                return@launch
-            }
-
-            lightningRepo.openChannel(peer, 50_000u, 25_000u)
-                .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Channel Pending",
-                        description = "Awaiting next block..."
-                    )
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
     fun wipeWallet() {
         viewModelScope.launch(bgDispatcher) {
             walletRepo.wipeWallet().onFailure { error ->
@@ -307,63 +276,6 @@ class WalletViewModel @Inject constructor(
     }
 
     // region debug methods
-    fun manualRegisterForNotifications() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.registerForNotifications()
-                .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.INFO,
-                        title = "Success",
-                        description = "Registered for notifications."
-                    )
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun debugFcmToken() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.getFcmToken().onSuccess { token ->
-                Logger.debug("FCM registration token: $token")
-            }
-        }
-    }
-
-    fun debugLspNotifications() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.testNotification().onFailure { e ->
-                Logger.error("Error in LSP notification test:", e)
-            }
-        }
-    }
-
-    fun debugBlocktankInfo() {
-        viewModelScope.launch(bgDispatcher) {
-            lightningRepo.getBlocktankInfo().onSuccess { info ->
-                Logger.debug("Blocktank info: $info")
-            }.onFailure { e ->
-                Logger.error("Error getting Blocktank info:", e)
-            }
-        }
-    }
-
-    fun debugTransactionSheet() {
-        viewModelScope.launch {
-            NewTransactionSheetDetails.save(
-                appContext,
-                NewTransactionSheetDetails(
-                    type = NewTransactionSheetType.LIGHTNING,
-                    direction = NewTransactionSheetDirection.RECEIVED,
-                    sats = 123456789,
-                )
-            )
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = "Transaction sheet cached",
-                description = "Restart app to see sheet."
-            )
-        }
-    }
 
     fun addTagToSelected(newTag: String) {
         viewModelScope.launch(bgDispatcher) {

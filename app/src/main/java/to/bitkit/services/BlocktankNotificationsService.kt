@@ -23,7 +23,6 @@ class BlocktankNotificationsService @Inject constructor(
     private val keychain: Keychain,
     private val crypto: Crypto,
 ) {
-
     suspend fun registerDevice(deviceToken: String) = withContext(bgDispatcher) {
         val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
@@ -64,18 +63,5 @@ class BlocktankNotificationsService @Inject constructor(
         keychain.saveString(Key.PUSH_NOTIFICATION_TOKEN.name, deviceToken)
 
         Logger.info("Device registered for notifications")
-    }
-
-    suspend fun testNotification(deviceToken: String) = withContext(bgDispatcher) {
-        Logger.debug("Sending test notification to self…")
-
-        ServiceQueue.CORE.background {
-            com.synonym.bitkitcore.testNotification(
-                deviceToken = deviceToken,
-                secretMessage = "hello",
-                notificationType = "incomingHtlc",
-                customUrl = Env.blocktankPushNotificationServer,
-            )
-        }
     }
 }

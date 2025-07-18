@@ -2,7 +2,6 @@ package to.bitkit.repositories
 
 import android.net.Uri
 import com.google.firebase.messaging.FirebaseMessaging
-import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
@@ -11,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -410,6 +408,7 @@ class LightningRepo @Inject constructor(
         val invoice = getLnurlInvoice(address, amountSatoshis)
         Result.success(invoice)
     }
+
     suspend fun handleLnUrlWithdraw(
         k1: String,
         callback: String,
@@ -426,7 +425,7 @@ class LightningRepo @Inject constructor(
      * Extension function to remove duplicate query parameters from a URL string
      * Keeps the first occurrence of each parameter
      */
-    private fun String.removeDuplicateQueryParams(): String { //TODO REMOVE AFTER CORE FIX
+    private fun String.removeDuplicateQueryParams(): String { // TODO REMOVE AFTER CORE FIX
         return try {
             val uri = Uri.parse(this)
             val builder = uri.buildUpon().clearQuery()
@@ -470,6 +469,7 @@ class LightningRepo @Inject constructor(
      * @return A `Result` with the `Txid` of sent transaction, or an error if the transaction fails
      * or the fee rate cannot be retrieved.
      */
+
     suspend fun sendOnChain(
         address: Address,
         sats: ULong,
@@ -478,8 +478,7 @@ class LightningRepo @Inject constructor(
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-            val fees = coreService.blocktank.getFees().getOrThrow()
-            val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
 
             // if utxos are manually specified, use them, otherwise run auto coin select if enabled
             val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
@@ -647,16 +646,6 @@ class LightningRepo @Inject constructor(
         _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
 
     // Notification handling
-    suspend fun getFcmToken(): Result<String> = withContext(bgDispatcher) {
-        try {
-            val token = firebaseMessaging.token.await()
-            Result.success(token)
-        } catch (e: Throwable) {
-            Logger.error("Get FCM token error", e)
-            Result.failure(e)
-        }
-    }
-
     suspend fun registerForNotifications(): Result<Unit> = executeWhenNodeRunning("Register for notifications") {
         return@executeWhenNodeRunning try {
             val token = firebaseMessaging.token.await()
@@ -671,28 +660,6 @@ class LightningRepo @Inject constructor(
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Register for notifications error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun testNotification(): Result<Unit> = executeWhenNodeRunning("Test notification") {
-        try {
-            val token = firebaseMessaging.token.await()
-            blocktankNotificationsService.testNotification(token)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Logger.error("Test notification error", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getBlocktankInfo(): Result<IBtInfo> = withContext(bgDispatcher) {
-        try {
-            val info = coreService.blocktank.info(refresh = true)
-                ?: return@withContext Result.failure(Exception("Couldn't get info"))
-            Result.success(info)
-        } catch (e: Throwable) {
-            Logger.error("Blocktank info error", e)
             Result.failure(e)
         }
     }

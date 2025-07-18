@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <external-cache-path
+    <cache-path
         name="logs"
-        path="." />
+        path="logs/" />
     <cache-path
         name="qr_codes"
         path="qr_codes/" />

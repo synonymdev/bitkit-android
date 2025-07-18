@@ -230,9 +230,9 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    fun generateRandomTestData() {
+    fun generateRandomTestData(count: Int) {
         viewModelScope.launch(bgDispatcher) {
-            coreService.activity.generateRandomTestData()
+            coreService.activity.generateRandomTestData(count)
             syncState()
         }
     }

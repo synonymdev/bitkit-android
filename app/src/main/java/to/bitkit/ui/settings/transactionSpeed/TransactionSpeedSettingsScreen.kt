@@ -1,8 +1,6 @@
 package to.bitkit.ui.settings.transactionSpeed
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,7 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.navigateToCustomFeeSettings
@@ -62,9 +60,7 @@ private fun TransactionSpeedSettingsContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Caption13Up(text = stringResource(R.string.settings__general__speed_default), color = Colors.White64)
-            Spacer(modifier = Modifier.height(16.dp))
+            SectionHeader(stringResource(R.string.settings__general__speed_default))
 
             SettingsButtonRow(
                 title = stringResource(R.string.settings__fee__fast__label),
