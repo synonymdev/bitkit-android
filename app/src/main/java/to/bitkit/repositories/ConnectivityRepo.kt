@@ -42,7 +42,6 @@ class ConnectivityRepo @Inject constructor(
         fun send() {
             repoScope.launch {
                 val state = calculateConnectivityState(currentCapabilities)
-                Logger.verbose("Network state update: $state")
                 send(state)
             }
         }
@@ -89,7 +88,6 @@ class ConnectivityRepo @Inject constructor(
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 currentNetwork = network
                 currentCapabilities = capabilities
-                Logger.verbose("Network capabilities changed for $network")
                 send()
             }
 
