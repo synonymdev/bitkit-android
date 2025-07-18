@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -38,6 +39,7 @@ class DevSettingsViewModel @Inject constructor(
     private val currencyRepo: CurrencyRepo,
     private val logsRepo: LogsRepo,
     private val cacheStore: CacheStore,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     fun openChannel() {
@@ -58,7 +60,7 @@ class DevSettingsViewModel @Inject constructor(
     }
 
     fun registerForNotifications() {
-        viewModelScope.launch(bgDispatcher) {
+        viewModelScope.launch {
             lightningRepo.registerForNotifications()
                 .onSuccess {
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Registered for notifications")
@@ -129,10 +131,15 @@ class DevSettingsViewModel @Inject constructor(
         }
     }
 
-    fun wipeWallet() {
-        viewModelScope.launch(bgDispatcher) {
-            walletRepo.wipeWallet()
+    fun resetSuggestions() {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
         }
     }
 
+    fun wipeWallet() {
+        viewModelScope.launch {
+            walletRepo.wipeWallet()
+        }
+    }
 }

@@ -50,6 +50,12 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            SettingsTextButtonRow(
+                title = "Export Logs",
+                onClick = {
+                    viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
+                }
+            )
             SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
             SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
 
@@ -84,12 +90,6 @@ fun DevSettingsScreen(
                 }
             )
             SettingsTextButtonRow(
-                title = "Export Logs",
-                onClick = {
-                    viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
-                }
-            )
-            SettingsTextButtonRow(
                 title = "Reset Widgets State",
                 onClick = {
                     viewModel.resetWidgetsState()
@@ -100,6 +100,13 @@ fun DevSettingsScreen(
                 title = "Refresh Currency Rates",
                 onClick = {
                     viewModel.refreshCurrencyRates()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Reset Suggestion Cards",
+                onClick = {
+                    viewModel.resetSuggestions()
                     app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
                 }
             )
