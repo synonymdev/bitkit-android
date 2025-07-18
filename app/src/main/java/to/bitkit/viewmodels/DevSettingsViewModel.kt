@@ -150,4 +150,10 @@ class DevSettingsViewModel @Inject constructor(
             TODO("Not yet implemented")
         }
     }
+
+    fun resetMetadataState() {
+        viewModelScope.launch {
+            walletRepo.deleteAllInvoices()
+        }
+    }
 }

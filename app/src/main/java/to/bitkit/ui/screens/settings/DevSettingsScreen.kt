@@ -111,6 +111,13 @@ fun DevSettingsScreen(
                 }
             )
             SettingsTextButtonRow(
+                title = "Reset Metadata State",
+                onClick = {
+                    viewModel.resetMetadataState()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Metadata state reset")
+                }
+            )
+            SettingsTextButtonRow(
                 title = "Reset Cache Store",
                 onClick = {
                     viewModel.resetCacheStore()
