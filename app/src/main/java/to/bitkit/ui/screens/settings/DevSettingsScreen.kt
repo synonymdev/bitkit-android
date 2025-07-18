@@ -63,7 +63,6 @@ fun DevSettingsScreen(
                 SectionHeader("REGTEST")
 
                 SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
-                SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
             }
 
             SectionHeader("APP CACHE")
@@ -141,6 +140,7 @@ fun DevSettingsScreen(
 
             SectionHeader("DEBUG")
 
+            SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
             SettingsTextButtonRow("Fake New BG Transaction", onClick = viewModel::fakeBgTransaction)
             SettingsTextButtonRow("Open Channel To Trusted Peer", onClick = viewModel::openChannel)
 
