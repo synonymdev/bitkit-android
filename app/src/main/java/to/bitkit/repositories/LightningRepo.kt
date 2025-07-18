@@ -469,6 +469,7 @@ class LightningRepo @Inject constructor(
      * @return A `Result` with the `Txid` of sent transaction, or an error if the transaction fails
      * or the fee rate cannot be retrieved.
      */
+
     suspend fun sendOnChain(
         address: Address,
         sats: ULong,
@@ -477,8 +478,7 @@ class LightningRepo @Inject constructor(
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-            val fees = coreService.blocktank.getFees().getOrThrow()
-            val satsPerVByte = fees.getSatsPerVByteFor(transactionSpeed)
+            val satsPerVByte = getFeeRateForSpeed(transactionSpeed).getOrThrow().toUInt()
 
             // if utxos are manually specified, use them, otherwise run auto coin select if enabled
             val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
