@@ -9,8 +9,10 @@ import com.synonym.bitkitcore.testNotification
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -140,6 +142,12 @@ class DevSettingsViewModel @Inject constructor(
     fun wipeWallet() {
         viewModelScope.launch {
             walletRepo.wipeWallet()
+        }
+    }
+
+    fun resetCacheStore() {
+        viewModelScope.launch {
+            TODO("Not yet implemented")
         }
     }
 }

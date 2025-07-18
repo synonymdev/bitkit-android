@@ -107,7 +107,14 @@ fun DevSettingsScreen(
                 title = "Reset Suggestion Cards",
                 onClick = {
                     viewModel.resetSuggestions()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Currency rates refreshed")
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Suggestion cards reset")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Reset Cache Store",
+                onClick = {
+                    viewModel.resetCacheStore()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Cache store reset")
                 }
             )
             SettingsTextButtonRow(
