@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
@@ -62,13 +63,13 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.PagerWithIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
-import to.bitkit.ui.components.PagerWithIndicator
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareQrCode
 import to.bitkit.ui.shared.util.shareText
@@ -126,6 +127,7 @@ fun ReceiveQrSheet(
             .fillMaxWidth()
             .fillMaxHeight(SheetSize.LARGE)
             .imePadding()
+            .systemBarsPadding()
     ) {
         NavHost(
             navController = navController,
