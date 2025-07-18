@@ -260,12 +260,7 @@ fun BodyS(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.Normal,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.BodyS.merge(
             color = color,
             textAlign = textAlign,
         ),

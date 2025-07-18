@@ -1,5 +1,6 @@
 package to.bitkit.ui.theme
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -41,16 +42,19 @@ val Typography = Typography(
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
     ),
-    // Buttons Text:
-    labelLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        letterSpacing = 0.4.sp,
-    ),
+    labelLarge = AppTextStyles.BodySSB, // Buttons Text
 )
 
 object AppTextStyles {
+    val BodyS = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.4.sp,
+        fontFamily = InterFontFamily,
+        textAlign = TextAlign.Start,
+        color = Color.Unspecified,
+    )
     val BodyMSB = TextStyle(
         fontWeight = FontWeight.SemiBold,
         fontSize = 17.sp,
@@ -66,7 +70,7 @@ object AppTextStyles {
         lineHeight = 20.sp,
         letterSpacing = 0.4.sp,
         fontFamily = InterFontFamily,
-        color = Color.Unspecified,
         textAlign = TextAlign.Start,
+        color = Color.Unspecified,
     )
 }
