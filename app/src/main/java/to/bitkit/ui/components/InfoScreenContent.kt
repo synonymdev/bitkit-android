@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +19,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
@@ -28,7 +27,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InfoScreenContent(
     navTitle: String,
@@ -41,8 +39,9 @@ fun InfoScreenContent(
     onCloseClick: () -> Unit,
 ) {
     ScreenColumn {
-        CenterAlignedTopAppBar(
-            title = { Title(text = navTitle) },
+        AppTopBar(
+            titleText = navTitle,
+            onBackClick = null,
             actions = {
                 if (showCloseButton) {
                     CloseNavIcon(onCloseClick)
@@ -86,7 +85,7 @@ fun InfoScreenContent(
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
