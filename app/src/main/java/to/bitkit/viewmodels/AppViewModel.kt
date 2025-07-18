@@ -53,8 +53,8 @@ import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
-import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
@@ -69,6 +69,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import javax.inject.Inject
+import kotlin.onFailure
 
 private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
 
@@ -857,62 +858,66 @@ class AppViewModel @Inject constructor(
                     .getOrElse { e ->
                         Logger.error("Invalid bitcoin send address: '$address'", e)
                         toast(Exception("Invalid bitcoin send address"))
-                        return // TODO handle error
+                        hideSheet()
+                        return
                     }
 
-                val result = sendOnchain(validatedAddress.address, amount)
-                if (result.isSuccess) {
-                    val txId = result.getOrNull()
-                    val tags = _sendUiState.value.selectedTags
-                    activityRepo.addTagsToTransaction(
-                        paymentHashOrTxId = txId.orEmpty(),
-                        type = ActivityFilter.ONCHAIN,
-                        txType = PaymentType.SENT,
-                        tags = tags
-                    )
-                    Logger.info("Onchain send result txid: $txId")
-                    setSendEffect(
-                        SendEffect.PaymentSuccess(
-                            NewTransactionSheetDetails(
-                                type = NewTransactionSheetType.ONCHAIN,
-                                direction = NewTransactionSheetDirection.SENT,
-                                sats = amount.toLong(),
+                sendOnchain(validatedAddress.address, amount)
+                    .onSuccess { txId ->
+                        val tags = _sendUiState.value.selectedTags
+                        activityRepo.addTagsToTransaction(
+                            paymentHashOrTxId = txId,
+                            type = ActivityFilter.ONCHAIN,
+                            txType = PaymentType.SENT,
+                            tags = tags
+                        )
+                        Logger.info("Onchain send result txid: $txId")
+                        setSendEffect(
+                            SendEffect.PaymentSuccess(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.ONCHAIN,
+                                    direction = NewTransactionSheetDirection.SENT,
+                                    sats = amount.toLong(),
+                                )
                             )
                         )
-                    )
-                } else {
-                    // TODO error UI
-                    Logger.error("Error sending onchain payment", result.exceptionOrNull())
-                }
+                    }.onFailure { e ->
+                        Logger.error(msg = "Error sending onchain payment", e = e)
+                        toast(
+                            type = Toast.ToastType.ERROR,
+                            title = "Error Sending",
+                            description = e.message ?: "Unknown error"
+                        )
+                        hideSheet()
+                    }
             }
 
             SendMethod.LIGHTNING -> {
                 val bolt11 = _sendUiState.value.bolt11
                 if (bolt11 == null) {
-                    toast(Exception("Couldn't find invoice"))
                     Logger.error("Null invoice", context = "AppViewModel")
+                    toast(Exception("Couldn't find invoice"))
+                    hideSheet()
                     return
                 }
                 // Determine if we should override amount
                 val decodedInvoice = _sendUiState.value.decodedInvoice
                 val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
                 val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
-                val result = sendLightning(bolt11, paymentAmount)
-                result.onSuccess {
-                    val paymentHash = result.getOrNull()
+                sendLightning(bolt11, paymentAmount).onSuccess { paymentHash ->
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
                     activityRepo.addTagsToTransaction(
-                        paymentHashOrTxId = paymentHash.orEmpty(),
+                        paymentHashOrTxId = paymentHash,
                         type = ActivityFilter.LIGHTNING,
                         txType = PaymentType.SENT,
                         tags = tags
                     )
                     setSendEffect(SendEffect.PaymentSuccess())
                 }.onFailure { e ->
-                    // TODO error UI
-                    Logger.error("Error sending lightning payment", result.exceptionOrNull())
+                    Logger.error("Error sending lightning payment", e)
                     toast(e)
+                    hideSheet()
                 }
             }
         }
@@ -993,46 +998,39 @@ class AppViewModel @Inject constructor(
             address = address,
             sats = amount,
             utxosToSpend = utxos,
-        ).onFailure {
-            toast(
-                type = Toast.ToastType.ERROR,
-                title = "Error Sending",
-                description = it.message ?: "Unknown error"
-            )
-        }
+        )
     }
 
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        val hash =
-            lightningService.payInvoice(bolt11 = bolt11, sats = amount).getOrNull() // TODO HANDLE FAILURE IN OTHER PR
-
-        // Wait until matching payment event is received
-        val result = ldkNodeEventBus.events.watchUntil { event ->
-            when (event) {
-                is Event.PaymentSuccessful -> {
-                    if (event.paymentHash == hash) {
-                        WatchResult.Complete(Result.success(hash))
-                    } else {
-                        WatchResult.Continue()
+        return lightningService.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
+            // Wait until matching payment event is received
+            val result = ldkNodeEventBus.events.watchUntil { event ->
+                when (event) {
+                    is Event.PaymentSuccessful -> {
+                        if (event.paymentHash == hash) {
+                            WatchResult.Complete(Result.success(hash))
+                        } else {
+                            WatchResult.Continue()
+                        }
                     }
-                }
 
-                is Event.PaymentFailed -> {
-                    if (event.paymentHash == hash) {
-                        val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
-                        WatchResult.Complete(Result.failure(error))
-                    } else {
-                        WatchResult.Continue()
+                    is Event.PaymentFailed -> {
+                        if (event.paymentHash == hash) {
+                            val error = Exception(event.reason?.name ?: "Unknown payment failure reason")
+                            WatchResult.Complete(Result.failure(error))
+                        } else {
+                            WatchResult.Continue()
+                        }
                     }
-                }
 
-                else -> WatchResult.Continue()
+                    else -> WatchResult.Continue()
+                }
             }
+            return result
         }
-        return result
     }
 
     private fun getMinOnchainTx(): ULong {
