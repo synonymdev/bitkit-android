@@ -49,7 +49,7 @@ class BlocktankRepo @Inject constructor(
     private val cacheStore: CacheStore,
     @Named("enablePolling") private val enablePolling: Boolean,
 ) {
-    private val repoScope = CoroutineScope(SupervisorJob() + bgDispatcher)
+    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()
@@ -342,6 +342,10 @@ class BlocktankRepo @Inject constructor(
         }
 
         return@withContext min(lspBalance, maxLspBalance)
+    }
+
+    suspend fun resetState() = withContext(bgDispatcher) {
+        _blocktankState.update { BlocktankState() }
     }
 
     companion object {

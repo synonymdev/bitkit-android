@@ -118,6 +118,13 @@ fun DevSettingsScreen(
                 }
             )
             SettingsTextButtonRow(
+                title = "Reset Blocktank State",
+                onClick = {
+                    viewModel.resetBlocktankState()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Blocktank state reset")
+                }
+            )
+            SettingsTextButtonRow(
                 title = "Reset Cache Store",
                 onClick = {
                     viewModel.resetCacheStore()
@@ -128,6 +135,7 @@ fun DevSettingsScreen(
                 title = "Wipe App",
                 onClick = {
                     viewModel.wipeWallet()
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Wallet wiped")
                 }
             )
 

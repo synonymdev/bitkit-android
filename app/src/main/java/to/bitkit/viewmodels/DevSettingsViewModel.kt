@@ -23,6 +23,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Toast
+import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
@@ -42,6 +43,7 @@ class DevSettingsViewModel @Inject constructor(
     private val logsRepo: LogsRepo,
     private val cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
+    private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
     fun openChannel() {
@@ -154,6 +156,12 @@ class DevSettingsViewModel @Inject constructor(
     fun resetMetadataState() {
         viewModelScope.launch {
             walletRepo.deleteAllInvoices()
+        }
+    }
+
+    fun resetBlocktankState() {
+        viewModelScope.launch {
+            blocktankRepo.resetState()
         }
     }
 }
