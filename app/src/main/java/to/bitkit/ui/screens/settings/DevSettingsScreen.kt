@@ -50,14 +50,17 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            SettingsButtonRow("Fee Settings") { navController.navigate(Routes.FeeSettings) }
+            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
+
+            SectionHeader("LOGS")
+            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
             SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
                     viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
                 }
             )
-            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
-            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
 
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")

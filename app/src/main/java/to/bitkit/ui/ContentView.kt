@@ -40,6 +40,7 @@ import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
 import to.bitkit.ui.screens.settings.DevSettingsScreen
+import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -673,6 +674,9 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.FeeSettings> {
+        FeeSettingsScreen(navController)
     }
     composableWithDefaultTransitions<Routes.RegtestSettings> {
         BlocktankRegtestScreen(navController)
@@ -1474,6 +1478,9 @@ sealed interface Routes {
 
     @Serializable
     data object DevSettings : Routes
+
+    @Serializable
+    data object FeeSettings : Routes
 
     @Serializable
     data object RegtestSettings : Routes
