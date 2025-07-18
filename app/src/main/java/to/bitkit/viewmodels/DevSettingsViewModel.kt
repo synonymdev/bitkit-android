@@ -51,7 +51,7 @@ class DevSettingsViewModel @Inject constructor(
             val peer = lightningRepo.getPeers()?.firstOrNull()
 
             if (peer == null) {
-                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "No peer connected")
+                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "No peer connected")
                 return@launch
             }
 
@@ -82,9 +82,9 @@ class DevSettingsViewModel @Inject constructor(
                     notificationType = "incomingHtlc",
                     customUrl = Env.blocktankPushNotificationServer,
                 )
-
+                ToastEventBus.send(type = Toast.ToastType.INFO, title = "LSP notification sent to this device")
             }.onFailure {
-                ToastEventBus.send(type = Toast.ToastType.ERROR, title = "Error testing LSP notification")
+                ToastEventBus.send(type = Toast.ToastType.WARNING, title = "Error testing LSP notification")
             }
         }
     }
@@ -99,7 +99,6 @@ class DevSettingsViewModel @Inject constructor(
                     sats = 123456789,
                 )
             )
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Restart to see new transaction sheet")
         }
     }
 

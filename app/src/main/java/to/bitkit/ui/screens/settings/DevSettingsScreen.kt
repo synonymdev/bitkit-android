@@ -140,14 +140,42 @@ fun DevSettingsScreen(
 
             SectionHeader("DEBUG")
 
-            SettingsTextButtonRow("Generate Test Activities") { activity.generateRandomTestData() }
-            SettingsTextButtonRow("Fake New BG Transaction", onClick = viewModel::fakeBgTransaction)
-            SettingsTextButtonRow("Open Channel To Trusted Peer", onClick = viewModel::openChannel)
+            SettingsTextButtonRow(
+                title = "Generate Test Activities",
+                onClick = {
+                    val count = 100
+                    activity.generateRandomTestData(count)
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Generated $count test activities")
+                }
+            )
+            SettingsTextButtonRow(
+                "Fake New BG Transaction",
+                onClick = {
+                    viewModel.fakeBgTransaction()
+                    app.toast(type = Toast.ToastType.INFO, title = "Restart to see the transaction sheet")
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Open Channel To Trusted Peer",
+                onClick = {
+                    viewModel.openChannel()
+                }
+            )
 
             SectionHeader("NOTIFICATIONS")
 
-            SettingsTextButtonRow("Register For LSP Notifications", onClick = viewModel::registerForNotifications)
-            SettingsTextButtonRow("Test LSP Notification ", onClick = viewModel::testLspNotification)
+            SettingsTextButtonRow(
+                title = "Register For LSP Notifications",
+                onClick = {
+                    viewModel.registerForNotifications()
+                }
+            )
+            SettingsTextButtonRow(
+                title = "Test LSP Notification",
+                onClick = {
+                    viewModel.testLspNotification()
+                }
+            )
         }
     }
 }
