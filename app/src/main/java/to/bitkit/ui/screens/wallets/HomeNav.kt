@@ -75,10 +75,10 @@ fun HomeNav(
         }
 
         TabBar(
+            hazeState = hazeState,
             onSendClick = { appViewModel.showSheet(BottomSheetType.Send()) },
             onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
             onScanClick = { rootNavController.navigateToScanner() },
-            hazeState = hazeState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 

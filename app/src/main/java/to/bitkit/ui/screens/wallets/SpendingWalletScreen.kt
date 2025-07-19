@@ -106,10 +106,10 @@ fun SpendingWalletScreen(
                     val lightningActivities by activity.lightningActivities.collectAsState()
                     ActivityListGrouped(
                         items = lightningActivities,
-                        showFooter = true,
-                        onAllActivityButtonClick = onAllActivityButtonClick,
                         onActivityItemClick = onActivityItemClick,
                         onEmptyActivityRowClick = onEmptyActivityRowClick,
+                        showFooter = true,
+                        onAllActivityButtonClick = onAllActivityButtonClick,
                     )
                 }
             }

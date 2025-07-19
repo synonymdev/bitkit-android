@@ -51,10 +51,10 @@ private val buttonRightShape = RoundedCornerShape(topEndPercent = 50, bottomEndP
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun TabBar(
+    hazeState: HazeState,
     onSendClick: () -> Unit,
     onReceiveClick: () -> Unit,
     onScanClick: () -> Unit,
-    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     Box(
