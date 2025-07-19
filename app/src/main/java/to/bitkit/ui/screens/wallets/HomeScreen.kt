@@ -1,15 +1,10 @@
 package to.bitkit.ui.screens.wallets
 
-import android.Manifest
 import android.content.Intent
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -18,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,12 +27,8 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,46 +42,36 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.ext.requiresPermission
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
-import to.bitkit.ui.activityListViewModel
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
-import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.SuggestionCard
-import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.navigateToActivityItem
-import to.bitkit.ui.navigateToScanner
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
-import to.bitkit.ui.navigateToTransferSavingsAvailability
-import to.bitkit.ui.navigateToTransferSavingsIntro
-import to.bitkit.ui.navigateToTransferSpendingAmount
-import to.bitkit.ui.navigateToTransferSpendingIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppScaffold
-import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
@@ -106,8 +86,6 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.screenSlideIn
-import to.bitkit.ui.utils.screenSlideOut
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -115,245 +93,150 @@ import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
-
 @Composable
-fun HomeScreen(
+fun MainWalletScreen(
+    mainUiState: MainUiState,
+    drawerState: DrawerState,
+    hazeState: HazeState,
+    rootNavController: NavController,
+    walletNavController: NavHostController,
+    settingsViewModel: SettingsViewModel,
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
-    settingsViewModel: SettingsViewModel,
-    rootNavController: NavController,
+    homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
-    val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
-    val homeViewModel: HomeViewModel = hiltViewModel()
-    val homeUiState: HomeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
-    val hazeState = remember { HazeState() }
+    val context = LocalContext.current
+    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
+    val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+    val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+    val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
+    val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
+    val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
+    val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        val walletNavController = rememberNavController()
-
-        // Content layer with haze source
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState, zIndex = 0f)
-        ) {
-            NavHost(
-                navController = walletNavController,
-                startDestination = HomeRoutes.Home,
-            ) {
-                composable<HomeRoutes.Home> {
-                    val context = LocalContext.current
-                    val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
-                    val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
-                    val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
-                    val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
-
-                    HomeContentView(
-                        mainUiState = uiState,
-                        homeUiState = homeUiState,
-                        rootNavController = rootNavController,
-                        walletNavController = walletNavController,
-                        drawerState = drawerState,
-                        onRefresh = {
-                            walletViewModel.onPullToRefresh()
-                            homeViewModel.refreshWidgets()
-                            activityListViewModel.syncLdkNodePayments()
-                        },
-                        onRemoveSuggestion = { suggestion ->
-                            homeViewModel.removeSuggestion(suggestion)
-                        },
-                        onClickSuggestion = { suggestion ->
-                            when (suggestion) {
-                                Suggestion.BUY -> {
-                                    rootNavController.navigate(Routes.BuyIntro)
-                                }
-
-                                Suggestion.SPEND -> {
-                                    if (!hasSeenTransferIntro) {
-                                        rootNavController.navigateToTransferIntro()
-                                    } else {
-                                        rootNavController.navigateToTransferFunding()
-                                    }
-                                }
-
-                                Suggestion.BACK_UP -> {
-                                    appViewModel.showSheet(BottomSheetType.Backup)
-                                }
-
-                                Suggestion.SECURE -> {
-                                    appViewModel.showSheet(BottomSheetType.PinSetup)
-                                }
-
-                                Suggestion.SUPPORT -> {
-                                    rootNavController.navigate(Routes.Support)
-                                }
-
-                                Suggestion.INVITE -> {
-                                    shareText(
-                                        context,
-                                        context.getString(R.string.settings__about__shareText)
-                                            .replace("{appStoreUrl}", Env.APP_STORE_URL)
-                                            .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
-                                    )
-                                }
-
-                                Suggestion.PROFILE -> {
-                                    if (!hasSeenProfileIntro) {
-                                        rootNavController.navigate(Routes.ProfileIntro)
-                                    } else {
-                                        rootNavController.navigate(Routes.CreateProfile)
-                                    }
-                                }
-
-                                Suggestion.SHOP -> {
-                                    if (!hasSeenShopIntro) {
-                                        rootNavController.navigate(Routes.ShopIntro)
-                                    } else {
-                                        rootNavController.navigate(Routes.ShopDiscover)
-                                    }
-                                }
-
-                                Suggestion.QUICK_PAY -> {
-                                    if (!quickPayIntroSeen) {
-                                        rootNavController.navigate(Routes.QuickPayIntro)
-                                    } else {
-                                        rootNavController.navigate(Routes.QuickPaySettings)
-                                    }
-                                }
-                            }
-                        },
-                        onClickAddWidget = {
-                            if (!hasSeenWidgetsIntro) {
-                                rootNavController.navigate(Routes.WidgetsIntro)
-                            } else {
-                                rootNavController.navigate(Routes.AddWidget)
-                            }
-                        },
-                        onClickConfirmEdit = {
-                            homeViewModel.confirmWidgetOrder()
-                        },
-                        onClickEnableEdit = {
-                            homeViewModel.enableEditMode()
-                        },
-                        onClickEditWidget = { widgetType ->
-                            when (widgetType) {
-                                WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
-                                WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)
-                                WidgetType.FACTS -> rootNavController.navigate(Routes.FactsPreview)
-                                WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
-                                WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
-                                WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
-                            }
-                        },
-                        onClickDeleteWidget = { widgetType ->
-                            homeViewModel.displayAlertDeleteWidget(widgetType)
-                        },
-                        onMoveWidget = { fromIndex, toIndex ->
-                            homeViewModel.moveWidget(fromIndex, toIndex)
-                        },
-                        onDismissHighBalanceSheet = { homeViewModel.dismissHighBalanceSheet() },
-                        onDismissEmptyState = homeViewModel::dismissEmptyState,
-                    )
-                }
-                composable<HomeRoutes.Savings>(
-                    enterTransition = { screenSlideIn },
-                    exitTransition = { screenSlideOut },
-                ) {
-                    val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
-                    SavingsWalletScreen(
-                        onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
-                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
-                        onTransferToSpendingClick = {
-                            if (!hasSeenSpendingIntro) {
-                                rootNavController.navigateToTransferSpendingIntro()
-                            } else {
-                                rootNavController.navigateToTransferSpendingAmount()
-                            }
-                        },
-                        onBackClick = { walletNavController.popBackStack() },
-                    )
-                }
-                composable<HomeRoutes.Spending>(
-                    enterTransition = { screenSlideIn },
-                    exitTransition = { screenSlideOut },
-                ) {
-                    val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
-                    SpendingWalletScreen(
-                        uiState = uiState,
-                        onAllActivityButtonClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
-                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onEmptyActivityRowClick = { appViewModel.showSheet(BottomSheetType.Receive) },
-                        onTransferToSavingsClick = {
-                            if (!hasSeenSavingsIntro) {
-                                rootNavController.navigateToTransferSavingsIntro()
-                            } else {
-                                rootNavController.navigateToTransferSavingsAvailability()
-                            }
-                        },
-                        onBackClick = { walletNavController.popBackStack() },
-                    )
-                }
-                composable<HomeRoutes.AllActivity>(
-                    enterTransition = { screenSlideIn },
-                    exitTransition = { screenSlideOut },
-                ) {
-                    AllActivityScreen(
-                        viewModel = activityListViewModel,
-                        onBack = {
-                            activityListViewModel.clearFilters()
-                            walletNavController.popBackStack()
-                        },
-                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                    )
-                }
-            }
-
-            homeUiState.deleteWidgetAlert?.let { type ->
-                AppAlertDialog(
-                    title = stringResource(R.string.widgets__delete__title),
-                    text = stringResource(R.string.widgets__delete__description)
-                        .replace("{name}", stringResource(type.title)),
-                    confirmText = stringResource(R.string.common__delete_yes),
-                    dismissText = stringResource(R.string.common__dialog_cancel),
-                    onConfirm = { homeViewModel.deleteWidget(widgetType = type) },
-                    onDismiss = {
-                        homeViewModel.dismissAlertDeleteWidget()
-                    },
-                )
-            }
-        }
-
-        TabBar(
-            onSendClick = { appViewModel.showSheet(BottomSheetType.Send()) },
-            onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
-            onScanClick = { rootNavController.navigateToScanner() },
-            hazeState = hazeState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .systemBarsPadding()
-        )
-
-        DrawerMenu(
-            drawerState = drawerState,
-            walletNavController = walletNavController,
-            rootNavController = rootNavController,
-            hasSeenWidgetsIntro = hasSeenWidgetsIntro,
-            modifier = Modifier.align(Alignment.TopEnd)
-        )
+    homeUiState.deleteWidgetAlert?.let { type ->
+        DeleteWidgetAlert(type, homeViewModel)
     }
+
+    Content(
+        mainUiState = mainUiState,
+        homeUiState = homeUiState,
+        latestActivities = latestActivities,
+        rootNavController = rootNavController,
+        walletNavController = walletNavController,
+        drawerState = drawerState,
+        hazeState = hazeState,
+        onRefresh = {
+            walletViewModel.onPullToRefresh()
+            homeViewModel.refreshWidgets()
+            activityListViewModel.syncLdkNodePayments()
+        },
+        onRemoveSuggestion = { suggestion ->
+            homeViewModel.removeSuggestion(suggestion)
+        },
+        onClickSuggestion = { suggestion ->
+            when (suggestion) {
+                Suggestion.BUY -> {
+                    rootNavController.navigate(Routes.BuyIntro)
+                }
+
+                Suggestion.SPEND -> {
+                    if (!hasSeenTransferIntro) {
+                        rootNavController.navigateToTransferIntro()
+                    } else {
+                        rootNavController.navigateToTransferFunding()
+                    }
+                }
+
+                Suggestion.BACK_UP -> {
+                    appViewModel.showSheet(BottomSheetType.Backup)
+                }
+
+                Suggestion.SECURE -> {
+                    appViewModel.showSheet(BottomSheetType.PinSetup)
+                }
+
+                Suggestion.SUPPORT -> {
+                    rootNavController.navigate(Routes.Support)
+                }
+
+                Suggestion.INVITE -> {
+                    shareText(
+                        context,
+                        context.getString(R.string.settings__about__shareText)
+                            .replace("{appStoreUrl}", Env.APP_STORE_URL)
+                            .replace("{playStoreUrl}", Env.PLAY_STORE_URL)
+                    )
+                }
+
+                Suggestion.PROFILE -> {
+                    if (!hasSeenProfileIntro) {
+                        rootNavController.navigate(Routes.ProfileIntro)
+                    } else {
+                        rootNavController.navigate(Routes.CreateProfile)
+                    }
+                }
+
+                Suggestion.SHOP -> {
+                    if (!hasSeenShopIntro) {
+                        rootNavController.navigate(Routes.ShopIntro)
+                    } else {
+                        rootNavController.navigate(Routes.ShopDiscover)
+                    }
+                }
+
+                Suggestion.QUICK_PAY -> {
+                    if (!quickPayIntroSeen) {
+                        rootNavController.navigate(Routes.QuickPayIntro)
+                    } else {
+                        rootNavController.navigate(Routes.QuickPaySettings)
+                    }
+                }
+            }
+        },
+        onClickAddWidget = {
+            if (!hasSeenWidgetsIntro) {
+                rootNavController.navigate(Routes.WidgetsIntro)
+            } else {
+                rootNavController.navigate(Routes.AddWidget)
+            }
+        },
+        onClickEnableEdit = homeViewModel::enableEditMode,
+        onClickConfirmEdit = homeViewModel::confirmWidgetOrder,
+        onClickEditWidget = { widgetType ->
+            when (widgetType) {
+                WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
+                WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)
+                WidgetType.FACTS -> rootNavController.navigate(Routes.FactsPreview)
+                WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
+                WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
+                WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
+            }
+        },
+        onClickDeleteWidget = { widgetType ->
+            homeViewModel.displayAlertDeleteWidget(widgetType)
+        },
+        onMoveWidget = { fromIndex, toIndex ->
+            homeViewModel.moveWidget(fromIndex, toIndex)
+        },
+        onDismissEmptyState = homeViewModel::dismissEmptyState,
+        onDismissHighBalanceSheet = homeViewModel::dismissHighBalanceSheet,
+        onClickEmptyActivityRow = { appViewModel.showSheet(BottomSheetType.Receive) },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
-private fun HomeContentView(
+private fun Content(
     mainUiState: MainUiState,
     homeUiState: HomeUiState,
+    latestActivities: List<Activity>?,
+    rootNavController: NavController,
+    walletNavController: NavController,
+    drawerState: DrawerState,
+    hazeState: HazeState,
+    onRefresh: () -> Unit,
     onRemoveSuggestion: (Suggestion) -> Unit,
     onClickSuggestion: (Suggestion) -> Unit,
     onClickAddWidget: () -> Unit,
@@ -362,17 +245,16 @@ private fun HomeContentView(
     onClickEditWidget: (WidgetType) -> Unit,
     onClickDeleteWidget: (WidgetType) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
-    rootNavController: NavController,
-    walletNavController: NavController,
-    drawerState: DrawerState,
-    onRefresh: () -> Unit,
-    onDismissHighBalanceSheet: () -> Unit,
     onDismissEmptyState: () -> Unit,
+    onDismissHighBalanceSheet: () -> Unit,
+    onClickEmptyActivityRow: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val balances = LocalBalances.current
 
     AppScaffold(
         titleText = stringResource(R.string.slashtags__your_name_capital),
+        // hazeState = hazeState,
         actions = {
             AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
             HorizontalSpacer(4.dp)
@@ -384,16 +266,15 @@ private fun HomeContentView(
             }
         },
     ) {
-        RequestNotificationPermissions()
-        val balances = LocalBalances.current
-        val app = appViewModel ?: return@AppScaffold
         PullToRefreshBox(
             isRefreshing = mainUiState.isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.Companion
+                .fillMaxSize()
+                .hazeSource(hazeState, zIndex = 0f)
         ) {
             Column(
-                modifier = Modifier
+                modifier = Modifier.Companion
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
@@ -401,12 +282,12 @@ private fun HomeContentView(
                 BalanceHeaderView(
                     sats = balances.totalSats.toLong(),
                     showEyeIcon = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.Companion.fillMaxWidth()
                 )
                 if (!homeUiState.showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.Companion.height(32.dp))
                     Row(
-                        modifier = Modifier
+                        modifier = Modifier.Companion
                             .fillMaxWidth()
                             .height(IntrinsicSize.Min),
                     ) {
@@ -414,7 +295,7 @@ private fun HomeContentView(
                             title = stringResource(R.string.wallet__savings__title),
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
-                            modifier = Modifier
+                            modifier = Modifier.Companion
                                 .clickableAlpha { walletNavController.navigate(HomeRoutes.Savings) }
                                 .padding(vertical = 4.dp)
                         )
@@ -423,7 +304,7 @@ private fun HomeContentView(
                             title = stringResource(R.string.wallet__spending__title),
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
-                            modifier = Modifier
+                            modifier = Modifier.Companion
                                 .clickableAlpha { walletNavController.navigate(HomeRoutes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .padding(start = 16.dp)
@@ -438,11 +319,11 @@ private fun HomeContentView(
                         )
 
                         Column {
-                            Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.Companion.height(32.dp))
                             Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.Companion.height(16.dp))
                             LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.Companion.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 state = state,
                                 flingBehavior = snapBehavior
@@ -455,7 +336,7 @@ private fun HomeContentView(
                                         icon = item.icon,
                                         onClose = { onRemoveSuggestion(item) },
                                         onClick = { onClickSuggestion(item) },
-                                        modifier = Modifier.testTag("SUGGESTION_${item.name}")
+                                        modifier = Modifier.Companion.testTag("SUGGESTION_${item.name}")
                                     )
                                 }
                             }
@@ -463,11 +344,11 @@ private fun HomeContentView(
                     }
 
                     if (homeUiState.showWidgets) {
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.Companion.height(32.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.Companion.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Companion.CenterVertically
                         ) {
                             Text13Up(
                                 stringResource(R.string.widgets__widgets),
@@ -495,20 +376,20 @@ private fun HomeContentView(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.Companion.height(16.dp))
 
                         if (homeUiState.isEditingWidgets) {
                             DragDropColumn(
                                 items = homeUiState.widgetsWithPosition,
                                 onMove = onMoveWidget,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.Companion.fillMaxWidth()
                             ) { widgetWithPosition, isDragging ->
                                 DragAndDropWidget(
                                     iconRes = widgetWithPosition.type.iconRes,
                                     title = stringResource(widgetWithPosition.type.title),
                                     onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
                                     onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                                    modifier = Modifier
+                                    modifier = Modifier.Companion
                                         .fillMaxWidth()
                                         .graphicsLayer {
                                             alpha = if (isDragging) 0.8f else 1.0f
@@ -517,7 +398,7 @@ private fun HomeContentView(
                             }
                         } else {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.Companion.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 homeUiState.widgetsWithPosition.forEach { widgetsWithPosition ->
@@ -525,7 +406,7 @@ private fun HomeContentView(
                                         WidgetType.BLOCK -> {
                                             homeUiState.currentBlock?.run {
                                                 BlockCard(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showBlock = homeUiState.blocksPreferences.showBlock,
                                                     showTime = homeUiState.blocksPreferences.showTime,
@@ -547,7 +428,7 @@ private fun HomeContentView(
                                             currencyViewModel?.let {
                                                 CalculatorCard(
                                                     currencyViewModel = it,
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles
                                                 )
                                             }
@@ -556,7 +437,7 @@ private fun HomeContentView(
                                         WidgetType.FACTS -> {
                                             homeUiState.currentFact?.run {
                                                 FactsCard(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showSource = homeUiState.factsPreferences.showSource,
                                                     headline = homeUiState.currentFact,
@@ -567,7 +448,7 @@ private fun HomeContentView(
                                         WidgetType.NEWS -> {
                                             homeUiState.currentArticle?.run {
                                                 HeadlineCard(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showTime = homeUiState.headlinePreferences.showTime,
                                                     showSource = homeUiState.headlinePreferences.showSource,
@@ -582,7 +463,7 @@ private fun HomeContentView(
                                         WidgetType.PRICE -> {
                                             homeUiState.currentPrice?.run {
                                                 PriceCard(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     pricePreferences = homeUiState.pricePreferences,
                                                     priceDTO = homeUiState.currentPrice,
@@ -593,7 +474,7 @@ private fun HomeContentView(
                                         WidgetType.WEATHER -> {
                                             homeUiState.currentWeather?.run {
                                                 WeatherCard(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier.Companion.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     weatherModel = this,
                                                     preferences = homeUiState.weatherPreferences
@@ -605,7 +486,7 @@ private fun HomeContentView(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.Companion.height(32.dp))
                         TertiaryButton(
                             text = stringResource(R.string.widgets__add),
                             icon = {
@@ -615,31 +496,28 @@ private fun HomeContentView(
                                     tint = Colors.White80
                                 )
                             },
-                            onClick = onClickAddWidget
+                            onClick = onClickAddWidget,
                         )
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.Companion.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    val activity = activityListViewModel ?: return@Column
-                    val latestActivities by activity.latestActivities.collectAsStateWithLifecycle()
+                    Spacer(modifier = Modifier.Companion.height(16.dp))
                     ActivityListSimple(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
                         onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
-                        onEmptyActivityRowClick = { app.showSheet(BottomSheetType.Receive) },
+                        onEmptyActivityRowClick = onClickEmptyActivityRow,
                     )
 
-                    // Scrollable empty space behind bottom buttons
-                    Spacer(modifier = Modifier.height(120.dp))
+                    VerticalSpacer(120.dp) // Scrollable empty space behind TabBar
                 }
             }
             if (homeUiState.showEmptyState) {
                 EmptyStateView(
                     text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
                     onClose = onDismissEmptyState,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
+                    modifier = Modifier.Companion
+                        .align(Alignment.Companion.BottomCenter)
                 )
             }
 
@@ -660,44 +538,28 @@ private fun HomeContentView(
 }
 
 @Composable
-private fun RequestNotificationPermissions() {
-    val context = LocalContext.current
-
-    // Only check permission if running on Android 13+ (SDK 33+)
-    val requiresPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        context.requiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-
-    var isGranted by remember { mutableStateOf(!requiresPermission) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        isGranted = it
-    }
-
-    LaunchedEffect(isGranted) {
-        if (!isGranted && requiresPermission) {
-            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
+private fun DeleteWidgetAlert(
+    type: WidgetType,
+    homeViewModel: HomeViewModel,
+) {
+    AppAlertDialog(
+        title = stringResource(R.string.widgets__delete__title),
+        text = stringResource(R.string.widgets__delete__description)
+            .replace("{name}", stringResource(type.title)),
+        confirmText = stringResource(R.string.common__delete_yes),
+        dismissText = stringResource(R.string.common__dialog_cancel),
+        onConfirm = { homeViewModel.deleteWidget(widgetType = type) },
+        onDismiss = {
+            homeViewModel.dismissAlertDeleteWidget()
+        },
+    )
 }
 
-object HomeRoutes {
-    @Serializable
-    data object Home
-
-    @Serializable
-    data object Savings
-
-    @Serializable
-    data object Spending
-
-    @Serializable
-    data object AllActivity
-}
-
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showSystemUi = true)
 @Composable
-private fun HomeContentViewPreview() {
+private fun Preview() {
     AppThemeSurface {
-        HomeContentView(
+        Content(
             mainUiState = MainUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
@@ -714,6 +576,9 @@ private fun HomeContentViewPreview() {
             onDismissHighBalanceSheet = {},
             onMoveWidget = { _, _ -> },
             onDismissEmptyState = {},
+            hazeState = rememberHazeState(),
+            latestActivities = emptyList(),
+            onClickEmptyActivityRow = {},
         )
     }
 }
