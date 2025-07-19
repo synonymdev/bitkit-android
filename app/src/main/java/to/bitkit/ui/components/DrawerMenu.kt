@@ -50,6 +50,12 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
 
+private const val zIndexScrim = 10f
+private const val zIndexMenu = 11f
+private val bgScrim = Colors.Black50
+private val drawerBg = Colors.Brand
+private val drawerWidth = 200.dp
+
 @Composable
 fun DrawerMenu(
     drawerState: DrawerState,
@@ -60,29 +66,18 @@ fun DrawerMenu(
 ) {
     val scope = rememberCoroutineScope()
 
-    // backdrop
-    AnimatedVisibility(
+    Scrim(
         visible = drawerState.currentValue == DrawerValue.Open,
+        onClick = {
+            scope.launch {
+                drawerState.close()
+            }
+        },
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(10f) // Higher z-index than TabBar
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Colors.Black50)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    scope.launch {
-                        drawerState.close()
-                    }
-                }
-        )
-    }
+            .zIndex(zIndexScrim)
+    )
 
-    // Right-side drawer content
     AnimatedVisibility(
         visible = drawerState.currentValue == DrawerValue.Open,
         enter = slideInHorizontally(
@@ -94,11 +89,11 @@ fun DrawerMenu(
         modifier = modifier.then(
             Modifier
                 .fillMaxHeight()
-                .zIndex(11f) // Higher z-index than overlay
+                .zIndex(zIndexMenu)
                 .blockPointerInputPassthrough()
         )
     ) {
-        DrawerContent(
+        Menu(
             walletNavController = walletNavController,
             rootNavController = rootNavController,
             drawerState = drawerState,
@@ -114,20 +109,19 @@ fun DrawerMenu(
 }
 
 @Composable
-fun DrawerContent(
+private fun Menu(
     walletNavController: NavController,
     rootNavController: NavController,
     drawerState: DrawerState,
     onClickAddWidget: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val drawerWidth = 200.dp
 
     Column(
         modifier = Modifier
             .width(drawerWidth)
             .fillMaxHeight()
-            .background(Colors.Brand)
+            .background(drawerBg)
             .systemBarsPadding()
     ) {
         VerticalSpacer(16.dp)
@@ -206,6 +200,29 @@ fun DrawerContent(
                 modifier = Modifier.padding(vertical = 16.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun Scrim(
+    visible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(bgScrim)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                )
+        )
     }
 }
 
