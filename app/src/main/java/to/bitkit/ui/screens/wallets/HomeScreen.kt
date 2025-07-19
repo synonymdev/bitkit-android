@@ -122,11 +122,11 @@ fun MainWalletScreen(
     Content(
         mainUiState = mainUiState,
         homeUiState = homeUiState,
-        latestActivities = latestActivities,
         rootNavController = rootNavController,
         walletNavController = walletNavController,
         drawerState = drawerState,
         hazeState = hazeState,
+        latestActivities = latestActivities,
         onRefresh = {
             walletViewModel.onPullToRefresh()
             homeViewModel.refreshWidgets()
@@ -231,23 +231,23 @@ fun MainWalletScreen(
 private fun Content(
     mainUiState: MainUiState,
     homeUiState: HomeUiState,
-    latestActivities: List<Activity>?,
     rootNavController: NavController,
     walletNavController: NavController,
     drawerState: DrawerState,
     hazeState: HazeState,
-    onRefresh: () -> Unit,
-    onRemoveSuggestion: (Suggestion) -> Unit,
-    onClickSuggestion: (Suggestion) -> Unit,
-    onClickAddWidget: () -> Unit,
-    onClickEnableEdit: () -> Unit,
-    onClickConfirmEdit: () -> Unit,
-    onClickEditWidget: (WidgetType) -> Unit,
-    onClickDeleteWidget: (WidgetType) -> Unit,
-    onMoveWidget: (Int, Int) -> Unit,
-    onDismissEmptyState: () -> Unit,
-    onDismissHighBalanceSheet: () -> Unit,
-    onClickEmptyActivityRow: () -> Unit,
+    latestActivities: List<Activity>?,
+    onRefresh: () -> Unit = {},
+    onRemoveSuggestion: (Suggestion) -> Unit = {},
+    onClickSuggestion: (Suggestion) -> Unit = {},
+    onClickAddWidget: () -> Unit = {},
+    onClickEnableEdit: () -> Unit = {},
+    onClickConfirmEdit: () -> Unit = {},
+    onClickEditWidget: (WidgetType) -> Unit = {},
+    onClickDeleteWidget: (WidgetType) -> Unit = {},
+    onMoveWidget: (Int, Int) -> Unit = { _, _ -> },
+    onDismissEmptyState: () -> Unit = {},
+    onDismissHighBalanceSheet: () -> Unit = {},
+    onClickEmptyActivityRow: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val balances = LocalBalances.current
@@ -561,24 +561,12 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             mainUiState = MainUiState(),
+            homeUiState = HomeUiState(),
             rootNavController = rememberNavController(),
             walletNavController = rememberNavController(),
-            onRefresh = {},
             drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-            onClickSuggestion = {},
-            onRemoveSuggestion = {},
-            onClickAddWidget = {},
-            homeUiState = HomeUiState(),
-            onClickConfirmEdit = {},
-            onClickEnableEdit = {},
-            onClickEditWidget = {},
-            onClickDeleteWidget = {},
-            onDismissHighBalanceSheet = {},
-            onMoveWidget = { _, _ -> },
-            onDismissEmptyState = {},
             hazeState = rememberHazeState(),
             latestActivities = emptyList(),
-            onClickEmptyActivityRow = {},
         )
     }
 }
