@@ -112,7 +112,7 @@ fun AppStatus(
 @Composable
 fun rememberHealthState(): HealthState {
     val isPreview = LocalInspectionMode.current
-    if (isPreview) return HealthState.READY
+    if (isPreview) return HealthState.PENDING
 
     val app = requireNotNull(appViewModel)
     val healthState by app.healthState.collectAsStateWithLifecycle()

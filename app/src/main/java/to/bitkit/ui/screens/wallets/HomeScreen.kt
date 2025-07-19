@@ -2,35 +2,49 @@ package to.bitkit.ui.screens.wallets
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -38,6 +52,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +61,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
@@ -61,9 +77,12 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
@@ -71,8 +90,8 @@ import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToTransferFunding
 import to.bitkit.ui.navigateToTransferIntro
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.scaffold.AppScaffold
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
+import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.screens.widgets.DragAndDropWidget
 import to.bitkit.ui.screens.widgets.DragDropColumn
@@ -94,10 +113,9 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Composable
-fun MainWalletScreen(
+fun HomeScreen(
     mainUiState: MainUiState,
     drawerState: DrawerState,
-    hazeState: HazeState,
     rootNavController: NavController,
     walletNavController: NavHostController,
     settingsViewModel: SettingsViewModel,
@@ -113,6 +131,8 @@ fun MainWalletScreen(
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
+    val hazeState = rememberHazeState()
+
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
     homeUiState.deleteWidgetAlert?.let { type ->
@@ -252,50 +272,100 @@ private fun Content(
     val scope = rememberCoroutineScope()
     val balances = LocalBalances.current
 
-    AppScaffold(
-        titleText = stringResource(R.string.slashtags__your_name_capital),
-        // hazeState = hazeState,
-        actions = {
-            AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
-            HorizontalSpacer(4.dp)
-            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_list),
-                    contentDescription = stringResource(R.string.settings__settings),
-                )
-            }
-        },
-    ) {
+    val topbarGradient = Brush.verticalGradient(
+        colorStops = arrayOf(
+            0.5f to Colors.Black,
+            1.0f to Color.Transparent,
+        )
+    )
+
+    Box {
+        // Top AppBar Box
+        val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .hazeEffect(state = hazeState) {
+                    mask = topbarGradient
+                }
+                .background(topbarGradient)
+                .zIndex(1f)
+        ) {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickableAlpha { }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = stringResource(R.string.slashtags__your_name_capital),
+                            tint = Colors.White64,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        HorizontalSpacer(16.dp)
+                        Title(text = stringResource(R.string.slashtags__your_name_capital))
+                    }
+                },
+                actions = {
+                    AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
+                    HorizontalSpacer(4.dp)
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_list),
+                            contentDescription = stringResource(R.string.settings__settings),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.largeTopAppBarColors(Color.Transparent),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        val pullToRefreshState = rememberPullToRefreshState()
         PullToRefreshBox(
+            state = pullToRefreshState,
             isRefreshing = mainUiState.isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier.Companion
+            indicator = {
+                Indicator(
+                    isRefreshing = mainUiState.isRefreshing,
+                    state = pullToRefreshState,
+                    modifier = Modifier
+                        .padding(top = heightStatusBar)
+                        .align(Alignment.TopCenter)
+                )
+            },
+            modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState, zIndex = 0f)
+                .hazeSource(state = hazeState)
+                .zIndex(0f)
         ) {
             Column(
-                modifier = Modifier.Companion
+                modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
+                StatusBarSpacer()
+                TopBarSpacer()
+                VerticalSpacer(16.dp)
                 BalanceHeaderView(
                     sats = balances.totalSats.toLong(),
                     showEyeIcon = true,
-                    modifier = Modifier.Companion.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                 )
                 if (!homeUiState.showEmptyState) {
-                    Spacer(modifier = Modifier.Companion.height(32.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                     Row(
-                        modifier = Modifier.Companion
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
+                            .height(IntrinsicSize.Min)
                     ) {
                         WalletBalanceView(
                             title = stringResource(R.string.wallet__savings__title),
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
-                            modifier = Modifier.Companion
+                            modifier = Modifier
                                 .clickableAlpha { walletNavController.navigate(HomeRoutes.Savings) }
                                 .padding(vertical = 4.dp)
                         )
@@ -304,7 +374,7 @@ private fun Content(
                             title = stringResource(R.string.wallet__spending__title),
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
-                            modifier = Modifier.Companion
+                            modifier = Modifier
                                 .clickableAlpha { walletNavController.navigate(HomeRoutes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .padding(start = 16.dp)
@@ -319,11 +389,11 @@ private fun Content(
                         )
 
                         Column {
-                            Spacer(modifier = Modifier.Companion.height(32.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
                             Text13Up(stringResource(R.string.cards__suggestions), color = Colors.White64)
-                            Spacer(modifier = Modifier.Companion.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             LazyRow(
-                                modifier = Modifier.Companion.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 state = state,
                                 flingBehavior = snapBehavior
@@ -336,7 +406,7 @@ private fun Content(
                                         icon = item.icon,
                                         onClose = { onRemoveSuggestion(item) },
                                         onClick = { onClickSuggestion(item) },
-                                        modifier = Modifier.Companion.testTag("SUGGESTION_${item.name}")
+                                        modifier = Modifier.testTag("SUGGESTION_${item.name}")
                                     )
                                 }
                             }
@@ -344,11 +414,11 @@ private fun Content(
                     }
 
                     if (homeUiState.showWidgets) {
-                        Spacer(modifier = Modifier.Companion.height(32.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
                         Row(
-                            modifier = Modifier.Companion.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Companion.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text13Up(
                                 stringResource(R.string.widgets__widgets),
@@ -376,20 +446,20 @@ private fun Content(
                             }
                         }
 
-                        Spacer(modifier = Modifier.Companion.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         if (homeUiState.isEditingWidgets) {
                             DragDropColumn(
                                 items = homeUiState.widgetsWithPosition,
                                 onMove = onMoveWidget,
-                                modifier = Modifier.Companion.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth()
                             ) { widgetWithPosition, isDragging ->
                                 DragAndDropWidget(
                                     iconRes = widgetWithPosition.type.iconRes,
                                     title = stringResource(widgetWithPosition.type.title),
                                     onClickSettings = { onClickEditWidget(widgetWithPosition.type) },
                                     onClickDelete = { onClickDeleteWidget(widgetWithPosition.type) },
-                                    modifier = Modifier.Companion
+                                    modifier = Modifier
                                         .fillMaxWidth()
                                         .graphicsLayer {
                                             alpha = if (isDragging) 0.8f else 1.0f
@@ -398,7 +468,7 @@ private fun Content(
                             }
                         } else {
                             Column(
-                                modifier = Modifier.Companion.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 homeUiState.widgetsWithPosition.forEach { widgetsWithPosition ->
@@ -406,7 +476,7 @@ private fun Content(
                                         WidgetType.BLOCK -> {
                                             homeUiState.currentBlock?.run {
                                                 BlockCard(
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showBlock = homeUiState.blocksPreferences.showBlock,
                                                     showTime = homeUiState.blocksPreferences.showTime,
@@ -428,7 +498,7 @@ private fun Content(
                                             currencyViewModel?.let {
                                                 CalculatorCard(
                                                     currencyViewModel = it,
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles
                                                 )
                                             }
@@ -437,7 +507,7 @@ private fun Content(
                                         WidgetType.FACTS -> {
                                             homeUiState.currentFact?.run {
                                                 FactsCard(
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showSource = homeUiState.factsPreferences.showSource,
                                                     headline = homeUiState.currentFact,
@@ -448,7 +518,7 @@ private fun Content(
                                         WidgetType.NEWS -> {
                                             homeUiState.currentArticle?.run {
                                                 HeadlineCard(
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     showTime = homeUiState.headlinePreferences.showTime,
                                                     showSource = homeUiState.headlinePreferences.showSource,
@@ -463,7 +533,7 @@ private fun Content(
                                         WidgetType.PRICE -> {
                                             homeUiState.currentPrice?.run {
                                                 PriceCard(
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     pricePreferences = homeUiState.pricePreferences,
                                                     priceDTO = homeUiState.currentPrice,
@@ -474,7 +544,7 @@ private fun Content(
                                         WidgetType.WEATHER -> {
                                             homeUiState.currentWeather?.run {
                                                 WeatherCard(
-                                                    modifier = Modifier.Companion.fillMaxWidth(),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     showWidgetTitle = homeUiState.showWidgetTitles,
                                                     weatherModel = this,
                                                     preferences = homeUiState.weatherPreferences
@@ -486,7 +556,7 @@ private fun Content(
                             }
                         }
 
-                        Spacer(modifier = Modifier.Companion.height(32.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
                         TertiaryButton(
                             text = stringResource(R.string.widgets__add),
                             icon = {
@@ -499,9 +569,9 @@ private fun Content(
                             onClick = onClickAddWidget,
                         )
                     }
-                    Spacer(modifier = Modifier.Companion.height(32.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                     Text13Up(stringResource(R.string.wallet__activity), color = Colors.White64)
-                    Spacer(modifier = Modifier.Companion.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     ActivityListSimple(
                         items = latestActivities,
                         onAllActivityClick = { walletNavController.navigate(HomeRoutes.AllActivity) },
@@ -509,15 +579,15 @@ private fun Content(
                         onEmptyActivityRowClick = onClickEmptyActivityRow,
                     )
 
-                    VerticalSpacer(120.dp) // Scrollable empty space behind TabBar
+                    VerticalSpacer(120.dp) // scrollable empty space behind footer
                 }
             }
             if (homeUiState.showEmptyState) {
                 EmptyStateView(
                     text = stringResource(R.string.onboarding__empty_wallet).withAccent(),
                     onClose = onDismissEmptyState,
-                    modifier = Modifier.Companion
-                        .align(Alignment.Companion.BottomCenter)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
                 )
             }
 
@@ -559,14 +629,16 @@ private fun DeleteWidgetAlert(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(
-            mainUiState = MainUiState(),
-            homeUiState = HomeUiState(),
-            rootNavController = rememberNavController(),
-            walletNavController = rememberNavController(),
-            drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-            hazeState = rememberHazeState(),
-            latestActivities = emptyList(),
-        )
+        Box {
+            Content(
+                mainUiState = MainUiState(),
+                homeUiState = HomeUiState(),
+                rootNavController = rememberNavController(),
+                walletNavController = rememberNavController(),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                hazeState = rememberHazeState(),
+                latestActivities = previewActivityItems.take(3),
+            )
+        }
     }
 }

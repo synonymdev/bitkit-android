@@ -16,7 +16,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.serialization.Serializable
@@ -62,14 +61,13 @@ fun HomeNav(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState, zIndex = 0f)
+                .hazeSource(hazeState)
         ) {
             NavContent(
                 walletNavController = walletNavController,
                 rootNavController = rootNavController,
                 mainUiState = uiState,
                 drawerState = drawerState,
-                hazeState = hazeState,
                 settingsViewModel = settingsViewModel,
                 appViewModel = appViewModel,
                 walletViewModel = walletViewModel,
@@ -103,7 +101,6 @@ private fun NavContent(
     rootNavController: NavController,
     mainUiState: MainUiState,
     drawerState: DrawerState,
-    hazeState: HazeState,
     settingsViewModel: SettingsViewModel,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
@@ -114,10 +111,9 @@ private fun NavContent(
         startDestination = HomeRoutes.Home,
     ) {
         composable<HomeRoutes.Home> {
-            MainWalletScreen(
+            HomeScreen(
                 mainUiState = mainUiState,
                 drawerState = drawerState,
-                hazeState = hazeState,
                 rootNavController = rootNavController,
                 walletNavController = walletNavController,
                 settingsViewModel = settingsViewModel,
