@@ -131,7 +131,6 @@ fun HomeScreen(
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
-    val hazeState = rememberHazeState()
 
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -145,12 +144,18 @@ fun HomeScreen(
         rootNavController = rootNavController,
         walletNavController = walletNavController,
         drawerState = drawerState,
-        hazeState = hazeState,
         latestActivities = latestActivities,
         onRefresh = {
             walletViewModel.onPullToRefresh()
             homeViewModel.refreshWidgets()
             activityListViewModel.syncLdkNodePayments()
+        },
+        onClickProfile = {
+            if (!hasSeenProfileIntro) {
+                rootNavController.navigate(Routes.ProfileIntro)
+            } else {
+                rootNavController.navigate(Routes.CreateProfile)
+            }
         },
         onRemoveSuggestion = { suggestion ->
             homeViewModel.removeSuggestion(suggestion)
@@ -254,8 +259,9 @@ private fun Content(
     rootNavController: NavController,
     walletNavController: NavController,
     drawerState: DrawerState,
-    hazeState: HazeState,
+    hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
+    onClickProfile: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -295,7 +301,7 @@ private fun Content(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickableAlpha { }
+                        modifier = Modifier.clickableAlpha(onClick = onClickProfile)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AccountCircle,
@@ -636,7 +642,6 @@ private fun Preview() {
                 rootNavController = rememberNavController(),
                 walletNavController = rememberNavController(),
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
-                hazeState = rememberHazeState(),
                 latestActivities = previewActivityItems.take(3),
             )
         }
