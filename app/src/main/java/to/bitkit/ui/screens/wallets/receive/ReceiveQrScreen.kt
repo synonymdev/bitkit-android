@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -127,7 +128,7 @@ fun ReceiveQrSheet(
             .fillMaxWidth()
             .fillMaxHeight(SheetSize.LARGE)
             .imePadding()
-            .systemBarsPadding()
+            .navigationBarsPadding()
     ) {
         NavHost(
             navController = navController,
@@ -640,7 +641,7 @@ private fun CopyAddressCard(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun ReceiveQrScreenPreview() {
     AppThemeSurface {
@@ -657,7 +658,7 @@ private fun ReceiveQrScreenPreview() {
     }
 }
 
-@Preview(showBackground = true, heightDp = 600)
+@Preview(showSystemUi = true, heightDp = 600)
 @Composable
 private fun ReceiveQrScreenPreviewSmallScreen() {
     AppThemeSurface {
@@ -674,7 +675,7 @@ private fun ReceiveQrScreenPreviewSmallScreen() {
     }
 }
 
-@Preview(showBackground = true, device = PIXEL_TABLET)
+@Preview(showSystemUi = true, device = PIXEL_TABLET)
 @Composable
 private fun ReceiveQrScreenPreviewTablet() {
     AppThemeSurface {
