@@ -65,6 +65,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -278,55 +279,15 @@ private fun Content(
     val scope = rememberCoroutineScope()
     val balances = LocalBalances.current
 
-    val topbarGradient = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.5f to Colors.Black,
-            1.0f to Color.Transparent,
-        )
-    )
-
     Box {
-        // Top AppBar Box
         val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .hazeEffect(state = hazeState) {
-                    mask = topbarGradient
-                }
-                .background(topbarGradient)
-                .zIndex(1f)
-        ) {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickableAlpha(onClick = onClickProfile)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AccountCircle,
-                            contentDescription = stringResource(R.string.slashtags__your_name_capital),
-                            tint = Colors.White64,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        HorizontalSpacer(16.dp)
-                        Title(text = stringResource(R.string.slashtags__your_name_capital))
-                    }
-                },
-                actions = {
-                    AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
-                    HorizontalSpacer(4.dp)
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_list),
-                            contentDescription = stringResource(R.string.settings__settings),
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.largeTopAppBarColors(Color.Transparent),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+        TopBar(
+            hazeState = hazeState,
+            onClickProfile = onClickProfile,
+            rootNavController = rootNavController,
+            scope = scope,
+            drawerState = drawerState,
+        )
         val pullToRefreshState = rememberPullToRefreshState()
         PullToRefreshBox(
             state = pullToRefreshState,
@@ -610,6 +571,63 @@ private fun Content(
                 )
             }
         }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TopBar(
+    hazeState: HazeState,
+    onClickProfile: () -> Unit,
+    rootNavController: NavController,
+    scope: CoroutineScope,
+    drawerState: DrawerState,
+) {
+    val topbarGradient = Brush.verticalGradient(
+        colorStops = arrayOf(
+            0.5f to Colors.Black,
+            1.0f to Color.Transparent,
+        )
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .hazeEffect(state = hazeState) {
+                mask = topbarGradient
+            }
+            .background(topbarGradient)
+            .zIndex(1f)
+    ) {
+        TopAppBar(
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickableAlpha(onClick = onClickProfile)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AccountCircle,
+                        contentDescription = stringResource(R.string.slashtags__your_name_capital),
+                        tint = Colors.White64,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    HorizontalSpacer(16.dp)
+                    Title(text = stringResource(R.string.slashtags__your_name_capital))
+                }
+            },
+            actions = {
+                AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
+                HorizontalSpacer(4.dp)
+                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_list),
+                        contentDescription = stringResource(R.string.settings__settings),
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.largeTopAppBarColors(Color.Transparent),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
