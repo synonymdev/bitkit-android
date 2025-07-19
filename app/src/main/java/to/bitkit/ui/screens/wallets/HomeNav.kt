@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberDrawerState
@@ -80,9 +79,7 @@ fun HomeNav(
             onReceiveClick = { appViewModel.showSheet(BottomSheetType.Receive) },
             onScanClick = { rootNavController.navigateToScanner() },
             hazeState = hazeState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .systemBarsPadding()
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
 
         DrawerMenu(

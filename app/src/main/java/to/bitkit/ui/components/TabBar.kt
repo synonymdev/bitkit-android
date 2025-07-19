@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,6 +71,7 @@ fun TabBar(
             )
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
+            .navigationBarsPadding()
     ) {
         Row {
             val buttonMaterial = CupertinoMaterials.ultraThin(containerColor = buttonBg)
@@ -172,13 +175,16 @@ fun TabBar(
     }
 }
 
-@Preview()
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         val hazeState = rememberHazeState()
         Box(
-            modifier = Modifier.background(Colors.Brand)
+            contentAlignment = Alignment.BottomCenter,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Colors.Brand)
         ) {
             // Content Behind
             Column(
