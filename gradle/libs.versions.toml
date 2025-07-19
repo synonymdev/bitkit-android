@@ -12,6 +12,7 @@ constraintlayoutCompose = "1.1.1"
 coreKtx = "1.15.0"
 coreSplashscreen = "1.0.1"
 datastorePrefs = "1.1.4"
+detekt = "1.23.8"
 espressoCore = "3.6.1"
 firebaseBom = "33.11.0"
 googleServices = "4.4.2"
@@ -64,6 +65,8 @@ constraintlayout-compose = { module = "androidx.constraintlayout:constraintlayou
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePrefs" }
+detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version = "1.23.8" }
+detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.4.23" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
@@ -118,6 +121,8 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+spotless = { id = "com.diffplug.spotless", version = "7.1.0" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

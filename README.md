@@ -14,6 +14,21 @@ Bitkit Android Native app.
 - To communicate from emulator to host use:
   `10.0.2.2` instead of `localhost`
 
+### Linting
+
+This project uses detekt with default ktlint and compose-rules for linting Kotlin and Jetpack Compose code.
+
+Recommended Android Studio plugins:
+- **Detekt** - code analysis and formatting feedback
+
+#### Commands
+
+```sh
+./gradlew detekt # run analysis + formatting check
+./gradlew detekt --auto-correct # auto-fix formatting issues
+```
+Lint reports are generated in: `app/build/reports/detekt/`.
+
 ## Localization
 See repo: https://github.com/synonymdev/bitkit-transifex-sync
 

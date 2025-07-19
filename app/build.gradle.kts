@@ -12,6 +12,7 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.protobuf)
     alias(libs.plugins.room)
+    alias(libs.plugins.detekt)
 }
 
 // https://developer.android.com/studio/publish/app-signing#secure-key
@@ -83,8 +84,11 @@ android {
             keyPassword = "android"
         }
         create("release") {
-            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
-                ?.let { rootProject.file(it) }
+            val keystoreFile =
+                keystoreProperties
+                    .getProperty("storeFile")
+                    .takeIf { it.isNotBlank() }
+                    ?.let { rootProject.file(it) }
             storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
             // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
             storePassword = keystoreProperties.getProperty("storePassword")
@@ -105,7 +109,7 @@ android {
             isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName("release")
             ndk {
@@ -137,7 +141,7 @@ android {
     }
     testOptions {
         unitTests {
-            isReturnDefaultValues = true     // mockito
+            isReturnDefaultValues = true // mockito
             isIncludeAndroidResources = true // robolectric
         }
     }
@@ -171,12 +175,25 @@ protobuf {
 }
 
 composeCompiler {
-    featureFlags = setOf(
-        ComposeFeatureFlag.StrongSkipping.disabled(),
-        ComposeFeatureFlag.OptimizeNonSkippingGroups,
-    )
+    featureFlags =
+        setOf(
+            ComposeFeatureFlag.StrongSkipping.disabled(),
+            ComposeFeatureFlag.OptimizeNonSkippingGroups,
+        )
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
+
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    ignoreFailures = true
+    reports {
+        html.required.set(true)
+        sarif.required.set(true)
+        md.required.set(false)
+        txt.required.set(false)
+        xml.required.set(false)
+    }
+}
+
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
     implementation(libs.jna) { artifact { type = "aar" } }
@@ -273,10 +290,14 @@ dependencies {
     testImplementation(libs.test.mockito.kotlin)
     testImplementation(libs.test.robolectric)
     testImplementation(libs.test.turbine)
+    // Linting
+    detektPlugins(libs.detekt.formatting)
+    detektPlugins(libs.detekt.compose.rules)
 }
 ksp {
-    // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0
-    // arg("room.generateKotlin", "true")
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+    arg("room.expandProjection", "true")
 }
 // https://developer.android.com/jetpack/androidx/releases/room#gradle-plugin
 room {
