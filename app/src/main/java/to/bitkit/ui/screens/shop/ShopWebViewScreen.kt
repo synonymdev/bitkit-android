@@ -19,24 +19,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.viewinterop.AndroidView
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ShopWebViewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
-    page: String
+    page: String,
 ) {
     var isLoading by remember { mutableStateOf(true) }
     var webView: WebView? by remember { mutableStateOf(null) }
-    ScreenColumn {
 
+    ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.other__shop__discover__nav_title),
             onBackClick = onBack,
@@ -50,7 +52,7 @@ fun ShopWebViewScreen(
                     WebView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
+                            ViewGroup.LayoutParams.MATCH_PARENT,
                         )
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -66,7 +68,7 @@ fun ShopWebViewScreen(
                             override fun onReceivedError(
                                 view: WebView?,
                                 request: WebResourceRequest?,
-                                error: WebResourceError?
+                                error: WebResourceError?,
                             ) {
                                 super.onReceivedError(view, request, error)
                                 isLoading = false
@@ -97,10 +99,14 @@ fun ShopWebViewScreen(
     }
 }
 
-//@Preview
-//@Composable
-//private fun Preview() {
-//    AppThemeSurface {
-//        ShopDiscoverScreen(onClose = {})
-//    }
-//}
+@Preview
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        ShopWebViewScreen(
+            onClose = {},
+            onBack = {},
+            page = "esims",
+        )
+    }
+}
