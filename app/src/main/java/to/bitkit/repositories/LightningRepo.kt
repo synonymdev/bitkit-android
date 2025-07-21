@@ -416,40 +416,7 @@ class LightningRepo @Inject constructor(
     ): Result<LnUrlWithdrawResponse> = executeWhenNodeRunning("create LnUrl withdraw callback") {
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Logger.debug("handleLnUrlWithdraw callbackUrl generated:$callbackUrl")
-        val formattedCallbackUrl = callbackUrl.removeDuplicateQueryParams()
-        Logger.debug("handleLnUrlWithdraw formatted callbackUrl:$formattedCallbackUrl")
-        lnUrlWithdrawService.fetchWithdrawInfo(formattedCallbackUrl)
-    }
-
-    /**
-     * Extension function to remove duplicate query parameters from a URL string
-     * Keeps the first occurrence of each parameter
-     */
-    private fun String.removeDuplicateQueryParams(): String { // TODO REMOVE AFTER CORE FIX
-        return try {
-            val uri = Uri.parse(this)
-            val builder = uri.buildUpon().clearQuery()
-
-            // Track seen parameters to avoid duplicates
-            val seenParams = mutableSetOf<String>()
-
-            // Get all query parameter names
-            uri.queryParameterNames.forEach { paramName ->
-                if (!seenParams.contains(paramName)) {
-                    // Add only the first occurrence of each parameter
-                    val value = uri.getQueryParameter(paramName)
-                    if (value != null) {
-                        builder.appendQueryParameter(paramName, value)
-                        seenParams.add(paramName)
-                    }
-                }
-            }
-
-            builder.build().toString()
-        } catch (e: Exception) {
-            // Return original string if parsing fails
-            this
-        }
+        lnUrlWithdrawService.fetchWithdrawInfo(callbackUrl)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
