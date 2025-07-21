@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.shop
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
@@ -40,6 +37,7 @@ import to.bitkit.ui.theme.Colors
 fun ShopDiscoverScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
+    navigateWebView: (String) -> Unit,
 ) {
     ScreenColumn(
         modifier = Modifier.gradientBackground()
@@ -61,7 +59,9 @@ fun ShopDiscoverScreen(
                 description = stringResource(R.string.other__shop__discover__gift_cards__description),
                 icon = R.drawable.gift,
                 size = 164,
-                onClick = {}
+                onClick = {
+                    navigateWebView("gift-cards")
+                }
             )
             SuggestionCard(
                 modifier = Modifier.weight(1f),
@@ -70,7 +70,9 @@ fun ShopDiscoverScreen(
                 description = stringResource(R.string.other__shop__discover__esims__description),
                 icon = R.drawable.globe,
                 size = 164,
-                onClick = {}
+                onClick = {
+                    navigateWebView("esims")
+                }
             )
         }
 
@@ -88,7 +90,9 @@ fun ShopDiscoverScreen(
                 description = stringResource(R.string.other__shop__discover__refill__description),
                 icon = R.drawable.phone,
                 size = 164,
-                onClick = {}
+                onClick = {
+                    navigateWebView("refill")
+                }
             )
             SuggestionCard(
                 modifier = Modifier.weight(1f),
@@ -97,7 +101,9 @@ fun ShopDiscoverScreen(
                 description = stringResource(R.string.other__shop__discover__travel__description),
                 icon = R.drawable.rocket,
                 size = 164,
-                onClick = {}
+                onClick = {
+                    navigateWebView("buy/travel")
+                }
             )
         }
 
@@ -109,7 +115,11 @@ fun ShopDiscoverScreen(
             items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
                 Column {
                     Row(
-                        modifier = Modifier.padding(top = 8.5.dp, bottom = 10.5.dp),
+                        modifier = Modifier
+                            .padding(top = 8.5.dp, bottom = 10.5.dp)
+                            .clickable {
+                                navigateWebView(item.route)
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -126,9 +136,11 @@ fun ShopDiscoverScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                        BodyM(text = item.title, modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp))
+                        BodyM(
+                            text = item.title, modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp)
+                        )
                         Icon(
                             painter = painterResource(R.drawable.ic_chevron_right),
                             contentDescription = null,
@@ -147,6 +159,6 @@ fun ShopDiscoverScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ShopDiscoverScreen(onClose = {}, onBack = {})
+        ShopDiscoverScreen(onClose = {}, onBack = {}, navigateWebView = {})
     }
 }
