@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -34,12 +35,13 @@ fun SuggestionCard(
     title: String,
     description: String,
     @DrawableRes icon: Int,
-    onClose: () -> Unit,
+    onClose: (() -> Unit)? = null,
+    size: Int = 152,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
-            .size(152.dp)
+            .size(size.dp)
             .clip(ShapeDefaults.Large)
             .gradientBackground(gradientColor.copy(alpha = 0.30f))
             .clickableAlpha { onClick() }
@@ -58,18 +60,21 @@ fun SuggestionCard(
                 Image(
                     painter = painterResource(icon),
                     contentDescription = null,
+                    contentScale = ContentScale.FillHeight,
                     modifier = Modifier.weight(1f)
                 )
 
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.size(16.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_x),
-                        contentDescription = null,
-                        tint = Colors.White,
-                    )
+                onClose?.let {
+                    IconButton(
+                        onClick = it,
+                        modifier = Modifier.size(16.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_x),
+                            contentDescription = null,
+                            tint = Colors.White,
+                        )
+                    }
                 }
             }
 
