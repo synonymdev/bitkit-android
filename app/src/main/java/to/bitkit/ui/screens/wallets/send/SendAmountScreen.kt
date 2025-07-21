@@ -32,8 +32,8 @@ import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadTextField
-import to.bitkit.ui.components.OutlinedColorButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.Text13Up
@@ -154,7 +154,7 @@ private fun SendAmountNodeRunning(
 ) {
     val availableAmount = when {
         uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
-            uiState.lnUrlParameters.data.maxWithdrawable.toLong().div(1000) //Convert from millisats to sats
+            uiState.lnUrlParameters.data.maxWithdrawable.toLong().div(1000) //Convert from msat to sat
         }
 
         uiState.payMethod == SendMethod.ONCHAIN -> {
@@ -245,28 +245,22 @@ private fun PaymentMethodButton(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
 ) {
-    OutlinedColorButton(
-        onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
-        enabled = uiState.isUnified,
+    NumberPadActionButton(
+        text = when (uiState.payMethod) {
+            SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
+            SendMethod.LIGHTNING -> stringResource(R.string.wallet__spending__title)
+        },
         color = when (uiState.payMethod) {
             SendMethod.ONCHAIN -> Colors.Brand
             SendMethod.LIGHTNING -> Colors.Purple
         },
+        icon = if (uiState.isUnified) R.drawable.ic_transfer else null,
+        onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
+        enabled = uiState.isUnified,
         modifier = Modifier
             .height(28.dp)
             .testTag("payment_method_button")
-    ) {
-        Text13Up(
-            text = when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
-                SendMethod.LIGHTNING -> stringResource(R.string.wallet__spending__title)
-            },
-            color = when (uiState.payMethod) {
-                SendMethod.ONCHAIN -> Colors.Brand
-                SendMethod.LIGHTNING -> Colors.Purple
-            }
-        )
-    }
+    )
 }
 
 @Preview(showSystemUi = true, name = "Running - Lightning")
@@ -279,6 +273,32 @@ private fun PreviewRunningLightning() {
                 amountInput = "100",
                 isAmountInputValid = true,
                 isUnified = false
+            ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            walletUiState = MainUiState(
+                nodeLifecycleState = NodeLifecycleState.Running
+            ),
+            onBack = {},
+            onEvent = {},
+            input = "100",
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.FIAT,
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {}
+        )
+    }
+}
+
+@Preview(showSystemUi = true, name = "Running - Unified")
+@Composable
+private fun PreviewRunningUnified() {
+    AppThemeSurface {
+        SendAmountContent(
+            uiState = SendUiState(
+                payMethod = SendMethod.LIGHTNING,
+                amountInput = "100",
+                isAmountInputValid = true,
+                isUnified = true,
             ),
             balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
             walletUiState = MainUiState(
