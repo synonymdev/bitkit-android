@@ -48,70 +48,69 @@ fun ShopDiscoverScreen(
             actions = { CloseNavIcon(onClick = onClose) },
         )
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp),
-        ) {
-            SuggestionCard(
-                modifier = Modifier.weight(1f),
-                gradientColor = Colors.Green,
-                title = stringResource(R.string.other__shop__discover__gift_cards__title),
-                description = stringResource(R.string.other__shop__discover__gift_cards__description),
-                icon = R.drawable.gift,
-                size = 164,
-                onClick = {
-                    navigateWebView("gift-cards")
-                }
-            )
-            SuggestionCard(
-                modifier = Modifier.weight(1f),
-                gradientColor = Colors.Yellow,
-                title = stringResource(R.string.other__shop__discover__esims__title),
-                description = stringResource(R.string.other__shop__discover__esims__description),
-                icon = R.drawable.globe,
-                size = 164,
-                onClick = {
-                    navigateWebView("esims")
-                }
-            )
-        }
-
-        VerticalSpacer(16.dp)
-
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp),
-        ) {
-            SuggestionCard(
-                modifier = Modifier.weight(1f),
-                gradientColor = Colors.Purple,
-                title = stringResource(R.string.other__shop__discover__refill__title),
-                description = stringResource(R.string.other__shop__discover__refill__description),
-                icon = R.drawable.phone,
-                size = 164,
-                onClick = {
-                    navigateWebView("refill")
-                }
-            )
-            SuggestionCard(
-                modifier = Modifier.weight(1f),
-                gradientColor = Colors.Red,
-                title = stringResource(R.string.other__shop__discover__travel__title),
-                description = stringResource(R.string.other__shop__discover__travel__description),
-                icon = R.drawable.rocket,
-                size = 164,
-                onClick = {
-                    navigateWebView("buy/travel")
-                }
-            )
-        }
-
-        VerticalSpacer(16.dp)
-
         LazyColumn(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Green,
+                        title = stringResource(R.string.other__shop__discover__gift_cards__title),
+                        description = stringResource(R.string.other__shop__discover__gift_cards__description),
+                        icon = R.drawable.gift,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("gift-cards")
+                        }
+                    )
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Yellow,
+                        title = stringResource(R.string.other__shop__discover__esims__title),
+                        description = stringResource(R.string.other__shop__discover__esims__description),
+                        icon = R.drawable.globe,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("esims")
+                        }
+                    )
+                }
+
+                VerticalSpacer(16.dp)
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Purple,
+                        title = stringResource(R.string.other__shop__discover__refill__title),
+                        description = stringResource(R.string.other__shop__discover__refill__description),
+                        icon = R.drawable.phone,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("refill")
+                        }
+                    )
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Red,
+                        title = stringResource(R.string.other__shop__discover__travel__title),
+                        description = stringResource(R.string.other__shop__discover__travel__description),
+                        icon = R.drawable.rocket,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("buy/travel")
+                        }
+                    )
+                }
+
+                VerticalSpacer(16.dp)
+            }
+
             items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
                 Column {
                     Row(
