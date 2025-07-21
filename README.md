@@ -16,10 +16,11 @@ Bitkit Android Native app.
 
 ### Linting
 
-This project uses detekt with default ktlint and compose-rules for linting Kotlin and Jetpack Compose code.
+This project uses detekt with default ktlint and compose-rules for linting Kotlin and Compose code.
 
 Recommended Android Studio plugins:
-- **Detekt** - code analysis and formatting feedback
+- EditorConfig
+- Detekt
 
 #### Commands
 
