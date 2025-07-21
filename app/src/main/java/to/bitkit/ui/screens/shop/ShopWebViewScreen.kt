@@ -27,6 +27,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.utils.Logger
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -71,8 +72,15 @@ fun ShopWebViewScreen(
                                 error: WebResourceError?,
                             ) {
                                 super.onReceivedError(view, request, error)
+                                Logger.warn("Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}", context = "ShopWebViewScreen")
                                 isLoading = false
-                                onClose()
+                                error?.let {
+                                    if (it.errorCode == WebViewClient.ERROR_HOST_LOOKUP ||
+                                        it.errorCode == WebViewClient.ERROR_CONNECT ||
+                                        it.errorCode == WebViewClient.ERROR_TIMEOUT) {
+                                        onClose()
+                                    }
+                                }
                             }
                         }
                         settings.javaScriptEnabled = true
