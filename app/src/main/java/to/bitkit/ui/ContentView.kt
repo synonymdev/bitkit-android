@@ -406,7 +406,7 @@ private fun RootNavHost(
         home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
         settings(navController, settingsViewModel)
         profile(navController, settingsViewModel)
-        shop(navController, settingsViewModel)
+        shop(navController, settingsViewModel, appViewModel)
         generalSettings(navController)
         advancedSettings(navController)
         aboutSettings(navController)
@@ -707,6 +707,7 @@ private fun NavGraphBuilder.profile(
 private fun NavGraphBuilder.shop(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ShopIntro> {
         ShopIntroScreen(
@@ -731,9 +732,9 @@ private fun NavGraphBuilder.shop(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
             page = navBackEntry.toRoute<Routes.ShopWebView>().page,
-            onPaymentIntent = { intent ->
-                Logger.warn("Payment intent $intent", context = "ShopWebViewScreen")
-            } // TODO HANDLE
+            onPaymentIntent = { data ->
+               appViewModel.onScanSuccess(data)
+            }
         )
     }
 }
