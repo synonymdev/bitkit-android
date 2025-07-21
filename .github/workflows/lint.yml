@@ -1,0 +1,56 @@
+name: Lint
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERM: xterm-256color
+  FORCE_COLOR: 1
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read  # for actions/checkout to fetch code
+      security-events: write  # for github/codeql-action/upload-sarif to upload SARIF results
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Detekt Analysis
+        run: |
+          ./gradlew detekt --no-daemon --stacktrace
+        continue-on-error: true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: app/build/reports/detekt/detekt.sarif
+        continue-on-error: true
+
+      - name: Upload lint report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint_report_${{ github.run_number }}
+          path: app/build/reports/detekt/
+          retention-days: 30

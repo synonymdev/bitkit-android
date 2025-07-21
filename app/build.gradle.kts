@@ -12,6 +12,7 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.protobuf)
     alias(libs.plugins.room)
+    alias(libs.plugins.detekt)
 }
 
 // https://developer.android.com/studio/publish/app-signing#secure-key
@@ -96,7 +97,7 @@ android {
         debug {
             signingConfig = signingConfigs.getByName("debug")
             ndk {
-                //noinspection ChromeOsAbiSupport
+                // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
             }
         }
@@ -105,11 +106,11 @@ android {
             isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName("release")
             ndk {
-                //noinspection ChromeOsAbiSupport
+                // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
         }
@@ -137,7 +138,7 @@ android {
     }
     testOptions {
         unitTests {
-            isReturnDefaultValues = true     // mockito
+            isReturnDefaultValues = true // mockito
             isIncludeAndroidResources = true // robolectric
         }
     }
@@ -177,6 +178,18 @@ composeCompiler {
     )
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
+
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    ignoreFailures = true
+    reports {
+        html.required.set(true)
+        sarif.required.set(true)
+        md.required.set(false)
+        txt.required.set(false)
+        xml.required.set(false)
+    }
+}
+
 dependencies {
     implementation(fileTree("libs") { include("*.aar") })
     implementation(libs.jna) { artifact { type = "aar" } }
@@ -273,10 +286,8 @@ dependencies {
     testImplementation(libs.test.mockito.kotlin)
     testImplementation(libs.test.robolectric)
     testImplementation(libs.test.turbine)
-}
-ksp {
-    // cool but strict: https://developer.android.com/jetpack/androidx/releases/room#2.6.0
-    // arg("room.generateKotlin", "true")
+    detektPlugins(libs.detekt.formatting)
+    detektPlugins(libs.detekt.compose.rules)
 }
 // https://developer.android.com/jetpack/androidx/releases/room#gradle-plugin
 room {
