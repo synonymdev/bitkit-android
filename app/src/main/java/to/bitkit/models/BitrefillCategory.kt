@@ -1,7 +1,26 @@
 package to.bitkit.models
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.DeliveryDining
+import androidx.compose.material.icons.filled.DirectionsBoat
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
