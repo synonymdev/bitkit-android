@@ -730,7 +730,10 @@ private fun NavGraphBuilder.shop(
         ShopWebViewScreen (
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
-            page = navBackEntry.toRoute<Routes.ShopWebView>().page
+            page = navBackEntry.toRoute<Routes.ShopWebView>().page,
+            onPaymentIntent = { intent ->
+                Logger.warn("Payment intent $intent", context = "ShopWebViewScreen")
+            } // TODO HANDLE
         )
     }
 }
