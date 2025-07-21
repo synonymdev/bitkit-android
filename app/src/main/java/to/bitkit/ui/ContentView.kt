@@ -719,6 +719,7 @@ private fun NavGraphBuilder.shop(
     composableWithDefaultTransitions<Routes.ShopDiscover> {
         ShopDiscoverScreen(
             onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
         )
     }
 }

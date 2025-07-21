@@ -1,12 +1,17 @@
 package to.bitkit.ui.screens.shop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
@@ -22,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.SuggestionCard
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -42,9 +49,63 @@ fun ShopDiscoverScreen(
             onBackClick = onBack,
             actions = { CloseNavIcon(onClick = onClose) },
         )
-        // TODO ADD TabBar
 
-        LazyColumn {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
+            SuggestionCard(
+                modifier = Modifier.weight(1f),
+                gradientColor = Colors.Green,
+                title = stringResource(R.string.other__shop__discover__gift_cards__title),
+                description = stringResource(R.string.other__shop__discover__gift_cards__description),
+                icon = R.drawable.gift,
+                size = 164,
+                onClick = {}
+            )
+            SuggestionCard(
+                modifier = Modifier.weight(1f),
+                gradientColor = Colors.Yellow,
+                title = stringResource(R.string.other__shop__discover__esims__title),
+                description = stringResource(R.string.other__shop__discover__esims__description),
+                icon = R.drawable.globe,
+                size = 164,
+                onClick = {}
+            )
+        }
+
+        VerticalSpacer(16.dp)
+
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
+            SuggestionCard(
+                modifier = Modifier.weight(1f),
+                gradientColor = Colors.Purple,
+                title = stringResource(R.string.other__shop__discover__refill__title),
+                description = stringResource(R.string.other__shop__discover__refill__description),
+                icon = R.drawable.phone,
+                size = 164,
+                onClick = {}
+            )
+            SuggestionCard(
+                modifier = Modifier.weight(1f),
+                gradientColor = Colors.Red,
+                title = stringResource(R.string.other__shop__discover__travel__title),
+                description = stringResource(R.string.other__shop__discover__travel__description),
+                icon = R.drawable.rocket,
+                size = 164,
+                onClick = {}
+            )
+        }
+
+        VerticalSpacer(16.dp)
+
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
             items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
                 Column {
                     Row(
