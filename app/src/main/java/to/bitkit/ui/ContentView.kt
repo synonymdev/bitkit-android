@@ -47,6 +47,7 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.shop.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
+import to.bitkit.ui.screens.shop.ShopWebViewScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
@@ -720,6 +721,16 @@ private fun NavGraphBuilder.shop(
         ShopDiscoverScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
+            navigateWebView = { page ->
+                navController.navigate(Routes.ShopWebView(page = page))
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.ShopWebView> { navBackEntry ->
+        ShopWebViewScreen (
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            page = navBackEntry.toRoute<Routes.ShopWebView>().page
         )
     }
 }
@@ -1589,6 +1600,9 @@ sealed interface Routes {
 
     @Serializable
     data object ShopDiscover : Routes
+
+    @Serializable
+    data class ShopWebView(val page: String) : Routes
 
     @Serializable
     data object WidgetsIntro : Routes
