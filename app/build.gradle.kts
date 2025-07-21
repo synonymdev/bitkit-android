@@ -84,11 +84,8 @@ android {
             keyPassword = "android"
         }
         create("release") {
-            val keystoreFile =
-                keystoreProperties
-                    .getProperty("storeFile")
-                    .takeIf { it.isNotBlank() }
-                    ?.let { rootProject.file(it) }
+            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
+                ?.let { rootProject.file(it) }
             storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
             // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
             storePassword = keystoreProperties.getProperty("storePassword")
@@ -100,7 +97,7 @@ android {
         debug {
             signingConfig = signingConfigs.getByName("debug")
             ndk {
-                //noinspection ChromeOsAbiSupport
+                // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
             }
         }
@@ -113,7 +110,7 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
             ndk {
-                //noinspection ChromeOsAbiSupport
+                // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
         }
@@ -175,11 +172,10 @@ protobuf {
 }
 
 composeCompiler {
-    featureFlags =
-        setOf(
-            ComposeFeatureFlag.StrongSkipping.disabled(),
-            ComposeFeatureFlag.OptimizeNonSkippingGroups,
-        )
+    featureFlags = setOf(
+        ComposeFeatureFlag.StrongSkipping.disabled(),
+        ComposeFeatureFlag.OptimizeNonSkippingGroups,
+    )
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
@@ -290,14 +286,8 @@ dependencies {
     testImplementation(libs.test.mockito.kotlin)
     testImplementation(libs.test.robolectric)
     testImplementation(libs.test.turbine)
-    // Linting
     detektPlugins(libs.detekt.formatting)
     detektPlugins(libs.detekt.compose.rules)
-}
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-    arg("room.incremental", "true")
-    arg("room.expandProjection", "true")
 }
 // https://developer.android.com/jetpack/androidx/releases/room#gradle-plugin
 room {
