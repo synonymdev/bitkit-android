@@ -69,7 +69,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import javax.inject.Inject
-import kotlin.onFailure
 
 private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
 
@@ -575,7 +574,7 @@ class AppViewModel @Inject constructor(
                     )
 
                     lightningService.createLnurlInvoice(
-                        address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
+                        address = uri,
                         amountSatoshis = minSendable,
                     ).onSuccess { lightningInvoice ->
                         val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
@@ -691,7 +690,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handleLightningInvoice(
         invoice: LightningInvoice,
         uri: String,
-        lnUrlParameters: LnUrlParameters? = null
+        lnUrlParameters: LnUrlParameters? = null,
     ) {
         if (invoice.isExpired) {
             toast(
