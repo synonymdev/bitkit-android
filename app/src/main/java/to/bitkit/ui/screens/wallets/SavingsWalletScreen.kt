@@ -93,10 +93,10 @@ fun SavingsWalletScreen(
                     val onchainActivities by activity.onchainActivities.collectAsState()
                     ActivityListGrouped(
                         items = onchainActivities,
-                        showFooter = true,
-                        onAllActivityButtonClick = onAllActivityButtonClick,
                         onActivityItemClick = onActivityItemClick,
                         onEmptyActivityRowClick = onEmptyActivityRowClick,
+                        showFooter = true,
+                        onAllActivityButtonClick = onAllActivityButtonClick,
                     )
                 }
             }

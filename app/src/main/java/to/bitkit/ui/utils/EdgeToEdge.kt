@@ -1,5 +1,6 @@
 package to.bitkit.ui.utils
 
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -19,4 +20,9 @@ fun ComponentActivity.enableAppEdgeToEdge() {
             detectDarkMode = { true },
         ),
     )
+
+    // Disable navigation bar contrast enforcement
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        window.isNavigationBarContrastEnforced = false
+    }
 }

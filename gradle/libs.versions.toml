@@ -36,6 +36,7 @@ workRuntimeKtx = "2.10.0"
 zxing = "3.5.2"
 lottieVersion = "6.6.4"
 composeChartsVersion = "0.1.7"
+haze = "1.6.9"
 
 [libraries]
 accompanist-pager-indicators = { module = "com.google.accompanist:accompanist-pager-indicators", version.ref = "accompanistPermissions" }
@@ -110,6 +111,8 @@ work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "w
 zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 lottie = { module = "com.airbnb.android:lottie-compose", version.ref = "lottieVersion" }
 charts = { module = "io.github.ehsannarmani:compose-charts", version.ref = "composeChartsVersion" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version = "4.31.1" }
 
 [plugins]

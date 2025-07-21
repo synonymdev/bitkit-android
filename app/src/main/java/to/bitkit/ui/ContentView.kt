@@ -67,7 +67,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
-import to.bitkit.ui.screens.wallets.HomeScreen
+import to.bitkit.ui.screens.wallets.HomeNav
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
@@ -97,7 +97,6 @@ import to.bitkit.ui.settings.AboutScreen
 import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
-import to.bitkit.ui.settings.BlocktankRegtestViewModel
 import to.bitkit.ui.settings.CJitDetailScreen
 import to.bitkit.ui.settings.ChannelOrdersScreen
 import to.bitkit.ui.settings.LogDetailScreen
@@ -632,15 +631,15 @@ private fun RootNavHost(
 
 // region destinations
 private fun NavGraphBuilder.home(
-    viewModel: WalletViewModel,
+    walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
     activityListViewModel: ActivityListViewModel,
     settingsViewModel: SettingsViewModel,
     navController: NavHostController,
 ) {
     composable<Routes.Home> {
-        HomeScreen(
-            walletViewModel = viewModel,
+        HomeNav(
+            walletViewModel = walletViewModel,
             appViewModel = appViewModel,
             activityListViewModel = activityListViewModel,
             settingsViewModel = settingsViewModel,

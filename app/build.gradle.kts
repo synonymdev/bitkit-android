@@ -224,9 +224,10 @@ dependencies {
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.accompanist.permissions)
     implementation(libs.constraintlayout.compose)
-
     implementation(libs.lottie)
     implementation(libs.charts)
+    implementation(libs.haze)
+    implementation(libs.haze.materials)
 
     // Compose Navigation
     implementation(libs.navigation.compose)

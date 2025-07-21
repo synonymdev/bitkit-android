@@ -40,6 +40,7 @@ fun ActivityListGrouped(
     modifier: Modifier = Modifier,
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
+    contentPadding: PaddingValues = PaddingValues(top = 20.dp),
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -50,7 +51,7 @@ fun ActivityListGrouped(
 
             LazyColumn(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(top = 20.dp),
+                contentPadding = contentPadding,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 itemsIndexed(groupedItems) { index, item ->

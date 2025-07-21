@@ -308,6 +308,7 @@ class WalletViewModel @Inject constructor(
     }
 }
 
+// TODO rename to walletUiState
 data class MainUiState(
     val nodeId: String = "",
     val balanceInput: String = "",
