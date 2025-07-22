@@ -3,12 +3,14 @@ package to.bitkit.models
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 const val BITCOIN_SYMBOL = "₿"
 const val SATS_IN_BTC = 100_000_000
+const val BTC_SCALE = 8
 const val BTC_PLACEHOLDER = "0.00000000"
 const val SATS_PLACEHOLDER = "0"
 
@@ -54,7 +56,7 @@ data class ConvertedAmount(
     val flag: String,
     val sats: Long,
 ) {
-    val btcValue: BigDecimal = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC))
+    val btcValue: BigDecimal = sats.asBtc()
 
     data class BitcoinDisplayComponents(
         val symbol: String,
@@ -96,3 +98,6 @@ fun Long.formatToModernDisplay(): String {
 }
 
 fun ULong.formatToModernDisplay(): String = this.toLong().formatToModernDisplay()
+
+/** Represent this sat value in Bitcoin BigDecimal. */
+fun Long.asBtc(): BigDecimal = BigDecimal(this).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)

@@ -4,6 +4,7 @@ import okhttp3.internal.toLongOrDefault
 import to.bitkit.ext.removeSpaces
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.SATS_IN_BTC
+import to.bitkit.models.asBtc
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.utils.formatCurrency
 import to.bitkit.viewmodels.CurrencyViewModel
@@ -48,16 +49,10 @@ object CalculatorFormatter {
             }
 
             BitcoinDisplayUnit.CLASSIC -> {
-                val btcAmount = BigDecimal(satsValue)
-                    .divide(BigDecimal(SATS_IN_BTC))
+                satsValue.asBtc()
                     .formatCurrency(decimalPlaces = 8)
                     .orEmpty()
-                btcAmount
             }
         }
-    }
-
-    fun getCleanValue(value: String): String {
-        return value.removeSpaces().replace(",", "")
     }
 }
