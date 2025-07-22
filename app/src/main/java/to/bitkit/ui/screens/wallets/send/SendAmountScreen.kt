@@ -164,18 +164,12 @@ private fun SendAmountNodeRunning(
     onEvent: (SendEvent) -> Unit,
     onMaxClick: (Long) -> Unit,
 ) {
+    val isLnurlWithdraw = uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw
+
     val availableAmount = when {
-        uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
-            uiState.lnUrlParameters.data.maxWithdrawableSat().toLong()
-        }
-
-        uiState.payMethod == SendMethod.ONCHAIN -> {
-            balances.totalOnchainSats.toLong()
-        }
-
-        else -> {
-            balances.maxSendLightningSats.toLong()
-        }
+        isLnurlWithdraw -> uiState.lnUrlParameters.data.maxWithdrawableSat().toLong()
+        uiState.payMethod == SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
+        else -> balances.maxSendLightningSats.toLong()
     }
 
     Column(
@@ -302,7 +296,7 @@ private fun PreviewRunningLightning() {
                 isAmountInputValid = true,
                 isUnified = false
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -328,7 +322,7 @@ private fun PreviewRunningUnified() {
                 isAmountInputValid = true,
                 isUnified = true,
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -357,7 +351,7 @@ private fun PreviewRunningOnchain() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
             onBack = {},
             onEvent = {},
             input = "5000",
@@ -381,7 +375,7 @@ private fun PreviewInitializing() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Initializing
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,
@@ -407,8 +401,8 @@ private fun PreviewWithdraw() {
                         callback = "",
                         k1 = "",
                         defaultDescription = "Test",
-                        minWithdrawable = 1UL,
-                        maxWithdrawable = 130UL,
+                        minWithdrawable = 1u,
+                        maxWithdrawable = 130u,
                         tag = ""
                     ),
                     address = ""
@@ -417,7 +411,7 @@ private fun PreviewWithdraw() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, totalLightningSats = 100u),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,
@@ -453,7 +447,7 @@ private fun PreviewLnurlPay() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, totalLightningSats = 100u),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,

@@ -61,6 +61,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -205,7 +206,7 @@ private fun SendAndReviewContent(
                         onValueChange = { onEvent(SendEvent.CommentChange(it)) },
                         minLines = 3,
                         maxLines = 3,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 } else {
                     TagsSection(uiState = uiState, onClickTag = onClickTag, onClickAddTag = onClickAddTag)
@@ -261,7 +262,7 @@ private fun TagsSection(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp),
+            .padding(bottom = 16.dp)
     ) {
         uiState.selectedTags.map { tagText ->
             TagButton(
@@ -278,7 +279,7 @@ private fun TagsSection(
         icon = {
             Icon(
                 painter = painterResource(R.drawable.ic_tag),
-                contentDescription = null,
+                contentDescription = stringResource(R.string.wallet__tags_add),
                 tint = Colors.Brand,
             )
         },
@@ -303,14 +304,14 @@ private fun OnChainDescription(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.height(IntrinsicSize.Min),
+            modifier = Modifier.height(IntrinsicSize.Min)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(1f)
                     .clickable { onEvent(SendEvent.SpeedAndFee) }
-                    .padding(top = 16.dp),
+                    .padding(top = 16.dp)
             ) {
                 Caption13Up(text = stringResource(R.string.wallet__send_fee_and_speed), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -322,14 +323,14 @@ private fun OnChainDescription(
                         painterResource(R.drawable.ic_speed_normal),
                         contentDescription = null,
                         tint = Colors.Brand,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                     BodySSB(text = "Normal (₿ 210)") // TODO GET FROM STATE
                     Icon(
                         painterResource(R.drawable.ic_pencil_simple),
                         contentDescription = null,
                         tint = Colors.White,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
@@ -339,8 +340,8 @@ private fun OnChainDescription(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(1f)
-                    .clickable { onEvent(SendEvent.SpeedAndFee) }
-                    .padding(top = 16.dp),
+                    .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
+                    .padding(top = 16.dp)
             ) {
                 Caption13Up(text = stringResource(R.string.wallet__send_confirming_in), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -352,7 +353,7 @@ private fun OnChainDescription(
                         painterResource(R.drawable.ic_clock),
                         contentDescription = null,
                         tint = Colors.Brand,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                     BodySSB(text = "± 20-60 minutes") // TODO GET FROM STATE
                 }
@@ -418,7 +419,7 @@ private fun LightningDescription(
                     modifier = Modifier
                         .fillMaxHeight()
                         .weight(1f)
-                        .padding(top = 16.dp),
+                        .padding(top = 16.dp)
                 ) {
                     Caption13Up(
                         text = stringResource(R.string.wallet__send_invoice_expiration),
@@ -433,7 +434,7 @@ private fun LightningDescription(
                             painterResource(R.drawable.ic_timer),
                             contentDescription = null,
                             tint = Colors.Purple,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                         val invoiceExpiryTimestamp = Instant.now().plusSeconds(expirySeconds.toLong())
                             .formatted(DatePattern.INVOICE_EXPIRY)
@@ -463,15 +464,15 @@ private fun Preview() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "",
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = LightningInvoice(
                     bolt11 = "bolt11_invoice_string",
                     paymentHash = ByteArray(0),
-                    amountSatoshis = 100000uL,
-                    timestampSeconds = 0uL,
-                    expirySeconds = 3600uL,
+                    amountSatoshis = 100_000u,
+                    timestampSeconds = 0u,
+                    expirySeconds = 3600u,
                     isExpired = false,
                     networkType = NetworkType.REGTEST,
                     payeeNodeId = null,
@@ -498,7 +499,7 @@ private fun PreviewLnurl() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 payMethod = SendMethod.LIGHTNING,
                 lnUrlParameters = LnUrlParameters.LnUrlPay(
@@ -516,9 +517,9 @@ private fun PreviewLnurl() {
                 decodedInvoice = LightningInvoice(
                     bolt11 = "bcrt123",
                     paymentHash = ByteArray(0),
-                    amountSatoshis = 100000uL,
-                    timestampSeconds = 0uL,
-                    expirySeconds = 3600uL,
+                    amountSatoshis = 100_000u,
+                    timestampSeconds = 0u,
+                    expirySeconds = 3600u,
                     isExpired = false,
                     networkType = NetworkType.REGTEST,
                     payeeNodeId = null,
@@ -545,7 +546,7 @@ private fun PreviewOnChain() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
@@ -571,7 +572,7 @@ private fun PreviewBio() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
@@ -597,7 +598,7 @@ private fun PreviewDialog() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
