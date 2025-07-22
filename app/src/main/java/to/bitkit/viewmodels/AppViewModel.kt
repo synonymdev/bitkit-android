@@ -467,12 +467,9 @@ class AppViewModel @Inject constructor(
 
                     val quickPayHandled = handleQuickPayIfApplicable(
                         amountSats = lnInvoice.amountSatoshis,
+                        invoice = lnInvoice,
                     )
-
-                    if (quickPayHandled) {
-                        resetSendState()
-                        return
-                    }
+                    if (quickPayHandled) return
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -524,14 +521,8 @@ class AppViewModel @Inject constructor(
                 if (hasAmount) {
                     Logger.info("Found amount $$minSendable in lnurlPay, proceeding with payment")
 
-                    val quickPayHandled = handleQuickPayIfApplicable(
-                        amountSats = minSendable,
-                        lnurlPayCallback = data.callback,
-                    )
-                    if (quickPayHandled) {
-                        resetSendState()
-                        return
-                    }
+                    val quickPayHandled = handleQuickPayIfApplicable(amountSats = minSendable, lnurlPay = data)
+                    if (quickPayHandled) return
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -614,7 +605,6 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleLightningInvoice(
         invoice: LightningInvoice,
-        lnUrlParameters: LnUrlParameters? = null,
     ) {
         if (invoice.isExpired) {
             toast(
@@ -625,7 +615,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis)
+        val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
         if (quickPayHandled) return
 
         if (!lightningService.canSend(invoice.amountSatoshis)) {
@@ -642,9 +632,9 @@ class AppViewModel @Inject constructor(
                 amount = invoice.amountSatoshis,
                 decodedInvoice = invoice,
                 payMethod = SendMethod.LIGHTNING,
-                lnUrlParameters = lnUrlParameters,
             )
         }
+
         if (invoice.amountSatoshis > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment")
 
@@ -653,21 +643,22 @@ class AppViewModel @Inject constructor(
             } else {
                 setSendEffect(SendEffect.NavigateToReview)
             }
-        } else {
-            Logger.info("No amount found in invoice, proceeding to enter amount manually")
-            resetAmountInput()
+            return
+        }
+        Logger.info("No amount found in invoice, proceeding to enter amount manually")
+        resetAmountInput()
 
-            if (isMainScanner) {
-                showSheet(BottomSheetType.Send(SendRoute.Amount))
-            } else {
-                setSendEffect(SendEffect.NavigateToAmount)
-            }
+        if (isMainScanner) {
+            showSheet(BottomSheetType.Send(SendRoute.Amount))
+        } else {
+            setSendEffect(SendEffect.NavigateToAmount)
         }
     }
 
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
-        lnurlPayCallback: String? = null,
+        lnurlPay: LnurlPayData? = null,
+        invoice: LightningInvoice? = null,
     ): Boolean {
         val settings = settingsStore.data.first()
         if (!settings.isQuickPayEnabled || amountSats == 0uL) {
@@ -681,12 +672,12 @@ class AppViewModel @Inject constructor(
             Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
 
             val quickPayData: QuickPayData = when {
-                lnurlPayCallback != null -> {
-                    QuickPayData.LnurlPay(sats = amountSats, callback = lnurlPayCallback)
+                lnurlPay != null -> {
+                    QuickPayData.LnurlPay(sats = amountSats, callback = lnurlPay.callback)
                 }
 
                 else -> {
-                    val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
+                    val decodedInvoice = requireNotNull(invoice)
                     QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
                 }
             }

@@ -31,7 +31,6 @@ fun List<ChannelDetails>.totalNextOutboundHtlcLimitSats(): ULong {
         .sumOf { it.nextOutboundHtlcLimitMsat / 1000uL }
 }
 
-
 fun createChannelDetails(): ChannelDetails {
     return ChannelDetails(
         channelId = "channelId",
