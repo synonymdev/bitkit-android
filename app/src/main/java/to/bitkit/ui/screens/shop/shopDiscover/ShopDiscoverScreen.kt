@@ -48,6 +48,7 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -100,7 +101,8 @@ fun ShopDiscoverScreen(
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
-                    text = { Text(title) },
+                    unselectedContentColor = Colors.White64,
+                    text = { CaptionB(title) },
                 )
             }
         }
