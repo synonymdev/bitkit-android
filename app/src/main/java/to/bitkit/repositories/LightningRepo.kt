@@ -403,27 +403,14 @@ class LightningRepo @Inject constructor(
         Result.success(invoice)
     }
 
-    suspend fun createLnurlInvoice(
-        address: String,
-        amountSatoshis: ULong,
-    ): Result<LightningInvoice> {
-        return runCatching {
-            val bolt11 = getLnurlInvoice(address, amountSatoshis)
-            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
-            return@runCatching decoded
-        }.onFailure {
-            Logger.error("createLnurlInvoice error for address: $address, amountSatoshis: $amountSatoshis", it)
-        }
-    }
-
     suspend fun fetchLnurlInvoice(
         callbackUrl: String,
         amountSats: ULong,
         comment: String? = null,
     ): Result<LightningInvoice> {
         return runCatching {
-            val res = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment)
-            val bolt11 = res.pr
+            // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
+            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).pr
             val decoded = (decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
