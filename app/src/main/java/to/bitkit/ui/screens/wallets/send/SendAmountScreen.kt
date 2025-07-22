@@ -21,12 +21,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import to.bitkit.R
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.ext.maxSendableSat
+import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInputHandler
@@ -60,14 +63,19 @@ fun SendAmountScreen(
 ) {
     val currencyVM = currencyViewModel ?: return
     var input: String by remember { mutableStateOf("") }
+    var overrideSats: Long? by remember { mutableStateOf(null) }
 
     AmountInputHandler(
         input = input,
+        overrideSats = overrideSats,
         primaryDisplay = currencyUiState.primaryDisplay,
         displayUnit = currencyUiState.displayUnit,
         onInputChanged = { newInput -> input = newInput },
-        onAmountCalculated = { sats -> onEvent(SendEvent.AmountChange(value = sats)) },
-        currencyVM = currencyVM
+        onAmountCalculated = { sats ->
+            onEvent(SendEvent.AmountChange(value = sats))
+            overrideSats = null
+        },
+        currencyVM = currencyVM,
     )
 
     SendAmountContent(
@@ -79,7 +87,8 @@ fun SendAmountScreen(
         displayUnit = currencyUiState.displayUnit,
         onInputChanged = { input = it },
         onEvent = onEvent,
-        onBack = onBack
+        onBack = onBack,
+        onClickMax = { maxSats -> overrideSats = maxSats },
     )
 
 }
@@ -96,6 +105,7 @@ fun SendAmountContent(
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
     onBack: () -> Unit,
+    onClickMax: (Long) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -104,10 +114,10 @@ fun SendAmountContent(
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
-        val titleRes = if (uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
-            R.string.wallet__lnurl_w_title
-        } else {
-            R.string.wallet__send_amount
+        val titleRes = when (uiState.lnUrlParameters) {
+            is LnUrlParameters.LnUrlWithdraw -> R.string.wallet__lnurl_w_title
+            is LnUrlParameters.LnUrlPay -> R.string.wallet__lnurl_p_title
+            else -> R.string.wallet__send_amount
         }
 
         SheetTopBar(stringResource(titleRes)) {
@@ -125,7 +135,8 @@ fun SendAmountContent(
                     balances = balances,
                     displayUnit = displayUnit,
                     primaryDisplay = primaryDisplay,
-                    onEvent = onEvent
+                    onEvent = onEvent,
+                    onMaxClick = onClickMax,
                 )
             }
 
@@ -151,10 +162,11 @@ private fun SendAmountNodeRunning(
     currencyUiState: CurrencyUiState,
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
+    onMaxClick: (Long) -> Unit,
 ) {
     val availableAmount = when {
         uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> {
-            uiState.lnUrlParameters.data.maxWithdrawable.toLong().div(1000) //Convert from msat to sat
+            uiState.lnUrlParameters.data.maxWithdrawableSat().toLong()
         }
 
         uiState.payMethod == SendMethod.ONCHAIN -> {
@@ -201,12 +213,28 @@ private fun SendAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // TODO add onClick -> override to max amount
             MoneySSB(sats = availableAmount)
 
             Spacer(modifier = Modifier.weight(1f))
 
-            if (uiState.lnUrlParameters !is LnUrlParameters.LnUrlWithdraw) {
+            val isLnurl = uiState.lnUrlParameters != null
+            if (!isLnurl) {
                 PaymentMethodButton(uiState = uiState, onEvent = onEvent)
+            }
+            if (uiState.lnUrlParameters is LnUrlParameters.LnUrlPay) {
+                val max = minOf(
+                    uiState.lnUrlParameters.data.maxSendableSat().toLong(),
+                    availableAmount,
+                )
+                NumberPadActionButton(
+                    text = stringResource(R.string.common__max),
+                    onClick = { onMaxClick(max) },
+                    modifier = Modifier
+                        .height(28.dp)
+                        .testTag("max_amount_button")
+                )
+
             }
             Spacer(modifier = Modifier.width(8.dp))
             UnitButton(modifier = Modifier.height(28.dp))
@@ -329,14 +357,14 @@ private fun PreviewRunningOnchain() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             input = "5000",
             currencyUiState = CurrencyUiState(),
             displayUnit = BitcoinDisplayUnit.MODERN,
             primaryDisplay = PrimaryDisplay.BITCOIN,
-            onInputChanged = {}
+            onInputChanged = {},
         )
     }
 }
@@ -353,18 +381,17 @@ private fun PreviewInitializing() {
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Initializing
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
             onBack = {},
             onEvent = {},
             displayUnit = BitcoinDisplayUnit.MODERN,
             primaryDisplay = PrimaryDisplay.BITCOIN,
             input = "100",
             currencyUiState = CurrencyUiState(),
-            onInputChanged = {}
+            onInputChanged = {},
         )
     }
 }
-
 
 @Preview(showSystemUi = true, name = "Withdraw")
 @Composable
@@ -385,7 +412,7 @@ private fun PreviewWithdraw() {
                         tag = ""
                     ),
                     address = ""
-                )
+                ),
             ),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
@@ -397,7 +424,43 @@ private fun PreviewWithdraw() {
             primaryDisplay = PrimaryDisplay.BITCOIN,
             input = "100",
             currencyUiState = CurrencyUiState(),
-            onInputChanged = {}
+            onInputChanged = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLnurlPay() {
+    AppThemeSurface {
+        SendAmountContent(
+            uiState = SendUiState(
+                payMethod = SendMethod.LIGHTNING,
+                amountInput = "100",
+                lnUrlParameters = LnUrlParameters.LnUrlPay(
+                    data = LnurlPayData(
+                        uri = "",
+                        callback = "",
+                        metadataStr = "",
+                        commentAllowed = 255u,
+                        minSendable = 1000u,
+                        maxSendable = 1000_000u,
+                        allowsNostr = false,
+                        nostrPubkey = null,
+                    ),
+                ),
+            ),
+            walletUiState = MainUiState(
+                nodeLifecycleState = NodeLifecycleState.Running
+            ),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            onBack = {},
+            onEvent = {},
+            displayUnit = BitcoinDisplayUnit.MODERN,
+            primaryDisplay = PrimaryDisplay.BITCOIN,
+            input = "100",
+            currencyUiState = CurrencyUiState(),
+            onInputChanged = {},
         )
     }
 }
