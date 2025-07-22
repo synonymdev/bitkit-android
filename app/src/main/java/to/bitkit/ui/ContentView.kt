@@ -45,9 +45,9 @@ import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
-import to.bitkit.ui.screens.shop.ShopDiscoverScreen
+import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
-import to.bitkit.ui.screens.shop.ShopWebViewScreen
+import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen

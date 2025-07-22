@@ -181,6 +181,7 @@ internal object Env {
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BIT_REFILL_URL = "https://embed.bitrefill.com"
+    const val BTC_MAP_URL = "https://btcmap.org/map"
     private const val BITREFILL_REF = "AL6dyZYt"
     private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
     private const val BITREFILL_APP_NAME = "Bitkit"
