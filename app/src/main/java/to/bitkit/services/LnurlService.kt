@@ -11,12 +11,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class LnUrlWithdrawService @Inject constructor(
+class LnurlService @Inject constructor(
     private val client: HttpClient,
 ) {
 
-    suspend fun fetchWithdrawInfo(lnUrlCallBack: String): Result<LnUrlWithdrawResponse> = runCatching {
-        val response: HttpResponse = client.get(lnUrlCallBack)
+    suspend fun fetchWithdrawInfo(callbackUrl: String): Result<LnUrlWithdrawResponse> = runCatching {
+        val response: HttpResponse = client.get(callbackUrl)
+        Logger.debug("Http call: $response")
 
         if (!response.status.isSuccess()) {
             throw Exception("HTTP error: ${response.status}")
@@ -36,7 +37,7 @@ class LnUrlWithdrawService @Inject constructor(
 
 
     companion object {
-        private const val TAG = "LnUrlWithdrawService"
+        private const val TAG = "LnurlService"
     }
 }
 

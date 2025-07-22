@@ -39,7 +39,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnUrlWithdrawResponse
-import to.bitkit.services.LnUrlWithdrawService
+import to.bitkit.services.LnurlService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -59,7 +59,7 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
-    private val lnUrlWithdrawService: LnUrlWithdrawService,
+    private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
@@ -416,7 +416,7 @@ class LightningRepo @Inject constructor(
     ): Result<LnUrlWithdrawResponse> = executeWhenNodeRunning("create LnUrl withdraw callback") {
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Logger.debug("handleLnUrlWithdraw callbackUrl generated:$callbackUrl")
-        lnUrlWithdrawService.fetchWithdrawInfo(callbackUrl)
+        lnurlService.fetchWithdrawInfo(callbackUrl)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
