@@ -25,6 +25,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.toHex
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
@@ -162,6 +163,7 @@ class WalletRepo @Inject constructor(
             val newBalance = BalanceState(
                 totalOnchainSats = balance.totalOnchainBalanceSats,
                 totalLightningSats = balance.totalLightningBalanceSats,
+                maxSendLightningSats = lightningRepo.getChannels()?.totalNextOutboundHtlcLimitSats() ?: 0u,
                 totalSats = totalSats,
             )
             _balanceState.update { newBalance }

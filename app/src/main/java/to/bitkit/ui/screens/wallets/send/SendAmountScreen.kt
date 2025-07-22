@@ -162,7 +162,7 @@ private fun SendAmountNodeRunning(
         }
 
         else -> {
-            balances.totalLightningSats.toLong()
+            balances.maxSendLightningSats.toLong()
         }
     }
 
@@ -274,7 +274,7 @@ private fun PreviewRunningLightning() {
                 isAmountInputValid = true,
                 isUnified = false
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -284,7 +284,7 @@ private fun PreviewRunningLightning() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             primaryDisplay = PrimaryDisplay.FIAT,
             currencyUiState = CurrencyUiState(),
-            onInputChanged = {}
+            onInputChanged = {},
         )
     }
 }
@@ -300,7 +300,7 @@ private fun PreviewRunningUnified() {
                 isAmountInputValid = true,
                 isUnified = true,
             ),
-            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, totalLightningSats = 100UL),
+            balances = BalanceState(totalSats = 150UL, totalOnchainSats = 50UL, maxSendLightningSats = 100UL),
             walletUiState = MainUiState(
                 nodeLifecycleState = NodeLifecycleState.Running
             ),
@@ -310,7 +310,7 @@ private fun PreviewRunningUnified() {
             displayUnit = BitcoinDisplayUnit.MODERN,
             primaryDisplay = PrimaryDisplay.FIAT,
             currencyUiState = CurrencyUiState(),
-            onInputChanged = {}
+            onInputChanged = {},
         )
     }
 }
