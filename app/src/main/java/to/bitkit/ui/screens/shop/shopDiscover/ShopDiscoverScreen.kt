@@ -56,6 +56,7 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.utils.configureForBasicWebContent
 import to.bitkit.utils.Logger
 
@@ -239,8 +240,8 @@ private fun MapTabContent() {
 
     Box(
         modifier = Modifier
-            .padding(16.dp)
-            .clip(RoundedCornerShape(8.dp)),
+            .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+            .clip(Shapes.medium),
         contentAlignment = Alignment.Center,
     ) {
         AndroidView(
