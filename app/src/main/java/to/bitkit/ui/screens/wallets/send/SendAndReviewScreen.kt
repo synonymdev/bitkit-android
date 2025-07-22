@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -43,13 +45,14 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
-import to.bitkit.ext.formatted
 import to.bitkit.ext.commentAllowed
+import to.bitkit.ext.formatted
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TagButton
@@ -179,7 +182,8 @@ private fun SendAndReviewContent(
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .fillMaxWidth()
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
                 BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
 
@@ -204,10 +208,12 @@ private fun SendAndReviewContent(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    TagsSection(uiState, onClickTag, onClickAddTag)
+                    TagsSection(uiState = uiState, onClickTag = onClickTag, onClickAddTag = onClickAddTag)
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
+                VerticalSpacer(16.dp)
+
                 SwipeToConfirm(
                     text = stringResource(R.string.wallet__send_swipe),
                     loading = isLoading,
