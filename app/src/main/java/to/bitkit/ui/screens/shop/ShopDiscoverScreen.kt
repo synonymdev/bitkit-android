@@ -64,6 +64,7 @@ fun ShopDiscoverScreen(
                         title = stringResource(R.string.other__shop__discover__gift_cards__title),
                         description = stringResource(R.string.other__shop__discover__gift_cards__description),
                         icon = R.drawable.gift,
+                        captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
                             navigateWebView("gift-cards")
@@ -75,6 +76,7 @@ fun ShopDiscoverScreen(
                         title = stringResource(R.string.other__shop__discover__esims__title),
                         description = stringResource(R.string.other__shop__discover__esims__description),
                         icon = R.drawable.globe,
+                        captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
                             navigateWebView("esims")
@@ -93,6 +95,7 @@ fun ShopDiscoverScreen(
                         title = stringResource(R.string.other__shop__discover__refill__title),
                         description = stringResource(R.string.other__shop__discover__refill__description),
                         icon = R.drawable.phone,
+                        captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
                             navigateWebView("refill")
@@ -105,6 +108,7 @@ fun ShopDiscoverScreen(
                         description = stringResource(R.string.other__shop__discover__travel__description),
                         icon = R.drawable.rocket,
                         size = 164,
+                        captionColor = Colors.Gray1,
                         onClick = {
                             navigateWebView("buy/travel")
                         }

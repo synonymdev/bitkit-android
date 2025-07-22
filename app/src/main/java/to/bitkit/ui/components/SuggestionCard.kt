@@ -37,6 +37,7 @@ fun SuggestionCard(
     @DrawableRes icon: Int,
     onClose: (() -> Unit)? = null,
     size: Int = 152,
+    captionColor: Color = Colors.White64,
     onClick: () -> Unit,
 ) {
     Box(
@@ -85,7 +86,7 @@ fun SuggestionCard(
 
             CaptionB(
                 text = description,
-                color = Colors.White,
+                color = captionColor,
             )
         }
     }
