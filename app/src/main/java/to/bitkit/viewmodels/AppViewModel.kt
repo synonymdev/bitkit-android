@@ -282,6 +282,8 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
 
+                    is SendEvent.CommentChange -> onCommentChange(it.value)
+
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     SendEvent.Reset -> resetSendState()
@@ -334,6 +336,14 @@ class AppViewModel @Inject constructor(
                 amountInput = value,
                 isAmountInputValid = validateAmount(value)
             )
+        }
+    }
+
+    private fun onCommentChange(value: String) {
+        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?: 0u
+        val trimmed = value.take(maxLength.toInt())
+        _sendUiState.update {
+            it.copy(comment = trimmed)
         }
     }
 
@@ -406,7 +416,6 @@ class AppViewModel @Inject constructor(
             }
             return
         }
-
     }
 
     private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -823,6 +832,22 @@ class AppViewModel @Inject constructor(
         delay(300) // wait for screen transitions when applicable
 
         val amount = _sendUiState.value.amount
+
+        val lnUrlParameters = _sendUiState.value.lnUrlParameters
+        val isLnurlPay = lnUrlParameters is LnUrlParameters.LnUrlPay
+
+        if (isLnurlPay) {
+            lightningService.fetchLnurlInvoice(
+                callbackUri = lnUrlParameters.data.callback,
+                amount = amount,
+                comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
+            ).onSuccess { invoice ->
+                _sendUiState.update {
+                    it.copy(decodedInvoice = invoice)
+                }
+            }
+        }
+
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
@@ -1216,6 +1241,7 @@ data class SendUiState(
     val isLoading: Boolean = false,
     val speed: TransactionSpeed? = null,
     val utxosToSpend: List<SpendableUtxo>? = null,
+    val comment: String = "",
 )
 
 enum class AmountWarning(@StringRes val message: Int) {
@@ -1259,6 +1285,8 @@ sealed class SendEvent {
     data class AmountChange(val value: String) : SendEvent()
 
     data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent()
+
+    data class CommentChange(val value: String) : SendEvent()
 
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
