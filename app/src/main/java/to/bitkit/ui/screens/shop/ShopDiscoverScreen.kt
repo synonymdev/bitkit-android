@@ -38,10 +38,10 @@ import to.bitkit.ui.theme.Colors
 fun ShopDiscoverScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
-    navigateWebView: (String) -> Unit,
+    navigateWebView: (String, String) -> Unit, //Page, Title
 ) {
     ScreenColumn(
-        modifier = Modifier.gradientBackground()
+        modifier = Modifier.gradientBackground(),
     ) {
         AppTopBar(
             titleText = stringResource(R.string.other__shop__discover__nav_title),
@@ -50,7 +50,7 @@ fun ShopDiscoverScreen(
         )
 
         LazyColumn(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
             item {
                 VerticalSpacer(16.dp)
@@ -58,29 +58,31 @@ fun ShopDiscoverScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    val title = stringResource(R.string.other__shop__discover__gift_cards__title)
                     SuggestionCard(
                         modifier = Modifier.weight(1f),
                         gradientColor = Colors.Green,
-                        title = stringResource(R.string.other__shop__discover__gift_cards__title),
+                        title = title,
                         description = stringResource(R.string.other__shop__discover__gift_cards__description),
                         icon = R.drawable.gift,
                         captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
-                            navigateWebView("gift-cards")
-                        }
+                            navigateWebView("gift-cards", title)
+                        },
                     )
+                    val title2 = stringResource(R.string.other__shop__discover__esims__title)
                     SuggestionCard(
                         modifier = Modifier.weight(1f),
                         gradientColor = Colors.Yellow,
-                        title = stringResource(R.string.other__shop__discover__esims__title),
+                        title = title2,
                         description = stringResource(R.string.other__shop__discover__esims__description),
                         icon = R.drawable.globe,
                         captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
-                            navigateWebView("esims")
-                        }
+                            navigateWebView("esims", title2)
+                        },
                     )
                 }
 
@@ -89,29 +91,31 @@ fun ShopDiscoverScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    val title = stringResource(R.string.other__shop__discover__refill__title)
                     SuggestionCard(
                         modifier = Modifier.weight(1f),
                         gradientColor = Colors.Purple,
-                        title = stringResource(R.string.other__shop__discover__refill__title),
+                        title = title,
                         description = stringResource(R.string.other__shop__discover__refill__description),
                         icon = R.drawable.phone,
                         captionColor = Colors.Gray1,
                         size = 164,
                         onClick = {
-                            navigateWebView("refill")
-                        }
+                            navigateWebView("refill", title)
+                        },
                     )
+                    val title2 = stringResource(R.string.other__shop__discover__travel__title)
                     SuggestionCard(
                         modifier = Modifier.weight(1f),
                         gradientColor = Colors.Red,
-                        title = stringResource(R.string.other__shop__discover__travel__title),
+                        title = title2,
                         description = stringResource(R.string.other__shop__discover__travel__description),
                         icon = R.drawable.rocket_2,
                         size = 164,
                         captionColor = Colors.Gray1,
                         onClick = {
-                            navigateWebView("buy/travel")
-                        }
+                            navigateWebView("buy/travel", title2)
+                        },
                     )
                 }
 
@@ -128,28 +132,29 @@ fun ShopDiscoverScreen(
                         modifier = Modifier
                             .padding(top = 8.5.dp, bottom = 10.5.dp)
                             .clickable {
-                                navigateWebView(item.route)
+                                navigateWebView(item.route, item.title)
                             },
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
                             modifier = Modifier
                                 .clip(CircleShape)
                                 .size(32.dp)
                                 .background(Colors.White10),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = item.icon,
                                 contentDescription = null,
                                 tint = Colors.White64,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.dp),
                             )
                         }
                         BodyM(
-                            text = item.title, modifier = Modifier
+                            text = item.title,
+                            modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = 8.dp),
                         )
                         Icon(
                             painter = painterResource(R.drawable.ic_chevron_right),
@@ -169,6 +174,6 @@ fun ShopDiscoverScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ShopDiscoverScreen(onClose = {}, onBack = {}, navigateWebView = {})
+        ShopDiscoverScreen(onClose = {}, onBack = {}, navigateWebView = { _, _ -> })
     }
 }

@@ -48,6 +48,7 @@ fun ShopWebViewScreen(
     onBack: () -> Unit,
     onPaymentIntent: (String) -> Unit,
     page: String,
+    title: String,
 ) {
     var isLoading by remember { mutableStateOf(true) }
     var webView: WebView? by remember { mutableStateOf(null) }
@@ -81,7 +82,7 @@ fun ShopWebViewScreen(
 
     ScreenColumn {
         AppTopBar(
-            titleText = stringResource(R.string.other__shop__discover__nav_title),
+            titleText = "${stringResource(R.string.other__shop__discover__nav_title)} $title",
             onBackClick = onBack,
             actions = { CloseNavIcon(onClick = onClose) },
         )
@@ -174,9 +175,9 @@ fun ShopWebViewScreen(
                 if (it.canGoBack()) {
                     it.goBack()
                 } else {
-                    onClose()
+                    onBack()
                 }
-            } ?: onClose()
+            } ?: onBack()
         }
     }
 }
@@ -191,6 +192,7 @@ private fun Preview() {
             onPaymentIntent = { uri ->
             },
             page = "esims",
+            title = "Gift Cards"
         )
     }
 }

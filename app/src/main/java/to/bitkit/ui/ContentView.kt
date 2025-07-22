@@ -722,8 +722,8 @@ private fun NavGraphBuilder.shop(
         ShopDiscoverScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
-            navigateWebView = { page ->
-                navController.navigate(Routes.ShopWebView(page = page))
+            navigateWebView = { page, title ->
+                navController.navigate(Routes.ShopWebView(page = page, title = title))
             }
         )
     }
@@ -732,6 +732,7 @@ private fun NavGraphBuilder.shop(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
             page = navBackEntry.toRoute<Routes.ShopWebView>().page,
+            title = navBackEntry.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
                appViewModel.onScanSuccess(data)
             }
@@ -1606,7 +1607,7 @@ sealed interface Routes {
     data object ShopDiscover : Routes
 
     @Serializable
-    data class ShopWebView(val page: String) : Routes
+    data class ShopWebView(val page: String, val title: String) : Routes
 
     @Serializable
     data object WidgetsIntro : Routes
