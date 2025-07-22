@@ -196,20 +196,9 @@ private fun SendAndReviewContent(
                 }
 
                 if (isLnurlPay && uiState.lnUrlParameters.data.commentAllowed()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    TextInput(
-                        value = uiState.comment,
-                        placeholder = stringResource(R.string.wallet__lnurl_pay_confirm__comment_placeholder),
-                        onValueChange = { onEvent(SendEvent.CommentChange(it)) },
-                        minLines = 3,
-                        maxLines = 3,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    LnurlCommentSection(uiState, onEvent)
                 } else {
-                    TagsSection(uiState = uiState, onClickTag = onClickTag, onClickAddTag = onClickAddTag)
+                    TagsSection(uiState, onClickTag, onClickAddTag)
                 }
 
                 FillHeight()
@@ -246,6 +235,25 @@ private fun SendAndReviewContent(
             )
         }
     }
+}
+
+@Composable
+private fun LnurlCommentSection(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+) {
+    Spacer(modifier = Modifier.height(16.dp))
+    Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
+    Spacer(modifier = Modifier.height(8.dp))
+
+    TextInput(
+        value = uiState.comment,
+        placeholder = stringResource(R.string.wallet__lnurl_pay_confirm__comment_placeholder),
+        onValueChange = { onEvent(SendEvent.CommentChange(it)) },
+        minLines = 3,
+        maxLines = 3,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
