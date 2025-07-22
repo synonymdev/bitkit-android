@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
@@ -53,9 +54,11 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -155,7 +158,12 @@ private fun SendAndReviewContent(
     onBiometricsFailure: () -> Unit,
 ) {
     Box {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .gradientBackground()
+                .navigationBarsPadding()
+        ) {
             val isLnurlPay = uiState.lnUrlParameters is LnUrlParameters.LnUrlPay
 
             SheetTopBar(
@@ -206,7 +214,7 @@ private fun SendAndReviewContent(
                     confirmed = isLoading,
                     onConfirm = onSwipeToConfirm,
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(16.dp)
             }
         }
 
@@ -443,7 +451,7 @@ private fun LightningDescription(
     }
 }
 
-@Preview(name = "Lightning")
+@Preview(name = "Lightning", showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -478,7 +486,7 @@ private fun Preview() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview(name = "LnurlPay")
+@Preview(name = "LnurlPay", showSystemUi = true)
 @Composable
 private fun PreviewLnurl() {
     AppThemeSurface {
@@ -525,7 +533,7 @@ private fun PreviewLnurl() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview(name = "OnChain")
+@Preview(name = "OnChain", showSystemUi = true)
 @Composable
 private fun PreviewOnChain() {
     AppThemeSurface {
@@ -551,7 +559,7 @@ private fun PreviewOnChain() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewBio() {
     AppThemeSurface {
@@ -577,7 +585,7 @@ private fun PreviewBio() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewDialog() {
     AppThemeSurface {
