@@ -1,8 +1,10 @@
 package to.bitkit.repositories
 
-import android.net.Uri
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
+import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -407,6 +409,20 @@ class LightningRepo @Inject constructor(
     ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
         val invoice = getLnurlInvoice(address, amountSatoshis)
         Result.success(invoice)
+
+    suspend fun fetchLnurlInvoice(
+        callbackUri: String,
+        amount: ULong,
+        comment: String? = null,
+    ): Result<LightningInvoice> {
+        return runCatching {
+            val res = lnurlService.fetchLnurlInvoice(callbackUri, amount, comment)
+            val bolt11 = res.pr
+            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
+            return@runCatching decoded
+        }.onFailure {
+            Logger.error("fetchLnurlInvoice error for callback: $callbackUri, amount: $amount, comment: $comment", it)
+        }
     }
 
     suspend fun handleLnUrlWithdraw(
