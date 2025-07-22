@@ -48,6 +48,9 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.ext.maxSendableSat
+import to.bitkit.ext.maxWithdrawableSat
+import to.bitkit.ext.minSendableSat
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -364,30 +367,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (
-            (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
-            && _sendUiState.value.bolt11.isNullOrEmpty()
-        ) {
-            val address = when (lnUrlParameters) {
-                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
-                is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
-                else -> ""
-            }
-
+        if (lnUrlParameters is LnUrlParameters.LnUrlAddress) {
             lightningService.createLnurlInvoice(
-                address = address,
-                amountSatoshis = _sendUiState.value.amount
-            ).onSuccess { lightningInvoice ->
+                address = lnUrlParameters.address,
+                amountSatoshis = _sendUiState.value.amount,
+            ).onSuccess { decodedInvoice ->
                 _sendUiState.update {
-                    it.copy(bolt11 = lightningInvoice)
+                    it.copy(decodedInvoice = decodedInvoice)
                 }
                 setSendEffect(SendEffect.NavigateToReview)
             }.onFailure { e ->
-                Logger.error(
-                    "Error generating invoice from lnurl parameters: $lnUrlParameters",
-                    e = e,
-                    context = "AppViewModel"
-                )
+                Logger.error("Error generating invoice from lnurl parameters: $lnUrlParameters", e)
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -396,6 +386,25 @@ class AppViewModel @Inject constructor(
             }
         } else {
             setSendEffect(SendEffect.NavigateToReview)
+        }
+
+        if (lnUrlParameters is LnUrlParameters.LnUrlPay) {
+            lightningService.fetchLnurlInvoice(
+                callbackUri = lnUrlParameters.data.callback,
+                amount = _sendUiState.value.amount,
+            ).onSuccess { decodedInvoice ->
+                _sendUiState.update {
+                    it.copy(decodedInvoice = decodedInvoice)
+                }
+                setSendEffect(SendEffect.NavigateToReview)
+            }.onFailure { e ->
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan__error__generic),
+                )
+            }
+            return
         }
 
     }
@@ -420,13 +429,14 @@ class AppViewModel @Inject constructor(
             null -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlPay -> {
-                lnUrlParams.data.minSendable / 1000u < amount
-                    && amount < lnUrlParams.data.maxSendable / 1000u
-                    && lightningService.canSend(amount)
+                val minSat = lnUrlParams.data.minSendableSat()
+                val maxSat = lnUrlParams.data.maxSendableSat()
+
+                amount in minSat..maxSat && lightningService.canSend(amount)
             }
 
             is LnUrlParameters.LnUrlWithdraw -> {
-                amount < lnUrlParams.data.maxWithdrawable / 1000u
+                amount < lnUrlParams.data.maxWithdrawableSat()
             }
         }
 
@@ -459,7 +469,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Logger.error("Failed to decode input data $uri", it) }
+            .onFailure { Logger.error("Failed to decode: '$uri'", it) }
             .getOrNull()
         this.scan = scan
 
@@ -473,7 +483,6 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update {
                     it.copy(
                         address = invoice.address,
-                        bolt11 = invoice.lightningParam(),
                         amount = invoice.amountSatoshis,
                         isUnified = invoice.hasLightingParam(),
                         decodedInvoice = lnInvoice,
@@ -513,7 +522,7 @@ class AppViewModel @Inject constructor(
 
             is Scanner.Lightning -> {
                 val invoice = scan.invoice
-                handleLightningInvoice(invoice, uri)
+                handleLightningInvoice(invoice)
             }
 
             is Scanner.LnurlAddress -> {
@@ -522,24 +531,11 @@ class AppViewModel @Inject constructor(
                 lightningService.createLnurlInvoice(
                     address = data.uri,
                     amountSatoshis = 0UL
-                ).onSuccess { lightningInvoice ->
-                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                    if (scan is Scanner.Lightning) {
-                        val invoice = scan.invoice
-                        handleLightningInvoice(
-                            invoice = invoice,
-                            uri = uri,
-                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data = data, address = uri)
-                        )
-                    } else {
-                        Logger.error("Error scan is not Lightning type. scan: $scan", context = "AppViewModel")
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__generic),
-                        )
-                        resetSendState()
-                    }
+                ).onSuccess { invoice ->
+                    handleLightningInvoice(
+                        invoice = invoice,
+                        lnUrlParameters = LnUrlParameters.LnUrlAddress(data = data, address = uri)
+                    )
                 }.onFailure { e ->
                     Logger.error("Error decoding LnurlAddress. data: $data", e = e, context = "AppViewModel")
                     toast(
@@ -573,27 +569,11 @@ class AppViewModel @Inject constructor(
                         context = "AppViewModel"
                     )
 
-                    lightningService.createLnurlInvoice(
-                        address = uri,
-                        amountSatoshis = minSendable,
-                    ).onSuccess { lightningInvoice ->
-                        val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                        if (scan is Scanner.Lightning) {
-                            val invoice = scan.invoice
-                            handleLightningInvoice(
-                                invoice = invoice,
-                                uri = uri,
-                                LnUrlParameters.LnUrlPay(data = data, address = uri)
-                            )
-                        } else {
-                            Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
-                            toast(
-                                type = Toast.ToastType.ERROR,
-                                title = context.getString(R.string.other__scan_err_decoding),
-                                description = context.getString(R.string.other__scan__error__generic),
-                            )
-                            resetSendState()
-                        }
+                    lightningService.fetchLnurlInvoice(
+                        callbackUri = data.callback,
+                        amount = minSendable,
+                    ).onSuccess { invoice ->
+                        handleLightningInvoice(invoice, LnUrlParameters.LnUrlPay(data))
                     }.onFailure { e ->
                         Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
                         toast(
@@ -604,15 +584,12 @@ class AppViewModel @Inject constructor(
                         resetSendState()
                     }
                 } else {
-                    val lnUrlParameters = LnUrlParameters.LnUrlPay(
-                        data = data,
-                        address = uri
-                    )
+                    val lnUrlParameters = LnUrlParameters.LnUrlPay(data)
 
                     _sendUiState.update {
                         it.copy(
                             payMethod = SendMethod.LIGHTNING,
-                            lnUrlParameters = lnUrlParameters
+                            lnUrlParameters = lnUrlParameters,
                         )
                     }
 
@@ -689,7 +666,6 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleLightningInvoice(
         invoice: LightningInvoice,
-        uri: String,
         lnUrlParameters: LnUrlParameters? = null,
     ) {
         if (invoice.isExpired) {
@@ -702,7 +678,7 @@ class AppViewModel @Inject constructor(
         }
         // Check for QuickPay conditions
         val quickPayHandled = handleQuickPayIfApplicable(
-            invoice = uri,
+            invoice = invoice.bolt11,
             amountSats = invoice.amountSatoshis,
         )
 
@@ -720,11 +696,9 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 amount = invoice.amountSatoshis,
-                bolt11 = uri,
-                description = invoice.description.orEmpty(),
                 decodedInvoice = invoice,
                 payMethod = SendMethod.LIGHTNING,
-                lnUrlParameters = lnUrlParameters
+                lnUrlParameters = lnUrlParameters,
             )
         }
         if (invoice.amountSatoshis > 0uL) {
@@ -823,7 +797,6 @@ class AppViewModel @Inject constructor(
             utxosToSpend = _sendUiState.value.utxosToSpend
         ).getOrNull() ?: return
 
-
         if (totalFee > BigDecimal.valueOf(amountSats.toLong())
                 .times(BigDecimal(0.5)).toLong().toUInt()
         ) {
@@ -892,17 +865,12 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.LIGHTNING -> {
-                val bolt11 = _sendUiState.value.bolt11
-                if (bolt11 == null) {
-                    Logger.error("Null invoice", context = "AppViewModel")
-                    toast(Exception("Couldn't find invoice"))
-                    hideSheet()
-                    return
-                }
+                val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
+                val bolt11 = decodedInvoice.bolt11
+
                 // Determine if we should override amount
-                val decodedInvoice = _sendUiState.value.decodedInvoice
-                val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
-                val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
+                val paymentAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
+
                 sendLightning(bolt11, paymentAmount).onSuccess { paymentHash ->
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
@@ -1237,7 +1205,6 @@ data class SendUiState(
     val amount: ULong = 0u,
     val amountInput: String = "",
     val isAmountInputValid: Boolean = false,
-    val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: List<String> = listOf(),
@@ -1303,7 +1270,7 @@ sealed class SendEvent {
 }
 
 sealed interface LnUrlParameters {
-    data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
+    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
     data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
     data class LnUrlWithdraw(val data: LnurlWithdrawData, val address: String) : LnUrlParameters
 }
