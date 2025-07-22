@@ -1,14 +1,14 @@
-package to.bitkit.ui.screens.shop
+package to.bitkit.ui.screens.shop.shopDiscover
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +56,7 @@ import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.configureForBasicWebContent
 import to.bitkit.utils.Logger
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -228,14 +229,20 @@ private fun ShopTabContent(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun MapTabContent() {
+    var isLoading by remember { mutableStateOf(true) }
+
+    val webViewClient = remember {
+        MapWebViewClient(
+            onLoadingStateChanged = { loading -> isLoading = loading }
+        )
+    }
+
     Box(
         modifier = Modifier
             .padding(16.dp)
             .clip(RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        var isLoading by remember { mutableStateOf(true) }
-
         AndroidView(
             modifier = Modifier.fillMaxWidth(),
             factory = { context ->
@@ -244,31 +251,9 @@ private fun MapTabContent() {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                            super.onPageStarted(view, url, favicon)
-                            isLoading = true
-                        }
 
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                            isLoading = false
-                        }
-
-                        override fun onReceivedError(
-                            view: WebView?,
-                            request: WebResourceRequest?,
-                            error: WebResourceError?,
-                        ) {
-                            super.onReceivedError(view, request, error)
-                            Logger.warn(
-                                "Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}",
-                                context = "MapTabContent",
-                            )
-                            isLoading = false
-                        }
-                    }
-                    settings.javaScriptEnabled = true
+                    this.webViewClient = webViewClient
+                    configureForBasicWebContent()
                     loadUrl(Env.BTC_MAP_URL)
                 }
             },

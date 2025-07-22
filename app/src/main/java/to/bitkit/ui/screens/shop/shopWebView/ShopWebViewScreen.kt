@@ -24,6 +24,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.configureForBasicWebContent
 
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -64,19 +65,7 @@ fun ShopWebViewScreen(
                         )
 
                         this.webViewClient = webViewClient
-
-                        // Configure WebView settings with security considerations
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            allowContentAccess = true
-                            allowFileAccess = false
-                            allowUniversalAccessFromFileURLs = false
-                            allowFileAccessFromFileURLs = false
-                            // Disable mixed content for security
-                            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        }
-
+                        configureForBasicWebContent()
                         addJavascriptInterface(webViewInterface, "Android")
                         loadUrl(Env.buildBitrefillUri(page = page))
                         webView = this
