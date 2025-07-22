@@ -25,6 +25,7 @@ import to.bitkit.R
 import to.bitkit.models.BitrefillCategory
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.SuggestionCard
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -52,6 +53,8 @@ fun ShopDiscoverScreen(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
             item {
+                VerticalSpacer(16.dp)
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -107,6 +110,10 @@ fun ShopDiscoverScreen(
                         }
                     )
                 }
+
+                VerticalSpacer(32.dp)
+
+                Text13Up(stringResource(R.string.other__shop__discover__label), color = Colors.White64)
 
                 VerticalSpacer(16.dp)
             }
