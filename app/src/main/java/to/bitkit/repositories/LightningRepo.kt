@@ -406,9 +406,15 @@ class LightningRepo @Inject constructor(
     suspend fun createLnurlInvoice(
         address: String,
         amountSatoshis: ULong,
-    ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
-        val invoice = getLnurlInvoice(address, amountSatoshis)
-        Result.success(invoice)
+    ): Result<LightningInvoice> {
+        return runCatching {
+            val bolt11 = getLnurlInvoice(address, amountSatoshis)
+            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
+            return@runCatching decoded
+        }.onFailure {
+            Logger.error("createLnurlInvoice error for address: $address, amountSatoshis: $amountSatoshis", it)
+        }
+    }
 
     suspend fun fetchLnurlInvoice(
         callbackUri: String,

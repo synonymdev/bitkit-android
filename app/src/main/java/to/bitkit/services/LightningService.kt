@@ -41,6 +41,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
+import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
@@ -390,9 +391,7 @@ class LightningService @Inject constructor(
             return false
         }
 
-        val totalNextOutboundHtlcLimitSats = channels
-            .filter { it.isUsable }
-            .sumOf { it.nextOutboundHtlcLimitMsat / 1000uL }
+        val totalNextOutboundHtlcLimitSats = channels.totalNextOutboundHtlcLimitSats()
 
         if (totalNextOutboundHtlcLimitSats < amountSats) {
             Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats")
@@ -668,16 +667,6 @@ class LightningService @Inject constructor(
 }
 
 // region helpers
-
-/** Returns only `open` channels, filtering out pending ones. */
-fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
-    return this.filter { it.isChannelReady }
-}
-
-/** Returns only `pending` channels. */
-fun List<ChannelDetails>.filterPending(): List<ChannelDetails> {
-    return this.filterNot { it.isChannelReady }
-}
 
 private fun generateLogFilePath(): String {
     val dateFormatter = SimpleDateFormat(DatePattern.LOG_FILE, Locale.US).apply {

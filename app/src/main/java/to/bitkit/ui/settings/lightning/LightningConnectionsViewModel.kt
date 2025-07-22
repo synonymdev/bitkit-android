@@ -28,8 +28,8 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.filterOpen
-import to.bitkit.services.filterPending
+import to.bitkit.ext.filterOpen
+import to.bitkit.ext.filterPending
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
