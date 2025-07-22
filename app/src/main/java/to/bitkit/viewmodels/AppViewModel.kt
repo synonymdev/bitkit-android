@@ -521,7 +521,7 @@ class AppViewModel @Inject constructor(
 
                 // If fixed amount
                 if (minSendable == maxSendable && minSendable > 0u) {
-                    Logger.debug("LnurlPay: minSendable == maxSendable, skipping amount screen")
+                    Logger.debug("LnurlPay: minSendable == maxSendable == $minSendable, skipping amount screen")
 
                     val quickPayHandled = handleQuickPayIfApplicable(
                         amountSats = minSendable,
@@ -537,6 +537,7 @@ class AppViewModel @Inject constructor(
                     } else {
                         setSendEffect(SendEffect.NavigateToReview)
                     }
+                    return
                 }
 
                 if (isMainScanner) {
