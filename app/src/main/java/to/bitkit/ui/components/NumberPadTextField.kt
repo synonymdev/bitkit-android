@@ -26,6 +26,7 @@ import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.asBtc
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -136,7 +137,6 @@ fun NumberPadTextField(
     )
 }
 
-
 @Composable
 fun AmountInputHandler(
     input: String,
@@ -144,9 +144,29 @@ fun AmountInputHandler(
     displayUnit: BitcoinDisplayUnit,
     onInputChanged: (String) -> Unit,
     onAmountCalculated: (String) -> Unit,
-    currencyVM: CurrencyViewModel
+    currencyVM: CurrencyViewModel,
+    overrideSats: Long? = null,
 ) {
     var lastDisplay by rememberSaveable { mutableStateOf(primaryDisplay) }
+
+    LaunchedEffect(overrideSats) {
+        overrideSats?.let { sats ->
+            val newInput = when (primaryDisplay) {
+                PrimaryDisplay.BITCOIN -> {
+                    if (displayUnit == BitcoinDisplayUnit.MODERN) {
+                        sats.toString()
+                    } else {
+                        sats.asBtc().toString()
+                    }
+                }
+                PrimaryDisplay.FIAT -> {
+                    currencyVM.convert(sats)?.formatted ?: "0"
+                }
+            }
+            onInputChanged(newInput)
+        }
+    }
+
     LaunchedEffect(primaryDisplay) {
         if (primaryDisplay == lastDisplay) return@LaunchedEffect
         lastDisplay = primaryDisplay
