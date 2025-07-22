@@ -43,6 +43,7 @@ import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
+import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -981,6 +982,15 @@ class AppViewModel @Inject constructor(
     }
 
     fun resetQuickPayData() = _quickPayData.update { null }
+
+    fun clearClipboardForAutoRead() {
+        viewModelScope.launch {
+            val isAutoReadClipboardEnabled = settingsStore.data.first().enableAutoReadClipboard
+            if (isAutoReadClipboardEnabled) {
+                context.setClipboardText("")
+            }
+        }
+    }
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()

@@ -337,6 +337,7 @@ fun ContentView(
                                 onComplete = { txSheet ->
                                     appViewModel.resetSendState()
                                     appViewModel.hideSheet()
+                                    appViewModel.clearClipboardForAutoRead()
                                     txSheet?.let { appViewModel.showNewTransactionSheet(it) }
                                 }
                             )
