@@ -1,98 +1,171 @@
 package to.bitkit.ui.screens.shop
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.view.ViewGroup
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.env.Env
+import to.bitkit.models.BitrefillCategory
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.SuggestionCard
+import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ShopDiscoverScreen(
     onClose: () -> Unit,
-) { //TODO IMPLEMENT FULL LAYOUT
-    var isLoading by remember { mutableStateOf(true) }
-    var webView: WebView? by remember { mutableStateOf(null) }
-    ScreenColumn {
-
+    onBack: () -> Unit,
+    navigateWebView: (String, String) -> Unit, //Page, Title
+) {
+    ScreenColumn(
+        modifier = Modifier.gradientBackground(),
+    ) {
         AppTopBar(
             titleText = stringResource(R.string.other__shop__discover__nav_title),
-            onBackClick = null,
+            onBackClick = onBack,
             actions = { CloseNavIcon(onClick = onClose) },
         )
 
-        Box(modifier = Modifier.weight(1f)) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    WebView(context).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                super.onPageStarted(view, url, favicon)
-                                isLoading = true
-                            }
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
+            item {
+                VerticalSpacer(16.dp)
 
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                super.onPageFinished(view, url)
-                                isLoading = false
-                            }
-
-                            override fun onReceivedError(
-                                view: WebView?,
-                                request: WebResourceRequest?,
-                                error: WebResourceError?
-                            ) {
-                                super.onReceivedError(view, request, error)
-                                isLoading = false
-                                onClose()
-                            }
-                        }
-                        settings.javaScriptEnabled = true
-                        loadUrl(Env.BIT_REFILL_URL)
-                        webView = this
-                    }
-                },
-            )
-
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
-        }
-
-        BackHandler {
-            webView?.let {
-                if (it.canGoBack()) {
-                    it.goBack()
-                } else {
-                    onClose()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    val title = stringResource(R.string.other__shop__discover__gift_cards__title)
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Green,
+                        title = title,
+                        description = stringResource(R.string.other__shop__discover__gift_cards__description),
+                        icon = R.drawable.gift,
+                        captionColor = Colors.Gray1,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("gift-cards", title)
+                        },
+                    )
+                    val title2 = stringResource(R.string.other__shop__discover__esims__title)
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Yellow,
+                        title = title2,
+                        description = stringResource(R.string.other__shop__discover__esims__description),
+                        icon = R.drawable.globe,
+                        captionColor = Colors.Gray1,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("esims", title2)
+                        },
+                    )
                 }
-            } ?: onClose()
+
+                VerticalSpacer(16.dp)
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    val title = stringResource(R.string.other__shop__discover__refill__title)
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Purple,
+                        title = title,
+                        description = stringResource(R.string.other__shop__discover__refill__description),
+                        icon = R.drawable.phone,
+                        captionColor = Colors.Gray1,
+                        size = 164,
+                        onClick = {
+                            navigateWebView("refill", title)
+                        },
+                    )
+                    val title2 = stringResource(R.string.other__shop__discover__travel__title)
+                    SuggestionCard(
+                        modifier = Modifier.weight(1f),
+                        gradientColor = Colors.Red,
+                        title = title2,
+                        description = stringResource(R.string.other__shop__discover__travel__description),
+                        icon = R.drawable.rocket_2,
+                        size = 164,
+                        captionColor = Colors.Gray1,
+                        onClick = {
+                            navigateWebView("buy/travel", title2)
+                        },
+                    )
+                }
+
+                VerticalSpacer(32.dp)
+
+                Text13Up(stringResource(R.string.other__shop__discover__label), color = Colors.White64)
+
+                VerticalSpacer(16.dp)
+            }
+
+            items(items = BitrefillCategory.entries.toList(), key = { it.name }) { item ->
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 8.5.dp, bottom = 10.5.dp)
+                            .clickable {
+                                navigateWebView(item.route, item.title)
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .size(32.dp)
+                                .background(Colors.White10),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                tint = Colors.White64,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        BodyM(
+                            text = item.title,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp),
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chevron_right),
+                            contentDescription = null,
+                            tint = Colors.White64,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    HorizontalDivider()
+                }
+            }
         }
     }
 }
@@ -101,6 +174,6 @@ fun ShopDiscoverScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ShopDiscoverScreen(onClose = {})
+        ShopDiscoverScreen(onClose = {}, onBack = {}, navigateWebView = { _, _ -> })
     }
 }

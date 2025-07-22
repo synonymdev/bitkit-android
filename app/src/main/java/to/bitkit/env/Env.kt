@@ -121,6 +121,12 @@ internal object Env {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }
 
+    fun buildBitrefillUri(
+        page: String
+    ): String {
+        return "$BIT_REFILL_URL/$page/$BITREFILL_PARAMS"
+    }
+
     private fun storagePathOf(walletIndex: Int, network: String, dir: String): String {
         require(::appStoragePath.isInitialized) { "App storage path should be 'context.filesDir.absolutePath'." }
         val path = Path(appStoragePath, network, "wallet$walletIndex", dir)
@@ -174,7 +180,11 @@ internal object Env {
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
-    const val BIT_REFILL_URL = "https://www.bitrefill.com/br/en/gift-cards/"
+    const val BIT_REFILL_URL = "https://embed.bitrefill.com"
+    private const val BITREFILL_REF = "AL6dyZYt"
+    private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
+    private const val BITREFILL_APP_NAME = "Bitkit"
+    private const val BITREFILL_PARAMS = "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
     const val SYNONYM_CONTACT = "https://synonym.to/contact"
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
