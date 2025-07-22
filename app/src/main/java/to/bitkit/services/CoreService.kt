@@ -341,7 +341,7 @@ class ActivityService(
                                 value = payment.amountSats ?: 0u,
                                 fee = (payment.feePaidMsat ?: 0u) / 1000u,
                                 invoice = "lnbc123_todo", // TODO
-                                message = "",
+                                message = kind.description.orEmpty(),
                                 timestamp = payment.latestUpdateTimestamp,
                                 preimage = kind.preimage,
                                 createdAt = payment.latestUpdateTimestamp,
