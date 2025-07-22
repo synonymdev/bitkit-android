@@ -519,9 +519,9 @@ class AppViewModel @Inject constructor(
                     )
                 }
 
-                // If fixed amount
-                if (minSendable == maxSendable && minSendable > 0u) {
-                    Logger.debug("LnurlPay: minSendable == maxSendable == $minSendable, skipping amount screen")
+                val hasAmount = minSendable == maxSendable && minSendable > 0u
+                if (hasAmount) {
+                    Logger.info("Found amount $$minSendable in lnurlPay, proceeding with payment")
 
                     val quickPayHandled = handleQuickPayIfApplicable(
                         amountSats = minSendable,
@@ -540,6 +540,7 @@ class AppViewModel @Inject constructor(
                     return
                 }
 
+                Logger.info("No amount found in lnurlPay, proceeding to enter amount manually")
                 if (isMainScanner) {
                     showSheet(BottomSheetType.Send(SendRoute.Amount))
                 } else {
@@ -652,7 +653,7 @@ class AppViewModel @Inject constructor(
                 setSendEffect(SendEffect.NavigateToReview)
             }
         } else {
-            Logger.info("No amount found in invoice, proceeding entering amount manually")
+            Logger.info("No amount found in invoice, proceeding to enter amount manually")
             resetAmountInput()
 
             if (isMainScanner) {
