@@ -98,7 +98,11 @@ fun ShopWebViewScreen(
                         )
 
                         webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                            override fun onPageStarted(
+                                view: WebView?,
+                                url: String?,
+                                favicon: Bitmap?
+                            ) {
                                 super.onPageStarted(view, url, favicon)
                                 isLoading = true
                             }
@@ -108,7 +112,8 @@ fun ShopWebViewScreen(
                                 isLoading = false
 
                                 // Inject JavaScript to bridge postMessage to Android
-                                view?.evaluateJavascript("""
+                                view?.evaluateJavascript(
+                                    """
                                     window.ReactNativeWebView = {
                                         postMessage: function(data) {
                                             Android.postMessage(data);
@@ -126,7 +131,8 @@ fun ShopWebViewScreen(
                                             }
                                         };
                                     }
-                                """.trimIndent(), null)
+                                """.trimIndent(), null
+                                )
                             }
 
                             override fun onReceivedError(
@@ -135,14 +141,18 @@ fun ShopWebViewScreen(
                                 error: WebResourceError?,
                             ) {
                                 super.onReceivedError(view, request, error)
-                                Logger.warn("Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}", context = "ShopWebViewScreen")
+                                Logger.warn(
+                                    "Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}",
+                                    context = "ShopWebViewScreen"
+                                )
                                 isLoading = false
 
                                 error?.let {
                                     if (it.errorCode == WebViewClient.ERROR_HOST_LOOKUP ||
                                         it.errorCode == WebViewClient.ERROR_CONNECT ||
                                         it.errorCode == WebViewClient.ERROR_TIMEOUT ||
-                                        it.errorCode == WebViewClient.ERROR_FILE_NOT_FOUND) {
+                                        it.errorCode == WebViewClient.ERROR_FILE_NOT_FOUND
+                                    ) {
                                         onClose()
                                     }
                                 }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -68,7 +67,7 @@ fun ShopDiscoverScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf(
         stringResource(R.string.other__shop__discover__tabs__shop),
-        stringResource(R.string.other__shop__discover__tabs__map)
+        stringResource(R.string.other__shop__discover__tabs__map),
     )
 
     ScreenColumn(
@@ -83,13 +82,13 @@ fun ShopDiscoverScreen(
         PrimaryTabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
         ) {
             tabTitles.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
-                    text = { Text(title) }
+                    text = { Text(title) },
                 )
             }
         }
@@ -103,7 +102,7 @@ fun ShopDiscoverScreen(
 
 @Composable
 private fun ShopTabContent(
-    navigateWebView: (String, String) -> Unit
+    navigateWebView: (String, String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -229,8 +228,10 @@ private fun ShopTabContent(
 @Composable
 private fun MapTabContent() {
     Box(
-        modifier = Modifier.padding(16.dp).clip(RoundedCornerShape(8.dp)),
-        contentAlignment = Alignment.Center
+        modifier = Modifier
+            .padding(16.dp)
+            .clip(RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center,
     ) {
         var isLoading by remember { mutableStateOf(true) }
 
@@ -240,7 +241,7 @@ private fun MapTabContent() {
                 WebView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
+                        ViewGroup.LayoutParams.MATCH_PARENT,
                     )
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -256,10 +257,13 @@ private fun MapTabContent() {
                         override fun onReceivedError(
                             view: WebView?,
                             request: WebResourceRequest?,
-                            error: WebResourceError?
+                            error: WebResourceError?,
                         ) {
                             super.onReceivedError(view, request, error)
-                            Logger.warn("Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}", context = "MapTabContent")
+                            Logger.warn(
+                                "Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}",
+                                context = "MapTabContent",
+                            )
                             isLoading = false
                         }
                     }
