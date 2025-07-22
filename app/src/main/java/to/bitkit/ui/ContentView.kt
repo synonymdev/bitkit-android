@@ -47,6 +47,7 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.shop.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
+import to.bitkit.ui.screens.shop.ShopWebViewScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
@@ -405,7 +406,7 @@ private fun RootNavHost(
         home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
         settings(navController, settingsViewModel)
         profile(navController, settingsViewModel)
-        shop(navController, settingsViewModel)
+        shop(navController, settingsViewModel, appViewModel)
         generalSettings(navController)
         advancedSettings(navController)
         aboutSettings(navController)
@@ -706,6 +707,7 @@ private fun NavGraphBuilder.profile(
 private fun NavGraphBuilder.shop(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ShopIntro> {
         ShopIntroScreen(
@@ -719,6 +721,21 @@ private fun NavGraphBuilder.shop(
     composableWithDefaultTransitions<Routes.ShopDiscover> {
         ShopDiscoverScreen(
             onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            navigateWebView = { page, title ->
+                navController.navigate(Routes.ShopWebView(page = page, title = title))
+            }
+        )
+    }
+    composableWithDefaultTransitions<Routes.ShopWebView> { navBackEntry ->
+        ShopWebViewScreen (
+            onClose = { navController.navigateToHome() },
+            onBack = { navController.popBackStack() },
+            page = navBackEntry.toRoute<Routes.ShopWebView>().page,
+            title = navBackEntry.toRoute<Routes.ShopWebView>().title,
+            onPaymentIntent = { data ->
+               appViewModel.onScanSuccess(data)
+            }
         )
     }
 }
@@ -1588,6 +1605,9 @@ sealed interface Routes {
 
     @Serializable
     data object ShopDiscover : Routes
+
+    @Serializable
+    data class ShopWebView(val page: String, val title: String) : Routes
 
     @Serializable
     data object WidgetsIntro : Routes
