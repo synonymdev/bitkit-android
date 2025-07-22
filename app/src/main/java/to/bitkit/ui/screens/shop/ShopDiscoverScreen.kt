@@ -106,7 +106,7 @@ fun ShopDiscoverScreen(
                         gradientColor = Colors.Red,
                         title = stringResource(R.string.other__shop__discover__travel__title),
                         description = stringResource(R.string.other__shop__discover__travel__description),
-                        icon = R.drawable.rocket,
+                        icon = R.drawable.rocket_2,
                         size = 164,
                         captionColor = Colors.Gray1,
                         onClick = {
