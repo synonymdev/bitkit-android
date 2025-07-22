@@ -32,12 +32,10 @@ import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SheetSize
-import to.bitkit.ui.navigateToHome
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.withdraw.WithDrawErrorScreen
@@ -64,7 +62,8 @@ fun SendOptionsView(
     // Reset on new user-initiated send
     LaunchedEffect(startDestination) {
         if (startDestination == SendRoute.Options) {
-            appViewModel.setSendEvent(SendEvent.Reset)
+            appViewModel.resetSendState()
+            appViewModel.resetQuickPayData()
         }
     }
 
@@ -88,12 +87,9 @@ fun SendOptionsView(
                         context.setClipboardText(text = "")
                     }
 
-                    is SendEffect.NavigateToQuickPay -> {
-                        navController.navigate(SendRoute.QuickPay(it.invoice, it.amount))
-                    }
-
+                    is SendEffect.NavigateToQuickPay -> navController.navigate(SendRoute.QuickPay)
                     is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithdrawConfirm)
-                    SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
+                    is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                 }
             }
         }
@@ -195,10 +191,9 @@ fun SendOptionsView(
                 )
             }
             composableWithDefaultTransitions<SendRoute.QuickPay> { backStackEntry ->
-                val route = backStackEntry.toRoute<SendRoute.QuickPay>()
+                val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
                 QuickPaySendScreen(
-                    invoice = route.invoice,
-                    amount = route.amount,
+                    quickPayData = requireNotNull(quickPayData),
                     onPaymentComplete = {
                         onComplete(null)
                     },
@@ -364,7 +359,7 @@ sealed interface SendRoute {
     data object CoinSelection : SendRoute
 
     @Serializable
-    data class QuickPay(val invoice: String, val amount: Long) : SendRoute
+    data object QuickPay : SendRoute
 
     @Serializable
     data class Error(val errorMessage: String) : SendRoute

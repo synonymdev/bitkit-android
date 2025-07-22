@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SyncNodeView
@@ -27,23 +29,30 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.QuickPayData
 import to.bitkit.viewmodels.QuickPayResult
 import to.bitkit.viewmodels.QuickPayViewModel
 
 @Composable
 fun QuickPaySendScreen(
-    invoice: String,
-    amount: Long,
+    quickPayData: QuickPayData,
     onPaymentComplete: () -> Unit,
     onShowError: (String) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
+    val app = appViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(invoice, lightningState.nodeLifecycleState) {
+    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState) {
         if (lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
-            viewModel.payInvoice(invoice, amount.toULong())
+            viewModel.pay(quickPayData)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            app.resetQuickPayData()
         }
     }
 
@@ -56,14 +65,14 @@ fun QuickPaySendScreen(
     }
 
     QuickPaySendScreenContent(
-        amount = amount,
+        amount = quickPayData.sats,
         nodeLifecycleState = lightningState.nodeLifecycleState,
     )
 }
 
 @Composable
 private fun QuickPaySendScreenContent(
-    amount: Long,
+    amount: ULong,
     nodeLifecycleState: NodeLifecycleState = NodeLifecycleState.Stopped,
 ) {
     Column(
@@ -82,7 +91,7 @@ private fun QuickPaySendScreenContent(
                         .padding(horizontal = 16.dp)
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    BalanceHeaderView(sats = amount, modifier = Modifier.fillMaxWidth())
+                    BalanceHeaderView(sats = amount.toLong(), modifier = Modifier.fillMaxWidth())
 
                     Spacer(modifier = Modifier.weight(1f))
                     TransferAnimationView(
@@ -113,7 +122,7 @@ private fun QuickPaySendScreenContent(
 private fun Preview() {
     AppThemeSurface {
         QuickPaySendScreenContent(
-            amount = 50000L,
+            amount = 50_000u,
             nodeLifecycleState = NodeLifecycleState.Running,
         )
     }
@@ -124,7 +133,7 @@ private fun Preview() {
 private fun Preview2() {
     AppThemeSurface {
         QuickPaySendScreenContent(
-            amount = 50000L,
+            amount = 50_000u,
             nodeLifecycleState = NodeLifecycleState.Initializing,
         )
     }

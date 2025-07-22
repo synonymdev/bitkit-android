@@ -23,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.settingsViewModel
@@ -50,7 +51,7 @@ fun BalanceHeaderView(
             smallRowSymbol = "$",
             smallRowText = "12.34",
             largeRowPrefix = prefix,
-            largeRowText = "$sats",
+            largeRowText = sats.formatToModernDisplay(),
             largeRowSymbol = BITCOIN_SYMBOL,
             showSymbol = showBitcoinSymbol,
             hideBalance = false,

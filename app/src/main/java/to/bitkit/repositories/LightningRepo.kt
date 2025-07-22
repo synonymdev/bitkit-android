@@ -417,17 +417,17 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun fetchLnurlInvoice(
-        callbackUri: String,
-        amount: ULong,
+        callbackUrl: String,
+        amountSats: ULong,
         comment: String? = null,
     ): Result<LightningInvoice> {
         return runCatching {
-            val res = lnurlService.fetchLnurlInvoice(callbackUri, amount, comment)
+            val res = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment)
             val bolt11 = res.pr
             val decoded = (decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
-            Logger.error("fetchLnurlInvoice error for callback: $callbackUri, amount: $amount, comment: $comment", it)
+            Logger.error("Error fetching lnurl invoice, url: $callbackUrl, amount: $amountSats, comment: $comment", it)
         }
     }
 

@@ -334,7 +334,7 @@ fun ContentView(
                                 walletViewModel = walletViewModel,
                                 startDestination = sheet.route,
                                 onComplete = { txSheet ->
-                                    appViewModel.setSendEvent(SendEvent.Reset)
+                                    appViewModel.resetSendState()
                                     appViewModel.hideSheet()
                                     txSheet?.let { appViewModel.showNewTransactionSheet(it) }
                                 }
