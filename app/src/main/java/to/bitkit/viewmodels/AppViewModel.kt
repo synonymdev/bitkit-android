@@ -514,6 +514,7 @@ class AppViewModel @Inject constructor(
 
                 _sendUiState.update {
                     it.copy(
+                        amount = minSendable,
                         payMethod = SendMethod.LIGHTNING,
                         lnUrlParameters = LnUrlParameters.LnUrlPay(data),
                     )
