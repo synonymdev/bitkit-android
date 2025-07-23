@@ -446,6 +446,10 @@ class AppViewModel @Inject constructor(
             .getOrNull()
         this.scan = scan
 
+        // always reset state on new scan
+        resetSendState()
+        resetQuickPayData()
+
         when (scan) {
             is Scanner.OnChain -> {
                 val invoice: OnChainInvoice = scan.invoice
@@ -976,8 +980,6 @@ class AppViewModel @Inject constructor(
         return Env.TransactionDefaults.dustLimit.toULong()
     }
 
-    fun resetQuickPayData() = _quickPayData.update { null }
-
     fun clearClipboardForAutoRead() {
         viewModelScope.launch {
             val isAutoReadClipboardEnabled = settingsStore.data.first().enableAutoReadClipboard
@@ -986,6 +988,8 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    fun resetQuickPayData() = _quickPayData.update { null }
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
