@@ -105,3 +105,11 @@ data class SettingsData(
     val electrumServer: ElectrumServer = Env.defaultElectrumServer,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
 )
+
+fun SettingsData.resetPin() = this.copy(
+    isPinEnabled = false,
+    isPinOnLaunchEnabled = true,
+    isPinOnIdleEnabled = false,
+    isPinForPaymentsEnabled = false,
+    isBiometricEnabled = false,
+)

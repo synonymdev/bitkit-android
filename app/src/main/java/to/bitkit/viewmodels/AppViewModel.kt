@@ -35,6 +35,7 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
@@ -1132,13 +1133,7 @@ class AppViewModel @Inject constructor(
     fun removePin() {
         viewModelScope.launch(bgDispatcher) {
             settingsStore.update {
-                it.copy(
-                    isPinEnabled = false,
-                    isPinOnLaunchEnabled = true,
-                    isPinOnIdleEnabled = false,
-                    isPinForPaymentsEnabled = false,
-                    isBiometricEnabled = false,
-                )
+                it.resetPin()
             }
             keychain.delete(Keychain.Key.PIN.name)
             keychain.upsertString(Keychain.Key.PIN_ATTEMPTS_REMAINING.name, Env.PIN_ATTEMPTS.toString())
