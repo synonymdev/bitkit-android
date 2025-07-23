@@ -16,6 +16,10 @@ This repository contains a **new native Android app** which is **not ready for p
 
 ## Development
 
+### References
+
+- For LNURL dev testing see [bitkit-docker](https://github.com/ovitrif/bitkit-docker)
+
 ### Linting
 
 This project uses detekt with default ktlint and compose-rules for android code linting.
@@ -35,7 +39,7 @@ Reports are generated in: `app/build/reports/detekt/`.
 ## Localization
 See repo: https://github.com/synonymdev/bitkit-transifex-sync
 
-### Build
+## Build
 
 ### Bitcoin Networks
 The build config supports building 3 different apps for the 3 bitcoin networks (mainnet, testnet, regtest) via the 3 build flavors:
@@ -50,6 +54,7 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 - Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
 
 #### Routine:
+
 Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
 ./gradlew assembleDevRelease
