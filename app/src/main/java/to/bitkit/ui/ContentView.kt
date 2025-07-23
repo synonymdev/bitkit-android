@@ -150,6 +150,7 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
 
 @Composable
 fun ContentView(
@@ -607,6 +608,14 @@ private fun RootNavHost(
                         onNetworkFeeClick = { navController.navigate(Routes.ExternalFeeCustom) },
                         onBackClick = { navController.popBackStack() },
                         onCloseClick = { navController.navigateToHome() },
+                    )
+                }
+                composableWithDefaultTransitions<Routes.LnurlChannel> {
+                    LnurlChannelScreen(
+                        route = it.toRoute<Routes.LnurlChannel>(),
+                        onConnected = { navController.navigate(Routes.ExternalSuccess) },
+                        onBack = { navController.popBackStack() },
+                        onClose = { navController.navigateToHome() },
                     )
                 }
                 composableWithDefaultTransitions<Routes.ExternalSuccess> {
@@ -1563,6 +1572,9 @@ sealed interface Routes {
 
     @Serializable
     data object ExternalFeeCustom : Routes
+
+    @Serializable
+    data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes
 
     @Serializable
     data class ActivityDetail(val id: String) : Routes
