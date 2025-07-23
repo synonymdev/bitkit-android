@@ -10,11 +10,10 @@
 
 This repository contains a **new native Android app** which is **not ready for production**.
 
-## Prerequisites
-
-1. Download `google-services.json` to `./app` from FCM Console
-
 ## Development
+
+**Prerequisites**  
+1. Download `google-services.json` to `app/` from FCM Console.
 
 ### References
 
@@ -28,8 +27,7 @@ Recommended Android Studio plugins:
 - EditorConfig
 - Detekt
 
-#### Commands
-
+**Commands** 
 ```sh
 ./gradlew detekt # run analysis + formatting check
 ./gradlew detekt --auto-correct # auto-fix formatting issues
@@ -49,11 +47,12 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 
 ### Build for Release
 
-**Prerequisite**: setup the signing config:
-- Add the keystore file to root dir (i.e. `./release.keystore`)
+**Prerequisites**  
+Setup the signing config:
+- Add the keystore file to root dir (i.e. `release.keystore`)
 - Setup `keystore.properties` file in root dir (`cp keystore.properties.template keystore.properties`)
 
-#### Routine:
+**Routine**
 
 Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
@@ -63,3 +62,8 @@ Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 
 APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
 Example for dev: `app/build/outputs/apk/dev/release`
+
+## License
+
+This project is licensed under the MIT License.  
+See the [LICENSE](./LICENSE) file for more details.
