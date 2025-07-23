@@ -21,6 +21,7 @@ import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupsClient
 import to.bitkit.data.backup.VssObjectInfo
+import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.json
 import to.bitkit.ext.formatPlural
@@ -295,7 +296,7 @@ class BackupsRepo @Inject constructor(
 
         return@withContext try {
             performRestore(BackupCategory.SETTINGS) { dataBytes ->
-                val parsed = json.decodeFromString<SettingsData>(String(dataBytes))
+                val parsed = json.decodeFromString<SettingsData>(String(dataBytes)).resetPin()
                 settingsStore.update { parsed }
             }
             performRestore(BackupCategory.WIDGETS) { dataBytes ->
