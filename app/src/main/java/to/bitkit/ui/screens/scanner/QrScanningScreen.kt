@@ -62,6 +62,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.clipboardManager
+import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
@@ -131,13 +132,17 @@ fun QrScanningScreen(
     val analyzer = remember {
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
-                val qrCode = requireNotNull(result.getOrNull())
+                val qrCode = result.getOrThrow()
                 Logger.debug("QR code scanned: $qrCode")
                 setScanResult(qrCode)
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Failed to scan QR code", error)
-                app.toast(error)
+                app.toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
+                )
             }
         }
     }
