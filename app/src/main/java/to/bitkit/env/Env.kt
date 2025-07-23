@@ -37,9 +37,8 @@ internal object Env {
 
     val vssServerUrl
         get() = when (network) {
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/vss"
-            Network.TESTNET -> "https://bitkit.stag0.blocktank.to/vss"
-            else -> TODO("${network.name} network not implemented")
+            Network.BITCOIN -> TODO("VSS not implemented for mainnet")
+            else -> "https://bitkit.stag0.blocktank.to/vss_rs/"
         }
 
     val vssStoreId
