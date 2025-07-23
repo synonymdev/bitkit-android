@@ -147,7 +147,6 @@ import to.bitkit.viewmodels.BlocktankViewModel
 import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
-import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
@@ -728,12 +727,12 @@ private fun NavGraphBuilder.shop(
             }
         )
     }
-    composableWithDefaultTransitions<Routes.ShopWebView> { navBackEntry ->
+    composableWithDefaultTransitions<Routes.ShopWebView> { backStackEntry ->
         ShopWebViewScreen (
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
-            page = navBackEntry.toRoute<Routes.ShopWebView>().page,
-            title = navBackEntry.toRoute<Routes.ShopWebView>().title,
+            page = backStackEntry.toRoute<Routes.ShopWebView>().page,
+            title = backStackEntry.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
                appViewModel.onScanSuccess(data)
             }
@@ -823,8 +822,8 @@ private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinConfirm> { navBackEntry ->
-        val route = navBackEntry.toRoute<Routes.ChangePinConfirm>()
+    composableWithDefaultTransitions<Routes.ChangePinConfirm> { backStackEntry ->
+        val route = backStackEntry.toRoute<Routes.ChangePinConfirm>()
         ChangePinConfirmScreen(
             newPin = route.newPin,
             navController = navController,
@@ -887,9 +886,9 @@ private fun NavGraphBuilder.channelOrdersSettings(
 private fun NavGraphBuilder.orderDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.OrderDetail> { navBackEntry ->
+    composableWithDefaultTransitions<Routes.OrderDetail> { backStackEntry ->
         OrderDetailScreen(
-            orderItem = navBackEntry.toRoute(),
+            orderItem = backStackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -898,9 +897,9 @@ private fun NavGraphBuilder.orderDetailSettings(
 private fun NavGraphBuilder.cjitDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.CjitDetail> { navBackEntry ->
+    composableWithDefaultTransitions<Routes.CjitDetail> { backStackEntry ->
         CJitDetailScreen(
-            cjitItem = navBackEntry.toRoute(),
+            cjitItem = backStackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -940,19 +939,19 @@ private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.ActivityDetail> { navBackEntry ->
+    composableWithDefaultTransitions<Routes.ActivityDetail> { backStackEntry ->
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
-            route = navBackEntry.toRoute(),
+            route = backStackEntry.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
     }
-    composableWithDefaultTransitions<Routes.ActivityExplore> { navBackEntry ->
+    composableWithDefaultTransitions<Routes.ActivityExplore> { backStackEntry ->
         ActivityExploreScreen(
             listViewModel = activityListViewModel,
-            route = navBackEntry.toRoute(),
+            route = backStackEntry.toRoute(),
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
@@ -979,8 +978,8 @@ private fun NavGraphBuilder.qrScanner(
 private fun NavGraphBuilder.authCheck(
     navController: NavHostController,
 ) {
-    composable<Routes.AuthCheck> { navBackEntry ->
-        val route = navBackEntry.toRoute<Routes.AuthCheck>()
+    composable<Routes.AuthCheck> { backStackEntry ->
+        val route = backStackEntry.toRoute<Routes.AuthCheck>()
         AuthCheckScreen(
             route = route,
             navController = navController,
@@ -994,8 +993,8 @@ private fun NavGraphBuilder.logs(
     composableWithDefaultTransitions<Routes.Logs> {
         LogsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LogDetail> { navBackEntry ->
-        val route = navBackEntry.toRoute<Routes.LogDetail>()
+    composableWithDefaultTransitions<Routes.LogDetail> { backStackEntry ->
+        val route = backStackEntry.toRoute<Routes.LogDetail>()
         LogDetailScreen(
             navController = navController,
             fileName = route.fileName,
