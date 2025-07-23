@@ -244,7 +244,7 @@ class BackupsRepo @Inject constructor(
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
         BackupCategory.SETTINGS -> {
-            val data = settingsStore.data.first()
+            val data = settingsStore.data.first().resetPin()
             json.encodeToString(data).toByteArray()
         }
 
