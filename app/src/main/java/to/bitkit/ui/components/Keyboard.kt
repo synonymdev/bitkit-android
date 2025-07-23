@@ -1,18 +1,21 @@
 package to.bitkit.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -24,21 +27,25 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
+
+val buttonHeight = 75.dp // 75 * 4 = 300 height
+val buttonHaptic = HapticFeedbackType.LongPress
 
 @Composable
 fun Keyboard(
     onClick: (String) -> Unit,
     onClickBackspace: () -> Unit,
     modifier: Modifier = Modifier,
-    isDecimal: Boolean = true
+    isDecimal: Boolean = true,
 ) {
     LazyVerticalGrid(
-        verticalArrangement = Arrangement.spacedBy(34.dp),
         columns = GridCells.Fixed(3),
-        modifier = modifier
+        userScrollEnabled = false,
+        modifier = modifier,
     ) {
         item { KeyboardButton(text = "1", onClick = onClick) }
         item { KeyboardButton(text = "2", onClick = onClick) }
@@ -52,15 +59,15 @@ fun Keyboard(
         item { KeyboardButton(text = if (isDecimal) "." else "000", onClick = onClick) }
         item { KeyboardButton(text = "0", onClick = onClick) }
         item {
-            Icon(
-                painter = painterResource(R.drawable.ic_backspace),
-                contentDescription = stringResource(R.string.common__delete),
-                modifier = Modifier
-                    .sizeIn(minHeight = 30.dp)
-                    .padding(vertical = 4.dp)
-                    .clickable(onClick = onClickBackspace)
-                    .testTag("KeyboardButton_backspace")
-            )
+            ButtonBox(
+                onClick = onClickBackspace,
+                modifier = Modifier.testTag("KeyboardButton_backspace"),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_backspace),
+                    contentDescription = stringResource(R.string.common__delete),
+                )
+            }
         }
     }
 }
@@ -68,27 +75,45 @@ fun Keyboard(
 @Composable
 private fun KeyboardButton(
     text: String,
-    onClick: (String) -> Unit
+    onClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Text(
-        text = text,
-        style = TextStyle(
-            fontFamily = InterFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 24.sp,
-            lineHeight = 44.sp,
-            letterSpacing = (-0.1).sp,
-            textAlign = TextAlign.Center,
-            color = Colors.White,
-        ),
-        modifier = Modifier
-            .clickable(
-                onClick = {
-                    onClick(text)
-                },
-                onClickLabel = text
-            )
-            .testTag("KeyboardButton_$text"),
+    ButtonBox(
+        onClick = { onClick(text) },
+        modifier = modifier.testTag("KeyboardButton_$text"),
+    ) {
+        Text(
+            text = text,
+            style = TextStyle(
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = 24.sp,
+                lineHeight = 44.sp,
+                letterSpacing = (-0.1).sp,
+                textAlign = TextAlign.Center,
+                color = Colors.White,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun ButtonBox(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (BoxScope.() -> Unit),
+) {
+    val haptic = LocalHapticFeedback.current
+    Box(
+        content = content,
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .heightIn(buttonHeight)
+            .fillMaxSize()
+            .clickableAlpha(0.2f) {
+                haptic.performHapticFeedback(buttonHaptic)
+                onClick()
+            },
     )
 }
 
@@ -98,9 +123,10 @@ private fun Preview() {
     AppThemeSurface {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
             Keyboard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(41.dp), onClick = {}, onClickBackspace = {})
+                onClick = {},
+                onClickBackspace = {},
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -112,11 +138,10 @@ private fun Preview2() {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
             Keyboard(
                 isDecimal = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(41.dp),
                 onClick = {},
-                onClickBackspace = {})
+                onClickBackspace = {},
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -128,11 +153,10 @@ private fun Preview3() {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
             Keyboard(
                 isDecimal = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(41.dp),
                 onClick = {},
-                onClickBackspace = {})
+                onClickBackspace = {},
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

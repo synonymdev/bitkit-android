@@ -27,20 +27,38 @@ class QuickPayViewModel @Inject constructor(
 
     val lightningState = lightningRepo.lightningState
 
-    fun payInvoice(bolt11: String, amount: ULong? = null) {
+    fun pay(quickPayData: QuickPayData) {
         viewModelScope.launch {
-            val result = sendLightning(bolt11, amount)
-            if (result.isSuccess) {
-                Logger.info("QuickPay lightning payment successful")
-                _uiState.update { it.copy(result = QuickPayResult.Success) }
-            } else {
-                val error = result.exceptionOrNull()
-                Logger.error("QuickPay lightning payment failed", error)
+            val (bolt11, amount) = when (val data = quickPayData) {
+                is QuickPayData.Bolt11 -> {
+                    Logger.info("QuickPay: processing bolt11 invoice")
+                    data.bolt11 to data.sats
+                }
 
-                _uiState.update {
-                    it.copy(result = QuickPayResult.Error(error?.message ?: "Payment failed"))
+                is QuickPayData.LnurlPay -> {
+                    Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
+                    val invoice = lightningRepo.fetchLnurlInvoice(callbackUrl = data.callback, amountSats = data.sats)
+                        .getOrElse { error ->
+                            _uiState.update {
+                                it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
+                            }
+                            return@launch
+                        }
+                    invoice.bolt11 to quickPayData.sats
                 }
             }
+
+            sendLightning(bolt11, amount)
+                .onSuccess {
+                    Logger.info("QuickPay lightning payment successful")
+                    _uiState.update { it.copy(result = QuickPayResult.Success) }
+                }.onFailure { error ->
+                    Logger.error("QuickPay lightning payment failed", error)
+
+                    _uiState.update {
+                        it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
+                    }
+                }
         }
     }
 
@@ -48,8 +66,7 @@ class QuickPayViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        val hash = lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).getOrNull()
-            ?: return Result.failure(Exception("Failed to initiate payment"))
+        val hash = lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).getOrThrow()
 
         // Wait until matching payment event is received
         val result = ldkNodeEventBus.events.watchUntil { event ->

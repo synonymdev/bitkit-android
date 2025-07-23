@@ -23,12 +23,14 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.models.BTC_SCALE
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.Toast
+import to.bitkit.models.asBtc
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.utils.formatCurrency
@@ -196,16 +198,16 @@ class CurrencyRepo @Inject constructor(
             )
         )
 
-        val btcAmount = BigDecimal(sats).divide(BigDecimal(SATS_IN_BTC), BTC_SCALE, RoundingMode.HALF_UP)
-        val value = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
-        val formatted = value.formatCurrency() ?: return Result.failure(
+        val btcAmount = sats.asBtc()
+        val fiatValue = btcAmount.multiply(BigDecimal.valueOf(rate.rate))
+        val formatted = fiatValue.formatCurrency() ?: return Result.failure(
             IllegalStateException(
-                "Failed to format value: $value for currency: $targetCurrency"
+                "Failed to format value: $fiatValue for currency: $targetCurrency"
             )
         )
 
         ConvertedAmount(
-            value = value,
+            value = fiatValue,
             formatted = formatted,
             symbol = rate.currencySymbol,
             currency = rate.quote,
@@ -243,7 +245,6 @@ class CurrencyRepo @Inject constructor(
 
     companion object {
         private const val TAG = "CurrencyRepo"
-        private const val BTC_SCALE = 8
     }
 }
 

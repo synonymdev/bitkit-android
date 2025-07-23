@@ -15,6 +15,22 @@ val ChannelDetails.amountOnClose: ULong
         return outboundCapacitySat + reserveSats
     }
 
+/** Returns only `open` channels, filtering out pending ones. */
+fun List<ChannelDetails>.filterOpen(): List<ChannelDetails> {
+    return this.filter { it.isChannelReady }
+}
+
+/** Returns only `pending` channels. */
+fun List<ChannelDetails>.filterPending(): List<ChannelDetails> {
+    return this.filterNot { it.isChannelReady }
+}
+
+/** Returns a limit in sats as close as possible to the HTLC limit we can currently send. */
+fun List<ChannelDetails>.totalNextOutboundHtlcLimitSats(): ULong {
+    return this.filter { it.isUsable }
+        .sumOf { it.nextOutboundHtlcLimitMsat / 1000uL }
+}
+
 fun createChannelDetails(): ChannelDetails {
     return ChannelDetails(
         channelId = "channelId",

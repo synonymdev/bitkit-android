@@ -1,8 +1,10 @@
 package to.bitkit.repositories
 
-import android.net.Uri
 import com.google.firebase.messaging.FirebaseMessaging
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
+import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -39,7 +41,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnUrlWithdrawResponse
-import to.bitkit.services.LnUrlWithdrawService
+import to.bitkit.services.LnurlService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -59,7 +61,7 @@ class LightningRepo @Inject constructor(
     private val blocktankNotificationsService: BlocktankNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
-    private val lnUrlWithdrawService: LnUrlWithdrawService,
+    private val lnurlService: LnurlService,
     private val cacheStore: CacheStore,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
@@ -401,12 +403,19 @@ class LightningRepo @Inject constructor(
         Result.success(invoice)
     }
 
-    suspend fun createLnurlInvoice(
-        address: String,
-        amountSatoshis: ULong,
-    ): Result<String> = executeWhenNodeRunning("getLnUrlInvoice") {
-        val invoice = getLnurlInvoice(address, amountSatoshis)
-        Result.success(invoice)
+    suspend fun fetchLnurlInvoice(
+        callbackUrl: String,
+        amountSats: ULong,
+        comment: String? = null,
+    ): Result<LightningInvoice> {
+        return runCatching {
+            // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
+            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).pr
+            val decoded = (decode(bolt11) as Scanner.Lightning).invoice
+            return@runCatching decoded
+        }.onFailure {
+            Logger.error("Error fetching lnurl invoice, url: $callbackUrl, amount: $amountSats, comment: $comment", it)
+        }
     }
 
     suspend fun handleLnUrlWithdraw(
@@ -416,40 +425,7 @@ class LightningRepo @Inject constructor(
     ): Result<LnUrlWithdrawResponse> = executeWhenNodeRunning("create LnUrl withdraw callback") {
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Logger.debug("handleLnUrlWithdraw callbackUrl generated:$callbackUrl")
-        val formattedCallbackUrl = callbackUrl.removeDuplicateQueryParams()
-        Logger.debug("handleLnUrlWithdraw formatted callbackUrl:$formattedCallbackUrl")
-        lnUrlWithdrawService.fetchWithdrawInfo(formattedCallbackUrl)
-    }
-
-    /**
-     * Extension function to remove duplicate query parameters from a URL string
-     * Keeps the first occurrence of each parameter
-     */
-    private fun String.removeDuplicateQueryParams(): String { // TODO REMOVE AFTER CORE FIX
-        return try {
-            val uri = Uri.parse(this)
-            val builder = uri.buildUpon().clearQuery()
-
-            // Track seen parameters to avoid duplicates
-            val seenParams = mutableSetOf<String>()
-
-            // Get all query parameter names
-            uri.queryParameterNames.forEach { paramName ->
-                if (!seenParams.contains(paramName)) {
-                    // Add only the first occurrence of each parameter
-                    val value = uri.getQueryParameter(paramName)
-                    if (value != null) {
-                        builder.appendQueryParameter(paramName, value)
-                        seenParams.add(paramName)
-                    }
-                }
-            }
-
-            builder.build().toString()
-        } catch (e: Exception) {
-            // Return original string if parsing fails
-            this
-        }
+        lnurlService.fetchWithdrawInfo(callbackUrl)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =

@@ -2,21 +2,16 @@ package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,7 +31,7 @@ fun SendErrorScreen(
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
-    SendErrorScreenContent(
+    Content(
         errorMessage = errorMessage,
         onRetry = onRetry,
         onClose = onClose,
@@ -44,11 +39,13 @@ fun SendErrorScreen(
 }
 
 @Composable
-private fun SendErrorScreenContent(
+private fun Content(
     errorMessage: String,
     onRetry: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
+    val errorText = errorMessage.ifEmpty { "Unknown error." }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -64,7 +61,7 @@ private fun SendErrorScreenContent(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            BodyM(text = errorMessage, color = Colors.White64)
+            BodyM(text = errorText, color = Colors.White64)
 
             Spacer(modifier = Modifier.weight(1f))
             Image(
@@ -99,8 +96,18 @@ private fun SendErrorScreenContent(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        SendErrorScreenContent(
+        Content(
             errorMessage = stringResource(R.string.wallet__send_error_create_tx),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewUnknown() {
+    AppThemeSurface {
+        Content(
+            errorMessage = "",
         )
     }
 }

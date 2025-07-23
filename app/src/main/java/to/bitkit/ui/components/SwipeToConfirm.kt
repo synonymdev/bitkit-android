@@ -1,4 +1,4 @@
- package to.bitkit.ui.components
+package to.bitkit.ui.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
@@ -6,19 +6,20 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -94,7 +95,7 @@ fun SwipeToConfirm(
 
     Box(
         modifier = modifier
-            .height(CircleSize + Padding * 2)
+            .requiredHeight(CircleSize + Padding * 2)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.16f))
             .padding(Padding)
@@ -216,11 +217,15 @@ private fun SwipeToConfirmPreview() {
     val scope = rememberCoroutineScope()
     AppThemeSurface {
         Column(
+            verticalArrangement = Arrangement.Bottom,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
-                .padding(top = 200.dp)
+                .padding(horizontal = 16.dp)
+                .systemBarsPadding()
         ) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            )
             SwipeToConfirm(
                 text = stringResource(R.string.wallet__send_swipe),
                 color = Colors.Green,

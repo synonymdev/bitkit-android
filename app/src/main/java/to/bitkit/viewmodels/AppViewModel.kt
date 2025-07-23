@@ -9,7 +9,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningInvoice
-import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
@@ -39,8 +38,12 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.maxSendableSat
+import to.bitkit.ext.maxWithdrawableSat
+import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
+import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -69,7 +72,6 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import java.math.BigDecimal
 import javax.inject.Inject
-import kotlin.onFailure
 
 private const val SEND_AMOUNT_WARNING_THRESHOLD = 100.0
 
@@ -102,6 +104,9 @@ class AppViewModel @Inject constructor(
 
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
+
+    private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
+    val quickPayData = _quickPayData.asStateFlow()
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -280,9 +285,10 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
 
+                    is SendEvent.CommentChange -> onCommentChange(it.value)
+
                     SendEvent.SpeedAndFee -> toast(Exception("Coming soon: Speed and Fee"))
                     SendEvent.SwipeToPay -> onSwipeToPay()
-                    SendEvent.Reset -> resetSendState()
                     SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning()
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
                     SendEvent.PayConfirmed -> onConfirmPay()
@@ -335,6 +341,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun onCommentChange(value: String) {
+        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?: 0u
+        val trimmed = value.take(maxLength.toInt())
+        _sendUiState.update {
+            it.copy(comment = trimmed)
+        }
+    }
+
     private fun onPaymentMethodSwitch() {
         val nextPaymentMethod = when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> SendMethod.LIGHTNING
@@ -365,40 +379,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (
-            (lnUrlParameters is LnUrlParameters.LnUrlPay || lnUrlParameters is LnUrlParameters.LnUrlAddress)
-            && _sendUiState.value.bolt11.isNullOrEmpty()
-        ) {
-            val address = when (lnUrlParameters) {
-                is LnUrlParameters.LnUrlAddress -> lnUrlParameters.address
-                is LnUrlParameters.LnUrlPay -> lnUrlParameters.address
-                else -> ""
-            }
-
-            lightningService.createLnurlInvoice(
-                address = address,
-                amountSatoshis = _sendUiState.value.amount
-            ).onSuccess { lightningInvoice ->
-                _sendUiState.update {
-                    it.copy(bolt11 = lightningInvoice)
-                }
-                setSendEffect(SendEffect.NavigateToReview)
-            }.onFailure { e ->
-                Logger.error(
-                    "Error generating invoice from lnurl parameters: $lnUrlParameters",
-                    e = e,
-                    context = "AppViewModel"
-                )
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__scan_err_decoding),
-                    description = context.getString(R.string.other__scan__error__generic),
-                )
-            }
-        } else {
-            setSendEffect(SendEffect.NavigateToReview)
-        }
-
+        setSendEffect(SendEffect.NavigateToReview)
     }
 
     private fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -419,15 +400,15 @@ class AppViewModel @Inject constructor(
 
         val isValidLNAmount = when (lnUrlParams) {
             null -> lightningService.canSend(amount)
-            is LnUrlParameters.LnUrlAddress -> lightningService.canSend(amount)
             is LnUrlParameters.LnUrlPay -> {
-                lnUrlParams.data.minSendable / 1000u < amount
-                    && amount < lnUrlParams.data.maxSendable / 1000u
-                    && lightningService.canSend(amount)
+                val minSat = lnUrlParams.data.minSendableSat()
+                val maxSat = lnUrlParams.data.maxSendableSat()
+
+                amount in minSat..maxSat && lightningService.canSend(amount)
             }
 
             is LnUrlParameters.LnUrlWithdraw -> {
-                amount < lnUrlParams.data.maxWithdrawable / 1000u
+                amount < lnUrlParams.data.maxWithdrawableSat()
             }
         }
 
@@ -460,7 +441,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Logger.error("Failed to decode input data $uri", it) }
+            .onFailure { Logger.error("Failed to decode: '$uri'", it) }
             .getOrNull()
         this.scan = scan
 
@@ -474,7 +455,6 @@ class AppViewModel @Inject constructor(
                 _sendUiState.update {
                     it.copy(
                         address = invoice.address,
-                        bolt11 = invoice.lightningParam(),
                         amount = invoice.amountSatoshis,
                         isUnified = invoice.hasLightingParam(),
                         decodedInvoice = lnInvoice,
@@ -486,14 +466,10 @@ class AppViewModel @Inject constructor(
                     Logger.info("Found amount in unified invoice, checking QuickPay conditions")
 
                     val quickPayHandled = handleQuickPayIfApplicable(
-                        invoice = lnInvoice.bolt11,
                         amountSats = lnInvoice.amountSatoshis,
+                        invoice = lnInvoice,
                     )
-
-                    if (quickPayHandled) {
-                        resetSendState()
-                        return
-                    }
+                    if (quickPayHandled) return
 
                     if (isMainScanner) {
                         showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
@@ -513,115 +489,54 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.Lightning -> {
-                val invoice = scan.invoice
-                handleLightningInvoice(invoice, uri)
-            }
-
-            is Scanner.LnurlAddress -> {
-                val data = scan.data
-
-                lightningService.createLnurlInvoice(
-                    address = data.uri,
-                    amountSatoshis = 0UL
-                ).onSuccess { lightningInvoice ->
-                    val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                    if (scan is Scanner.Lightning) {
-                        val invoice = scan.invoice
-                        handleLightningInvoice(
-                            invoice = invoice,
-                            uri = uri,
-                            lnUrlParameters = LnUrlParameters.LnUrlAddress(data = data, address = uri)
-                        )
-                    } else {
-                        Logger.error("Error scan is not Lightning type. scan: $scan", context = "AppViewModel")
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__generic),
-                        )
-                        resetSendState()
-                    }
-                }.onFailure { e ->
-                    Logger.error("Error decoding LnurlAddress. data: $data", e = e, context = "AppViewModel")
-                    toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__scan_err_decoding),
-                        description = context.getString(R.string.other__scan__error__generic),
-                    )
-                    resetSendState()
-                }
+                handleLightningInvoice(scan.invoice)
             }
 
             is Scanner.LnurlPay -> {
                 val data = scan.data
                 Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
 
-                val minSendable = data.minSendable / 1000u
-                val maxSendable = data.maxSendable / 1000u
+                val minSendable = data.minSendableSat()
+                val maxSendable = data.maxSendableSat()
 
                 if (!lightningService.canSend(minSendable)) {
                     toast(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.other__lnurl_pay_error),
-                        description = context.getString(R.string.other__lnurl_pay_error_no_capacity)
+                        description = context.getString(R.string.other__lnurl_pay_error_no_capacity),
                     )
                     resetSendState()
                     return
                 }
-                if (minSendable == maxSendable && minSendable > 0u) {
-                    Logger.debug(
-                        "LnurlPay: minSendable == maxSendable. navigating directly to confirm screen",
-                        context = "AppViewModel"
-                    )
 
-                    lightningService.createLnurlInvoice(
-                        address = data.uri, //TODO We should pass the lnurlAddress not the uri when calling bitkit-core's
-                        amountSatoshis = minSendable,
-                    ).onSuccess { lightningInvoice ->
-                        val scan = runCatching { scannerService.decode(lightningInvoice) }.getOrNull()
-                        if (scan is Scanner.Lightning) {
-                            val invoice = scan.invoice
-                            handleLightningInvoice(
-                                invoice = invoice,
-                                uri = uri,
-                                LnUrlParameters.LnUrlPay(data = data, address = uri)
-                            )
-                        } else {
-                            Logger.error("Error decoding LNURL pay. scan: $scan", context = "AppViewModel")
-                            toast(
-                                type = Toast.ToastType.ERROR,
-                                title = context.getString(R.string.other__scan_err_decoding),
-                                description = context.getString(R.string.other__scan__error__generic),
-                            )
-                            resetSendState()
-                        }
-                    }.onFailure { e ->
-                        Logger.error("Error decoding LNURL pay", e = e, context = "AppViewModel")
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.other__scan_err_decoding),
-                            description = context.getString(R.string.other__scan__error__generic),
-                        )
-                        resetSendState()
-                    }
-                } else {
-                    val lnUrlParameters = LnUrlParameters.LnUrlPay(
-                        data = data,
-                        address = uri
+                _sendUiState.update {
+                    it.copy(
+                        amount = minSendable,
+                        payMethod = SendMethod.LIGHTNING,
+                        lnUrlParameters = LnUrlParameters.LnUrlPay(data),
                     )
+                }
 
-                    _sendUiState.update {
-                        it.copy(
-                            payMethod = SendMethod.LIGHTNING,
-                            lnUrlParameters = lnUrlParameters
-                        )
-                    }
+                val hasAmount = minSendable == maxSendable && minSendable > 0u
+                if (hasAmount) {
+                    Logger.info("Found amount $$minSendable in lnurlPay, proceeding with payment")
+
+                    val quickPayHandled = handleQuickPayIfApplicable(amountSats = minSendable, lnurlPay = data)
+                    if (quickPayHandled) return
 
                     if (isMainScanner) {
-                        showSheet(BottomSheetType.Send(SendRoute.Amount))
+                        showSheet(BottomSheetType.Send(SendRoute.ReviewAndSend))
                     } else {
-                        setSendEffect(SendEffect.NavigateToAmount)
+                        setSendEffect(SendEffect.NavigateToReview)
                     }
+                    return
+                }
+
+                Logger.info("No amount found in lnurlPay, proceeding to enter amount manually")
+                if (isMainScanner) {
+                    showSheet(BottomSheetType.Send(SendRoute.Amount))
+                } else {
+                    setSendEffect(SendEffect.NavigateToAmount)
                 }
             }
 
@@ -690,8 +605,6 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleLightningInvoice(
         invoice: LightningInvoice,
-        uri: String,
-        lnUrlParameters: LnUrlParameters? = null
     ) {
         if (invoice.isExpired) {
             toast(
@@ -701,12 +614,8 @@ class AppViewModel @Inject constructor(
             )
             return
         }
-        // Check for QuickPay conditions
-        val quickPayHandled = handleQuickPayIfApplicable(
-            invoice = uri,
-            amountSats = invoice.amountSatoshis,
-        )
 
+        val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
         if (quickPayHandled) return
 
         if (!lightningService.canSend(invoice.amountSatoshis)) {
@@ -721,13 +630,11 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 amount = invoice.amountSatoshis,
-                bolt11 = uri,
-                description = invoice.description.orEmpty(),
                 decodedInvoice = invoice,
                 payMethod = SendMethod.LIGHTNING,
-                lnUrlParameters = lnUrlParameters
             )
         }
+
         if (invoice.amountSatoshis > 0uL) {
             Logger.info("Found amount in invoice, proceeding with payment")
 
@@ -736,36 +643,53 @@ class AppViewModel @Inject constructor(
             } else {
                 setSendEffect(SendEffect.NavigateToReview)
             }
-        } else {
-            Logger.info("No amount found in invoice, proceeding entering amount manually")
-            resetAmountInput()
+            return
+        }
+        Logger.info("No amount found in invoice, proceeding to enter amount manually")
+        resetAmountInput()
 
-            if (isMainScanner) {
-                showSheet(BottomSheetType.Send(SendRoute.Amount))
-            } else {
-                setSendEffect(SendEffect.NavigateToAmount)
-            }
+        if (isMainScanner) {
+            showSheet(BottomSheetType.Send(SendRoute.Amount))
+        } else {
+            setSendEffect(SendEffect.NavigateToAmount)
         }
     }
 
     private suspend fun handleQuickPayIfApplicable(
-        invoice: String,
         amountSats: ULong,
+        lnurlPay: LnurlPayData? = null,
+        invoice: LightningInvoice? = null,
     ): Boolean {
         val settings = settingsStore.data.first()
         if (!settings.isQuickPayEnabled || amountSats == 0uL) {
             return false
         }
 
-        val quickPayAmountSats =
-            currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull() ?: return false
+        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+            ?: return false
 
         if (amountSats <= quickPayAmountSats) {
             Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold")
+
+            val quickPayData: QuickPayData = when {
+                lnurlPay != null -> {
+                    QuickPayData.LnurlPay(sats = amountSats, callback = lnurlPay.callback)
+                }
+
+                else -> {
+                    val decodedInvoice = requireNotNull(invoice)
+                    QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
+                }
+            }
+
+            _quickPayData.update { quickPayData }
+
+            Logger.debug("QuickPayData: $quickPayData")
+
             if (isMainScanner) {
-                showSheet(BottomSheetType.Send(SendRoute.QuickPay(invoice, amountSats.toLong())))
+                showSheet(BottomSheetType.Send(SendRoute.QuickPay))
             } else {
-                setSendEffect(SendEffect.NavigateToQuickPay(invoice, amountSats.toLong()))
+                setSendEffect(SendEffect.NavigateToQuickPay)
             }
             return true
         }
@@ -824,7 +748,6 @@ class AppViewModel @Inject constructor(
             utxosToSpend = _sendUiState.value.utxosToSpend
         ).getOrNull() ?: return
 
-
         if (totalFee > BigDecimal.valueOf(amountSats.toLong())
                 .times(BigDecimal(0.5)).toLong().toUInt()
         ) {
@@ -851,6 +774,26 @@ class AppViewModel @Inject constructor(
         delay(300) // wait for screen transitions when applicable
 
         val amount = _sendUiState.value.amount
+
+        val lnUrlParameters = _sendUiState.value.lnUrlParameters
+        val isLnurlPay = lnUrlParameters is LnUrlParameters.LnUrlPay
+
+        if (isLnurlPay) {
+            lightningService.fetchLnurlInvoice(
+                callbackUrl = lnUrlParameters.data.callback,
+                amountSats = amount,
+                comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
+            ).onSuccess { invoice ->
+                _sendUiState.update {
+                    it.copy(decodedInvoice = invoice)
+                }
+            }.onFailure {
+                toast(Exception("Error fetching lnurl invoice"))
+                hideSheet()
+                return
+            }
+        }
+
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
@@ -893,17 +836,12 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.LIGHTNING -> {
-                val bolt11 = _sendUiState.value.bolt11
-                if (bolt11 == null) {
-                    Logger.error("Null invoice", context = "AppViewModel")
-                    toast(Exception("Couldn't find invoice"))
-                    hideSheet()
-                    return
-                }
+                val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
+                val bolt11 = decodedInvoice.bolt11
+
                 // Determine if we should override amount
-                val decodedInvoice = _sendUiState.value.decodedInvoice
-                val invoiceAmount = decodedInvoice?.amountSatoshis?.takeIf { it > 0uL } ?: amount
-                val paymentAmount = if (decodedInvoice?.amountSatoshis != null) invoiceAmount else null
+                val paymentAmount = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
+
                 sendLightning(bolt11, paymentAmount).onSuccess { paymentHash ->
                     Logger.info("Lightning send result payment hash: $paymentHash")
                     val tags = _sendUiState.value.selectedTags
@@ -945,7 +883,7 @@ class AppViewModel @Inject constructor(
             val invoice = lightningService.createInvoice(
                 amountSats = _sendUiState.value.amount,
                 description = lnUrlData.data.defaultDescription,
-                expirySeconds = 3600u
+                expirySeconds = 3600u,
             ).getOrNull()
 
             if (invoice == null) {
@@ -1035,6 +973,17 @@ class AppViewModel @Inject constructor(
 
     private fun getMinOnchainTx(): ULong {
         return Env.TransactionDefaults.dustLimit.toULong()
+    }
+
+    fun resetQuickPayData() = _quickPayData.update { null }
+
+    fun clearClipboardForAutoRead() {
+        viewModelScope.launch {
+            val isAutoReadClipboardEnabled = settingsStore.data.first().enableAutoReadClipboard
+            if (isAutoReadClipboardEnabled) {
+                context.setClipboardText("")
+            }
+        }
     }
 
     fun resetSendState() {
@@ -1238,7 +1187,6 @@ data class SendUiState(
     val amount: ULong = 0u,
     val amountInput: String = "",
     val isAmountInputValid: Boolean = false,
-    val description: String = "",
     val isUnified: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: List<String> = listOf(),
@@ -1250,6 +1198,7 @@ data class SendUiState(
     val isLoading: Boolean = false,
     val speed: TransactionSpeed? = null,
     val utxosToSpend: List<SpendableUtxo>? = null,
+    val comment: String = "",
 )
 
 enum class AmountWarning(@StringRes val message: Int) {
@@ -1269,7 +1218,7 @@ sealed class SendEffect {
     data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()
-    data class NavigateToQuickPay(val invoice: String, val amount: Long) : SendEffect()
+    data object NavigateToQuickPay : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
@@ -1294,18 +1243,25 @@ sealed class SendEvent {
 
     data class CoinSelectionContinue(val utxos: List<SpendableUtxo>) : SendEvent()
 
+    data class CommentChange(val value: String) : SendEvent()
+
     data object SwipeToPay : SendEvent()
     data object SpeedAndFee : SendEvent()
     data object PaymentMethodSwitch : SendEvent()
-    data object Reset : SendEvent()
     data object ConfirmAmountWarning : SendEvent()
     data object DismissAmountWarning : SendEvent()
     data object PayConfirmed : SendEvent()
 }
 
 sealed interface LnUrlParameters {
-    data class LnUrlPay(val data: LnurlPayData, val address: String) : LnUrlParameters
-    data class LnUrlAddress(val data: LnurlAddressData, val address: String) : LnUrlParameters
+    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
     data class LnUrlWithdraw(val data: LnurlWithdrawData, val address: String) : LnUrlParameters
+}
+
+sealed interface QuickPayData {
+    val sats: ULong
+
+    data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
+    data class LnurlPay(override val sats: ULong, val callback: String) : QuickPayData
 }
 // endregion

@@ -29,6 +29,7 @@ import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -189,6 +190,7 @@ class ExternalNodeViewModel @Inject constructor(
     }
 
     private suspend fun failConfirm(error: String) {
+        Logger.warn("Error opening channel to '${_uiState.value.peer}': '$error'")
         _uiState.update { it.copy(isLoading = false) }
 
         ToastEventBus.send(

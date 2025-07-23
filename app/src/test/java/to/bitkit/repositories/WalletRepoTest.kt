@@ -1,8 +1,6 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
-import com.synonym.bitkitcore.ActivityFilter
-import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -18,8 +16,8 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
-import to.bitkit.data.AppDb
 import to.bitkit.data.AppCacheData
+import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -203,6 +201,14 @@ class WalletRepoTest : BaseUnitTest() {
         }
         whenever(lightningRepo.getBalances()).thenReturn(balanceDetails)
 
+        val channels = listOf(
+            mock<ChannelDetails> {
+                on { isUsable } doReturn true
+                on { nextOutboundHtlcLimitMsat } doReturn 1000uL
+            },
+        )
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+
         sut.syncBalances()
 
         sut.balanceState.test {
@@ -210,6 +216,7 @@ class WalletRepoTest : BaseUnitTest() {
             assertEquals(1500uL, state.totalSats)
             assertEquals(500uL, state.totalLightningSats)
             assertEquals(1000uL, state.totalOnchainSats)
+            assertEquals(1uL, state.maxSendLightningSats)
             cancelAndIgnoreRemainingEvents()
         }
     }

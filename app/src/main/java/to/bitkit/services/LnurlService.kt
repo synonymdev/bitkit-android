@@ -11,12 +11,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class LnUrlWithdrawService @Inject constructor(
+class LnurlService @Inject constructor(
     private val client: HttpClient,
 ) {
 
-    suspend fun fetchWithdrawInfo(lnUrlCallBack: String): Result<LnUrlWithdrawResponse> = runCatching {
-        val response: HttpResponse = client.get(lnUrlCallBack)
+    suspend fun fetchWithdrawInfo(callbackUrl: String): Result<LnUrlWithdrawResponse> = runCatching {
+        val response: HttpResponse = client.get(callbackUrl)
+        Logger.debug("Http call: $response")
 
         if (!response.status.isSuccess()) {
             throw Exception("HTTP error: ${response.status}")
@@ -34,9 +35,28 @@ class LnUrlWithdrawService @Inject constructor(
         Logger.warn(e = it, msg = "Failed to fetch withdraw info", context = TAG)
     }
 
+    suspend fun fetchLnurlInvoice(
+        callbackUrl: String,
+        amountSats: ULong,
+        comment: String? = null,
+    ): LnurlPayResponse {
+        val response = client.get(callbackUrl) {
+            url {
+                parameters.append("amount", "${amountSats * 1000u}") // convert to msat
+                comment?.takeIf { it.isNotBlank() }?.let { parameters.append("comment", it) }
+            }
+        }
+        Logger.debug("Http call: $response")
+
+        if (!response.status.isSuccess()) {
+            throw Exception("HTTP error: ${response.status}")
+        }
+
+        return response.body<LnurlPayResponse>()
+    }
 
     companion object {
-        private const val TAG = "LnUrlWithdrawService"
+        private const val TAG = "LnurlService"
     }
 }
 
@@ -51,4 +71,10 @@ data class LnUrlWithdrawResponse(
     val minWithdrawable: Long? = null,
     val maxWithdrawable: Long? = null,
     val balanceCheck: String? = null
+)
+
+@Serializable
+data class LnurlPayResponse(
+    val pr: String,
+    val routes: List<String>,
 )

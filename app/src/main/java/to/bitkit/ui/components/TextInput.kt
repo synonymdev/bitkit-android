@@ -26,6 +26,7 @@ fun TextInput(
     singleLine: Boolean = false,
     isError: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    minLines: Int = 1,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     leadingIcon: @Composable (() -> Unit)? = null,
@@ -49,6 +50,7 @@ fun TextInput(
         value = value,
         onValueChange = onValueChange,
         maxLines = maxLines,
+        minLines = minLines,
         singleLine = singleLine,
         colors = AppTextFieldDefaults.semiTransparent,
         shape = AppShapes.small,
@@ -90,6 +92,15 @@ private fun Preview() {
                 value = "Error text",
                 onValueChange = {},
                 isError = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            VerticalSpacer(12.dp)
+            TextInput(
+                value = "First line of text \nSecond line of text",
+                onValueChange = {},
+                minLines = 3,
+                maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

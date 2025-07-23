@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -29,34 +32,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
-import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.commentAllowed
 import to.bitkit.ext.formatted
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
+import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.AmountWarning
+import to.bitkit.viewmodels.LnUrlParameters
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -137,7 +148,6 @@ fun SendAndReviewScreen(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SendAndReviewContent(
     uiState: SendUiState,
@@ -152,17 +162,29 @@ private fun SendAndReviewContent(
     onBiometricsFailure: () -> Unit,
 ) {
     Box {
-        Column(modifier = Modifier.fillMaxSize()) {
-            SheetTopBar(stringResource(R.string.wallet__send_review)) {
-                onBack()
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .gradientBackground()
+                .navigationBarsPadding()
+        ) {
+            val isLnurlPay = uiState.lnUrlParameters is LnUrlParameters.LnUrlPay
+
+            SheetTopBar(
+                titleText = when {
+                    isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
+                    else -> stringResource(R.string.wallet__send_review)
+                },
+                onBack = onBack,
+            )
 
             Spacer(Modifier.height(16.dp))
 
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .fillMaxWidth()
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
                 BalanceHeaderView(sats = uiState.amount.toLong(), modifier = Modifier.fillMaxWidth())
 
@@ -173,47 +195,22 @@ private fun SendAndReviewContent(
                     SendMethod.LIGHTNING -> LightningDescription(uiState = uiState)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    uiState.selectedTags.map { tagText ->
-                        TagButton(
-                            text = tagText,
-                            displayIconClose = true,
-                            onClick = { onClickTag(tagText) },
-                        )
-                    }
+                if (isLnurlPay && uiState.lnUrlParameters.data.commentAllowed()) {
+                    LnurlCommentSection(uiState, onEvent)
+                } else {
+                    TagsSection(uiState, onClickTag, onClickAddTag)
                 }
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__tags_add),
-                    size = ButtonSize.Small,
-                    onClick = onClickAddTag,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_tag),
-                            contentDescription = null,
-                            tint = Colors.Brand
-                        )
-                    },
-                    fullWidth = false
-                )
-                HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
-                Spacer(modifier = Modifier.weight(1f))
+                FillHeight()
+                VerticalSpacer(16.dp)
+
                 SwipeToConfirm(
                     text = stringResource(R.string.wallet__send_swipe),
                     loading = isLoading,
                     confirmed = isLoading,
                     onConfirm = onSwipeToConfirm,
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(16.dp)
             }
         }
 
@@ -241,6 +238,65 @@ private fun SendAndReviewContent(
 }
 
 @Composable
+private fun LnurlCommentSection(
+    uiState: SendUiState,
+    onEvent: (SendEvent) -> Unit,
+) {
+    Spacer(modifier = Modifier.height(16.dp))
+    Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
+    Spacer(modifier = Modifier.height(8.dp))
+
+    TextInput(
+        value = uiState.comment,
+        placeholder = stringResource(R.string.wallet__lnurl_pay_confirm__comment_placeholder),
+        onValueChange = { onEvent(SendEvent.CommentChange(it)) },
+        minLines = 3,
+        maxLines = 3,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun TagsSection(
+    uiState: SendUiState,
+    onClickTag: (String) -> Unit,
+    onClickAddTag: () -> Unit,
+) {
+    Spacer(modifier = Modifier.height(16.dp))
+    Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
+    Spacer(modifier = Modifier.height(8.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
+        uiState.selectedTags.map { tagText ->
+            TagButton(
+                text = tagText,
+                displayIconClose = true,
+                onClick = { onClickTag(tagText) },
+            )
+        }
+    }
+    PrimaryButton(
+        text = stringResource(R.string.wallet__tags_add),
+        size = ButtonSize.Small,
+        onClick = onClickAddTag,
+        icon = {
+            Icon(
+                painter = painterResource(R.drawable.ic_tag),
+                contentDescription = stringResource(R.string.wallet__tags_add),
+                tint = Colors.Brand,
+            )
+        },
+        fullWidth = false,
+    )
+    HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+}
+
+@Composable
 private fun OnChainDescription(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
@@ -250,9 +306,8 @@ private fun OnChainDescription(
             text = stringResource(R.string.wallet__send_to),
             color = Colors.White64,
         )
-        val destination = uiState.address.ellipsisMiddle(25)
         Spacer(modifier = Modifier.height(8.dp))
-        BodySSB(text = destination)
+        BodySSB(text = uiState.address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         Row(
@@ -293,7 +348,7 @@ private fun OnChainDescription(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(1f)
-                    .clickable { onEvent(SendEvent.SpeedAndFee) }
+                    .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
                     .padding(top = 16.dp)
             ) {
                 Caption13Up(text = stringResource(R.string.wallet__send_confirming_in), color = Colors.White64)
@@ -322,14 +377,22 @@ private fun OnChainDescription(
 private fun LightningDescription(
     uiState: SendUiState,
 ) {
+    val isLnurlPay = uiState.lnUrlParameters is LnUrlParameters.LnUrlPay
+    val expirySeconds = uiState.decodedInvoice?.expirySeconds
+    val description = uiState.decodedInvoice?.description
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
             text = stringResource(R.string.wallet__send_invoice),
             color = Colors.White64,
         )
-        val destination = uiState.bolt11?.ellipsisMiddle(25).orEmpty()
+        val destination = when {
+            isLnurlPay -> uiState.lnUrlParameters.data.uri
+            else -> uiState.decodedInvoice?.bolt11.orEmpty()
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
-        BodySSB(text = destination)
+        BodySSB(text = destination, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         Row(
@@ -359,7 +422,7 @@ private fun LightningDescription(
                 Spacer(modifier = Modifier.weight(1f))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
-            uiState.decodedInvoice?.expirySeconds?.let { expirySeconds ->
+            if (!isLnurlPay && expirySeconds != null) {
                 Column(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -368,7 +431,7 @@ private fun LightningDescription(
                 ) {
                     Caption13Up(
                         text = stringResource(R.string.wallet__send_invoice_expiration),
-                        color = Colors.White64
+                        color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
@@ -381,9 +444,9 @@ private fun LightningDescription(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val invoiceExpiryTimestamp = expirySeconds.let {
-                            Instant.now().plusSeconds(it.toLong()).formatted(DatePattern.INVOICE_EXPIRY)
-                        }
+                        val invoiceExpiryTimestamp = Instant.now().plusSeconds(expirySeconds.toLong())
+                            .formatted(DatePattern.INVOICE_EXPIRY)
+
                         BodySSB(text = invoiceExpiryTimestamp)
                     }
                     Spacer(modifier = Modifier.weight(1f))
@@ -392,7 +455,7 @@ private fun LightningDescription(
             }
         }
 
-        uiState.decodedInvoice?.description?.let { description ->
+        if (!isLnurlPay && description != null) {
             Column {
                 Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -403,23 +466,21 @@ private fun LightningDescription(
     }
 }
 
-@Suppress("SpellCheckingInspection")
-@Preview(name = "Lightning")
+@Preview(name = "Lightning", showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
-                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
-                bolt11 = "lnbcrt1…",
+                amount = 1234u,
+                address = "",
                 payMethod = SendMethod.LIGHTNING,
                 decodedInvoice = LightningInvoice(
-                    bolt11 = "bcrt123",
+                    bolt11 = "bolt11_invoice_string",
                     paymentHash = ByteArray(0),
-                    amountSatoshis = 100000uL,
-                    timestampSeconds = 0uL,
-                    expirySeconds = 3600uL,
+                    amountSatoshis = 100_000u,
+                    timestampSeconds = 0u,
+                    expirySeconds = 3600u,
                     isExpired = false,
                     networkType = NetworkType.REGTEST,
                     payeeNodeId = null,
@@ -440,15 +501,61 @@ private fun Preview() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview(name = "OnChain")
+@Preview(name = "LnurlPay", showSystemUi = true)
+@Composable
+private fun PreviewLnurl() {
+    AppThemeSurface {
+        SendAndReviewContent(
+            uiState = SendUiState(
+                amount = 1234u,
+                address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
+                payMethod = SendMethod.LIGHTNING,
+                lnUrlParameters = LnUrlParameters.LnUrlPay(
+                    data = LnurlPayData(
+                        uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",
+                        callback = "",
+                        metadataStr = "",
+                        commentAllowed = 255u,
+                        minSendable = 1000u,
+                        maxSendable = 1000_000u,
+                        allowsNostr = false,
+                        nostrPubkey = null,
+                    ),
+                ),
+                decodedInvoice = LightningInvoice(
+                    bolt11 = "bcrt123",
+                    paymentHash = ByteArray(0),
+                    amountSatoshis = 100_000u,
+                    timestampSeconds = 0u,
+                    expirySeconds = 3600u,
+                    isExpired = false,
+                    networkType = NetworkType.REGTEST,
+                    payeeNodeId = null,
+                    description = "Some invoice description",
+                ),
+            ),
+            isLoading = false,
+            showBiometrics = false,
+            onBack = {},
+            onEvent = {},
+            onClickAddTag = {},
+            onClickTag = {},
+            onSwipeToConfirm = {},
+            onBiometricsSuccess = {},
+            onBiometricsFailure = {},
+        )
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview(name = "OnChain", showSystemUi = true)
 @Composable
 private fun PreviewOnChain() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
-                bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
                 decodedInvoice = null,
@@ -467,15 +574,14 @@ private fun PreviewOnChain() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewBio() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
-                bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
                 decodedInvoice = null,
@@ -494,15 +600,14 @@ private fun PreviewBio() {
 }
 
 @Suppress("SpellCheckingInspection")
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewDialog() {
     AppThemeSurface {
         SendAndReviewContent(
             uiState = SendUiState(
-                amount = 1234uL,
+                amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
-                bolt11 = "lnbcrt1…",
                 payMethod = SendMethod.ONCHAIN,
                 selectedTags = listOf("car", "house", "uber"),
                 decodedInvoice = null,
