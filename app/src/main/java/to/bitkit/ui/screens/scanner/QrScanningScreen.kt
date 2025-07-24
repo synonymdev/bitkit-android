@@ -3,7 +3,6 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
-import android.content.ClipData
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -61,7 +60,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.ext.clipboardManager
+import to.bitkit.ext.getClipboardText
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
@@ -213,20 +212,15 @@ fun QrScanningScreen(
                         }
                     },
                     onPasteFromClipboard = {
-                        val clipboard = context.clipboardManager
-                        if (clipboard.hasPrimaryClip()) {
-                            val clipData: ClipData = clipboard.primaryClip ?: return@Content
-                            if (clipData.itemCount > 0) {
-                                val text = clipData.getItemAt(0).text.toString()
-                                if (text.isNotBlank()) {
-                                    setScanResult(text)
-                                } else {
-                                    app.toast(Exception("Clipboard is empty or doesn't contain text"))
-                                }
-                            }
-                        } else {
-                            app.toast(Exception("Clipboard is empty"))
+                        val clipboard = context.getClipboardText()?.trim()
+                        if (clipboard.isNullOrBlank()) {
+                            app.toast(
+                                type = Toast.ToastType.WARNING,
+                                title = context.getString(R.string.wallet__send_clipboard_empty_title),
+                                description = context.getString(R.string.wallet__send_clipboard_empty_text),
+                            )
                         }
+                        setScanResult(clipboard)
                     }
                 )
             }
