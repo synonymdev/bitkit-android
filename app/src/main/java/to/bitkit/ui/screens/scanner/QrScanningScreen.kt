@@ -4,8 +4,10 @@ package to.bitkit.ui.screens.scanner
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,6 +54,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -69,6 +72,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
+import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
@@ -188,11 +192,15 @@ fun QrScanningScreen(
         }
     }
 
-    CameraPermissionRequiredView(
-        deniedContent = { status ->
-            CameraPermissionDeniedScreen(
-                requestPermission = cameraPermissionState::launchPermissionRequest,
-                shouldShowRationale = status.shouldShowRationale,
+    CameraPermissionView(
+        permissionState = cameraPermissionState,
+        deniedContent = {
+            DeniedContent(
+                shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
+                onClickOpenSettings = { context.startActivity(Intent(Settings.ACTION_SETTINGS)) },
+                onClickRetry = cameraPermissionState::launchPermissionRequest,
+                onClickPaste = handlePaste(context, app, setScanResult),
+                onBack = { navController.popBackStack() },
             )
         },
         grantedContent = {
@@ -211,21 +219,28 @@ fun QrScanningScreen(
                             galleryLauncher.launch("image/*")
                         }
                     },
-                    onPasteFromClipboard = {
-                        val clipboard = context.getClipboardText()?.trim()
-                        if (clipboard.isNullOrBlank()) {
-                            app.toast(
-                                type = Toast.ToastType.WARNING,
-                                title = context.getString(R.string.wallet__send_clipboard_empty_title),
-                                description = context.getString(R.string.wallet__send_clipboard_empty_text),
-                            )
-                        }
-                        setScanResult(clipboard)
-                    }
+                    onPasteFromClipboard = handlePaste(context, app, setScanResult)
                 )
             }
         }
     )
+}
+
+@Composable
+private fun handlePaste(
+    context: Context,
+    app: AppViewModel,
+    setScanResult: (String?) -> Unit,
+): () -> Unit = {
+    val clipboard = context.getClipboardText()?.trim()
+    if (clipboard.isNullOrBlank()) {
+        app.toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.wallet__send_clipboard_empty_title),
+            description = context.getString(R.string.wallet__send_clipboard_empty_text),
+        )
+    }
+    setScanResult(clipboard)
 }
 
 @Composable
@@ -259,9 +274,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(
-                        Colors.White64
-                    )
+                    .background(Colors.White64)
                     .size(48.dp)
                     .align(Alignment.TopStart)
             ) {
@@ -277,9 +290,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(
-                        Colors.White64
-                    )
+                    .background(Colors.White64)
                     .size(48.dp)
                     .align(Alignment.TopEnd)
             ) {
@@ -295,8 +306,7 @@ private fun Content(
             icon = {
                 Icon(
                     painterResource(R.drawable.ic_clipboard_text_simple),
-                    contentDescription = null,
-                    tint = Colors.White
+                    contentDescription = stringResource(R.string.other__qr_paste),
                 )
             },
             text = stringResource(R.string.other__qr_paste),
