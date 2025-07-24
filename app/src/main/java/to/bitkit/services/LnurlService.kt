@@ -82,6 +82,8 @@ class LnurlService @Inject constructor(
         callback: String,
         nodeId: String,
     ): Result<LnurlChannelResponse> = runCatching {
+        Logger.debug("Handling LNURL channel request to: $callback")
+
         val response = client.get(callback) {
             url {
                 parameters["k1"] = k1

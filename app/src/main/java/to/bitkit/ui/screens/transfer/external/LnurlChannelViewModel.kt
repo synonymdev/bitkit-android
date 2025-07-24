@@ -62,6 +62,7 @@ class LnurlChannelViewModel @Inject constructor(
                 return@launch
             }
 
+            // Connect to peer if not connected
             lightningRepo.connectPeer(peer)
 
             lightningRepo.handleLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
