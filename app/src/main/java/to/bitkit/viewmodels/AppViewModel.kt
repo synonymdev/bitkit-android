@@ -554,6 +554,7 @@ class AppViewModel @Inject constructor(
 
             is Scanner.LnurlWithdraw -> {
                 val data = scan.data
+                Logger.debug("LNURL: $data")
 
                 val minWithdrawable = (data.minWithdrawable ?: 0uL) / 1000u
                 val maxWithdrawable = data.maxWithdrawable / 1000u
@@ -588,7 +589,11 @@ class AppViewModel @Inject constructor(
                 }
             }
 
-            is Scanner.LnurlAuth -> TODO("Not implemented")
+            is Scanner.LnurlAuth -> {
+                val data = scan.data
+                Logger.debug("LNURL: $data")
+                // TODO handle
+            }
 
             is Scanner.LnurlChannel -> {
                 val data: LnurlChannelData = scan.data
