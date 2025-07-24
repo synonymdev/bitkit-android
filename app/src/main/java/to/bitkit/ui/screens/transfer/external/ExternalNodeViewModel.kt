@@ -25,7 +25,6 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.LightningService
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -35,7 +34,6 @@ import javax.inject.Inject
 @HiltViewModel
 class ExternalNodeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val lightningService: LightningService,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
@@ -65,7 +63,7 @@ class ExternalNodeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val result = lightningService.connectPeer(peer)
+            val result = lightningRepo.connectPeer(peer)
 
             _uiState.update { it.copy(isLoading = false) }
 

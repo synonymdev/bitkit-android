@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlChannelData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
@@ -103,6 +104,8 @@ class AppViewModel @Inject constructor(
     var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
 
+    var scan: Scanner? = null; private set
+
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
@@ -156,8 +159,6 @@ class AppViewModel @Inject constructor(
             )
         }
     }
-
-    private var scan: Scanner? = null
 
     init {
         viewModelScope.launch {
@@ -442,9 +443,14 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Logger.error("Failed to decode: '$uri'", it) }
+            .onFailure { Logger.error("Failed to decode scan result: '$uri'", it) }
+            .onSuccess { Logger.info("Handling scan data: $it") }
             .getOrNull()
         this.scan = scan
+
+        // always reset state on new scan
+        resetSendState()
+        resetQuickPayData()
 
         when (scan) {
             is Scanner.OnChain -> {
@@ -495,7 +501,7 @@ class AppViewModel @Inject constructor(
 
             is Scanner.LnurlPay -> {
                 val data = scan.data
-                Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
+                Logger.debug("LNURL: $data")
 
                 val minSendable = data.minSendableSat()
                 val maxSendable = data.maxSendableSat()
@@ -578,7 +584,18 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.LnurlAuth -> TODO("Not implemented")
-            is Scanner.LnurlChannel -> TODO("Not implemented")
+
+            is Scanner.LnurlChannel -> {
+                val data: LnurlChannelData = scan.data
+                Logger.debug("LNURL: $data")
+                hideSheet() // hide scan sheet if opened
+                mainScreenEffect(
+                    MainScreenEffect.Navigate(
+                        Routes.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
+                    )
+                )
+            }
+
             is Scanner.NodeId -> {
                 hideSheet() // hide scan sheet if opened
                 val nextRoute = Routes.ExternalConnection(scan.url)
@@ -893,7 +910,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningService.handleLnUrlWithdraw(
+            lightningService.handleLnurlWithdraw(
                 k1 = lnUrlData.data.k1,
                 callback = lnUrlData.data.callback,
                 paymentRequest = invoice
@@ -976,8 +993,6 @@ class AppViewModel @Inject constructor(
         return Env.TransactionDefaults.dustLimit.toULong()
     }
 
-    fun resetQuickPayData() = _quickPayData.update { null }
-
     fun clearClipboardForAutoRead() {
         viewModelScope.launch {
             val isAutoReadClipboardEnabled = settingsStore.data.first().enableAutoReadClipboard
@@ -986,6 +1001,8 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    fun resetQuickPayData() = _quickPayData.update { null }
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
