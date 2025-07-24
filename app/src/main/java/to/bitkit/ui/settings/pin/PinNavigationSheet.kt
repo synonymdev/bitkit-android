@@ -43,13 +43,11 @@ fun PinNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<PinRoute.ConfirmPin> { backStackEntry ->
-                val route = backStackEntry.toRoute<PinRoute.ConfirmPin>()
+            composable<PinRoute.ConfirmPin> {
+                val route = it.toRoute<PinRoute.ConfirmPin>()
                 ConfirmPinScreen(
                     originalPin = route.pin,
-                    onPinConfirmed = {
-                        navController.navigate(PinRoute.AskForBiometrics)
-                    },
+                    onPinConfirmed = { navController.navigate(PinRoute.AskForBiometrics) },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -62,8 +60,8 @@ fun PinNavigationSheet(
                     onBack = onDismiss,
                 )
             }
-            composable<PinRoute.Result> { backStackEntry ->
-                val route = backStackEntry.toRoute<PinRoute.Result>()
+            composable<PinRoute.Result> {
+                val route = it.toRoute<PinRoute.Result>()
                 PinResultScreen(
                     isBioOn = route.isBioOn,
                     onDismiss = onDismiss,

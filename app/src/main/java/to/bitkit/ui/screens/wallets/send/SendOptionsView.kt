@@ -128,13 +128,13 @@ fun SendOptionsView(
                     onContinue = { utxos -> appViewModel.setSendEvent(SendEvent.CoinSelectionContinue(utxos)) },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.ReviewAndSend> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.ReviewAndSend> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
-                    savedStateHandle = backStackEntry.savedStateHandle,
+                    savedStateHandle = it.savedStateHandle,
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onEvent = { appViewModel.setSendEvent(it) },
+                    onEvent = { e -> appViewModel.setSendEvent(e) },
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
@@ -182,7 +182,7 @@ fun SendOptionsView(
                     },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.QuickPay> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.QuickPay> {
                 val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
                 QuickPaySendScreen(
                     quickPayData = requireNotNull(quickPayData),
@@ -194,8 +194,8 @@ fun SendOptionsView(
                     }
                 )
             }
-            composableWithDefaultTransitions<SendRoute.Error> { backStackEntry ->
-                val route = backStackEntry.toRoute<SendRoute.Error>()
+            composableWithDefaultTransitions<SendRoute.Error> {
+                val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
                     errorMessage = route.errorMessage,
                     onRetry = {

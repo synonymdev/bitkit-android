@@ -736,14 +736,14 @@ private fun NavGraphBuilder.shop(
             }
         )
     }
-    composableWithDefaultTransitions<Routes.ShopWebView> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.ShopWebView> {
         ShopWebViewScreen (
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
-            page = backStackEntry.toRoute<Routes.ShopWebView>().page,
-            title = backStackEntry.toRoute<Routes.ShopWebView>().title,
+            page = it.toRoute<Routes.ShopWebView>().page,
+            title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-               appViewModel.onScanSuccess(data)
+                appViewModel.onScanSuccess(data)
             }
         )
     }
@@ -831,8 +831,8 @@ private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
 }
 
 private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinConfirm> { backStackEntry ->
-        val route = backStackEntry.toRoute<Routes.ChangePinConfirm>()
+    composableWithDefaultTransitions<Routes.ChangePinConfirm> {
+        val route = it.toRoute<Routes.ChangePinConfirm>()
         ChangePinConfirmScreen(
             newPin = route.newPin,
             navController = navController,
@@ -895,9 +895,9 @@ private fun NavGraphBuilder.channelOrdersSettings(
 private fun NavGraphBuilder.orderDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.OrderDetail> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.OrderDetail> {
         OrderDetailScreen(
-            orderItem = backStackEntry.toRoute(),
+            orderItem = it.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -906,9 +906,9 @@ private fun NavGraphBuilder.orderDetailSettings(
 private fun NavGraphBuilder.cjitDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.CjitDetail> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.CjitDetail> {
         CJitDetailScreen(
-            cjitItem = backStackEntry.toRoute(),
+            cjitItem = it.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -948,19 +948,19 @@ private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.ActivityDetail> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.ActivityDetail> {
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
-            route = backStackEntry.toRoute(),
+            route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
     }
-    composableWithDefaultTransitions<Routes.ActivityExplore> { backStackEntry ->
+    composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(
             listViewModel = activityListViewModel,
-            route = backStackEntry.toRoute(),
+            route = it.toRoute(),
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
@@ -987,8 +987,8 @@ private fun NavGraphBuilder.qrScanner(
 private fun NavGraphBuilder.authCheck(
     navController: NavHostController,
 ) {
-    composable<Routes.AuthCheck> { backStackEntry ->
-        val route = backStackEntry.toRoute<Routes.AuthCheck>()
+    composable<Routes.AuthCheck> {
+        val route = it.toRoute<Routes.AuthCheck>()
         AuthCheckScreen(
             route = route,
             navController = navController,
@@ -1002,8 +1002,8 @@ private fun NavGraphBuilder.logs(
     composableWithDefaultTransitions<Routes.Logs> {
         LogsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LogDetail> { backStackEntry ->
-        val route = backStackEntry.toRoute<Routes.LogDetail>()
+    composableWithDefaultTransitions<Routes.LogDetail> {
+        val route = it.toRoute<Routes.LogDetail>()
         LogDetailScreen(
             navController = navController,
             fileName = route.fileName,
