@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -114,7 +113,10 @@ fun SendOptionsView(
                 )
             }
             composableWithDefaultTransitions<SendRoute.QrScanner> {
-                QrScanningScreen(navController = navController) { qrCode ->
+                QrScanningScreen(
+                    navController = navController,
+                    inSheet = true,
+                ) { qrCode ->
                     navController.popBackStack()
                     appViewModel.onScanSuccess(data = qrCode)
                 }
@@ -128,13 +130,13 @@ fun SendOptionsView(
                     onContinue = { utxos -> appViewModel.setSendEvent(SendEvent.CoinSelectionContinue(utxos)) },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.ReviewAndSend> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.ReviewAndSend> {
                 val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                 SendAndReviewScreen(
-                    savedStateHandle = backStackEntry.savedStateHandle,
+                    savedStateHandle = it.savedStateHandle,
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
-                    onEvent = { appViewModel.setSendEvent(it) },
+                    onEvent = { e -> appViewModel.setSendEvent(e) },
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },
                     onNavigateToPin = { navController.navigate(SendRoute.PinCheck) },
@@ -182,7 +184,7 @@ fun SendOptionsView(
                     },
                 )
             }
-            composableWithDefaultTransitions<SendRoute.QuickPay> { backStackEntry ->
+            composableWithDefaultTransitions<SendRoute.QuickPay> {
                 val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
                 QuickPaySendScreen(
                     quickPayData = requireNotNull(quickPayData),
@@ -194,8 +196,8 @@ fun SendOptionsView(
                     }
                 )
             }
-            composableWithDefaultTransitions<SendRoute.Error> { backStackEntry ->
-                val route = backStackEntry.toRoute<SendRoute.Error>()
+            composableWithDefaultTransitions<SendRoute.Error> {
+                val route = it.toRoute<SendRoute.Error>()
                 SendErrorScreen(
                     errorMessage = route.errorMessage,
                     onRetry = {
@@ -250,7 +252,6 @@ private fun SendOptionsContent(
             }
         }
 
-        val clipboard = LocalClipboardManager.current
         RectangleButton(
             label = stringResource(R.string.wallet__recipient_invoice),
             icon = {
@@ -263,8 +264,7 @@ private fun SendOptionsContent(
             },
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            val uri = clipboard.getText()?.text.orEmpty().trim()
-            onEvent(SendEvent.Paste(uri))
+            onEvent(SendEvent.Paste)
         }
 
         RectangleButton(

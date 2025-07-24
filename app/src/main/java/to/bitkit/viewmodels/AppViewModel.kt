@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlChannelData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
@@ -39,6 +40,7 @@ import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -103,6 +105,8 @@ class AppViewModel @Inject constructor(
     var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
 
+    var scan: Scanner? = null; private set
+
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
@@ -156,8 +160,6 @@ class AppViewModel @Inject constructor(
             )
         }
     }
-
-    private var scan: Scanner? = null
 
     init {
         viewModelScope.launch {
@@ -272,8 +274,8 @@ class AppViewModel @Inject constructor(
             sendEvents.collect {
                 when (it) {
                     SendEvent.EnterManually -> onEnterManuallyClick()
-                    is SendEvent.Paste -> onPasteInvoice(it.data)
-                    is SendEvent.Scan -> onScanClick()
+                    SendEvent.Paste -> onPasteClick()
+                    SendEvent.Scan -> onScanClick()
 
                     is SendEvent.AddressChange -> onAddressChange(it.value)
                     SendEvent.AddressReset -> resetAddressInput()
@@ -342,9 +344,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onCommentChange(value: String) {
-        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?: 0u
-        val trimmed = value.take(maxLength.toInt())
+    private fun onCommentChange(comment: String) {
+        // Apply maxLength from lnurlPay commentAllowed
+        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?:0u
+        val trimmed = comment.take(maxLength.toInt())
         _sendUiState.update {
             it.copy(comment = trimmed)
         }
@@ -419,9 +422,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onPasteInvoice(data: String) {
-        if (data.isBlank()) {
-            Logger.error("No data in clipboard")
+    private fun onPasteClick() {
+        val data = context.getClipboardText()?.trim()
+        if (data.isNullOrBlank()) {
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.wallet__send_clipboard_empty_title),
+                description = context.getString(R.string.wallet__send_clipboard_empty_text),
+            )
             return
         }
         viewModelScope.launch {
@@ -442,9 +450,14 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleScannedData(uri: String) {
         val scan = runCatching { scannerService.decode(uri) }
-            .onFailure { Logger.error("Failed to decode: '$uri'", it) }
+            .onFailure { Logger.error("Failed to decode scan result: '$uri'", it) }
+            .onSuccess { Logger.info("Handling scan data: $it") }
             .getOrNull()
         this.scan = scan
+
+        // always reset state on new scan
+        resetSendState()
+        resetQuickPayData()
 
         when (scan) {
             is Scanner.OnChain -> {
@@ -495,7 +508,7 @@ class AppViewModel @Inject constructor(
 
             is Scanner.LnurlPay -> {
                 val data = scan.data
-                Logger.debug("scan result: LnurlPay: $scan", context = "AppViewModel")
+                Logger.debug("LNURL: $data")
 
                 val minSendable = data.minSendableSat()
                 val maxSendable = data.maxSendableSat()
@@ -578,7 +591,18 @@ class AppViewModel @Inject constructor(
             }
 
             is Scanner.LnurlAuth -> TODO("Not implemented")
-            is Scanner.LnurlChannel -> TODO("Not implemented")
+
+            is Scanner.LnurlChannel -> {
+                val data: LnurlChannelData = scan.data
+                Logger.debug("LNURL: $data")
+                hideSheet() // hide scan sheet if opened
+                mainScreenEffect(
+                    MainScreenEffect.Navigate(
+                        Routes.LnurlChannel(uri = data.uri, callback = data.callback, k1 = data.k1)
+                    )
+                )
+            }
+
             is Scanner.NodeId -> {
                 hideSheet() // hide scan sheet if opened
                 val nextRoute = Routes.ExternalConnection(scan.url)
@@ -893,7 +917,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningService.handleLnUrlWithdraw(
+            lightningService.handleLnurlWithdraw(
                 k1 = lnUrlData.data.k1,
                 callback = lnUrlData.data.callback,
                 paymentRequest = invoice
@@ -976,8 +1000,6 @@ class AppViewModel @Inject constructor(
         return Env.TransactionDefaults.dustLimit.toULong()
     }
 
-    fun resetQuickPayData() = _quickPayData.update { null }
-
     fun clearClipboardForAutoRead() {
         viewModelScope.launch {
             val isAutoReadClipboardEnabled = settingsStore.data.first().enableAutoReadClipboard
@@ -986,6 +1008,8 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    fun resetQuickPayData() = _quickPayData.update { null }
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
@@ -1225,7 +1249,7 @@ sealed class MainScreenEffect {
 
 sealed class SendEvent {
     data object EnterManually : SendEvent()
-    data class Paste(val data: String) : SendEvent()
+    data object Paste : SendEvent()
     data object Scan : SendEvent()
 
     data object AddressReset : SendEvent()

@@ -5,7 +5,6 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.decode
-import com.synonym.bitkitcore.getLnurlInvoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +40,8 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnUrlWithdrawResponse
+import to.bitkit.services.LnurlChannelInfoResponse
+import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
@@ -378,6 +379,12 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
+    suspend fun connectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("connectPeer") {
+        lightningService.connectPeer(peer)
+        syncState()
+        Result.success(Unit)
+    }
+
     suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
         lightningService.disconnectPeer(peer)
         syncState()
@@ -410,7 +417,7 @@ class LightningRepo @Inject constructor(
     ): Result<LightningInvoice> {
         return runCatching {
             // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
-            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).pr
+            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountSats, comment).getOrThrow().pr
             val decoded = (decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
         }.onFailure {
@@ -418,7 +425,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun handleLnUrlWithdraw(
+    suspend fun handleLnurlWithdraw(
         k1: String,
         callback: String,
         paymentRequest: String,
@@ -426,6 +433,18 @@ class LightningRepo @Inject constructor(
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Logger.debug("handleLnUrlWithdraw callbackUrl generated:$callbackUrl")
         lnurlService.fetchWithdrawInfo(callbackUrl)
+    }
+
+    suspend fun fetchLnurlChannelInfo(url: String): Result<LnurlChannelInfoResponse> =
+        lnurlService.fetchLnurlChannelInfo(url)
+
+    suspend fun handleLnurlChannel(
+        k1: String,
+        callback: String,
+        nodeId: String,
+    ): Result<LnurlChannelResponse> = executeWhenNodeRunning("handleLnurlChannel") {
+        // TODO use bitkit-core createChannelRequestUrl after it is fixed to prevent k1 duplicating
+        lnurlService.handleLnurlChannel(k1 = k1, callback = callback, nodeId = nodeId)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
