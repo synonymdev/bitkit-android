@@ -51,6 +51,12 @@ object AppTextStyles {
         letterSpacing = 0.4.sp,
         fontFamily = InterFontFamily,
     )
+    val Subtitle = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        letterSpacing = 0.4.sp,
+        fontFamily = InterFontFamily,
+    )
     val BodyS = TextStyle(
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,

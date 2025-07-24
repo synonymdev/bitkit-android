@@ -131,11 +131,7 @@ fun Subtitle(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.Subtitle.merge(
             color = color,
             textAlign = textAlign,
         ),
