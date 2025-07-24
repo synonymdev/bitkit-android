@@ -111,6 +111,7 @@ fun Title(
     modifier: Modifier = Modifier,
     lineHeight: TextUnit = 26.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Unspecified,
 ) {
     Text(
         text = text,
@@ -121,6 +122,7 @@ fun Title(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
+            textAlign = textAlign,
         ),
         modifier = modifier,
     )
@@ -199,11 +201,13 @@ fun BodyMSB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyMSB.merge(
             color = color,
+            textAlign = textAlign,
         ),
         maxLines = maxLines,
         overflow = overflow,
@@ -218,6 +222,7 @@ fun BodyMB(
     color: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text,
@@ -228,7 +233,7 @@ fun BodyMB(
             letterSpacing = 0.4.sp,
             fontFamily = InterFontFamily,
             color = color,
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
         ),
         maxLines = maxLines,
         overflow = overflow,
