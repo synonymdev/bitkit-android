@@ -344,9 +344,10 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onCommentChange(value: String) {
-        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?: 0u
-        val trimmed = value.take(maxLength.toInt())
+    private fun onCommentChange(comment: String) {
+        // Apply maxLength from lnurlPay commentAllowed
+        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?:0u
+        val trimmed = comment.take(maxLength.toInt())
         _sendUiState.update {
             it.copy(comment = trimmed)
         }
