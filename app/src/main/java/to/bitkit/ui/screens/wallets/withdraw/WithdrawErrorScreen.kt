@@ -88,10 +88,8 @@ fun WithDrawErrorScreen(
                         .testTag("scan_button")
                 )
             }
-
             VerticalSpacer(16.dp)
         }
-
     }
 }
 

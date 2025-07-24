@@ -68,10 +68,8 @@ fun WithdrawConfirmScreen(
                 isLoading = uiState.isLoading,
                 modifier = Modifier.testTag("continue_button")
             )
-
             VerticalSpacer(16.dp)
         }
-
     }
 }
 
