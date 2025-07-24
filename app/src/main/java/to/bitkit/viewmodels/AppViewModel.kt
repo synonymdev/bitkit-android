@@ -492,7 +492,7 @@ class AppViewModel @Inject constructor(
                     }
                     return
                 }
-                Logger.info("No amount found in invoice, proceeding entering amount manually")
+                Logger.info("No amount found in invoice, proceeding to enter amount manually")
                 resetAmountInput()
 
                 if (isMainScanner) {
