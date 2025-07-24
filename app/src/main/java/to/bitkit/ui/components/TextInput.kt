@@ -1,16 +1,19 @@
 package to.bitkit.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
@@ -35,18 +38,16 @@ fun TextInput(
     suffix: @Composable (() -> Unit)? = null,
     supportingText: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    textStyle: TextStyle = AppTextStyles.BodySSB,
 ) {
     TextField(
         placeholder = {
-            if (!placeholder.isNullOrEmpty()) {
-                BodySSB(
-                    placeholder,
-                    color = Colors.White64,
-                )
-            } else null
+            placeholder?.let {
+                Text(placeholder, color = Colors.White64, style = textStyle)
+            }
         },
         isError = isError,
-        textStyle = AppTextStyles.BodySSB,
+        textStyle = textStyle,
         value = value,
         onValueChange = onValueChange,
         maxLines = maxLines,
@@ -66,11 +67,12 @@ fun TextInput(
     )
 }
 
-@Preview(showSystemUi = true)
+@Preview
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        ScreenColumn(
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)
         ) {
             TextInput(
@@ -78,29 +80,30 @@ private fun Preview() {
                 onValueChange = {},
                 modifier = Modifier.fillMaxWidth(),
             )
-
-            VerticalSpacer(12.dp)
             TextInput(
                 value = "",
                 onValueChange = {},
                 placeholder = "Placeholder text",
                 modifier = Modifier.fillMaxWidth(),
             )
-
-            VerticalSpacer(12.dp)
             TextInput(
                 value = "Error text",
                 onValueChange = {},
                 isError = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-
-            VerticalSpacer(12.dp)
             TextInput(
                 value = "First line of text \nSecond line of text",
                 onValueChange = {},
                 minLines = 3,
                 maxLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextInput(
+                value = "",
+                onValueChange = {},
+                placeholder = "Placeholder title size",
+                textStyle = AppTextStyles.Title,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
