@@ -230,8 +230,10 @@ class TransferViewModel @Inject constructor(
             defaultLspBalanceSats - clientBalanceSat
         } else if (clientBalanceSat < threshold2) {   // 225-495€: LSP balance = client balance
             clientBalanceSat
-        } else { // 495-950€: LSP balance = max - client balance
+        } else if (clientBalanceSat < maxLspBalance) { // 495-950€: LSP balance = max - client balance
             maxLspBalance - clientBalanceSat
+        } else {
+            maxLspBalance
         }
 
         return min(lspBalance, maxLspBalance)
