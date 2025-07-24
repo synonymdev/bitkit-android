@@ -15,6 +15,8 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.decode
+import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -65,9 +67,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
-import to.bitkit.services.ScannerService
-import to.bitkit.services.hasLightingParam
-import to.bitkit.services.lightningParam
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.screens.wallets.send.SendRoute
@@ -83,7 +82,6 @@ class AppViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
-    private val scannerService: ScannerService,
     private val lightningService: LightningRepo,
     private val walletRepo: WalletRepo,
     private val coreService: CoreService,
@@ -319,7 +317,7 @@ class AppViewModel @Inject constructor(
     private fun onAddressChange(value: String) {
         val valueWithoutSpaces = value.removeSpaces()
         viewModelScope.launch {
-            val result = runCatching { scannerService.decode(valueWithoutSpaces) }
+            val result = runCatching { decode(valueWithoutSpaces) }
             _sendUiState.update {
                 it.copy(
                     addressInput = valueWithoutSpaces,
@@ -346,7 +344,7 @@ class AppViewModel @Inject constructor(
 
     private fun onCommentChange(comment: String) {
         // Apply maxLength from lnurlPay commentAllowed
-        val maxLength = (_sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed ?:0u
+        val maxLength = (_sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed ?: 0u
         val trimmed = comment.take(maxLength.toInt())
         _sendUiState.update {
             it.copy(comment = trimmed)
@@ -449,7 +447,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleScannedData(uri: String) {
-        val scan = runCatching { scannerService.decode(uri) }
+        val scan = runCatching { decode(uri) }
             .onFailure { Logger.error("Failed to decode scan result: '$uri'", it) }
             .onSuccess { Logger.info("Handling scan data: $it") }
             .getOrNull()
@@ -462,15 +460,15 @@ class AppViewModel @Inject constructor(
         when (scan) {
             is Scanner.OnChain -> {
                 val invoice: OnChainInvoice = scan.invoice
-                val lnInvoice: LightningInvoice? = invoice.lightningParam()?.let { bolt11 ->
-                    val decoded = runCatching { scannerService.decode(bolt11) }.getOrNull()
+                val lnInvoice: LightningInvoice? = invoice.params?.get("lightning")?.let { bolt11 ->
+                    val decoded = runCatching { decode(bolt11) }.getOrNull()
                     (decoded as? Scanner.Lightning)?.invoice
                 }
                 _sendUiState.update {
                     it.copy(
                         address = invoice.address,
                         amount = invoice.amountSatoshis,
-                        isUnified = invoice.hasLightingParam(),
+                        isUnified = invoice.params?.containsKey("lightning") == true,
                         decodedInvoice = lnInvoice,
                         payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
                     )
@@ -822,7 +820,7 @@ class AppViewModel @Inject constructor(
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
-                val validatedAddress = runCatching { scannerService.validateBitcoinAddress(address) }
+                val validatedAddress = runCatching { validateBitcoinAddress(address) }
                     .getOrElse { e ->
                         Logger.error("Invalid bitcoin send address: '$address'", e)
                         toast(Exception("Invalid bitcoin send address"))
