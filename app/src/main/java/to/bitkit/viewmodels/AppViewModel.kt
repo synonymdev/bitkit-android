@@ -607,20 +607,12 @@ class AppViewModel @Inject constructor(
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }
 
-            null -> {
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = "Error",
-                    description = "Error decoding data"
-                )
-            }
-
             else -> {
-                Logger.warn("Unhandled invoice type: $scan")
+                Logger.warn("Unhandled scan data: $scan")
                 toast(
-                    type = Toast.ToastType.ERROR,
-                    title = "Unsupported",
-                    description = "This type of invoice is not supported yet"
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.other__scan_err_decoding),
+                    description = context.getString(R.string.other__scan_err_interpret_title),
                 )
             }
         }
