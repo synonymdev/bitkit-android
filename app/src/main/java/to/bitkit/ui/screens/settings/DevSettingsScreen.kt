@@ -106,13 +106,6 @@ fun DevSettingsScreen(
                 }
             )
             SettingsTextButtonRow(
-                title = "Reset Suggestion Cards",
-                onClick = {
-                    viewModel.resetSuggestions()
-                    app.toast(type = Toast.ToastType.SUCCESS, title = "Suggestion cards reset")
-                }
-            )
-            SettingsTextButtonRow(
                 title = "Reset Metadata State",
                 onClick = {
                     viewModel.resetMetadataState()

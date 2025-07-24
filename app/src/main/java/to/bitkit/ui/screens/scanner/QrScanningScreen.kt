@@ -3,10 +3,11 @@
 package to.bitkit.ui.screens.scanner
 
 import android.Manifest
-import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -24,8 +25,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -53,6 +56,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -61,15 +65,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.ext.clipboardManager
+import to.bitkit.ext.getClipboardText
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
+import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
 const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
@@ -78,6 +83,8 @@ const val SCAN_RESULT_KEY = "SCAN_RESULT"
 @Composable
 fun QrScanningScreen(
     navController: NavController,
+    inSheet: Boolean = false,
+    onBack: () -> Unit = { navController.popBackStack() },
     onScanSuccess: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
@@ -95,10 +102,10 @@ fun QrScanningScreen(
 
             if (isCalledForResult) {
                 backStackEntry.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                navController.popBackStack()
+                onBack()
                 backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
             } else {
-                navController.popBackStack()
+                onBack()
                 onScanSuccess(qrCode)
             }
 
@@ -189,16 +196,30 @@ fun QrScanningScreen(
         }
     }
 
-    CameraPermissionRequiredView(
-        deniedContent = { status ->
-            CameraPermissionDeniedScreen(
-                requestPermission = cameraPermissionState::launchPermissionRequest,
-                shouldShowRationale = status.shouldShowRationale,
+    CameraPermissionView(
+        permissionState = cameraPermissionState,
+        deniedContent = {
+            DeniedContent(
+                shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
+                inSheet = inSheet,
+                onClickOpenSettings = { context.startActivity(Intent(Settings.ACTION_SETTINGS)) },
+                onClickRetry = cameraPermissionState::launchPermissionRequest,
+                onClickPaste = handlePaste(context, app, setScanResult),
+                onBack = onBack,
             )
         },
         grantedContent = {
-            ScreenColumn(modifier = Modifier.gradientBackground()) {
-                AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = { navController.popBackStack() })
+            Column(
+                modifier = Modifier
+                    .then(if (inSheet) Modifier.gradientBackground() else Modifier)
+                    .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+            ) {
+                if (inSheet) {
+                    SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
+                } else {
+                    AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = onBack)
+                }
+
                 Content(
                     previewView = previewView,
                     onClickFlashlight = {
@@ -212,26 +233,28 @@ fun QrScanningScreen(
                             galleryLauncher.launch("image/*")
                         }
                     },
-                    onPasteFromClipboard = {
-                        val clipboard = context.clipboardManager
-                        if (clipboard.hasPrimaryClip()) {
-                            val clipData: ClipData = clipboard.primaryClip ?: return@Content
-                            if (clipData.itemCount > 0) {
-                                val text = clipData.getItemAt(0).text.toString()
-                                if (text.isNotBlank()) {
-                                    setScanResult(text)
-                                } else {
-                                    app.toast(Exception("Clipboard is empty or doesn't contain text"))
-                                }
-                            }
-                        } else {
-                            app.toast(Exception("Clipboard is empty"))
-                        }
-                    }
+                    onPasteFromClipboard = handlePaste(context, app, setScanResult)
                 )
             }
         }
     )
+}
+
+@Composable
+private fun handlePaste(
+    context: Context,
+    app: AppViewModel,
+    setScanResult: (String?) -> Unit,
+): () -> Unit = {
+    val clipboard = context.getClipboardText()?.trim()
+    if (clipboard.isNullOrBlank()) {
+        app.toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.wallet__send_clipboard_empty_title),
+            description = context.getString(R.string.wallet__send_clipboard_empty_text),
+        )
+    }
+    setScanResult(clipboard)
 }
 
 @Composable
@@ -265,9 +288,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(
-                        Colors.White64
-                    )
+                    .background(Colors.White64)
                     .size(48.dp)
                     .align(Alignment.TopStart)
             ) {
@@ -283,9 +304,7 @@ private fun Content(
                 modifier = Modifier
                     .padding(16.dp)
                     .clip(CircleShape)
-                    .background(
-                        Colors.White64
-                    )
+                    .background(Colors.White64)
                     .size(48.dp)
                     .align(Alignment.TopEnd)
             ) {
@@ -301,8 +320,7 @@ private fun Content(
             icon = {
                 Icon(
                     painterResource(R.drawable.ic_clipboard_text_simple),
-                    contentDescription = null,
-                    tint = Colors.White
+                    contentDescription = stringResource(R.string.other__qr_paste),
                 )
             },
             text = stringResource(R.string.other__qr_paste),

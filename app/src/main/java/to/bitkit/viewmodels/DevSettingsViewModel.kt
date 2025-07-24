@@ -40,7 +40,6 @@ class DevSettingsViewModel @Inject constructor(
     private val currencyRepo: CurrencyRepo,
     private val logsRepo: LogsRepo,
     private val cacheStore: CacheStore,
-    private val settingsStore: SettingsStore,
     private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
@@ -129,12 +128,6 @@ class DevSettingsViewModel @Inject constructor(
     fun resetBackupState() {
         viewModelScope.launch {
             cacheStore.update { it.copy(backupStatuses = mapOf()) }
-        }
-    }
-
-    fun resetSuggestions() {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(dismissedSuggestions = emptyList()) }
         }
     }
 

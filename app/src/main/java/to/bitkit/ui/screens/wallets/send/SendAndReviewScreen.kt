@@ -195,8 +195,10 @@ private fun SendAndReviewContent(
                     SendMethod.LIGHTNING -> LightningDescription(uiState = uiState)
                 }
 
-                if (isLnurlPay && uiState.lnUrlParameters.data.commentAllowed()) {
-                    LnurlCommentSection(uiState, onEvent)
+                if (isLnurlPay) {
+                    if (uiState.lnUrlParameters.data.commentAllowed()) {
+                        LnurlCommentSection(uiState, onEvent)
+                    }
                 } else {
                     TagsSection(uiState, onClickTag, onClickAddTag)
                 }

@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -114,7 +113,10 @@ fun SendOptionsView(
                 )
             }
             composableWithDefaultTransitions<SendRoute.QrScanner> {
-                QrScanningScreen(navController = navController) { qrCode ->
+                QrScanningScreen(
+                    navController = navController,
+                    inSheet = true,
+                ) { qrCode ->
                     navController.popBackStack()
                     appViewModel.onScanSuccess(data = qrCode)
                 }
@@ -250,7 +252,6 @@ private fun SendOptionsContent(
             }
         }
 
-        val clipboard = LocalClipboardManager.current
         RectangleButton(
             label = stringResource(R.string.wallet__recipient_invoice),
             icon = {
@@ -263,8 +264,7 @@ private fun SendOptionsContent(
             },
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            val uri = clipboard.getText()?.text.orEmpty().trim()
-            onEvent(SendEvent.Paste(uri))
+            onEvent(SendEvent.Paste)
         }
 
         RectangleButton(

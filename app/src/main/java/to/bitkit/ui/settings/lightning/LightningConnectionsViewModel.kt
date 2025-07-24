@@ -294,9 +294,9 @@ class LightningConnectionsViewModel @Inject constructor(
             try {
                 // TODO replace with bitkit-core method when available
                 _txDetails.value = addressChecker.getTransaction(txid)
-                Logger.debug("fetchTransactionDetails success for '$txid'")
+                Logger.debug("fetchTransactionDetails success for: '$txid'")
             } catch (e: Exception) {
-                Logger.error("fetchTransactionDetails error for '$txid'", e)
+                Logger.warn("fetchTransactionDetails error for: '$txid'", e)
                 _txDetails.value = null
             }
         }

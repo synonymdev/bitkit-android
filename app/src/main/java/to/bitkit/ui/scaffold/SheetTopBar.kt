@@ -15,13 +15,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,7 +29,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun SheetTopBar(
-    titleText: String,
+    titleText: String?,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
 ) {
@@ -41,14 +38,16 @@ fun SheetTopBar(
             .fillMaxWidth()
             .height(42.dp)
     ) {
-        Subtitle(
-            text = titleText,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .align(Alignment.Center)
-        )
+        titleText?.let {
+            Subtitle(
+                text = titleText,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .align(Alignment.Center)
+            )
+        }
 
         onBack?.let { callback ->
             IconButton(
@@ -85,6 +84,17 @@ private fun PreviewWithBack() {
     AppThemeSurface {
         SheetTopBar(
             titleText = "Sheet Top Bar With Back",
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewNoText() {
+    AppThemeSurface {
+        SheetTopBar(
+            titleText = null,
             onBack = {},
         )
     }

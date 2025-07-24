@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.utils.composableWithDefaultTransitions
 
 @Composable
 fun PinNavigationSheet(
@@ -28,14 +28,14 @@ fun PinNavigationSheet(
             navController = navController,
             startDestination = PinRoute.PinPrompt,
         ) {
-            composable<PinRoute.PinPrompt> {
+            composableWithDefaultTransitions<PinRoute.PinPrompt> {
                 PinPromptScreen(
                     showLaterButton = showLaterButton,
                     onContinue = { navController.navigate(PinRoute.ChoosePin) },
                     onLater = onDismiss,
                 )
             }
-            composable<PinRoute.ChoosePin> {
+            composableWithDefaultTransitions<PinRoute.ChoosePin> {
                 ChoosePinScreen(
                     onPinChosen = { pin ->
                         navController.navigate(PinRoute.ConfirmPin(pin))
@@ -43,7 +43,7 @@ fun PinNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<PinRoute.ConfirmPin> {
+            composableWithDefaultTransitions<PinRoute.ConfirmPin> {
                 val route = it.toRoute<PinRoute.ConfirmPin>()
                 ConfirmPinScreen(
                     originalPin = route.pin,
@@ -51,7 +51,7 @@ fun PinNavigationSheet(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable<PinRoute.AskForBiometrics> {
+            composableWithDefaultTransitions<PinRoute.AskForBiometrics> {
                 AskForBiometricsScreen(
                     onContinue = { isBioOn ->
                         navController.navigate(PinRoute.Result(isBioOn))
@@ -60,7 +60,7 @@ fun PinNavigationSheet(
                     onBack = onDismiss,
                 )
             }
-            composable<PinRoute.Result> {
+            composableWithDefaultTransitions<PinRoute.Result> {
                 val route = it.toRoute<PinRoute.Result>()
                 PinResultScreen(
                     isBioOn = route.isBioOn,
