@@ -39,7 +39,7 @@ import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
-import to.bitkit.services.LnUrlWithdrawResponse
+import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LnurlChannelInfoResponse
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
@@ -429,9 +429,9 @@ class LightningRepo @Inject constructor(
         k1: String,
         callback: String,
         paymentRequest: String,
-    ): Result<LnUrlWithdrawResponse> = executeWhenNodeRunning("create LnUrl withdraw callback") {
+    ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("handleLnurlWithdraw") {
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
-        Logger.debug("handleLnUrlWithdraw callbackUrl generated:$callbackUrl")
+        Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'")
         lnurlService.fetchWithdrawInfo(callbackUrl)
     }
 

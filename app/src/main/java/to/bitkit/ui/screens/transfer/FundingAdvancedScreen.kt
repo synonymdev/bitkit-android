@@ -28,7 +28,7 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun FundingAdvancedScreen(
-    onLnUrl: () -> Unit = {},
+    onLnurl: () -> Unit = {},
     onManual: () -> Unit = {},
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
@@ -63,7 +63,7 @@ fun FundingAdvancedScreen(
                             modifier = Modifier.size(28.dp),
                         )
                     },
-                    onClick = onLnUrl,
+                    onClick = onLnurl,
                 )
                 RectangleButton(
                     label = stringResource(R.string.lightning__funding_advanced__button2),

@@ -15,7 +15,7 @@ class LnurlService @Inject constructor(
     private val client: HttpClient,
 ) {
 
-    suspend fun fetchWithdrawInfo(callbackUrl: String): Result<LnUrlWithdrawResponse> = runCatching {
+    suspend fun fetchWithdrawInfo(callbackUrl: String): Result<LnurlWithdrawResponse> = runCatching {
         Logger.debug("Fetching LNURL withdraw info from: $callbackUrl")
 
         val response: HttpResponse = client.get(callbackUrl)
@@ -25,7 +25,7 @@ class LnurlService @Inject constructor(
             throw Exception("HTTP error: ${response.status}")
         }
 
-        val withdrawResponse = response.body<LnUrlWithdrawResponse>()
+        val withdrawResponse = response.body<LnurlWithdrawResponse>()
 
         when {
             withdrawResponse.status == "ERROR" -> {
@@ -114,7 +114,7 @@ class LnurlService @Inject constructor(
 }
 
 @Serializable
-data class LnUrlWithdrawResponse(
+data class LnurlWithdrawResponse(
     val status: String? = null,
     val reason: String? = null,
     val tag: String? = null,

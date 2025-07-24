@@ -560,7 +560,7 @@ private fun RootNavHost(
             }
             composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnUrl = { navController.navigateToScanner() },
+                    onLnurl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },

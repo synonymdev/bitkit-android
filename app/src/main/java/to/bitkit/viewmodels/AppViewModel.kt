@@ -346,7 +346,7 @@ class AppViewModel @Inject constructor(
 
     private fun onCommentChange(comment: String) {
         // Apply maxLength from lnurlPay commentAllowed
-        val maxLength = (_sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlPay)?.data?.commentAllowed ?:0u
+        val maxLength = (_sendUiState.value.lnurl as? LnurlParams.LnurlPay)?.data?.commentAllowed ?:0u
         val trimmed = comment.take(maxLength.toInt())
         _sendUiState.update {
             it.copy(comment = trimmed)
@@ -377,8 +377,8 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val lnUrlParameters = _sendUiState.value.lnUrlParameters
-        if (lnUrlParameters is LnUrlParameters.LnUrlWithdraw) {
+        val lnurl = _sendUiState.value.lnurl
+        if (lnurl is LnurlParams.LnurlWithdraw) {
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
         }
@@ -400,19 +400,19 @@ class AppViewModel @Inject constructor(
         if (value.isBlank()) return false
         val amount = value.toULongOrNull() ?: return false
 
-        val lnUrlParams = _sendUiState.value.lnUrlParameters
+        val lnurl = _sendUiState.value.lnurl
 
-        val isValidLNAmount = when (lnUrlParams) {
+        val isValidLNAmount = when (lnurl) {
             null -> lightningService.canSend(amount)
-            is LnUrlParameters.LnUrlPay -> {
-                val minSat = lnUrlParams.data.minSendableSat()
-                val maxSat = lnUrlParams.data.maxSendableSat()
+            is LnurlParams.LnurlPay -> {
+                val minSat = lnurl.data.minSendableSat()
+                val maxSat = lnurl.data.maxSendableSat()
 
                 amount in minSat..maxSat && lightningService.canSend(amount)
             }
 
-            is LnUrlParameters.LnUrlWithdraw -> {
-                amount < lnUrlParams.data.maxWithdrawableSat()
+            is LnurlParams.LnurlWithdraw -> {
+                amount < lnurl.data.maxWithdrawableSat()
             }
         }
 
@@ -527,7 +527,7 @@ class AppViewModel @Inject constructor(
                     it.copy(
                         amount = minSendable,
                         payMethod = SendMethod.LIGHTNING,
-                        lnUrlParameters = LnUrlParameters.LnUrlPay(data),
+                        lnurl = LnurlParams.LnurlPay(data),
                     )
                 }
 
@@ -574,7 +574,7 @@ class AppViewModel @Inject constructor(
                     it.copy(
                         payMethod = SendMethod.LIGHTNING,
                         amount = minWithdrawable,
-                        lnUrlParameters = LnUrlParameters.LnUrlWithdraw(data = data, address = uri)
+                        lnurl = LnurlParams.LnurlWithdraw(data = data)
                     )
                 }
 
@@ -800,12 +800,12 @@ class AppViewModel @Inject constructor(
 
         val amount = _sendUiState.value.amount
 
-        val lnUrlParameters = _sendUiState.value.lnUrlParameters
-        val isLnurlPay = lnUrlParameters is LnUrlParameters.LnUrlPay
+        val lnurl = _sendUiState.value.lnurl
+        val isLnurlPay = lnurl is LnurlParams.LnurlPay
 
         if (isLnurlPay) {
             lightningService.fetchLnurlInvoice(
-                callbackUrl = lnUrlParameters.data.callback,
+                callbackUrl = lnurl.data.callback,
                 amountSats = amount,
                 comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
             ).onSuccess { invoice ->
@@ -889,9 +889,9 @@ class AppViewModel @Inject constructor(
     fun onConfirmWithdraw() {
         _sendUiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            val lnUrlData = _sendUiState.value.lnUrlParameters as? LnUrlParameters.LnUrlWithdraw
+            val lnurl = _sendUiState.value.lnurl as? LnurlParams.LnurlWithdraw
 
-            if (lnUrlData == null) {
+            if (lnurl == null) {
                 resetSendState()
                 setSendEffect(SendEffect.NavigateToWithdrawError)
                 return@launch
@@ -900,14 +900,14 @@ class AppViewModel @Inject constructor(
             _sendUiState.update {
                 it.copy(
                     amount = it.amount.coerceAtLeast(
-                        (lnUrlData.data.minWithdrawable ?: 0u) / 1000u
+                        (lnurl.data.minWithdrawable ?: 0u) / 1000u
                     )
                 )
             }
 
             val invoice = lightningService.createInvoice(
                 amountSats = _sendUiState.value.amount,
-                description = lnUrlData.data.defaultDescription,
+                description = lnurl.data.defaultDescription,
                 expirySeconds = 3600u,
             ).getOrNull()
 
@@ -918,8 +918,8 @@ class AppViewModel @Inject constructor(
             }
 
             lightningService.handleLnurlWithdraw(
-                k1 = lnUrlData.data.k1,
-                callback = lnUrlData.data.callback,
+                k1 = lnurl.data.k1,
+                callback = lnurl.data.callback,
                 paymentRequest = invoice
             ).onSuccess {
                 toast(
@@ -1213,7 +1213,7 @@ data class SendUiState(
     val showAmountWarningDialog: AmountWarning? = null,
     val shouldConfirmPay: Boolean = false,
     val selectedUtxos: List<SpendableUtxo>? = null,
-    val lnUrlParameters: LnUrlParameters? = null,
+    val lnurl: LnurlParams? = null,
     val isLoading: Boolean = false,
     val speed: TransactionSpeed? = null,
     val utxosToSpend: List<SpendableUtxo>? = null,
@@ -1272,9 +1272,9 @@ sealed class SendEvent {
     data object PayConfirmed : SendEvent()
 }
 
-sealed interface LnUrlParameters {
-    data class LnUrlPay(val data: LnurlPayData) : LnUrlParameters
-    data class LnUrlWithdraw(val data: LnurlWithdrawData, val address: String) : LnUrlParameters
+sealed interface LnurlParams {
+    data class LnurlPay(val data: LnurlPayData) : LnurlParams
+    data class LnurlWithdraw(val data: LnurlWithdrawData) : LnurlParams
 }
 
 sealed interface QuickPayData {

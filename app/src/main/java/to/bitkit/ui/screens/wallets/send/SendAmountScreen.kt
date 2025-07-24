@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +47,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.CurrencyUiState
-import to.bitkit.viewmodels.LnUrlParameters
+import to.bitkit.viewmodels.LnurlParams
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
@@ -115,9 +114,9 @@ fun SendAmountContent(
             .navigationBarsPadding()
             .testTag("send_amount_screen")
     ) {
-        val titleRes = when (uiState.lnUrlParameters) {
-            is LnUrlParameters.LnUrlWithdraw -> R.string.wallet__lnurl_w_title
-            is LnUrlParameters.LnUrlPay -> R.string.wallet__lnurl_p_title
+        val titleRes = when (uiState.lnurl) {
+            is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_title
+            is LnurlParams.LnurlPay -> R.string.wallet__lnurl_p_title
             else -> R.string.wallet__send_amount
         }
 
@@ -165,10 +164,10 @@ private fun SendAmountNodeRunning(
     onEvent: (SendEvent) -> Unit,
     onMaxClick: (Long) -> Unit,
 ) {
-    val isLnurlWithdraw = uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw
+    val isLnurlWithdraw = uiState.lnurl is LnurlParams.LnurlWithdraw
 
     val availableAmount = when {
-        isLnurlWithdraw -> uiState.lnUrlParameters.data.maxWithdrawableSat().toLong()
+        isLnurlWithdraw -> uiState.lnurl.data.maxWithdrawableSat().toLong()
         uiState.payMethod == SendMethod.ONCHAIN -> balances.totalOnchainSats.toLong()
         else -> balances.maxSendLightningSats.toLong()
     }
@@ -191,7 +190,7 @@ private fun SendAmountNodeRunning(
         Spacer(modifier = Modifier.weight(1f))
 
         val textAvailable = when {
-            uiState.lnUrlParameters is LnUrlParameters.LnUrlWithdraw -> R.string.wallet__lnurl_w_max
+            uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
             uiState.isUnified -> R.string.wallet__send_available
             uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
             uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
@@ -213,13 +212,13 @@ private fun SendAmountNodeRunning(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            val isLnurl = uiState.lnUrlParameters != null
+            val isLnurl = uiState.lnurl != null
             if (!isLnurl) {
                 PaymentMethodButton(uiState = uiState, onEvent = onEvent)
             }
-            if (uiState.lnUrlParameters is LnUrlParameters.LnUrlPay) {
+            if (uiState.lnurl is LnurlParams.LnurlPay) {
                 val max = minOf(
-                    uiState.lnUrlParameters.data.maxSendableSat().toLong(),
+                    uiState.lnurl.data.maxSendableSat().toLong(),
                     availableAmount,
                 )
                 NumberPadActionButton(
@@ -396,7 +395,7 @@ private fun PreviewWithdraw() {
             uiState = SendUiState(
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
-                lnUrlParameters = LnUrlParameters.LnUrlWithdraw(
+                lnurl = LnurlParams.LnurlWithdraw(
                     data = LnurlWithdrawData(
                         uri = "",
                         callback = "",
@@ -406,7 +405,6 @@ private fun PreviewWithdraw() {
                         maxWithdrawable = 130u,
                         tag = ""
                     ),
-                    address = ""
                 ),
             ),
             walletUiState = MainUiState(
@@ -432,7 +430,7 @@ private fun PreviewLnurlPay() {
             uiState = SendUiState(
                 payMethod = SendMethod.LIGHTNING,
                 amountInput = "100",
-                lnUrlParameters = LnUrlParameters.LnUrlPay(
+                lnurl = LnurlParams.LnurlPay(
                     data = LnurlPayData(
                         uri = "",
                         callback = "",
