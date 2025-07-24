@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +63,7 @@ fun SendAmountScreen(
     onEvent: (SendEvent) -> Unit,
 ) {
     val currencyVM = currencyViewModel ?: return
-    var input: String by remember { mutableStateOf("") }
+    var input: String by remember { mutableStateOf(uiState.amountInput) }
     var overrideSats: Long? by remember { mutableStateOf(null) }
 
     AmountInputHandler(
