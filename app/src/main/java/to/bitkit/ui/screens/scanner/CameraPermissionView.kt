@@ -99,19 +99,19 @@ fun DeniedContent(
             )
             FillHeight()
 
-            if (shouldShowRationale) {
-                Icon(
-                    painterResource(R.drawable.ic_exclamation),
-                    contentDescription = null,
-                    modifier = Modifier.size(60.dp),
-                )
-                VerticalSpacer(32.dp)
-                BodyM(
-                    text = stringResource(R.string.other__camera_no_text).withBold(),
-                    textAlign = TextAlign.Center,
-                )
-                VerticalSpacer(32.dp)
+            Icon(
+                painterResource(R.drawable.ic_exclamation),
+                contentDescription = null,
+                modifier = Modifier.size(60.dp),
+            )
+            VerticalSpacer(32.dp)
+            BodyM(
+                text = stringResource(R.string.other__camera_no_text).withBold(),
+                textAlign = TextAlign.Center,
+            )
+            VerticalSpacer(32.dp)
 
+            if (shouldShowRationale) {
                 SecondaryButton(
                     text = stringResource(R.string.common__retry),
                     onClick = onClickRetry,
