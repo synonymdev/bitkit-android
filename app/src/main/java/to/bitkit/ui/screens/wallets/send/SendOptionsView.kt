@@ -113,7 +113,10 @@ fun SendOptionsView(
                 )
             }
             composableWithDefaultTransitions<SendRoute.QrScanner> {
-                QrScanningScreen(navController = navController) { qrCode ->
+                QrScanningScreen(
+                    navController = navController,
+                    inSheet = true,
+                ) { qrCode ->
                     navController.popBackStack()
                     appViewModel.onScanSuccess(data = qrCode)
                 }

@@ -25,8 +25,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -68,7 +70,7 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.utils.Logger
@@ -81,6 +83,8 @@ const val SCAN_RESULT_KEY = "SCAN_RESULT"
 @Composable
 fun QrScanningScreen(
     navController: NavController,
+    inSheet: Boolean = false,
+    onBack: () -> Unit = { navController.popBackStack() },
     onScanSuccess: (String) -> Unit,
 ) {
     val app = appViewModel ?: return
@@ -98,10 +102,10 @@ fun QrScanningScreen(
 
             if (isCalledForResult) {
                 backStackEntry.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                navController.popBackStack()
+                onBack()
                 backStackEntry.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
             } else {
-                navController.popBackStack()
+                onBack()
                 onScanSuccess(qrCode)
             }
 
@@ -197,15 +201,25 @@ fun QrScanningScreen(
         deniedContent = {
             DeniedContent(
                 shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
+                inSheet = inSheet,
                 onClickOpenSettings = { context.startActivity(Intent(Settings.ACTION_SETTINGS)) },
                 onClickRetry = cameraPermissionState::launchPermissionRequest,
                 onClickPaste = handlePaste(context, app, setScanResult),
-                onBack = { navController.popBackStack() },
+                onBack = onBack,
             )
         },
         grantedContent = {
-            ScreenColumn(modifier = Modifier.gradientBackground()) {
-                AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = { navController.popBackStack() })
+            Column(
+                modifier = Modifier
+                    .then(if (inSheet) Modifier.gradientBackground() else Modifier)
+                    .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
+            ) {
+                if (inSheet) {
+                    SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
+                } else {
+                    AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = onBack)
+                }
+
                 Content(
                     previewView = previewView,
                     onClickFlashlight = {
