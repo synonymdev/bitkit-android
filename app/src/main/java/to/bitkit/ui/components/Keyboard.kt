@@ -1,5 +1,6 @@
 package to.bitkit.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -19,8 +20,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,10 +29,9 @@ import to.bitkit.R
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.InterFontFamily
 
-val buttonHeight = 75.dp // 75 * 4 = 300 height
-val buttonHaptic = HapticFeedbackType.LongPress
+private val buttonHeight = 75.dp // 75 * 4 = 300 height
+val keyButtonHaptic = HapticFeedbackType.VirtualKey
 
 @Composable
 fun Keyboard(
@@ -47,58 +45,67 @@ fun Keyboard(
         userScrollEnabled = false,
         modifier = modifier,
     ) {
-        item { KeyboardButton(text = "1", onClick = onClick) }
-        item { KeyboardButton(text = "2", onClick = onClick) }
-        item { KeyboardButton(text = "3", onClick = onClick) }
-        item { KeyboardButton(text = "4", onClick = onClick) }
-        item { KeyboardButton(text = "5", onClick = onClick) }
-        item { KeyboardButton(text = "6", onClick = onClick) }
-        item { KeyboardButton(text = "7", onClick = onClick) }
-        item { KeyboardButton(text = "8", onClick = onClick) }
-        item { KeyboardButton(text = "9", onClick = onClick) }
-        item { KeyboardButton(text = if (isDecimal) "." else "000", onClick = onClick) }
-        item { KeyboardButton(text = "0", onClick = onClick) }
+        item { KeyTextButton(text = "1", onClick = onClick) }
+        item { KeyTextButton(text = "2", onClick = onClick) }
+        item { KeyTextButton(text = "3", onClick = onClick) }
+        item { KeyTextButton(text = "4", onClick = onClick) }
+        item { KeyTextButton(text = "5", onClick = onClick) }
+        item { KeyTextButton(text = "6", onClick = onClick) }
+        item { KeyTextButton(text = "7", onClick = onClick) }
+        item { KeyTextButton(text = "8", onClick = onClick) }
+        item { KeyTextButton(text = "9", onClick = onClick) }
+        item { KeyTextButton(text = if (isDecimal) "." else "000", onClick = onClick) }
+        item { KeyTextButton(text = "0", onClick = onClick) }
         item {
-            ButtonBox(
+            KeyIconButton(
+                icon = R.drawable.ic_backspace,
+                contentDescription = stringResource(R.string.common__delete),
                 onClick = onClickBackspace,
                 modifier = Modifier.testTag("KeyboardButton_backspace"),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_backspace),
-                    contentDescription = stringResource(R.string.common__delete),
-                )
-            }
+            )
         }
     }
 }
 
 @Composable
-private fun KeyboardButton(
-    text: String,
-    onClick: (String) -> Unit,
+fun KeyIconButton(
+    @DrawableRes icon: Int,
+    contentDescription: String?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ButtonBox(
-        onClick = { onClick(text) },
-        modifier = modifier.testTag("KeyboardButton_$text"),
+    KeyButtonBox(
+        onClick = onClick,
+        modifier = modifier,
     ) {
-        Text(
-            text = text,
-            style = TextStyle(
-                fontFamily = InterFontFamily,
-                fontWeight = FontWeight.Normal,
-                fontSize = 24.sp,
-                lineHeight = 44.sp,
-                letterSpacing = (-0.1).sp,
-                textAlign = TextAlign.Center,
-                color = Colors.White,
-            ),
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
         )
     }
 }
 
 @Composable
-private fun ButtonBox(
+fun KeyTextButton(
+    text: String,
+    onClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    KeyButtonBox(
+        onClick = { onClick(text) },
+        modifier = modifier.testTag("KeyboardButton_$text"),
+    ) {
+        Text(
+            text = text,
+            fontSize = 24.sp,
+            textAlign = TextAlign.Center,
+            color = Colors.White,
+        )
+    }
+}
+
+@Composable
+private fun KeyButtonBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (BoxScope.() -> Unit),
@@ -111,7 +118,7 @@ private fun ButtonBox(
             .heightIn(buttonHeight)
             .fillMaxSize()
             .clickableAlpha(0.2f) {
-                haptic.performHapticFeedback(buttonHaptic)
+                haptic.performHapticFeedback(keyButtonHaptic)
                 onClick()
             },
     )
