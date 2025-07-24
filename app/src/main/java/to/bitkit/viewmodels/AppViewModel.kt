@@ -40,6 +40,7 @@ import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -273,8 +274,8 @@ class AppViewModel @Inject constructor(
             sendEvents.collect {
                 when (it) {
                     SendEvent.EnterManually -> onEnterManuallyClick()
-                    is SendEvent.Paste -> onPasteInvoice(it.data)
-                    is SendEvent.Scan -> onScanClick()
+                    SendEvent.Paste -> onPasteClick()
+                    SendEvent.Scan -> onScanClick()
 
                     is SendEvent.AddressChange -> onAddressChange(it.value)
                     SendEvent.AddressReset -> resetAddressInput()
@@ -420,9 +421,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onPasteInvoice(data: String) {
-        if (data.isBlank()) {
-            Logger.error("No data in clipboard")
+    private fun onPasteClick() {
+        val data = context.getClipboardText()?.trim()
+        if (data.isNullOrBlank()) {
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.wallet__send_clipboard_empty_title),
+                description = context.getString(R.string.wallet__send_clipboard_empty_text),
+            )
             return
         }
         viewModelScope.launch {
@@ -1242,7 +1248,7 @@ sealed class MainScreenEffect {
 
 sealed class SendEvent {
     data object EnterManually : SendEvent()
-    data class Paste(val data: String) : SendEvent()
+    data object Paste : SendEvent()
     data object Scan : SendEvent()
 
     data object AddressReset : SendEvent()
