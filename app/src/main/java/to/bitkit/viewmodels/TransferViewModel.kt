@@ -197,7 +197,8 @@ class TransferViewModel @Inject constructor(
         val maxChannelSize = min(maxChannelSize1, maxChannelSize2)
 
         val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
-        val maxLspBalance = if (maxChannelSize > clientBalanceSat) maxChannelSize - clientBalanceSat else 0u
+        val maxLspBalance =
+            if (maxChannelSize > clientBalanceSat) maxChannelSize - clientBalanceSat else 0u //todo check this
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
         val maxClientBalance = getMaxClientBalance(maxChannelSize)
 
@@ -225,16 +226,12 @@ class TransferViewModel @Inject constructor(
             throw ServiceError.CurrencyRateUnavailable
         }
 
-        // Safely calculate lspBalance to avoid arithmetic overflow
-        var lspBalance: ULong = 0u
-        if (defaultLspBalanceSats > clientBalanceSat) {
-            lspBalance = defaultLspBalanceSats - clientBalanceSat
-        }
-        if (lspBalance > threshold1) {
-            lspBalance = clientBalanceSat
-        }
-        if (lspBalance > threshold2) {
-            lspBalance = maxLspBalance
+        val lspBalance = if (clientBalanceSat < threshold1) { // 0-225€: LSP balance = 450€ - client balance
+            defaultLspBalanceSats - clientBalanceSat
+        } else if (clientBalanceSat < threshold2) {   // 225-495€: LSP balance = client balance
+            clientBalanceSat
+        } else { // 495-950€: LSP balance = max - client balance
+            maxLspBalance - clientBalanceSat
         }
 
         return min(lspBalance, maxLspBalance)
