@@ -45,6 +45,7 @@ sealed class BottomSheetType {
     data object BackupNavigation : BottomSheetType()
     data object ActivityDateRangeSelector : BottomSheetType()
     data object ActivityTagSelector : BottomSheetType()
+    data class LnurlAuth(val domain: String, val lnurl: String, val k1: String) : BottomSheetType()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

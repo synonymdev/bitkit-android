@@ -653,34 +653,41 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onScanLnurlAuth(data: LnurlAuthData, lnurl: String) {
+    private fun onScanLnurlAuth(data: LnurlAuthData, lnurl: String) {
         Logger.debug("LNURL: $data")
 
         val domain = runCatching { data.uri.toUri().host }.getOrDefault(data.uri).orEmpty().trim()
 
-        // TODO pass callback and domain data from bitkit-core when updated to accept decoded callback and return domain
-        val result = lightningService.requestLnurlAuth(
-            callback = lnurl,
-            k1 = data.k1,
-            domain = domain,
-        ).onFailure {
-            toast(
-                type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.other__lnurl_auth_error),
-                description = context.getString(R.string.other__lnurl_auth_error_msg)
-                    .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
-            )
-        }.onSuccess {
-            toast(
-                type = Toast.ToastType.SUCCESS,
-                title = context.getString(R.string.other__lnurl_auth_success_title),
-                description = when (domain.isNotBlank()) {
-                    true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
-                        .replace("{domain}", domain)
+        showSheet(BottomSheetType.LnurlAuth(domain = domain, lnurl = lnurl, k1 = data.k1))
+    }
 
-                    else -> context.getString(R.string.other__lnurl_auth_success_msg_no_domain)
-                },
-            )
+    fun requestLnurlAuth(callback: String, k1: String, domain: String) {
+        viewModelScope.launch {
+            // TODO pass callback and domain data from bitkit-core when updated to accept decoded callback and return domain
+            lightningService.requestLnurlAuth(
+                callback = callback,
+                k1 = k1,
+                domain = domain,
+            ).onFailure {
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.other__lnurl_auth_error),
+                    description = context.getString(R.string.other__lnurl_auth_error_msg)
+                        .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
+                )
+            }.onSuccess {
+                toast(
+                    type = Toast.ToastType.SUCCESS,
+                    title = context.getString(R.string.other__lnurl_auth_success_title),
+                    description = when (domain.isNotBlank()) {
+                        true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
+                            .replace("{domain}", domain)
+
+                        else -> context.getString(R.string.other__lnurl_auth_success_msg_no_domain)
+                    },
+                )
+            }
+            hideSheet()
         }
     }
 
