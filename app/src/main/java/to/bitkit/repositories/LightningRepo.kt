@@ -425,26 +425,25 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun handleLnurlWithdraw(
+    suspend fun requestLnurlWithdraw(
         k1: String,
         callback: String,
         paymentRequest: String,
-    ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("handleLnurlWithdraw") {
+    ): Result<LnurlWithdrawResponse> = executeWhenNodeRunning("requestLnurlWithdraw") {
         val callbackUrl = createWithdrawCallbackUrl(k1 = k1, callback = callback, paymentRequest = paymentRequest)
         Logger.debug("handleLnurlWithdraw callbackUrl generated: '$callbackUrl'")
-        lnurlService.fetchWithdrawInfo(callbackUrl)
+        lnurlService.requestLnurlWithdraw(callbackUrl)
     }
 
-    suspend fun fetchLnurlChannelInfo(url: String): Result<LnurlChannelInfoResponse> =
-        lnurlService.fetchLnurlChannelInfo(url)
+    suspend fun fetchLnurlChannelInfo(url: String) = lnurlService.fetchLnurlChannelInfo(url)
 
-    suspend fun handleLnurlChannel(
+    suspend fun requestLnurlChannel(
         k1: String,
         callback: String,
         nodeId: String,
-    ): Result<LnurlChannelResponse> = executeWhenNodeRunning("handleLnurlChannel") {
+    ): Result<LnurlChannelResponse> = executeWhenNodeRunning("requestLnurlChannel") {
         // TODO use bitkit-core createChannelRequestUrl after it is fixed to prevent k1 duplicating
-        lnurlService.handleLnurlChannel(k1 = k1, callback = callback, nodeId = nodeId)
+        lnurlService.requestLnurlChannel(k1 = k1, callback = callback, nodeId = nodeId)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =

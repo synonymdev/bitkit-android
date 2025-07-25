@@ -910,7 +910,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningService.handleLnurlWithdraw(
+            lightningService.requestLnurlWithdraw(
                 k1 = lnurl.data.k1,
                 callback = lnurl.data.callback,
                 paymentRequest = invoice

@@ -14,9 +14,8 @@ import javax.inject.Singleton
 class LnurlService @Inject constructor(
     private val client: HttpClient,
 ) {
-
-    suspend fun fetchWithdrawInfo(callbackUrl: String): Result<LnurlWithdrawResponse> = runCatching {
-        Logger.debug("Fetching LNURL withdraw info from: $callbackUrl")
+    suspend fun requestLnurlWithdraw(callbackUrl: String): Result<LnurlWithdrawResponse> = runCatching {
+        Logger.debug("Requesting LNURL withdraw via: '$callbackUrl'")
 
         val response: HttpResponse = client.get(callbackUrl)
         Logger.debug("Http call: $response")
@@ -35,7 +34,7 @@ class LnurlService @Inject constructor(
             else -> withdrawResponse
         }
     }.onFailure {
-        Logger.warn(e = it, msg = "Failed to fetch withdraw info", context = TAG)
+        Logger.warn("Failed to request LNURL withdraw", e = it, context = TAG)
     }
 
     suspend fun fetchLnurlInvoice(
@@ -43,7 +42,7 @@ class LnurlService @Inject constructor(
         amountSats: ULong,
         comment: String? = null,
     ): Result<LnurlPayResponse> = runCatching {
-        Logger.debug("Fetching LNURL pay invoice info from: $callbackUrl")
+        Logger.debug("Fetching LNURL pay invoice from: $callbackUrl")
 
         val response = client.get(callbackUrl) {
             url {
@@ -74,15 +73,15 @@ class LnurlService @Inject constructor(
 
         return@runCatching response.body<LnurlChannelInfoResponse>()
     }.onFailure {
-        Logger.warn(msg = "Failed to fetch channel info", e = it, context = TAG)
+        Logger.warn("Failed to fetch channel info", e = it, context = TAG)
     }
 
-    suspend fun handleLnurlChannel(
+    suspend fun requestLnurlChannel(
         k1: String,
         callback: String,
         nodeId: String,
     ): Result<LnurlChannelResponse> = runCatching {
-        Logger.debug("Handling LNURL channel request to: $callback")
+        Logger.debug("Requesting LNURL channel request via: '$callback'")
 
         val response = client.get(callback) {
             url {
@@ -105,7 +104,7 @@ class LnurlService @Inject constructor(
             else -> parsedResponse
         }
     }.onFailure {
-        Logger.warn(msg = "Failed to handle LNURL channel", e = it, context = TAG)
+        Logger.warn("Failed to request LNURL channel", e = it, context = TAG)
     }
 
     companion object {
