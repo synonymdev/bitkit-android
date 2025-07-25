@@ -658,6 +658,7 @@ class AppViewModel @Inject constructor(
 
         val domain = runCatching { data.uri.toUri().host }.getOrDefault(data.uri).orEmpty().trim()
 
+        // TODO pass callback and domain data from bitkit-core when updated to accept decoded callback and return domain
         val result = lightningService.requestLnurlAuth(
             callback = lnurl,
             k1 = data.k1,
