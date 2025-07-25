@@ -83,7 +83,7 @@ fun SpendingAmountScreen(
             var maxLspFee by remember { mutableStateOf(0uL) }
 
             val feeMaximum = max(0, availableAmount.toLong() - maxLspFee.toLong())
-            val maximum = min(transferValues.maxClientBalance.toLong(), feeMaximum)
+            val maximum = min(transferValues.maxClientBalance.toLong(), feeMaximum) //TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
 
             // Update maxClientBalance Effect
             LaunchedEffect(satsAmount) {
