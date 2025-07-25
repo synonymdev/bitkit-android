@@ -682,8 +682,6 @@ class AppViewModel @Inject constructor(
                 },
             )
         }
-
-        Logger.debug("LNURL auth result: $result")
     }
 
     private fun onScanLnurlChannel(data: LnurlChannelData) {

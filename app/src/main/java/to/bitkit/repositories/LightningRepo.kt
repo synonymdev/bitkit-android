@@ -465,6 +465,8 @@ class LightningRepo @Inject constructor(
             bip39Passphrase = passphrase,
         )
 
+        Logger.debug("LNURL auth result: '$result'")
+
         return@runCatching result
     }.onFailure {
         Logger.error("Error requesting lnurl auth, k1: $k1, callback: $callback, domain: $domain", it)
