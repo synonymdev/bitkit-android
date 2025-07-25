@@ -107,8 +107,6 @@ class AppViewModel @Inject constructor(
     var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
 
-    var scan: Scanner? = null; private set
-
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
@@ -455,7 +453,6 @@ class AppViewModel @Inject constructor(
             .onFailure { Logger.error("Failed to decode scan result: '$result'", it) }
             .onSuccess { Logger.info("Handling scan data: $it") }
             .getOrNull()
-        this.scan = scan
 
         // always reset state on new scan
         resetSendState()
@@ -664,7 +661,7 @@ class AppViewModel @Inject constructor(
 
     fun requestLnurlAuth(callback: String, k1: String, domain: String) {
         viewModelScope.launch {
-            // TODO pass callback and domain data from bitkit-core when updated to accept decoded callback and return domain
+            // TODO pass callback and domain from bitkit-core when updated to accept decoded callback and return domain
             lightningService.requestLnurlAuth(
                 callback = callback,
                 k1 = k1,
@@ -1053,7 +1050,6 @@ class AppViewModel @Inject constructor(
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
-        scan = null
     }
     // endregion
 
