@@ -216,7 +216,7 @@ fun ContentView(
                         navController.navigateToHome()
                         delay(100) // Small delay to ensure navigation completes
                     }
-                    appViewModel.onScanSuccess(it.data)
+                    appViewModel.onScanResult(it.data)
                 }
 
                 else -> Unit
@@ -743,7 +743,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanSuccess(data)
+                appViewModel.onScanResult(data)
             }
         )
     }
@@ -976,9 +976,9 @@ private fun NavGraphBuilder.qrScanner(
         exitTransition = { screenSlideOut },
     ) {
         QrScanningScreen(navController = navController) { qrCode ->
-            appViewModel.onScanSuccess(
+            appViewModel.onScanResult(
                 data = qrCode,
-                onResultDelay = 650 // slight delay for nav transition before showing send sheet
+                delayMs = 650 // slight delay for nav transition before showing send sheet
             )
         }
     }
