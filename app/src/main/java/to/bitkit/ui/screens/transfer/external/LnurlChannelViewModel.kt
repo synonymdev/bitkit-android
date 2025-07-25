@@ -65,7 +65,7 @@ class LnurlChannelViewModel @Inject constructor(
             // Connect to peer if not connected
             lightningRepo.connectPeer(peer)
 
-            lightningRepo.handleLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
+            lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,

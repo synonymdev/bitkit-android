@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets.activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,7 +32,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagSelectorSheet() {
     val activity = activityListViewModel ?: return
@@ -41,7 +39,7 @@ fun TagSelectorSheet() {
     val availableTags by activity.availableTags.collectAsStateWithLifecycle()
     val selectedTags by activity.selectedTags.collectAsStateWithLifecycle()
 
-    TagSelectorSheetContent(
+    Content(
         availableTags = availableTags,
         selectedTags = selectedTags,
         onTagClick = { activity.toggleTag(it) },
@@ -55,9 +53,8 @@ fun TagSelectorSheet() {
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagSelectorSheetContent(
+private fun Content(
     availableTags: List<String>,
     selectedTags: Set<String>,
     onTagClick: (String) -> Unit = {},
@@ -114,7 +111,6 @@ private fun TagSelectorSheetContent(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -123,7 +119,7 @@ private fun Preview() {
             contentAlignment = Alignment.BottomCenter,
             modifier = Modifier.fillMaxSize()
         ) {
-            TagSelectorSheetContent(
+            Content(
                 availableTags = listOf("Bitcoin", "Lightning", "Sent", "Received"),
                 selectedTags = setOf("Bitcoin", "Received"),
             )

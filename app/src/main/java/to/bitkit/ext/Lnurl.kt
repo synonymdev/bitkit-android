@@ -7,4 +7,5 @@ fun LnurlPayData.commentAllowed(): Boolean = commentAllowed?.let { it > 0u } == 
 fun LnurlPayData.maxSendableSat(): ULong = maxSendable / 1000u
 fun LnurlPayData.minSendableSat(): ULong = minSendable / 1000u
 
+fun LnurlWithdrawData.minWithdrawableSat(): ULong = (minWithdrawable ?: 0u) / 1000u
 fun LnurlWithdrawData.maxWithdrawableSat(): ULong = maxWithdrawable / 1000u

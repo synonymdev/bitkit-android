@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -29,10 +30,10 @@ import to.bitkit.ui.components.ModalBottomSheetHandle
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
@@ -45,7 +46,6 @@ fun HighBalanceWarningSheet(
     onDismiss: () -> Unit,
     understoodClick: () -> Unit,
     learnMoreClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -62,7 +62,6 @@ fun HighBalanceWarningSheet(
         HighBalanceWarningContent(
             understoodClick = understoodClick,
             learnMoreClick = learnMoreClick,
-            modifier = modifier
         )
     }
 }
@@ -71,19 +70,19 @@ fun HighBalanceWarningSheet(
 fun HighBalanceWarningContent(
     understoodClick: () -> Unit,
     learnMoreClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .gradientBackground()
+            .navigationBarsPadding()
             .testTag("high_balance_intro_screen")
     ) {
         SheetTopBar(stringResource(R.string.other__high_balance__nav_title))
 
         Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
                 painter = painterResource(R.drawable.exclamation_mark),
@@ -106,13 +105,7 @@ fun HighBalanceWarningContent(
                 text =
                     stringResource(R.string.other__high_balance__text).withAccent(
                         defaultColor = Colors.White64,
-                        accentStyle = SpanStyle(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            letterSpacing = 0.4.sp,
-                            fontFamily = InterFontFamily,
-                            color = Colors.White,
-                        )
+                        accentStyle = AppTextStyles.Subtitle.merge(color = Colors.White).toSpanStyle()
                     ),
                 color = Colors.White64,
                 modifier = Modifier
@@ -148,15 +141,16 @@ fun HighBalanceWarningContent(
     }
 }
 
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        HighBalanceWarningContent(
-            understoodClick = {},
-            learnMoreClick = {},
-        )
+        Column {
+            VerticalSpacer(100.dp)
+            HighBalanceWarningContent(
+                understoodClick = {},
+                learnMoreClick = {},
+            )
+        }
     }
 }

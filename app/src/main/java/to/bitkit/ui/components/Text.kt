@@ -109,18 +109,12 @@ fun Headline20(
 fun Title(
     text: String,
     modifier: Modifier = Modifier,
-    lineHeight: TextUnit = 26.sp,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Unspecified,
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            lineHeight = lineHeight,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.Title.merge(
             color = color,
             textAlign = textAlign,
         ),
@@ -137,11 +131,7 @@ fun Subtitle(
 ) {
     Text(
         text = text,
-        style = TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp,
-            letterSpacing = 0.4.sp,
-            fontFamily = InterFontFamily,
+        style = AppTextStyles.Subtitle.merge(
             color = color,
             textAlign = textAlign,
         ),

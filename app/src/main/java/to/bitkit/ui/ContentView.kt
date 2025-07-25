@@ -39,14 +39,14 @@ import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.onboarding.InitializingWalletView
 import to.bitkit.ui.onboarding.WalletInitResult
 import to.bitkit.ui.onboarding.WalletInitResultView
-import to.bitkit.ui.screens.settings.DevSettingsScreen
-import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
-import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
+import to.bitkit.ui.screens.settings.DevSettingsScreen
+import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
+import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
@@ -68,6 +68,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
+import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
 import to.bitkit.ui.screens.wallets.HomeNav
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
@@ -75,6 +76,7 @@ import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveQrSheet
 import to.bitkit.ui.screens.wallets.send.SendOptionsView
+import to.bitkit.ui.screens.wallets.sheets.LnurlAuthSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
@@ -109,6 +111,7 @@ import to.bitkit.ui.settings.advanced.AddressViewerScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.RgsServerScreen
+import to.bitkit.ui.settings.appStatus.AppStatusScreen
 import to.bitkit.ui.settings.backups.BackupNavigationSheet
 import to.bitkit.ui.settings.backups.BackupSheet
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
@@ -129,7 +132,6 @@ import to.bitkit.ui.settings.pin.DisablePinScreen
 import to.bitkit.ui.settings.pin.PinNavigationSheet
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
-import to.bitkit.ui.settings.appStatus.AppStatusScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
 import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
@@ -150,7 +152,6 @@ import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
 
 @Composable
 fun ContentView(
@@ -216,7 +217,7 @@ fun ContentView(
                         navController.navigateToHome()
                         delay(100) // Small delay to ensure navigation completes
                     }
-                    appViewModel.onScanSuccess(it.data)
+                    appViewModel.onScanResult(it.data)
                 }
 
                 else -> Unit
@@ -372,6 +373,8 @@ fun ContentView(
                         BottomSheetType.BackupNavigation -> BackupNavigationSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
+
+                        is BottomSheetType.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
 
                         null -> Unit
                     }
@@ -560,7 +563,7 @@ private fun RootNavHost(
             }
             composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnUrl = { navController.navigateToScanner() },
+                    onLnurl = { navController.navigateToScanner() },
                     onManual = { navController.navigate(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
@@ -743,7 +746,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanSuccess(data)
+                appViewModel.onScanResult(data)
             }
         )
     }
@@ -976,9 +979,9 @@ private fun NavGraphBuilder.qrScanner(
         exitTransition = { screenSlideOut },
     ) {
         QrScanningScreen(navController = navController) { qrCode ->
-            appViewModel.onScanSuccess(
+            appViewModel.onScanResult(
                 data = qrCode,
-                onResultDelay = 650 // slight delay for nav transition before showing send sheet
+                delayMs = 650 // slight delay for nav transition before showing send sheet
             )
         }
     }

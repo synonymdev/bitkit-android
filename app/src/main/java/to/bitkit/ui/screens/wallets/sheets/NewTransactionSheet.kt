@@ -41,7 +41,6 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
@@ -145,7 +144,7 @@ fun NewTransactionSheetView(
         )
         LottieAnimation(
             composition = composition,
-            contentScale = ContentScale.FillBounds,
+            contentScale = ContentScale.Crop,
             iterations = 100,
             modifier = Modifier
                 .fillMaxSize()
