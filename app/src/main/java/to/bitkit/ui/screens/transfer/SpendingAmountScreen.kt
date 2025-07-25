@@ -94,17 +94,8 @@ fun SpendingAmountScreen(
                 )
             }
 
-            // Update maxLspBalance Effect
-            LaunchedEffect(availableAmount) {
-                viewModel.updateTransferValues(availableAmount)
-                Logger.debug(
-                    "availableAmount changed - maxLspBalance: ${transferValues.maxLspBalance}",
-                    context = "SpendingAmountScreen"
-                )
-            }
-
             // Update maxLspFee Effect
-            LaunchedEffect(availableAmount, transferValues.maxLspBalance) {
+            LaunchedEffect(availableAmount, transferValues.maxLspBalance) { //TODO MOVE TO VIEWMODEL
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = availableAmount,
