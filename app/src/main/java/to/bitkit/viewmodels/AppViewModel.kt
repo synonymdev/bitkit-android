@@ -465,7 +465,7 @@ class AppViewModel @Inject constructor(
             is Scanner.Lightning -> onScanLightning(scan.invoice)
             is Scanner.LnurlPay -> onScanLnurlPay(scan.data)
             is Scanner.LnurlWithdraw -> onScanLnurlWithdraw(scan.data)
-            is Scanner.LnurlAuth -> onScanLnurlAuth(scan.data)
+            is Scanner.LnurlAuth -> onScanLnurlAuth(scan.data, result)
             is Scanner.LnurlChannel -> onScanLnurlChannel(scan.data)
             is Scanner.NodeId -> onScanNodeId(scan.url)
             else -> {
@@ -653,13 +653,13 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onScanLnurlAuth(data: LnurlAuthData) {
+    private suspend fun onScanLnurlAuth(data: LnurlAuthData, lnurl: String) {
         Logger.debug("LNURL: $data")
 
         val domain = runCatching { data.uri.toUri().host }.getOrDefault(data.uri).orEmpty().trim()
 
         val result = lightningService.requestLnurlAuth(
-            callback = data.uri,
+            callback = lnurl,
             k1 = data.k1,
             domain = domain,
         ).onFailure {
@@ -667,7 +667,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_auth_error),
                 description = context.getString(R.string.other__lnurl_auth_error_msg)
-                    .replace("{raw}", it.message ?: "Unknown error"),
+                    .replace("{raw}", it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName),
             )
         }.onSuccess {
             toast(
