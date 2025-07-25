@@ -67,7 +67,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.viewmodels.AmountWarning
-import to.bitkit.viewmodels.LnUrlParameters
+import to.bitkit.viewmodels.LnurlParams
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
@@ -168,7 +168,7 @@ private fun SendAndReviewContent(
                 .gradientBackground()
                 .navigationBarsPadding()
         ) {
-            val isLnurlPay = uiState.lnUrlParameters is LnUrlParameters.LnUrlPay
+            val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
 
             SheetTopBar(
                 titleText = when {
@@ -196,7 +196,7 @@ private fun SendAndReviewContent(
                 }
 
                 if (isLnurlPay) {
-                    if (uiState.lnUrlParameters.data.commentAllowed()) {
+                    if (uiState.lnurl.data.commentAllowed()) {
                         LnurlCommentSection(uiState, onEvent)
                     }
                 } else {
@@ -379,7 +379,7 @@ private fun OnChainDescription(
 private fun LightningDescription(
     uiState: SendUiState,
 ) {
-    val isLnurlPay = uiState.lnUrlParameters is LnUrlParameters.LnUrlPay
+    val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
     val expirySeconds = uiState.decodedInvoice?.expirySeconds
     val description = uiState.decodedInvoice?.description
 
@@ -389,7 +389,7 @@ private fun LightningDescription(
             color = Colors.White64,
         )
         val destination = when {
-            isLnurlPay -> uiState.lnUrlParameters.data.uri
+            isLnurlPay -> uiState.lnurl.data.uri
             else -> uiState.decodedInvoice?.bolt11.orEmpty()
         }
 
@@ -512,7 +512,7 @@ private fun PreviewLnurl() {
                 amount = 1234u,
                 address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
                 payMethod = SendMethod.LIGHTNING,
-                lnUrlParameters = LnUrlParameters.LnUrlPay(
+                lnurl = LnurlParams.LnurlPay(
                     data = LnurlPayData(
                         uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",
                         callback = "",

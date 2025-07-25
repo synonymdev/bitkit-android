@@ -118,7 +118,7 @@ fun SendOptionsView(
                     inSheet = true,
                 ) { qrCode ->
                     navController.popBackStack()
-                    appViewModel.onScanSuccess(data = qrCode)
+                    appViewModel.onScanResult(data = qrCode)
                 }
             }
             composableWithDefaultTransitions<SendRoute.CoinSelection> {
