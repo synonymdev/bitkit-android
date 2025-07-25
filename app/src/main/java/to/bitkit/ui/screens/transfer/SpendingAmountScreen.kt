@@ -83,7 +83,10 @@ fun SpendingAmountScreen(
             var maxLspFee by remember { mutableStateOf(0uL) }
 
             val feeMaximum = max(0, availableAmount.toLong() - maxLspFee.toLong())
-            val maximum = min(transferValues.maxClientBalance.toLong(), feeMaximum) //TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
+            val maximum = min(
+                transferValues.maxClientBalance.toLong(),
+                feeMaximum
+            ) //TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
 
             // Update maxClientBalance Effect
             LaunchedEffect(satsAmount) {
@@ -106,7 +109,10 @@ fun SpendingAmountScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
+            Display(
+                text = stringResource(R.string.lightning__spending_amount__title)
+                    .withAccent(accentColor = Colors.Purple)
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             AmountInput(
@@ -165,7 +171,9 @@ fun SpendingAmountScreen(
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = resources.getString(R.string.lightning__spending_amount__error_max__title),
-                            description = resources.getString(R.string.lightning__spending_amount__error_max__description_zero),
+                            description = resources.getString(
+                                R.string.lightning__spending_amount__error_max__description_zero
+                            ),
                         )
                         return@PrimaryButton
                     }
