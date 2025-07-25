@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.ActivityFilter
@@ -652,9 +653,36 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun onScanLnurlAuth(data: LnurlAuthData) {
+    private suspend fun onScanLnurlAuth(data: LnurlAuthData) {
         Logger.debug("LNURL: $data")
-        // TODO handle
+
+        val domain = runCatching { data.uri.toUri().host }.getOrDefault(data.uri).orEmpty().trim()
+
+        val result = lightningService.requestLnurlAuth(
+            callback = data.uri,
+            k1 = data.k1,
+            domain = domain,
+        ).onFailure {
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.other__lnurl_auth_error),
+                description = context.getString(R.string.other__lnurl_auth_error_msg)
+                    .replace("{raw}", it.message ?: "Unknown error"),
+            )
+        }.onSuccess {
+            toast(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.other__lnurl_auth_success_title),
+                description = when (domain.isNotBlank()) {
+                    true -> context.getString(R.string.other__lnurl_auth_success_msg_domain)
+                        .replace("{domain}", domain)
+
+                    else -> context.getString(R.string.other__lnurl_auth_success_msg_no_domain)
+                },
+            )
+        }
+
+        Logger.debug("LNURL auth result: $result")
     }
 
     private fun onScanLnurlChannel(data: LnurlChannelData) {

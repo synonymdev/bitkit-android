@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.decode
+import com.synonym.bitkitcore.lnurlAuth
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +29,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.ElectrumServer
@@ -35,14 +37,14 @@ import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toCoinSelectAlgorithm
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
-import to.bitkit.services.LnurlWithdrawResponse
-import to.bitkit.services.LnurlChannelInfoResponse
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
+import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -444,6 +446,28 @@ class LightningRepo @Inject constructor(
     ): Result<LnurlChannelResponse> = executeWhenNodeRunning("requestLnurlChannel") {
         // TODO use bitkit-core createChannelRequestUrl after it is fixed to prevent k1 duplicating
         lnurlService.requestLnurlChannel(k1 = k1, callback = callback, nodeId = nodeId)
+    }
+
+    suspend fun requestLnurlAuth(
+        k1: String,
+        callback: String,
+        domain: String,
+    ): Result<String> = runCatching {
+        val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
+        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+        val result = lnurlAuth(
+            k1 = k1,
+            callback = callback,
+            domain = domain,
+            network = Env.network.toCoreNetwork(),
+            bip32Mnemonic = mnemonic,
+            bip39Passphrase = passphrase,
+        )
+
+        return@runCatching result
+    }.onFailure {
+        Logger.error("Error requesting lnurl auth, k1: $k1, callback: $callback, domain: $domain", it)
     }
 
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
