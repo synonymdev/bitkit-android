@@ -194,13 +194,35 @@ class TransferViewModel @Inject constructor(
 
         // The maximum channel size the user can open including existing channels
         val maxChannelSize2 = if (maxChannelSize1 > channelsSize) maxChannelSize1 - channelsSize else 0u
-        val maxChannelSize = min(maxChannelSize1, maxChannelSize2)
+        val maxChannelSizeAvailableToIncrease = min(maxChannelSize1, maxChannelSize2)
 
         val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
         val maxLspBalance =
-            if (maxChannelSize > clientBalanceSat) maxChannelSize - clientBalanceSat else 0u //todo check this
+            if (maxChannelSizeAvailableToIncrease > clientBalanceSat) maxChannelSizeAvailableToIncrease - clientBalanceSat else 0u
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
-        val maxClientBalance = getMaxClientBalance(maxChannelSize)
+        val maxClientBalance = getMaxClientBalance(maxChannelSizeAvailableToIncrease)
+
+        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) { //TODO DISPLAY ERROR
+            Logger.warn(
+                "Amount clientBalanceSat:$clientBalanceSat too large, max possible: $maxChannelSizeAvailableToIncrease",
+                context = TAG
+            )
+        }
+
+        if (defaultLspBalance < minLspBalance || defaultLspBalance > maxLspBalance) {
+            Logger.warn(
+                "Invalid defaultLspBalance:$defaultLspBalance min possible:$maxLspBalance , max possible: $minLspBalance",
+                context = TAG
+            )
+        }
+
+        if (maxChannelSizeAvailableToIncrease <= 0u) {
+            Logger.warn("Max channel size reached. current size: $channelsSize sats", context = TAG)
+        }
+
+        if (maxClientBalance <= 0u) {
+            Logger.warn("No liquidity available to purchase $maxClientBalance", context = TAG)
+        }
 
         return TransferValues(
             defaultLspBalance = defaultLspBalance,
