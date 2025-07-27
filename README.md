@@ -2,6 +2,7 @@
 
 > [!CAUTION]
 > ⚠️This **NOT** the repository of the Bitkit app from the app stores!
+> ⚠️Work-in-progress
 > The Bitkit app repository is here: **[github.com/synonymdev/bitkit](https://github.com/synonymdev/bitkit)**
 
 ---
