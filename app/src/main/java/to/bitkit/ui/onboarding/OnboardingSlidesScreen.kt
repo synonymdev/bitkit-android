@@ -173,7 +173,7 @@ fun OnboardingSlidesScreen(
             } else {
                 TextButton(
                     onClick = {
-                        scope.launch { pagerState.animateScrollToPage(4) }
+                        scope.launch { pagerState.animateScrollToPage(pagerState.pageCount - 1) }
                     },
                     modifier = Modifier.testTag("SkipButton")
                 ) {
