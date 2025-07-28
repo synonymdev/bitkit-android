@@ -107,7 +107,7 @@ fun SpendingAmountScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = uiState.maxAvailableToSend)
+                    MoneySSB(sats = uiState.balanceAfterFee)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(color = Colors.Purple)
@@ -116,8 +116,8 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = (uiState.maxAvailableToSend.toDouble() / 4.0).roundToLong()
-                        overrideSats = quarter
+                        val quarter = (uiState.balanceAfterFee.toDouble() / 4.0).roundToLong()
+                        overrideSats = min(quarter, uiState.maxAvailableToSend)
                     },
                 )
                 // Max Button

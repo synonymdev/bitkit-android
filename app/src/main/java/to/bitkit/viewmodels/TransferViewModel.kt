@@ -171,7 +171,8 @@ class TransferViewModel @Inject constructor(
                         maxAvailableToSend = min(
                             _transferValues.value.maxClientBalance.toLong(),
                             balanceAfterLspFee.toLong()
-                        )
+                        ),
+                        balanceAfterFee = availableAmount.toLong()
                     )
                 }
             }.onFailure { exception ->
@@ -432,6 +433,7 @@ data class TransferToSpendingUiState(
     val isAdvanced: Boolean = false,
     val satsAmount: Long = 0,
     val maxAvailableToSend: Long = 0,
+    val balanceAfterFee: Long = 0,
 )
 
 data class TransferValues(
