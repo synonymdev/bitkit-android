@@ -197,12 +197,15 @@ class TransferViewModel @Inject constructor(
         val maxChannelSizeAvailableToIncrease = min(maxChannelSize1, maxChannelSize2)
 
         val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
-        val maxLspBalance =
-            if (maxChannelSizeAvailableToIncrease > clientBalanceSat) maxChannelSizeAvailableToIncrease - clientBalanceSat else 0u
+        val maxLspBalance = if (maxChannelSizeAvailableToIncrease > clientBalanceSat) {
+            maxChannelSizeAvailableToIncrease - clientBalanceSat
+        } else {
+            0u
+        }
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
         val maxClientBalance = getMaxClientBalance(maxChannelSizeAvailableToIncrease)
 
-        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) { //TODO DISPLAY ERROR
+        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) { // TODO DISPLAY ERROR
             Logger.warn(
                 "Amount clientBalanceSat:$clientBalanceSat too large, max possible: $maxChannelSizeAvailableToIncrease",
                 context = TAG
@@ -250,7 +253,7 @@ class TransferViewModel @Inject constructor(
 
         val lspBalance = if (clientBalanceSat < threshold1) { // 0-225€: LSP balance = 450€ - client balance
             defaultLspBalanceSats - clientBalanceSat
-        } else if (clientBalanceSat < threshold2) {   // 225-495€: LSP balance = client balance
+        } else if (clientBalanceSat < threshold2) { // 225-495€: LSP balance = client balance
             clientBalanceSat
         } else if (clientBalanceSat < maxLspBalance) { // 495-950€: LSP balance = max - client balance
             maxLspBalance - clientBalanceSat

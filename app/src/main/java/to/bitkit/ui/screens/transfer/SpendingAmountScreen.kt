@@ -86,7 +86,7 @@ fun SpendingAmountScreen(
             val maximum = min(
                 transferValues.maxClientBalance.toLong(),
                 feeMaximum
-            ) //TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
+            ) // TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
 
             // Update maxClientBalance Effect
             LaunchedEffect(satsAmount) {
@@ -98,7 +98,7 @@ fun SpendingAmountScreen(
             }
 
             // Update maxLspFee Effect
-            LaunchedEffect(availableAmount, transferValues.maxLspBalance) { //TODO MOVE TO VIEWMODEL
+            LaunchedEffect(availableAmount, transferValues.maxLspBalance) { // TODO MOVE TO VIEWMODEL
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = availableAmount,
