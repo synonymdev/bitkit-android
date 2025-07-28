@@ -12,11 +12,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +41,6 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.TransferViewModel
 import kotlin.math.max
 import kotlin.math.min
@@ -62,6 +59,7 @@ fun SpendingAmountScreen(
     val currencies = LocalCurrencies.current
     val resources = LocalContext.current.resources
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
+    val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
     ScreenColumn {
         AppTopBar(
@@ -75,27 +73,17 @@ fun SpendingAmountScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var satsAmount by rememberSaveable { mutableLongStateOf(0) }
             var overrideSats: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
 
             val availableAmount = LocalBalances.current.totalOnchainSats - 512u // default tx fee
             var maxLspFee by remember { mutableStateOf(0uL) }
 
-            val feeMaximum = max(0, availableAmount.toLong() - maxLspFee.toLong())
+            val maxFeeDiscounted = max(0, availableAmount.toLong() - maxLspFee.toLong())
             val maximum = min(
                 transferValues.maxClientBalance.toLong(),
-                feeMaximum
+                maxFeeDiscounted
             ) // TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
-
-            // Update maxClientBalance Effect
-            LaunchedEffect(satsAmount) {
-                viewModel.updateTransferValues(satsAmount.toULong())
-                Logger.debug(
-                    "satsAmount changed - maxClientBalance: ${transferValues.maxClientBalance}",
-                    context = "SpendingAmountScreen"
-                )
-            }
 
             // Update maxLspFee Effect
             LaunchedEffect(availableAmount, transferValues.maxLspBalance) { // TODO MOVE TO VIEWMODEL
@@ -118,10 +106,7 @@ fun SpendingAmountScreen(
             AmountInput(
                 primaryDisplay = currencies.primaryDisplay,
                 overrideSats = overrideSats,
-                onSatsChange = { sats ->
-                    satsAmount = sats
-                    overrideSats = null
-                },
+                onSatsChange = viewModel::onAmountChanged,
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -181,7 +166,7 @@ fun SpendingAmountScreen(
                     isLoading = true
                     scope.launch {
                         try {
-                            val order = blocktank.createOrder(satsAmount.toULong())
+                            val order = blocktank.createOrder(uiState.satsAmount.toULong())
                             viewModel.onOrderCreated(order)
                             onOrderCreated()
                         } catch (e: Throwable) {
@@ -191,7 +176,7 @@ fun SpendingAmountScreen(
                         }
                     }
                 },
-                enabled = !isLoading && satsAmount != 0L,
+                enabled = !isLoading && uiState.satsAmount != 0L,
                 isLoading = isLoading,
             )
 

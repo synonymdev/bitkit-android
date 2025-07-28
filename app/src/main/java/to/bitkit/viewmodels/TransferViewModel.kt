@@ -27,6 +27,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -44,6 +45,7 @@ private const val EUR_CURRENCY = "EUR"
 class TransferViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val walletRepo: WalletRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
@@ -64,6 +66,11 @@ class TransferViewModel @Inject constructor(
 
     fun onOrderCreated(order: IBtOrder) {
         _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+    }
+
+    fun onAmountChanged(sats: Long) {
+        _spendingUiState.update { it.copy(satsAmount = sats) }
+        updateTransferValues(sats.toULong())
     }
 
     fun onAdvancedOrderCreated(order: IBtOrder) {
@@ -375,6 +382,7 @@ data class TransferToSpendingUiState(
     val order: IBtOrder? = null,
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
+    val satsAmount: Long = 0,
 )
 
 data class TransferValues(
