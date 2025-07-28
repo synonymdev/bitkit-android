@@ -61,6 +61,10 @@ fun SpendingAmountScreen(
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        viewModel.updateLimits(retry = true)
+    }
+
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
@@ -75,26 +79,6 @@ fun SpendingAmountScreen(
         ) {
             var overrideSats: Long? by remember { mutableStateOf(null) }
             var isLoading by remember { mutableStateOf(false) }
-
-            val availableAmount = LocalBalances.current.totalOnchainSats - 512u // default tx fee
-            var maxLspFee by remember { mutableStateOf(0uL) }
-
-            val maxFeeDiscounted = max(0, availableAmount.toLong() - maxLspFee.toLong())
-            val maximum = min(
-                transferValues.maxClientBalance.toLong(),
-                maxFeeDiscounted
-            ) // TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
-
-            // Update maxLspFee Effect
-            LaunchedEffect(availableAmount, transferValues.maxLspBalance) { // TODO MOVE TO VIEWMODEL
-                runCatching {
-                    val estimate = blocktank.estimateOrderFee(
-                        spendingBalanceSats = availableAmount,
-                        receivingBalanceSats = transferValues.maxLspBalance,
-                    )
-                    maxLspFee = estimate.feeSat
-                }
-            }
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(
@@ -123,7 +107,7 @@ fun SpendingAmountScreen(
                         color = Colors.White64,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    MoneySSB(sats = availableAmount.toLong())
+                    MoneySSB(sats = uiState.maxAvailableToSend)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 UnitButton(color = Colors.Purple)
@@ -132,9 +116,8 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
                     onClick = {
-                        val quarter = (availableAmount.toDouble() / 4.0).roundToLong()
-                        val amount = min(quarter, maximum)
-                        overrideSats = amount
+                        val quarter = (uiState.maxAvailableToSend.toDouble() / 4.0).roundToLong()
+                        overrideSats = quarter
                     },
                 )
                 // Max Button
@@ -142,7 +125,7 @@ fun SpendingAmountScreen(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
                     onClick = {
-                        overrideSats = maximum
+                        overrideSats = uiState.maxAvailableToSend
                     },
                 )
             }
@@ -164,7 +147,7 @@ fun SpendingAmountScreen(
                     }
 
                     isLoading = true
-                    scope.launch {
+                    scope.launch { //TODO THIS TRIGGERING AN EXCEPTION WHEN THE COMPOSITION IS FINISHED
                         try {
                             val order = blocktank.createOrder(uiState.satsAmount.toULong())
                             viewModel.onOrderCreated(order)

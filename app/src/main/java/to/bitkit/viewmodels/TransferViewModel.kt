@@ -36,6 +36,7 @@ import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.time.Duration.Companion.seconds
 
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
@@ -70,7 +71,12 @@ class TransferViewModel @Inject constructor(
 
     fun onAmountChanged(sats: Long) {
         _spendingUiState.update { it.copy(satsAmount = sats) }
-        updateTransferValues(sats.toULong())
+        updateLimits(retry = false)
+    }
+
+    fun updateLimits(retry: Boolean) {
+        updateTransferValues(_spendingUiState.value.satsAmount.toULong())
+        updateAvailableAmount(retry = retry)
     }
 
     fun onAdvancedOrderCreated(order: IBtOrder) {
@@ -137,6 +143,47 @@ class TransferViewModel @Inject constructor(
                 delay(frequencyMs)
             }
             Logger.debug("Stopped watching order '$orderId'", context = TAG)
+        }
+    }
+
+    private fun updateAvailableAmount(retry: Boolean) {
+        viewModelScope.launch {
+            val onChainBalance = walletRepo.balanceState.value.totalOnchainSats
+            val totalFeeFromAvailableAmount = lightningRepo.calculateTotalFee(amountSats = onChainBalance)
+                .getOrDefault(DEFAULT_TX_FEE.toULong())
+
+            // Get the max available balance discounting onChain fee
+            val availableAmount = onChainBalance - totalFeeFromAvailableAmount
+
+            // Calculate the LSP fee to the total balance
+            blocktankRepo.estimateOrderFee(
+                spendingBalanceSats = availableAmount,
+                receivingBalanceSats = _transferValues.value.maxLspBalance
+            ).onSuccess { estimate ->
+                val maxLspFee = estimate.feeSat
+
+                // Calculate the available balance to send after LSP fee
+                val balanceAfterLspFee = availableAmount - maxLspFee
+
+                _spendingUiState.update {
+                    // Calculate the max available to send considering the current balance and LSP policy
+                    it.copy(
+                        maxAvailableToSend = min(
+                            _transferValues.value.maxClientBalance.toLong(),
+                            balanceAfterLspFee.toLong()
+                        )
+                    )
+                }
+            }.onFailure { exception ->
+                if (exception is ServiceError.NodeNotStarted && retry) {
+                    //Retry after delay
+                    Logger.warn("Error getting the available amount. Node not started. trying again in 2 seconds")
+                    delay(2.seconds)
+                    updateAvailableAmount(retry = true)
+                } else {
+                    Logger.error("Failure", exception)
+                }
+            }
         }
     }
 
@@ -374,6 +421,7 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
+        private const val DEFAULT_TX_FEE = 512u
     }
 }
 
@@ -383,6 +431,7 @@ data class TransferToSpendingUiState(
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
     val satsAmount: Long = 0,
+    val maxAvailableToSend: Long = 0,
 )
 
 data class TransferValues(
