@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -44,9 +43,11 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.ChannelStatusUi
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.LightningChannel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -113,12 +114,12 @@ private fun Content(
             val totalFee = order.feeSat
             val lspBalance = order.lspBalanceSat
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(
                 text = stringResource(R.string.lightning__transfer__confirm)
                     .withAccent(accentColor = Colors.Purple)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -148,7 +149,7 @@ private fun Content(
             }
 
             if (isAdvanced) {
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 LightningChannel(
                     capacity = (clientBalance + lspBalance).toLong(),
                     localBalance = clientBalance.toLong(),
@@ -158,7 +159,7 @@ private fun Content(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 PrimaryButton(
                     text = stringResource(R.string.common__learn_more),
@@ -181,7 +182,7 @@ private fun Content(
                     },
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             if (!isAdvanced) {
                 Image(
@@ -193,7 +194,7 @@ private fun Content(
                         .align(alignment = CenterHorizontally)
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
@@ -209,7 +210,7 @@ private fun Content(
                     }
                 }
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
