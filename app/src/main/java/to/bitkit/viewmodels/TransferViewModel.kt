@@ -62,6 +62,7 @@ class TransferViewModel @Inject constructor(
 
     private val _transferValues = MutableStateFlow(TransferValues())
     val transferValues = _transferValues.asStateFlow()
+    var retryTimes = 0
 
     // region Spending
 
@@ -71,6 +72,7 @@ class TransferViewModel @Inject constructor(
 
     fun onAmountChanged(sats: Long) {
         _spendingUiState.update { it.copy(satsAmount = sats) }
+        retryTimes = 0
         updateLimits(retry = false)
     }
 
@@ -160,6 +162,7 @@ class TransferViewModel @Inject constructor(
                 spendingBalanceSats = availableAmount,
                 receivingBalanceSats = _transferValues.value.maxLspBalance
             ).onSuccess { estimate ->
+                retryTimes = 0
                 val maxLspFee = estimate.feeSat
 
                 // Calculate the available balance to send after LSP fee
@@ -180,7 +183,8 @@ class TransferViewModel @Inject constructor(
                     //Retry after delay
                     Logger.warn("Error getting the available amount. Node not started. trying again in 2 seconds")
                     delay(2.seconds)
-                    updateAvailableAmount(retry = true)
+                    updateAvailableAmount(retry = retryTimes <= RETRY_LIMIT)
+                    retryTimes++
                 } else {
                     Logger.error("Failure", exception)
                 }
@@ -423,6 +427,7 @@ class TransferViewModel @Inject constructor(
     companion object {
         private const val TAG = "TransferViewModel"
         private const val DEFAULT_TX_FEE = 512u
+        private const val RETRY_LIMIT = 5
     }
 }
 
