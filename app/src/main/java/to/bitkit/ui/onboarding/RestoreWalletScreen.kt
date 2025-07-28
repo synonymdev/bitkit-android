@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -283,6 +284,7 @@ fun RestoreWalletView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp)
+                            .testTag("PassphraseInput")
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     BodyS(
@@ -335,7 +337,9 @@ fun RestoreWalletView(
                                 bip39Passphrase = ""
                             },
                             enabled = areButtonsEnabled,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("AdvancedButton")
                         )
                     }
                     PrimaryButton(
@@ -344,7 +348,9 @@ fun RestoreWalletView(
                             onRestoreClick(bip39Mnemonic, bip39Passphrase.takeIf { it.isNotEmpty() })
                         },
                         enabled = areButtonsEnabled,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("RestoreButton")
                     )
                 }
             }
@@ -443,7 +449,7 @@ fun MnemonicInputField(
         modifier = Modifier
             .onFocusChanged { onFocusChanged(it.isFocused) }
             .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInParent().y.toInt() * 2 //double the scroll to ensure enough space
+                val position = coordinates.positionInParent().y.toInt() * 2 // double the scroll to ensure enough space
                 onPositionChanged(position)
             }
     )

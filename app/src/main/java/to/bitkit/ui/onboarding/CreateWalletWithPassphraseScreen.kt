@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -122,19 +123,21 @@ fun CreateWalletWithPassphraseScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp)
+                    .testTag("PassphraseInput")
             )
             Spacer(modifier = Modifier.height(32.dp))
             PrimaryButton(
                 text = stringResource(R.string.onboarding__create_new_wallet),
                 onClick = { onCreateClick(bip39Passphrase) },
                 enabled = bip39Passphrase.isNotBlank(),
+                modifier = Modifier.testTag("CreateNewWallet")
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun CreateWalletWithPassphraseScreenPreview() {
     AppThemeSurface {
