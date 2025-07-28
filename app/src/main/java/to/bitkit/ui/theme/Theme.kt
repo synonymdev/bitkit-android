@@ -8,6 +8,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 val Gray100 = Color(0xFFF4F4F4)
@@ -51,11 +52,15 @@ private object ColorPalette {
 
 @Composable
 internal fun AppThemeSurface(
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val isSystemInDarkTheme = true // isSystemInDarkTheme() // use computed value for dark theme
     AppTheme(inDarkTheme = isSystemInDarkTheme) {
-        Surface(content = content)
+        Surface(
+            content = content,
+            modifier = modifier,
+        )
     }
 }
 
