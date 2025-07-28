@@ -219,7 +219,6 @@ private fun Content(
             }
         }
     }
-
 }
 
 @Preview(showSystemUi = true, showBackground = true, name = "Normal screen - Default")
