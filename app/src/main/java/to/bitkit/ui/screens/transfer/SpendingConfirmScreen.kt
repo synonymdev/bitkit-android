@@ -23,8 +23,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.BtBolt11InvoiceState
+import com.synonym.bitkitcore.BtOrderState
+import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.BtPaymentState
+import com.synonym.bitkitcore.BtPaymentState2
+import com.synonym.bitkitcore.IBtBolt11Invoice
+import com.synonym.bitkitcore.IBtOnchainTransaction
+import com.synonym.bitkitcore.IBtOnchainTransactions
+import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IBtPayment
+import com.synonym.bitkitcore.ILspNode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -38,6 +50,7 @@ import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
@@ -51,10 +64,36 @@ fun SpendingConfirmScreen(
     onAdvancedClick: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
-    val scope = rememberCoroutineScope()
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val isAdvanced = state.isAdvanced
+
+    Content(
+        onBackClick = onBackClick,
+        onCloseClick = onCloseClick,
+        onLearnMoreClick = onLearnMoreClick,
+        onAdvancedClick = onAdvancedClick,
+        onConfirm = onConfirm,
+        onUseDefaultLspBalanceClick = { viewModel.onUseDefaultLspBalanceClick() },
+        onTransferToSpendingConfirm = { order -> order },
+        order = order,
+        isAdvanced = isAdvanced
+    )
+}
+
+@Composable
+private fun Content(
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
+    onLearnMoreClick: () -> Unit,
+    onAdvancedClick: () -> Unit,
+    onConfirm: () -> Unit,
+    onUseDefaultLspBalanceClick: () -> Unit,
+    onTransferToSpendingConfirm: (IBtOrder) -> Unit,
+    order: IBtOrder,
+    isAdvanced: Boolean,
+) {
+    val scope = rememberCoroutineScope()
 
     ScreenColumn {
         AppTopBar(
@@ -75,7 +114,10 @@ fun SpendingConfirmScreen(
             val lspBalance = order.lspBalanceSat
 
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
+            Display(
+                text = stringResource(R.string.lightning__transfer__confirm)
+                    .withAccent(accentColor = Colors.Purple)
+            )
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(
@@ -132,7 +174,7 @@ fun SpendingConfirmScreen(
                     fullWidth = false,
                     onClick = {
                         if (isAdvanced) {
-                            viewModel.onUseDefaultLspBalanceClick()
+                            onUseDefaultLspBalanceClick()
                         } else {
                             onAdvancedClick()
                         }
@@ -162,12 +204,88 @@ fun SpendingConfirmScreen(
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        viewModel.onTransferToSpendingConfirm(order)
+                        onTransferToSpendingConfirm(order)
                         onConfirm()
                     }
                 }
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Preview(showSystemUi = true, showBackground = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        Content(
+            onBackClick = {},
+            onCloseClick = {},
+            onLearnMoreClick = {},
+            onAdvancedClick = {},
+            onConfirm = {},
+            onUseDefaultLspBalanceClick = {},
+            onTransferToSpendingConfirm = {},
+            order = IBtOrder(
+                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
+                state = BtOrderState.CREATED,
+                state2 = BtOrderState2.CREATED,
+                feeSat = 1000UL,
+                networkFeeSat = 250UL,
+                serviceFeeSat = 750UL,
+                lspBalanceSat = 2000000UL,
+                clientBalanceSat = 500000UL,
+                zeroConf = false,
+                zeroReserve = true,
+                clientNodeId = null,
+                channelExpiryWeeks = 8u,
+                channelExpiresAt = "2025-09-22T08:29:03Z",
+                orderExpiresAt = "2025-07-29T08:29:03Z",
+                channel = null,
+                lspNode = ILspNode(
+                    alias = "Bitkit LSP",
+                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
+                    connectionStrings = listOf("mock@127.0.0.1:9735"),
+                    readonly = null
+                ),
+                lnurl = null,
+                payment = IBtPayment(
+                    state = BtPaymentState.CREATED,
+                    state2 = BtPaymentState2.CREATED,
+                    paidSat = 0UL,
+                    bolt11Invoice = IBtBolt11Invoice(
+                        request = "lnmock",
+                        state = BtBolt11InvoiceState.PENDING,
+                        expiresAt = "2025-07-28T12:00:00Z",
+                        updatedAt = "2025-07-28T08:30:00Z"
+                    ),
+                    onchain = IBtOnchainTransactions(
+                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                        confirmedSat = 0UL,
+                        requiredConfirmations = 1u,
+                        transactions = listOf(
+                            IBtOnchainTransaction(
+                                amountSat = 50000UL,
+                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+                                vout = 0u,
+                                blockHeight = null,
+                                blockConfirmationCount = 0u,
+                                feeRateSatPerVbyte = 12.5,
+                                confirmed = false,
+                                suspicious0ConfReason = ""
+                            )
+                        )
+                    ),
+                    isManuallyPaid = null,
+                    manualRefunds = null
+                ),
+                couponCode = null,
+                source = null,
+                discount = null,
+                updatedAt = "2025-07-28T08:29:03Z",
+                createdAt = "2025-07-28T08:29:03Z"
+            ),
+            isAdvanced = false
+        )
     }
 }
