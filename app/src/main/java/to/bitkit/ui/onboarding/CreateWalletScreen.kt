@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -33,10 +34,11 @@ import to.bitkit.ui.utils.withAccent
 fun CreateWalletScreen(
     onCreateClick: () -> Unit,
     onRestoreClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         contentAlignment = Alignment.TopCenter,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
     ) {
         Image(
@@ -70,12 +72,16 @@ fun CreateWalletScreen(
                 PrimaryButton(
                     text = stringResource(R.string.onboarding__new_wallet),
                     onClick = onCreateClick,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("NewWallet")
                 )
                 SecondaryButton(
                     text = stringResource(R.string.onboarding__restore),
                     onClick = onRestoreClick,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("RestoreWallet")
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -83,7 +89,7 @@ fun CreateWalletScreen(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun CreateWalletScreenPreview() {
     AppThemeSurface {

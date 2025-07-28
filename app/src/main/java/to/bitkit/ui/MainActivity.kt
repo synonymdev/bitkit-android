@@ -10,6 +10,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,7 +78,11 @@ class MainActivity : FragmentActivity() {
         installSplashScreen()
         enableAppEdgeToEdge()
         setContent {
-            AppThemeSurface {
+            AppThemeSurface(
+                modifier = Modifier.semantics {
+                    testTagsAsResourceId = true // see https://github.com/appium/appium/issues/15138
+                }
+            ) {
                 val scope = rememberCoroutineScope()
                 if (!walletViewModel.walletExists) {
                     val startupNavController = rememberNavController()
