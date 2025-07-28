@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +78,7 @@ fun OnboardingSlidesScreen(
                     title = stringResource(R.string.onboarding__slide0_header),
                     titleAccentColor = Colors.Blue,
                     text = stringResource(R.string.onboarding__slide0_text),
+                    modifier = Modifier.testTag("Slide0")
                 )
 
                 1 -> OnboardingTab(
@@ -85,6 +87,7 @@ fun OnboardingSlidesScreen(
                     titleAccentColor = Colors.Purple,
                     text = stringResource(R.string.onboarding__slide1_text),
                     disclaimerText = stringResource(R.string.onboarding__slide1_note), // TODO use GeoBlocking state
+                    modifier = Modifier.testTag("Slide1")
                 )
 
                 2 -> OnboardingTab(
@@ -92,6 +95,7 @@ fun OnboardingSlidesScreen(
                     title = stringResource(R.string.onboarding__slide2_header),
                     titleAccentColor = Colors.Yellow,
                     text = stringResource(R.string.onboarding__slide2_text),
+                    modifier = Modifier.testTag("Slide2")
                 )
 
                 3 -> OnboardingTab(
@@ -99,11 +103,13 @@ fun OnboardingSlidesScreen(
                     title = stringResource(R.string.onboarding__slide3_header),
                     titleAccentColor = Colors.Green,
                     text = stringResource(R.string.onboarding__slide3_text),
+                    modifier = Modifier.testTag("Slide3")
                 )
 
                 4 -> CreateWalletScreen(
                     onCreateClick = onCreateClick,
                     onRestoreClick = onRestoreClick,
+                    modifier = Modifier.testTag("Slide4")
                 )
             }
         }
@@ -153,7 +159,10 @@ fun OnboardingSlidesScreen(
         title = { },
         actions = {
             if (pagerState.currentPage == 4) {
-                TextButton(onClick = onAdvancedSetupClick) {
+                TextButton(
+                    onClick = onAdvancedSetupClick,
+                    modifier = Modifier.testTag("Passphrase")
+                ) {
                     Text(
                         text = stringResource(R.string.onboarding__advanced_setup),
                         fontSize = 17.sp,
@@ -162,9 +171,12 @@ fun OnboardingSlidesScreen(
                     )
                 }
             } else {
-                TextButton(onClick = {
-                    scope.launch { pagerState.animateScrollToPage(4) }
-                }) {
+                TextButton(
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(4) }
+                    },
+                    modifier = Modifier.testTag("SkipButton")
+                ) {
                     Text(
                         text = stringResource(R.string.onboarding__skip),
                         fontSize = 17.sp,
@@ -218,7 +230,7 @@ fun OnboardingTab(
     }
 }
 
-@Preview(showSystemUi = false)
+@Preview(showSystemUi = true)
 @Composable
 private fun OnboardingViewPreview() {
     AppThemeSurface {

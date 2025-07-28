@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,7 +30,6 @@ fun WarningMultipleDevicesScreen(
     onBackClick: () -> Unit,
     onConfirmClick: () -> Unit,
 ) {
-
     ScreenColumn {
         AppTopBar(
             titleText = null,
@@ -41,7 +40,7 @@ fun WarningMultipleDevicesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 32.dp)
-                .systemBarsPadding()
+                .testTag("MultipleDevices")
         ) {
             Image(
                 painter = painterResource(id = R.drawable.phone),
@@ -68,6 +67,7 @@ fun WarningMultipleDevicesScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__understood),
                 onClick = onConfirmClick,
+                modifier = Modifier.testTag("MultipleDevices-button")
             )
 
             Spacer(modifier = Modifier.height(24.dp))

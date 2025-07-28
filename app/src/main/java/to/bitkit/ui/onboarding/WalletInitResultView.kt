@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -109,13 +110,20 @@ fun WalletInitResultView(
                 }
                 onButtonClick()
             },
+            modifier = Modifier.testTag(
+                when (result) {
+                    is WalletInitResult.Restored -> "GetStartedButton"
+                    is WalletInitResult.Failed -> "TryAgainButton"
+                }
+            )
         )
 
         if (result is WalletInitResult.Failed && retryCount > 1 && onProceedWithoutRestore != null) {
             Spacer(modifier = Modifier.height(12.dp))
             SecondaryButton(
                 text = stringResource(R.string.onboarding__restore_no_backup_button),
-                onClick = { showProceedDialog = true }
+                onClick = { showProceedDialog = true },
+                modifier = Modifier.testTag("ProceedWithoutBackupButton")
             )
         }
 
@@ -132,7 +140,8 @@ fun WalletInitResultView(
                 retryCount = 0
                 onProceedWithoutRestore?.invoke()
             },
-            onDismiss = { showProceedDialog = false }
+            onDismiss = { showProceedDialog = false },
+            modifier = Modifier.testTag("ProceedWithoutBackupDialog")
         )
     }
 }
@@ -149,6 +158,10 @@ fun WalletInitResultViewRestoredPreview() {
 @Composable
 fun WalletInitResultViewErrorPreview() {
     AppThemeSurface {
-        WalletInitResultView(result = WalletInitResult.Failed(Error("Something went wrong")), onButtonClick = {})
+        WalletInitResultView(
+            result = WalletInitResult.Failed(Error("Something went wrong")),
+            onButtonClick = {},
+            onProceedWithoutRestore = {},
+        )
     }
 }

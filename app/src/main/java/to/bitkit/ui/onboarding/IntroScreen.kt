@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -80,12 +81,16 @@ fun IntroScreen(
                     PrimaryButton(
                         text = stringResource(R.string.onboarding__get_started),
                         onClick = onStartClick,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("GetStarted")
                     )
                     SecondaryButton(
                         text = stringResource(R.string.onboarding__skip_intro),
                         onClick = onSkipClick,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("SkipIntro")
                     )
                 }
             }

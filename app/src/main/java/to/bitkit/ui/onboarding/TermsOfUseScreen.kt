@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
@@ -71,6 +72,7 @@ fun TermsOfUseScreen(
                         .fillMaxWidth()
                         .padding(horizontal = horizontalPadding)
                         .verticalScroll(rememberScrollState())
+                        .testTag("TOS")
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Display(text = stringResource(R.string.onboarding__tos_header).withAccent())
@@ -102,7 +104,9 @@ fun TermsOfUseScreen(
                         .withAccentLink(Env.TERMS_OF_USE_URL),
                     isChecked = termsAccepted,
                     onCheckedChange = { termsAccepted = it },
-                    modifier = Modifier.padding(horizontal = horizontalPadding)
+                    modifier = Modifier
+                        .padding(horizontal = horizontalPadding)
+                        .testTag("Check1")
                 )
                 CheckButton(
                     title = stringResource(R.string.onboarding__pp_checkbox),
@@ -110,7 +114,9 @@ fun TermsOfUseScreen(
                         .withAccentLink("https://bitkit.to/privacy-policy"),
                     isChecked = privacyAccepted,
                     onCheckedChange = { privacyAccepted = it },
-                    modifier = Modifier.padding(horizontal = horizontalPadding)
+                    modifier = Modifier
+                        .padding(horizontal = horizontalPadding)
+                        .testTag("Check2")
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -119,7 +125,9 @@ fun TermsOfUseScreen(
                     text = stringResource(R.string.common__continue),
                     onClick = onNavigateToIntro,
                     enabled = termsAccepted && privacyAccepted,
-                    modifier = Modifier.padding(horizontal = horizontalPadding)
+                    modifier = Modifier
+                        .padding(horizontal = horizontalPadding)
+                        .testTag("Continue")
                 )
             }
         }
@@ -185,7 +193,7 @@ private fun CheckmarkBox(isChecked: Boolean) {
     }
 }
 
-@Preview
+@Preview(showSystemUi = true)
 @Composable
 private fun TermsPreview() {
     AppThemeSurface {
