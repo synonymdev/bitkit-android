@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
@@ -60,6 +61,7 @@ fun SpendingAmountScreen(
     val blocktank = blocktankViewModel ?: return
     val currencies = LocalCurrencies.current
     val resources = LocalContext.current.resources
+    val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
 
     ScreenColumn {
         AppTopBar(
@@ -78,41 +80,39 @@ fun SpendingAmountScreen(
             var isLoading by remember { mutableStateOf(false) }
 
             val availableAmount = LocalBalances.current.totalOnchainSats - 512u // default tx fee
-
-            var maxClientBalance by remember { mutableStateOf(0uL) }
-            var maxLspBalance by remember { mutableStateOf(0uL) }
             var maxLspFee by remember { mutableStateOf(0uL) }
 
             val feeMaximum = max(0, availableAmount.toLong() - maxLspFee.toLong())
-            val maximum = min(maxClientBalance.toLong(), feeMaximum)
+            val maximum = min(
+                transferValues.maxClientBalance.toLong(),
+                feeMaximum
+            ) // TODO USE MAX AVAILABLE TO TRANSFER INSTEAD OF MAX ONCHAIN BALANCE
 
             // Update maxClientBalance Effect
             LaunchedEffect(satsAmount) {
-                val transferValues = viewModel.calculateTransferValues(satsAmount.toULong())
-                maxClientBalance = transferValues.maxClientBalance
-                Logger.debug("maxClientBalance: $maxClientBalance", context = "SpendingAmountScreen")
-            }
-
-            // Update maxLspBalance Effect
-            LaunchedEffect(availableAmount) {
-                val transferValues = viewModel.calculateTransferValues(availableAmount)
-                maxLspBalance = transferValues.defaultLspBalance
-                Logger.debug("maxLspBalance: $maxLspBalance", context = "SpendingAmountScreen")
+                viewModel.updateTransferValues(satsAmount.toULong())
+                Logger.debug(
+                    "satsAmount changed - maxClientBalance: ${transferValues.maxClientBalance}",
+                    context = "SpendingAmountScreen"
+                )
             }
 
             // Update maxLspFee Effect
-            LaunchedEffect(availableAmount, maxLspBalance) {
+            LaunchedEffect(availableAmount, transferValues.maxLspBalance) { // TODO MOVE TO VIEWMODEL
                 runCatching {
                     val estimate = blocktank.estimateOrderFee(
                         spendingBalanceSats = availableAmount,
-                        receivingBalanceSats = maxLspBalance,
+                        receivingBalanceSats = transferValues.maxLspBalance,
                     )
                     maxLspFee = estimate.feeSat
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-            Display(text = stringResource(R.string.lightning__spending_amount__title).withAccent(accentColor = Colors.Purple))
+            Display(
+                text = stringResource(R.string.lightning__spending_amount__title)
+                    .withAccent(accentColor = Colors.Purple)
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             AmountInput(
@@ -167,11 +167,13 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = {
-                    if (maxLspBalance == 0uL) {
+                    if (transferValues.maxLspBalance == 0uL) {
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = resources.getString(R.string.lightning__spending_amount__error_max__title),
-                            description = resources.getString(R.string.lightning__spending_amount__error_max__description_zero),
+                            description = resources.getString(
+                                R.string.lightning__spending_amount__error_max__description_zero
+                            ),
                         )
                         return@PrimaryButton
                     }
