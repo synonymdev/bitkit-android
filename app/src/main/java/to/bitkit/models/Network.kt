@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import com.synonym.bitkitcore.NetworkType
 import org.lightningdevkit.ldknode.Network
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -15,4 +16,11 @@ fun Network.toCoreNetwork(): BitkitCoreNetwork = when (this) {
     Network.TESTNET -> BitkitCoreNetwork.TESTNET
     Network.SIGNET -> BitkitCoreNetwork.SIGNET
     Network.REGTEST -> BitkitCoreNetwork.REGTEST
+}
+
+fun Network.toCoreNetworkType(): NetworkType = when (this) {
+    Network.BITCOIN -> NetworkType.BITCOIN
+    Network.TESTNET -> NetworkType.TESTNET
+    Network.SIGNET -> NetworkType.SIGNET
+    Network.REGTEST -> NetworkType.REGTEST
 }

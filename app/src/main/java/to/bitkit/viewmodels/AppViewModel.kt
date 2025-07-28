@@ -60,6 +60,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
+import to.bitkit.models.toCoreNetworkType
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.ConnectivityRepo
@@ -105,8 +106,6 @@ class AppViewModel @Inject constructor(
 
     var isGeoBlocked by mutableStateOf<Boolean?>(null)
         private set
-
-    var scan: Scanner? = null; private set
 
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
@@ -454,7 +453,6 @@ class AppViewModel @Inject constructor(
             .onFailure { Logger.error("Failed to decode scan result: '$result'", it) }
             .onSuccess { Logger.info("Handling scan data: $it") }
             .getOrNull()
-        this.scan = scan
 
         // always reset state on new scan
         resetSendState()
@@ -467,7 +465,7 @@ class AppViewModel @Inject constructor(
             is Scanner.LnurlWithdraw -> onScanLnurlWithdraw(scan.data)
             is Scanner.LnurlAuth -> onScanLnurlAuth(scan.data, result)
             is Scanner.LnurlChannel -> onScanLnurlChannel(scan.data)
-            is Scanner.NodeId -> onScanNodeId(scan.url)
+            is Scanner.NodeId -> onScanNodeId(scan)
             else -> {
                 Logger.warn("Unhandled scan data: $scan")
                 toast(
@@ -663,7 +661,7 @@ class AppViewModel @Inject constructor(
 
     fun requestLnurlAuth(callback: String, k1: String, domain: String) {
         viewModelScope.launch {
-            // TODO pass callback and domain data from bitkit-core when updated to accept decoded callback and return domain
+            // TODO pass callback and domain from bitkit-core when updated to accept decoded callback and return domain
             lightningService.requestLnurlAuth(
                 callback = callback,
                 k1 = k1,
@@ -701,7 +699,19 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onScanNodeId(url: String) {
+    private fun onScanNodeId(data: Scanner.NodeId) {
+        val (url, network) = data
+        val appNetwork = Env.network.toCoreNetworkType()
+        if (network != appNetwork) {
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.other__qr_error_network_header),
+                description = context.getString(R.string.other__qr_error_network_text)
+                    .replace("{selectedNetwork}", appNetwork.name)
+                    .replace("{dataNetwork}", network.name),
+            )
+            return
+        }
         hideSheet() // hide scan sheet if opened
         val nextRoute = Routes.ExternalConnection(url)
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
@@ -1040,7 +1050,6 @@ class AppViewModel @Inject constructor(
 
     fun resetSendState() {
         _sendUiState.value = SendUiState()
-        scan = null
     }
     // endregion
 
