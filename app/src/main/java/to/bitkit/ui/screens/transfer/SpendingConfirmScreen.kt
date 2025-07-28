@@ -222,7 +222,7 @@ private fun Content(
 
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true, showBackground = true, name = "Normal screen - Default")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -298,9 +298,161 @@ private fun Preview() {
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true, showBackground = true, name = "Normal screen - Advanced")
 @Composable
 private fun Preview2() {
+    AppThemeSurface {
+        Content(
+            onBackClick = {},
+            onCloseClick = {},
+            onLearnMoreClick = {},
+            onAdvancedClick = {},
+            onConfirm = {},
+            onUseDefaultLspBalanceClick = {},
+            onTransferToSpendingConfirm = {},
+            order = IBtOrder(
+                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
+                state = BtOrderState.CREATED,
+                state2 = BtOrderState2.CREATED,
+                feeSat = 1000UL,
+                networkFeeSat = 250UL,
+                serviceFeeSat = 750UL,
+                lspBalanceSat = 2000000UL,
+                clientBalanceSat = 500000UL,
+                zeroConf = false,
+                zeroReserve = true,
+                clientNodeId = null,
+                channelExpiryWeeks = 8u,
+                channelExpiresAt = "2025-09-22T08:29:03Z",
+                orderExpiresAt = "2025-07-29T08:29:03Z",
+                channel = null,
+                lspNode = ILspNode(
+                    alias = "Bitkit LSP",
+                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
+                    connectionStrings = listOf("mock@127.0.0.1:9735"),
+                    readonly = null
+                ),
+                lnurl = null,
+                payment = IBtPayment(
+                    state = BtPaymentState.CREATED,
+                    state2 = BtPaymentState2.CREATED,
+                    paidSat = 0UL,
+                    bolt11Invoice = IBtBolt11Invoice(
+                        request = "lnmock",
+                        state = BtBolt11InvoiceState.PENDING,
+                        expiresAt = "2025-07-28T12:00:00Z",
+                        updatedAt = "2025-07-28T08:30:00Z"
+                    ),
+                    onchain = IBtOnchainTransactions(
+                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                        confirmedSat = 0UL,
+                        requiredConfirmations = 1u,
+                        transactions = listOf(
+                            IBtOnchainTransaction(
+                                amountSat = 50000UL,
+                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+                                vout = 0u,
+                                blockHeight = null,
+                                blockConfirmationCount = 0u,
+                                feeRateSatPerVbyte = 12.5,
+                                confirmed = false,
+                                suspicious0ConfReason = ""
+                            )
+                        )
+                    ),
+                    isManuallyPaid = null,
+                    manualRefunds = null
+                ),
+                couponCode = null,
+                source = null,
+                discount = null,
+                updatedAt = "2025-07-28T08:29:03Z",
+                createdAt = "2025-07-28T08:29:03Z"
+            ),
+            isAdvanced = true
+        )
+    }
+}
+
+@Preview(showSystemUi = true, showBackground = true, heightDp = 700, name = "Small screen - Normal")
+@Composable
+private fun Preview3() {
+    AppThemeSurface {
+        Content(
+            onBackClick = {},
+            onCloseClick = {},
+            onLearnMoreClick = {},
+            onAdvancedClick = {},
+            onConfirm = {},
+            onUseDefaultLspBalanceClick = {},
+            onTransferToSpendingConfirm = {},
+            order = IBtOrder(
+                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
+                state = BtOrderState.CREATED,
+                state2 = BtOrderState2.CREATED,
+                feeSat = 1000UL,
+                networkFeeSat = 250UL,
+                serviceFeeSat = 750UL,
+                lspBalanceSat = 2000000UL,
+                clientBalanceSat = 500000UL,
+                zeroConf = false,
+                zeroReserve = true,
+                clientNodeId = null,
+                channelExpiryWeeks = 8u,
+                channelExpiresAt = "2025-09-22T08:29:03Z",
+                orderExpiresAt = "2025-07-29T08:29:03Z",
+                channel = null,
+                lspNode = ILspNode(
+                    alias = "Bitkit LSP",
+                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
+                    connectionStrings = listOf("mock@127.0.0.1:9735"),
+                    readonly = null
+                ),
+                lnurl = null,
+                payment = IBtPayment(
+                    state = BtPaymentState.CREATED,
+                    state2 = BtPaymentState2.CREATED,
+                    paidSat = 0UL,
+                    bolt11Invoice = IBtBolt11Invoice(
+                        request = "lnmock",
+                        state = BtBolt11InvoiceState.PENDING,
+                        expiresAt = "2025-07-28T12:00:00Z",
+                        updatedAt = "2025-07-28T08:30:00Z"
+                    ),
+                    onchain = IBtOnchainTransactions(
+                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                        confirmedSat = 0UL,
+                        requiredConfirmations = 1u,
+                        transactions = listOf(
+                            IBtOnchainTransaction(
+                                amountSat = 50000UL,
+                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+                                vout = 0u,
+                                blockHeight = null,
+                                blockConfirmationCount = 0u,
+                                feeRateSatPerVbyte = 12.5,
+                                confirmed = false,
+                                suspicious0ConfReason = ""
+                            )
+                        )
+                    ),
+                    isManuallyPaid = null,
+                    manualRefunds = null
+                ),
+                couponCode = null,
+                source = null,
+                discount = null,
+                updatedAt = "2025-07-28T08:29:03Z",
+                createdAt = "2025-07-28T08:29:03Z"
+            ),
+            isAdvanced = false
+        )
+    }
+}
+
+@Preview(showSystemUi = true, showBackground = true, heightDp = 700, name = "Small screen - Advanced")
+@Composable
+private fun Preview4() {
     AppThemeSurface {
         Content(
             onBackClick = {},
