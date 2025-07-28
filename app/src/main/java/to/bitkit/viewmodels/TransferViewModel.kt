@@ -214,7 +214,9 @@ class TransferViewModel @Inject constructor(
 
         if (defaultLspBalance < minLspBalance || defaultLspBalance > maxLspBalance) {
             Logger.warn(
-                "Invalid defaultLspBalance:$defaultLspBalance min possible:$maxLspBalance , max possible: $minLspBalance",
+                "Invalid defaultLspBalance:$defaultLspBalance " +
+                    "min possible:$maxLspBalance, " +
+                    "max possible: $minLspBalance",
                 context = TAG
             )
         }
