@@ -1,0 +1,1155 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>AnnotationSpacing:AppDb.kt$AppDb$@Database( entities = [ ConfigEntity::class, InvoiceTagEntity::class, ], version = 2, ) @TypeConverters(StringListConverter::class) abstract</ID>
+    <ID>AnnotationSpacing:Change.kt$Change$@Serializable data</ID>
+    <ID>ArgumentListWrapping:ActivityDetailScreen.kt$(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost)</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$("Activity $id was deleted. If you want update it, set forceUpdate as true")</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$("Activity not found")</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$("paymentHashOrTxId is empty")</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$(IllegalArgumentException("paymentHashOrTxId is empty"))</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$(IllegalStateException("Activity not found"))</ID>
+    <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$(activity)</ID>
+    <ID>ArgumentListWrapping:BackupNavigationSheet.kt$(BackupRoute.ConfirmMnemonic)</ID>
+    <ID>ArgumentListWrapping:BackupNavigationSheet.kt$(BackupRoute.ConfirmPassphrase)</ID>
+    <ID>ArgumentListWrapping:BackupNavigationSheet.kt$(BackupRoute.MultipleDevices)</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("AbAnDoN abandon ABANDON abandon abandon abandon abandon abandon abandon abandon abandon about".toWordList().validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon actor")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon invalidword")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon zoo")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon")</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon actor").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon invalidword").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon zoo").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:Bip39Test.kt$Bip39Test$(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>ArgumentListWrapping:BlocktankRegtestScreen.kt$( verticalAlignment = CenterVertically, modifier = Modifier .padding(vertical = 4.dp) .fillMaxWidth() )</ID>
+    <ID>ArgumentListWrapping:BlocktankRegtestScreen.kt$("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")</ID>
+    <ID>ArgumentListWrapping:BoostTransactionViewModel.kt$BoostTransactionViewModel$("Activity $newTxId not found. Caching data to try again on next sync", e = error, context = TAG)</ID>
+    <ID>ArgumentListWrapping:EditInvoiceVM.kt$EditInvoiceVM$(effect)</ID>
+    <ID>ArgumentListWrapping:ExternalConfirmScreen.kt$(R.string.lightning__transfer__confirm)</ID>
+    <ID>ArgumentListWrapping:ExternalConfirmScreen.kt$(accentColor = Colors.Purple)</ID>
+    <ID>ArgumentListWrapping:ExternalConfirmScreen.kt$(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))</ID>
+    <ID>ArgumentListWrapping:FundingAdvancedScreen.kt$(R.string.lightning__funding_advanced__title)</ID>
+    <ID>ArgumentListWrapping:FundingAdvancedScreen.kt$(accentColor = Colors.Purple)</ID>
+    <ID>ArgumentListWrapping:FundingAdvancedScreen.kt$(text = stringResource(R.string.lightning__funding_advanced__title).withAccent(accentColor = Colors.Purple))</ID>
+    <ID>ArgumentListWrapping:LightningNodeService.kt$LightningNodeService$( this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE )</ID>
+    <ID>ArgumentListWrapping:LightningNodeService.kt$LightningNodeService$( this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE )</ID>
+    <ID>ArgumentListWrapping:LightningRepo.kt$LightningRepo$("Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting")</ID>
+    <ID>ArgumentListWrapping:LightningRepo.kt$LightningRepo$("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress")</ID>
+    <ID>ArgumentListWrapping:LightningRepo.kt$LightningRepo$("bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat")</ID>
+    <ID>ArgumentListWrapping:LightningService.kt$LightningService$("🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat")</ID>
+    <ID>ArgumentListWrapping:MainActivity.kt$MainActivity$(StartupRoutes.WarningMultipleDevices)</ID>
+    <ID>ArgumentListWrapping:ProfileIntroScreen.kt$(R.string.slashtags__onboarding_profile1_header)</ID>
+    <ID>ArgumentListWrapping:ProfileIntroScreen.kt$(accentColor = Colors.Brand)</ID>
+    <ID>ArgumentListWrapping:ReceiveConfirmScreen.kt$(if (isAdditional) R.string.wallet__receive_connect_additional else R.string.wallet__receive_connect_initial)</ID>
+    <ID>ArgumentListWrapping:ReceiveLiquidityScreen.kt$(if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label)</ID>
+    <ID>ArgumentListWrapping:ReceiveLiquidityScreen.kt$(if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title)</ID>
+    <ID>ArgumentListWrapping:ReceiveLiquidityScreen.kt$(if (isAdditional) R.string.wallet__receive_liquidity__text_additional else R.string.wallet__receive_liquidity__text)</ID>
+    <ID>ArgumentListWrapping:ReceiveLiquidityScreen.kt$(text = stringResource(if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label))</ID>
+    <ID>ArgumentListWrapping:ReceiveQrScreen.kt$(R.string.wallet__receive_text_lnfunds)</ID>
+    <ID>ArgumentListWrapping:ReceiveQrScreen.kt$(ReceiveRoutes.LOCATION_BLOCK)</ID>
+    <ID>ArgumentListWrapping:ReceiveQrScreen.kt$(accentColor = Colors.Purple)</ID>
+    <ID>ArgumentListWrapping:RestoreWalletScreen.kt$(R.string.onboarding__restore_passphrase_placeholder)</ID>
+    <ID>ArgumentListWrapping:RestoreWalletScreen.kt$(R.string.onboarding__restore_red_explain)</ID>
+    <ID>ArgumentListWrapping:RestoreWalletScreen.kt$(accentColor = Colors.Red)</ID>
+    <ID>ArgumentListWrapping:RestoreWalletScreen.kt$(text = stringResource(R.string.onboarding__restore_passphrase_placeholder))</ID>
+    <ID>ArgumentListWrapping:SavingsProgressScreen.kt$(R.string.lightning__savings_interrupted__nav_title)</ID>
+    <ID>ArgumentListWrapping:SettingUpScreen.kt$(R.string.lightning__savings_progress__title)</ID>
+    <ID>ArgumentListWrapping:SettingUpScreen.kt$(accentColor = Colors.Purple)</ID>
+    <ID>ArgumentListWrapping:SettingsTextButtonRow.kt$( verticalArrangement = Arrangement.Center, modifier = Modifier .weight(1f) .padding(end = 16.dp) )</ID>
+    <ID>ArgumentListWrapping:ShopWebViewClient.kt$ShopWebViewClient$( """ window.ReactNativeWebView = { postMessage: function(data) { Android.postMessage(data); } }; // Override the default postMessage if it exists if (window.postMessage) { window.originalPostMessage = window.postMessage; window.postMessage = function(data) { if (typeof data === 'string') { Android.postMessage(data); } else { Android.postMessage(JSON.stringify(data)); } }; } """.trimIndent(), null )</ID>
+    <ID>ArgumentListWrapping:VssBackupsClient.kt$VssBackupsClient$("Request failed with status: ${response.status}, message: ${errorResponse?.message}")</ID>
+    <ID>ArgumentListWrapping:VssStoreIdProvider.kt$VssStoreIdProvider$("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")</ID>
+    <ID>ArgumentListWrapping:WeatherService.kt$WeatherService$("Failed to fetch historical fee data: ${response.status.description}")</ID>
+    <ID>BlockCommentInitialStarAlignment:Theme.kt$ColorPalette$/* onPrimary = Color.White, onSecondary = Color.Black, onBackground = Color.Black, onSurface = Color.Black, */</ID>
+    <ID>CommentSpacing:ActivityDetailScreen.kt$//TODO CREATE STRING RESOURCE</ID>
+    <ID>CommentSpacing:CreateProfileScreen.kt$//TODO IMPLEMENT</ID>
+    <ID>CommentSpacing:NumberPadTextField.kt$//Convert fiat to sats</ID>
+    <ID>CommentSpacing:NumberPadTextField.kt$//Convert sats to fiat</ID>
+    <ID>CommentSpacing:ShopDiscoverScreen.kt$//Page, Title</ID>
+    <ID>CommentSpacing:WeatherService.kt$WeatherService$//TODO CACHE</ID>
+    <ID>CommentSpacing:WidgetsRepo.kt$WidgetsRepo$//TODO Only refresh in loop widgets displayed in the Home</ID>
+    <ID>CommentSpacing:WidgetsRepo.kt$WidgetsRepo$//TODO Perform a refresh when the preview screen is displayed</ID>
+    <ID>ComplexCondition:AuthCheckView.kt$(showBio &amp;&amp; isBiometrySupported &amp;&amp; !requirePin) || requireBiometrics</ID>
+    <ID>ComplexCondition:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$currentState.host.isBlank() || port == null || port &lt;= 0 || protocol == null</ID>
+    <ID>ComplexCondition:HomeViewModel.kt$HomeViewModel$thresholdReached &amp;&amp; isTimeOutOver &amp;&amp; belowMaxWarnings &amp;&amp; !_uiState.value.highBalanceSheetVisible</ID>
+    <ID>ComplexCondition:MapWebViewClient.kt$MapWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
+    <ID>ComplexCondition:ShopWebViewClient.kt$ShopWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
+    <ID>ComposableParamOrder:ActivityDetailScreen.kt$ActivityDetailScreen</ID>
+    <ID>ComposableParamOrder:ActivityExploreScreen.kt$ActivityExploreScreen</ID>
+    <ID>ComposableParamOrder:ActivityIcon.kt$ActivityIcon</ID>
+    <ID>ComposableParamOrder:ActivityIcon.kt$CircularIcon</ID>
+    <ID>ComposableParamOrder:AddTagScreen.kt$AddTagScreen</ID>
+    <ID>ComposableParamOrder:AmountInput.kt$AmountInput</ID>
+    <ID>ComposableParamOrder:AppStatus.kt$AppStatus</ID>
+    <ID>ComposableParamOrder:AuthCheckView.kt$AuthCheckView</ID>
+    <ID>ComposableParamOrder:AuthCheckView.kt$AuthCheckViewContent</ID>
+    <ID>ComposableParamOrder:AuthCheckView.kt$PinPad</ID>
+    <ID>ComposableParamOrder:BalanceHeaderView.kt$BalanceHeader</ID>
+    <ID>ComposableParamOrder:BlockCard.kt$BlockCard</ID>
+    <ID>ComposableParamOrder:BoostTransactionSheet.kt$BoostTransactionContent</ID>
+    <ID>ComposableParamOrder:BoostTransactionSheet.kt$BoostTransactionSheet</ID>
+    <ID>ComposableParamOrder:BoostTransactionSheet.kt$QuantityButton</ID>
+    <ID>ComposableParamOrder:CalculatorCard.kt$CalculatorCard</ID>
+    <ID>ComposableParamOrder:CalculatorCard.kt$CalculatorCardContent</ID>
+    <ID>ComposableParamOrder:CalculatorPreviewScreen.kt$CalculatorPreviewScreen</ID>
+    <ID>ComposableParamOrder:EditInvoiceScreen.kt$EditInvoiceScreen</ID>
+    <ID>ComposableParamOrder:FactsCard.kt$FactsCard</ID>
+    <ID>ComposableParamOrder:HeadlineCard.kt$HeadlineCard</ID>
+    <ID>ComposableParamOrder:HomeScreen.kt$Content</ID>
+    <ID>ComposableParamOrder:InfoScreenContent.kt$InfoScreenContent</ID>
+    <ID>ComposableParamOrder:LightningChannel.kt$LightningChannel</ID>
+    <ID>ComposableParamOrder:Money.kt$MoneyCaptionB</ID>
+    <ID>ComposableParamOrder:NumberPadTextField.kt$MoneyAmount</ID>
+    <ID>ComposableParamOrder:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
+    <ID>ComposableParamOrder:OnboardingSlidesScreen.kt$OnboardingTab</ID>
+    <ID>ComposableParamOrder:PinPromptScreen.kt$PinPromptScreen</ID>
+    <ID>ComposableParamOrder:PriceCard.kt$PriceCard</ID>
+    <ID>ComposableParamOrder:ReceiveConfirmScreen.kt$ReceiveConfirmScreen</ID>
+    <ID>ComposableParamOrder:ReceiveLiquidityScreen.kt$ReceiveLiquidityScreen</ID>
+    <ID>ComposableParamOrder:ReportIssueScreen.kt$ReportIssueScreen</ID>
+    <ID>ComposableParamOrder:RestoreWalletScreen.kt$MnemonicInputField</ID>
+    <ID>ComposableParamOrder:SendAmountScreen.kt$SendAmountContent</ID>
+    <ID>ComposableParamOrder:SendAmountScreen.kt$SendAmountScreen</ID>
+    <ID>ComposableParamOrder:SheetHost.kt$SheetHost</ID>
+    <ID>ComposableParamOrder:SuggestionCard.kt$SuggestionCard</ID>
+    <ID>ComposableParamOrder:SwipeToConfirm.kt$SwipeToConfirm</ID>
+    <ID>ComposableParamOrder:TextInput.kt$TextInput</ID>
+    <ID>ComposableParamOrder:WeatherCard.kt$WeatherCard</ID>
+    <ID>ComposableParamOrder:WidgetsSettingsScreen.kt$WidgetsSettingsContent</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalActivityListViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalAppViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalBackupsViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalBalances</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalBlocktankViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalCurrencies</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalCurrencyViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalSettingsViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalTransferViewModel</ID>
+    <ID>CompositionLocalAllowlist:Locals.kt$LocalWalletViewModel</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressInfo$val chain_stats: AddressStats</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressInfo$val mempool_stats: AddressStats</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val funded_txo_count: Int</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val funded_txo_sum: Int</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val spent_txo_count: Int</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val spent_txo_sum: Int</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val tx_count: Int</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxInput$val is_coinbase: Boolean? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxInput$val scriptsig_asm: String? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_address: String? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_asm: String? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_type: String? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_hash: String? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_height: Int? = null</ID>
+    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_time: Long? = null</ID>
+    <ID>CyclomaticComplexMethod:ActivityDetailScreen.kt$@OptIn(ExperimentalLayoutApi::class) @Composable private fun ActivityDetailContent( item: Activity, tags: List&lt;String&gt;, onRemoveTag: (String) -&gt; Unit, onAddTagClick: () -&gt; Unit, onClickBoost: () -&gt; Unit, onExploreClick: (String) -&gt; Unit, onCopy: (String) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:ActivityListGrouped.kt$private fun groupActivityItems(activityItems: List&lt;Activity&gt;): List&lt;Any&gt;</ID>
+    <ID>CyclomaticComplexMethod:ActivityRow.kt$@Composable private fun TransactionStatusText( txType: PaymentType, isLightning: Boolean, status: PaymentState?, confirmed: Boolean?, )</ID>
+    <ID>CyclomaticComplexMethod:AmountInput.kt$@Composable fun AmountInput( defaultValue: Long = 0, primaryDisplay: PrimaryDisplay, showConversion: Boolean = false, overrideSats: Long? = null, onSatsChange: (Long) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:AppStatusScreen.kt$@Composable private fun Content( uiState: AppStatusUiState = AppStatusUiState(), onBack: () -&gt; Unit = {}, onClose: () -&gt; Unit = {}, onInternetClick: () -&gt; Unit = {}, onElectrumClick: () -&gt; Unit = {}, onNodeClick: () -&gt; Unit = {}, onChannelsClick: () -&gt; Unit = {}, onBackupClick: () -&gt; Unit = {}, )</ID>
+    <ID>CyclomaticComplexMethod:AppViewModel.kt$AppViewModel$private fun observeSendEvents()</ID>
+    <ID>CyclomaticComplexMethod:BlocktankRegtestScreen.kt$@Composable fun BlocktankRegtestScreen( navController: NavController, viewModel: BlocktankRegtestViewModel = hiltViewModel(), )</ID>
+    <ID>CyclomaticComplexMethod:ChannelDetailScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun Content( channel: ChannelUi, blocktankOrders: List&lt;IBtOrder&gt; = emptyList(), cjitEntries: List&lt;IcJitEntry&gt; = emptyList(), txDetails: TxDetails? = null, isRefreshing: Boolean = false, onBack: () -&gt; Unit = {}, onClose: () -&gt; Unit = {}, onRefresh: () -&gt; Unit = {}, onCopyText: (String) -&gt; Unit = {}, onOpenUrl: (String) -&gt; Unit = {}, onSupport: (Any) -&gt; Unit = {}, onCloseConnection: () -&gt; Unit = {}, )</ID>
+    <ID>CyclomaticComplexMethod:ConfirmMnemonicScreen.kt$@OptIn(ExperimentalLayoutApi::class) @Composable fun ConfirmMnemonicScreen( uiState: BackupContract.UiState, onContinue: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:ContentView.kt$@Composable fun ContentView( appViewModel: AppViewModel, walletViewModel: WalletViewModel, blocktankViewModel: BlocktankViewModel, currencyViewModel: CurrencyViewModel, activityListViewModel: ActivityListViewModel, transferViewModel: TransferViewModel, settingsViewModel: SettingsViewModel, backupsViewModel: BackupsViewModel, )</ID>
+    <ID>CyclomaticComplexMethod:CoreService.kt$ActivityService$suspend fun syncLdkNodePayments(payments: List&lt;PaymentDetails&gt;, forceUpdate: Boolean = false)</ID>
+    <ID>CyclomaticComplexMethod:HealthRepo.kt$HealthRepo$private fun collectState()</ID>
+    <ID>CyclomaticComplexMethod:HomeScreen.kt$@Composable fun HomeScreen( mainUiState: MainUiState, drawerState: DrawerState, rootNavController: NavController, walletNavController: NavHostController, settingsViewModel: SettingsViewModel, walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, homeViewModel: HomeViewModel = hiltViewModel(), )</ID>
+    <ID>CyclomaticComplexMethod:HomeScreen.kt$@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class) @Composable private fun Content( mainUiState: MainUiState, homeUiState: HomeUiState, rootNavController: NavController, walletNavController: NavController, drawerState: DrawerState, hazeState: HazeState = rememberHazeState(), latestActivities: List&lt;Activity&gt;?, onClickProfile: () -&gt; Unit = {}, onRefresh: () -&gt; Unit = {}, onRemoveSuggestion: (Suggestion) -&gt; Unit = {}, onClickSuggestion: (Suggestion) -&gt; Unit = {}, onClickAddWidget: () -&gt; Unit = {}, onClickEnableEdit: () -&gt; Unit = {}, onClickConfirmEdit: () -&gt; Unit = {}, onClickEditWidget: (WidgetType) -&gt; Unit = {}, onClickDeleteWidget: (WidgetType) -&gt; Unit = {}, onMoveWidget: (Int, Int) -&gt; Unit = { _, _ -&gt; }, onDismissEmptyState: () -&gt; Unit = {}, onDismissHighBalanceSheet: () -&gt; Unit = {}, onClickEmptyActivityRow: () -&gt; Unit = {}, )</ID>
+    <ID>CyclomaticComplexMethod:InactivityTracker.kt$@Composable fun InactivityTracker( app: AppViewModel, settings: SettingsViewModel, modifier: Modifier = Modifier, content: @Composable () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:LightningService.kt$LightningService$private fun logEvent(event: Event)</ID>
+    <ID>CyclomaticComplexMethod:NumberPadTextField.kt$@Composable fun AmountInputHandler( input: String, primaryDisplay: PrimaryDisplay, displayUnit: BitcoinDisplayUnit, onInputChanged: (String) -&gt; Unit, onAmountCalculated: (String) -&gt; Unit, currencyVM: CurrencyViewModel, overrideSats: Long? = null, )</ID>
+    <ID>CyclomaticComplexMethod:NumberPadTextField.kt$@Composable fun NumberPadTextField( input: String, displayUnit: BitcoinDisplayUnit, primaryDisplay: PrimaryDisplay, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:ReceiveQrScreen.kt$@Composable fun ReceiveQrSheet( navigateToExternalConnection: () -&gt; Unit, walletState: MainUiState, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:RestoreWalletScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun RestoreWalletView( onBackClick: () -&gt; Unit, onRestoreClick: (mnemonic: String, passphrase: String?) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:SettingsButtonRow.kt$@Composable fun SettingsButtonRow( title: String, modifier: Modifier = Modifier, subtitle: String? = null, value: SettingsButtonValue = SettingsButtonValue.None, description: String? = null, iconRes: Int? = null, iconTint: Color = Color.Unspecified, iconSize: Dp = 32.dp, maxLinesSubtitle: Int = Int.MAX_VALUE, enabled: Boolean = true, loading: Boolean = false, onClick: () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:Slider.kt$@Composable fun StepSlider( value: Int, steps: List&lt;Int&gt;, onValueChange: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:WakeNodeWorker.kt$WakeNodeWorker$private suspend fun handleLdkEvent(event: Event)</ID>
+    <ID>CyclomaticComplexMethod:WalletInitResultView.kt$@Composable fun WalletInitResultView( result: WalletInitResult, onButtonClick: () -&gt; Unit, onProceedWithoutRestore: (() -&gt; Unit)? = null, )</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:ActivityRow.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:BalanceHeaderView.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:DefaultUnitSettingsScreen.kt$val (_, _, _, selectedCurrency, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:LocalCurrencySettingsScreen.kt$val (rates, _, _, selectedCurrency) = LocalCurrencies.current</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:WalletBalanceView.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
+    <ID>EnumEntryNameCase:BlocktankNotificationType.kt$BlocktankNotificationType$cjitPaymentArrived</ID>
+    <ID>EnumEntryNameCase:BlocktankNotificationType.kt$BlocktankNotificationType$incomingHtlc</ID>
+    <ID>EnumEntryNameCase:BlocktankNotificationType.kt$BlocktankNotificationType$mutualClose</ID>
+    <ID>EnumEntryNameCase:BlocktankNotificationType.kt$BlocktankNotificationType$orderPaymentConfirmed</ID>
+    <ID>EnumEntryNameCase:BlocktankNotificationType.kt$BlocktankNotificationType$wakeToTimeout</ID>
+    <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$cjitPaymentArrived</ID>
+    <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$incomingHtlc</ID>
+    <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$mutualClose</ID>
+    <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$orderPaymentConfirmed</ID>
+    <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$wakeToTimeout</ID>
+    <ID>Filename:BoostTransactionViewModelTest.kt$to.bitkit.ui.screens.wallets.activity.BoostTransactionViewModelTest.kt</ID>
+    <ID>Filename:EnablePolling.kt$to.bitkit.di.EnablePolling.kt</ID>
+    <ID>ForbiddenComment:ActivityDetailScreen.kt$/* TODO: Implement assign functionality */</ID>
+    <ID>ForbiddenComment:ActivityDetailScreen.kt$// TODO: handle isTransfer</ID>
+    <ID>ForbiddenComment:ActivityListViewModel.kt$ActivityListViewModel$// TODO: sync only on specific events for better performance</ID>
+    <ID>ForbiddenComment:ActivityRow.kt$// TODO: calculate confirmsIn text</ID>
+    <ID>ForbiddenComment:AppViewModel.kt$AppViewModel$// TODO: fee is not the sats sent. Need to get this amount from elsewhere like send flow or something.</ID>
+    <ID>ForbiddenComment:AppViewModel.kt$AppViewModel$// TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.</ID>
+    <ID>ForbiddenComment:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$// TODO: get from actual repository state</ID>
+    <ID>ForbiddenComment:BackupsRepo.kt$BackupsRepo$// TODO: Add other backup categories as they get implemented:</ID>
+    <ID>ForbiddenComment:BoostTransactionViewModel.kt$BoostTransactionUiState$// TODO: Implement dynamic time estimation</ID>
+    <ID>ForbiddenComment:ChannelStatusView.kt$// TODO: handle closed channels marking &amp; detection</ID>
+    <ID>ForbiddenComment:CoreService.kt$ActivityService$// TODO: find address</ID>
+    <ID>ForbiddenComment:CoreService.kt$ActivityService$// TODO: get from linked order</ID>
+    <ID>ForbiddenComment:CoreService.kt$ActivityService$// TODO: get from somewhere</ID>
+    <ID>ForbiddenComment:CoreService.kt$ActivityService$// TODO: handle when paying for order</ID>
+    <ID>ForbiddenComment:Env.kt$Env$// TODO: remove this to load from BT API instead</ID>
+    <ID>ForbiddenComment:ExternalNodeViewModel.kt$ExternalNodeViewModel$// TODO: pass customFeeRate to ldk-node when supported</ID>
+    <ID>ForbiddenComment:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$// TODO: sort channels to get consistent index; node.listChannels returns a list in random order</ID>
+    <ID>ForbiddenComment:LightningNodeService.kt$LightningNodeService$// TODO: Get from resources</ID>
+    <ID>ForbiddenComment:Notifications.kt$// TODO: review if needed:</ID>
+    <ID>ForbiddenComment:SuccessScreen.kt$// TODO: verify backup</ID>
+    <ID>ForbiddenComment:TransferIntroScreen.kt$// TODO: show on first LN suggestion card click</ID>
+    <ID>ForbiddenComment:TransferViewModel.kt$TransferViewModel$// TODO: showBottomSheet: forceTransfer</ID>
+    <ID>FunctionOnlyReturningConstant:EnablePolling.kt$CurrencyModule$@Provides @Named("enablePolling") fun provideEnablePolling(): Boolean</ID>
+    <ID>FunctionOnlyReturningConstant:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun isReady(): Boolean</ID>
+    <ID>FunctionReturnTypeSpacing:Bip39Utils.kt$fun List&lt;String&gt;.validBip39Checksum() : Boolean</ID>
+    <ID>FunctionReturnTypeSpacing:InvoiceTagDao.kt$InvoiceTagDao$@Query("SELECT * FROM invoice_tag WHERE paymentHash = :paymentHash LIMIT 1") suspend fun searchInvoice(paymentHash: String) : InvoiceTagEntity?</ID>
+    <ID>ImplicitDefaultLocale:BlocksService.kt$BlocksService$String.format("%.2f", blockInfo.difficulty / 1_000_000_000_000.0)</ID>
+    <ID>ImplicitDefaultLocale:PriceService.kt$PriceService$String.format("%.2f", price)</ID>
+    <ID>ImportOrdering:ActivityListFilter.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.width import androidx.compose.material3.Tab import androidx.compose.material3.TabRow import androidx.compose.material3.Text import androidx.compose.runtime.Composable import androidx.compose.ui.Modifier import androidx.compose.ui.graphics.Color import androidx.compose.ui.platform.LocalFocusManager import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import to.bitkit.R import to.bitkit.ui.components.SearchInputIconButton import to.bitkit.ui.components.SearchInput import to.bitkit.ui.theme.AppThemeSurface</ID>
+    <ID>ImportOrdering:BackupNavigationSheetViewModel.kt$import android.content.Context import androidx.lifecycle.ViewModel import androidx.lifecycle.viewModelScope import dagger.hilt.android.lifecycle.HiltViewModel import dagger.hilt.android.qualifiers.ApplicationContext import kotlinx.coroutines.delay import kotlinx.coroutines.flow.MutableSharedFlow import kotlinx.coroutines.flow.MutableStateFlow import kotlinx.coroutines.flow.asSharedFlow import kotlinx.coroutines.flow.asStateFlow import kotlinx.coroutines.flow.update import kotlinx.coroutines.launch import to.bitkit.R import to.bitkit.data.SettingsStore import to.bitkit.data.keychain.Keychain import to.bitkit.models.Toast import to.bitkit.ui.shared.toast.ToastEventBus import to.bitkit.utils.Logger import to.bitkit.ui.settings.backups.BackupContract.SideEffect import to.bitkit.ui.settings.backups.BackupContract.UiState import javax.inject.Inject</ID>
+    <ID>ImportOrdering:BalanceHeaderView.kt$import androidx.compose.animation.AnimatedContent import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.platform.LocalInspectionMode import androidx.compose.ui.res.painterResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import to.bitkit.R import to.bitkit.models.BITCOIN_SYMBOL import to.bitkit.models.ConvertedAmount import to.bitkit.models.PrimaryDisplay import to.bitkit.models.formatToModernDisplay import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.currencyViewModel import to.bitkit.ui.settingsViewModel import to.bitkit.ui.shared.animations.BalanceAnimations import to.bitkit.ui.shared.modifiers.swipeToHide import to.bitkit.ui.shared.UiConstants import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ChangePinConfirmScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.navigation.NavController import kotlinx.coroutines.delay import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.appViewModel import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.navigateToHome import to.bitkit.ui.navigateToChangePinResult import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.scaffold.CloseNavIcon import to.bitkit.ui.scaffold.ScreenColumn import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ChangePinNewScreen.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.navigation.NavController import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.navigateToChangePinConfirm import to.bitkit.ui.navigateToHome import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.scaffold.CloseNavIcon import to.bitkit.ui.scaffold.ScreenColumn import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ChangePinScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import androidx.navigation.NavController import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.appViewModel import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.navigateToChangePinNew import to.bitkit.ui.navigateToHome import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.scaffold.CloseNavIcon import to.bitkit.ui.scaffold.ScreenColumn import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ChannelOrdersScreen.kt$import androidx.compose.animation.core.Spring import androidx.compose.animation.core.animateFloatAsState import androidx.compose.animation.core.spring import androidx.compose.foundation.clickable import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.lazy.LazyColumn import androidx.compose.foundation.lazy.items import androidx.compose.material3.Card import androidx.compose.material3.CardColors import androidx.compose.material3.CardDefaults import androidx.compose.material3.MaterialTheme import androidx.compose.material3.Scaffold import androidx.compose.material3.Surface import androidx.compose.material3.Text import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.rememberCoroutineScope import androidx.compose.runtime.setValue import androidx.lifecycle.compose.collectAsStateWithLifecycle import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.draw.scale import androidx.compose.ui.graphics.Color import androidx.compose.ui.platform.LocalClipboardManager import androidx.compose.ui.text.AnnotatedString import androidx.compose.ui.text.font.FontFamily import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.text.style.TextOverflow import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.compose.ui.unit.sp import com.synonym.bitkitcore.BtBolt11InvoiceState import com.synonym.bitkitcore.BtOrderState import com.synonym.bitkitcore.BtOrderState2 import com.synonym.bitkitcore.BtPaymentState import com.synonym.bitkitcore.BtPaymentState2 import com.synonym.bitkitcore.CJitStateEnum import com.synonym.bitkitcore.IBtBolt11Invoice import com.synonym.bitkitcore.IBtOnchainTransaction import com.synonym.bitkitcore.IBtOnchainTransactions import com.synonym.bitkitcore.IBtOrder import com.synonym.bitkitcore.IBtPayment import com.synonym.bitkitcore.IDiscount import com.synonym.bitkitcore.ILspNode import com.synonym.bitkitcore.IcJitEntry import kotlinx.coroutines.delay import kotlinx.coroutines.launch import to.bitkit.ext.formatWithDotSeparator import to.bitkit.ui.Routes import to.bitkit.ui.blocktankViewModel import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.utils.Logger</ID>
+    <ID>ImportOrdering:ChoosePinScreen.kt$import androidx.compose.foundation.background import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ConfirmPinScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.foundation.background import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import kotlinx.coroutines.delay import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.appViewModel import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:CryptoTest.kt$import org.junit.Before import org.junit.Test import to.bitkit.env.Env.DERIVATION_NAME import to.bitkit.ext.fromBase64 import to.bitkit.ext.fromHex import to.bitkit.ext.toHex import to.bitkit.ext.toBase64 import to.bitkit.fcm.EncryptedNotification import kotlin.test.assertContentEquals import kotlin.test.assertEquals</ID>
+    <ID>ImportOrdering:ExternalConfirmScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.animation.fadeIn import androidx.compose.animation.fadeOut import androidx.compose.foundation.Image import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.IntrinsicSize import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxHeight import androidx.compose.foundation.layout.fillMaxSize import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.foundation.layout.width import androidx.compose.foundation.rememberScrollState import androidx.compose.foundation.verticalScroll import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.collectAsState import androidx.compose.runtime.getValue import androidx.compose.ui.Alignment import androidx.compose.ui.Alignment.Companion.CenterHorizontally import androidx.compose.ui.Modifier import androidx.compose.ui.layout.ContentScale import androidx.compose.ui.res.painterResource import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import to.bitkit.R import to.bitkit.ui.components.Caption13Up import to.bitkit.ui.components.Display import to.bitkit.ui.components.FeeInfo import to.bitkit.ui.components.MoneySSB import to.bitkit.ui.components.SwipeToConfirm import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.scaffold.CloseNavIcon import to.bitkit.ui.scaffold.ScreenColumn import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.ui.utils.withAccent import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect</ID>
+    <ID>ImportOrdering:ExternalConnectionScreen.kt$import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxSize import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.imePadding import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.foundation.rememberScrollState import androidx.compose.foundation.text.KeyboardOptions import androidx.compose.foundation.verticalScroll import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.collectAsState import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Modifier import androidx.compose.ui.platform.LocalContext import androidx.compose.ui.res.painterResource import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.input.ImeAction import androidx.compose.ui.text.input.KeyboardCapitalization import androidx.compose.ui.text.input.KeyboardType import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.lifecycle.SavedStateHandle import kotlinx.coroutines.flow.filterNotNull import to.bitkit.R import to.bitkit.ext.getClipboardText import to.bitkit.models.LnPeer import to.bitkit.ui.Routes import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.ButtonSize import to.bitkit.ui.components.Caption13Up import to.bitkit.ui.components.Display import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.components.SecondaryButton import to.bitkit.ui.components.TextInput import to.bitkit.ui.scaffold.AppTopBar import to.bitkit.ui.scaffold.CloseNavIcon import to.bitkit.ui.scaffold.ScreenColumn import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.ui.utils.withAccent import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect</ID>
+    <ID>ImportOrdering:LightningChannel.kt$import androidx.compose.foundation.background import androidx.compose.foundation.layout.* import androidx.compose.foundation.shape.RoundedCornerShape import androidx.compose.material.icons.Icons import androidx.compose.material.icons.filled.ArrowDownward import androidx.compose.material.icons.filled.ArrowUpward import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.ui.Alignment import androidx.compose.ui.Alignment.Companion.CenterVertically import androidx.compose.ui.Modifier import androidx.compose.ui.draw.alpha import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import to.bitkit.ui.theme.Colors import to.bitkit.R import to.bitkit.ui.theme.AppThemeSurface</ID>
+    <ID>ImportOrdering:LightningConnectionsViewModel.kt$import android.content.Context import android.net.Uri import androidx.lifecycle.ViewModel import androidx.lifecycle.viewModelScope import com.synonym.bitkitcore.BtOrderState2 import com.synonym.bitkitcore.IBtOrder import dagger.hilt.android.lifecycle.HiltViewModel import dagger.hilt.android.qualifiers.ApplicationContext import kotlinx.coroutines.CoroutineDispatcher import kotlinx.coroutines.delay import kotlinx.coroutines.flow.MutableStateFlow import kotlinx.coroutines.flow.asStateFlow import kotlinx.coroutines.flow.combine import kotlinx.coroutines.flow.update import kotlinx.coroutines.launch import org.lightningdevkit.ldknode.ChannelDetails import org.lightningdevkit.ldknode.Event import org.lightningdevkit.ldknode.OutPoint import to.bitkit.R import to.bitkit.di.BgDispatcher import to.bitkit.ext.amountOnClose import to.bitkit.ext.createChannelDetails import to.bitkit.models.Toast import to.bitkit.repositories.BlocktankRepo import to.bitkit.repositories.LightningRepo import to.bitkit.repositories.LogsRepo import to.bitkit.repositories.WalletRepo import to.bitkit.services.LdkNodeEventBus import to.bitkit.ext.filterOpen import to.bitkit.ext.filterPending import to.bitkit.ui.shared.toast.ToastEventBus import to.bitkit.utils.AddressChecker import to.bitkit.utils.Logger import to.bitkit.utils.TxDetails import javax.inject.Inject</ID>
+    <ID>ImportOrdering:NewTransactionSheetDetails.kt$import android.content.Context import android.content.SharedPreferences import com.synonym.bitkitcore.ActivityFilter import com.synonym.bitkitcore.PaymentType import kotlinx.serialization.Serializable import to.bitkit.di.json import to.bitkit.utils.Logger import androidx.core.content.edit</ID>
+    <ID>ImportOrdering:NumberPadTextField.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.saveable.rememberSaveable import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.platform.LocalInspectionMode import androidx.compose.ui.semantics.contentDescription import androidx.compose.ui.semantics.semantics import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import okhttp3.internal.toLongOrDefault import to.bitkit.ext.removeSpaces import to.bitkit.models.BITCOIN_SYMBOL import to.bitkit.models.BitcoinDisplayUnit import to.bitkit.models.PrimaryDisplay import to.bitkit.models.SATS_IN_BTC import to.bitkit.models.formatToModernDisplay import to.bitkit.models.asBtc import to.bitkit.ui.currencyViewModel import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.viewmodels.CurrencyViewModel import java.math.BigDecimal</ID>
+    <ID>ImportOrdering:PinCheckScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.foundation.background import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.appViewModel import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:PinDots.kt$import androidx.compose.foundation.background import androidx.compose.foundation.border import androidx.compose.foundation.layout.Box import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.shape.CircleShape import androidx.compose.runtime.Composable import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.draw.clip import androidx.compose.ui.unit.dp import to.bitkit.env.Env import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:ReceiveAmountScreen.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.material3.CircularProgressIndicator import androidx.compose.material3.HorizontalDivider import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableLongStateOf import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.rememberCoroutineScope import androidx.compose.runtime.saveable.rememberSaveable import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import kotlinx.coroutines.delay import kotlinx.coroutines.isActive import kotlinx.coroutines.launch import to.bitkit.R import to.bitkit.models.NodeLifecycleState import to.bitkit.models.Toast import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.appViewModel import to.bitkit.ui.blocktankViewModel import to.bitkit.ui.components.Caption13Up import to.bitkit.ui.components.MoneySSB import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.components.AmountInput import to.bitkit.ui.components.UnitButton import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.Colors import to.bitkit.ui.walletViewModel import to.bitkit.utils.Logger</ID>
+    <ID>ImportOrdering:SendAmountScreen.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxSize import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.width import androidx.compose.material3.HorizontalDivider import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.platform.testTag import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import com.synonym.bitkitcore.LnurlPayData import com.synonym.bitkitcore.LnurlWithdrawData import to.bitkit.R import to.bitkit.models.BalanceState import to.bitkit.models.BitcoinDisplayUnit import to.bitkit.models.NodeLifecycleState import to.bitkit.models.PrimaryDisplay import to.bitkit.ext.maxSendableSat import to.bitkit.ext.maxWithdrawableSat import to.bitkit.ui.LocalBalances import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.components.AmountInputHandler import to.bitkit.ui.components.Keyboard import to.bitkit.ui.components.MoneySSB import to.bitkit.ui.components.NumberPadActionButton import to.bitkit.ui.components.NumberPadTextField import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.components.SyncNodeView import to.bitkit.ui.components.Text13Up import to.bitkit.ui.components.UnitButton import to.bitkit.ui.currencyViewModel import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.viewmodels.CurrencyUiState import to.bitkit.viewmodels.LnurlParams import to.bitkit.viewmodels.MainUiState import to.bitkit.viewmodels.SendEvent import to.bitkit.viewmodels.SendMethod import to.bitkit.viewmodels.SendUiState</ID>
+    <ID>ImportOrdering:WakeNodeWorker.kt$import android.content.Context import androidx.hilt.work.HiltWorker import androidx.work.CoroutineWorker import androidx.work.WorkerParameters import androidx.work.workDataOf import dagger.assisted.Assisted import dagger.assisted.AssistedInject import kotlinx.coroutines.CompletableDeferred import kotlinx.coroutines.withTimeout import kotlinx.serialization.json.JsonObject import kotlinx.serialization.json.JsonPrimitive import kotlinx.serialization.json.contentOrNull import kotlinx.serialization.json.jsonObject import org.lightningdevkit.ldknode.Event import to.bitkit.di.json import to.bitkit.models.NewTransactionSheetDetails import to.bitkit.models.NewTransactionSheetDirection import to.bitkit.models.NewTransactionSheetType import to.bitkit.models.BlocktankNotificationType import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived import to.bitkit.models.BlocktankNotificationType.incomingHtlc import to.bitkit.models.BlocktankNotificationType.mutualClose import to.bitkit.models.BlocktankNotificationType.orderPaymentConfirmed import to.bitkit.models.BlocktankNotificationType.wakeToTimeout import to.bitkit.repositories.LightningRepo import to.bitkit.services.CoreService import to.bitkit.ui.pushNotification import to.bitkit.utils.Logger import to.bitkit.utils.withPerformanceLogging import kotlin.time.Duration.Companion.minutes</ID>
+    <ID>ImportOrdering:WalletBalanceView.kt$import androidx.compose.animation.AnimatedContent import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.RowScope import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.graphics.Color import androidx.compose.ui.graphics.painter.Painter import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import to.bitkit.models.ConvertedAmount import to.bitkit.models.PrimaryDisplay import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.currencyViewModel import to.bitkit.ui.settingsViewModel import to.bitkit.ui.shared.animations.BalanceAnimations import to.bitkit.ui.shared.UiConstants import to.bitkit.ui.theme.Colors</ID>
+    <ID>Indentation:App.kt$App$ </ID>
+    <ID>Indentation:BalanceAnimations.kt$BalanceAnimations$ </ID>
+    <ID>Indentation:HighBalanceWarningSheet.kt$ </ID>
+    <ID>InstanceOfCheckForException:LightningService.kt$LightningService$e is NodeException</ID>
+    <ID>LambdaParameterEventTrailing:BoostTransactionSheet.kt$onSwipe</ID>
+    <ID>LambdaParameterEventTrailing:CalculatorCard.kt$onFiatChange</ID>
+    <ID>LambdaParameterEventTrailing:ReceiveQrScreen.kt$onClickEditInvoice</ID>
+    <ID>LambdaParameterEventTrailing:SettingsButtonRow.kt$onClick</ID>
+    <ID>LambdaParameterEventTrailing:SuggestionCard.kt$onClick</ID>
+    <ID>LambdaParameterEventTrailing:ToastView.kt$onDismiss</ID>
+    <ID>LambdaParameterInRestartableEffect:AmountInput.kt$onSatsChange</ID>
+    <ID>LambdaParameterInRestartableEffect:AuthCheckView.kt$validatePin</ID>
+    <ID>LambdaParameterInRestartableEffect:BackupNavigationSheet.kt$onDismiss</ID>
+    <ID>LambdaParameterInRestartableEffect:BiometricPrompt.kt$onSuccess</ID>
+    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onFailure</ID>
+    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onMaxFee</ID>
+    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onMinFee</ID>
+    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onSuccess</ID>
+    <ID>LambdaParameterInRestartableEffect:CoinSelectionScreen.kt$onRender</ID>
+    <ID>LambdaParameterInRestartableEffect:ConfirmPinScreen.kt$onPinConfirmed</ID>
+    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$navigateReceiveConfirm</ID>
+    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$onBack</ID>
+    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$updateInvoice</ID>
+    <ID>LambdaParameterInRestartableEffect:InitializingWalletView.kt$onComplete</ID>
+    <ID>LambdaParameterInRestartableEffect:LnurlChannelScreen.kt$onConnected</ID>
+    <ID>LambdaParameterInRestartableEffect:NumberPadTextField.kt$onAmountCalculated</ID>
+    <ID>LambdaParameterInRestartableEffect:NumberPadTextField.kt$onInputChanged</ID>
+    <ID>LambdaParameterInRestartableEffect:PinCheckScreen.kt$onSuccess</ID>
+    <ID>LambdaParameterInRestartableEffect:PricePreviewScreen.kt$onClose</ID>
+    <ID>LambdaParameterInRestartableEffect:QrCodeImage.kt$onBitmapGenerated</ID>
+    <ID>LambdaParameterInRestartableEffect:QrScanningScreen.kt$onBack</ID>
+    <ID>LambdaParameterInRestartableEffect:QrScanningScreen.kt$onScanSuccess</ID>
+    <ID>LambdaParameterInRestartableEffect:QuickPaySendScreen.kt$onPaymentComplete</ID>
+    <ID>LambdaParameterInRestartableEffect:QuickPaySendScreen.kt$onShowError</ID>
+    <ID>LambdaParameterInRestartableEffect:ReportIssueScreen.kt$navigateResultScreen</ID>
+    <ID>LambdaParameterInRestartableEffect:SendAndReviewScreen.kt$onEvent</ID>
+    <ID>LambdaParameterInRestartableEffect:SendAndReviewScreen.kt$onNavigateToPin</ID>
+    <ID>LambdaParameterInRestartableEffect:SendOptionsView.kt$onComplete</ID>
+    <ID>LambdaParameterInRestartableEffect:SheetHost.kt$onDismiss</ID>
+    <ID>LargeClass:AppViewModel.kt$AppViewModel : ViewModel</ID>
+    <ID>LongMethod:AppViewModel.kt$AppViewModel$private fun observeLdkNodeEvents()</ID>
+    <ID>LongMethod:AppViewModel.kt$AppViewModel$private suspend fun proceedWithPayment()</ID>
+    <ID>LongMethod:BoostTransactionViewModel.kt$BoostTransactionViewModel$private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result&lt;Unit&gt;</ID>
+    <ID>LongMethod:ContentView.kt$private fun NavGraphBuilder.widgets( navController: NavHostController, settingsViewModel: SettingsViewModel, currencyViewModel: CurrencyViewModel, )</ID>
+    <ID>LongMethod:CoreService.kt$ActivityService$suspend fun generateRandomTestData(count: Int = 100)</ID>
+    <ID>LongMethod:CoreService.kt$ActivityService$suspend fun syncLdkNodePayments(payments: List&lt;PaymentDetails&gt;, forceUpdate: Boolean = false)</ID>
+    <ID>LongMethod:LightningRepo.kt$LightningRepo$suspend fun start( walletIndex: Int = 0, timeout: Duration? = null, shouldRetry: Boolean = true, eventHandler: NodeEventHandler? = null, customServer: ElectrumServer? = null, customRgsServerUrl: String? = null, ): Result&lt;Unit&gt;</ID>
+    <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:WakeNodeWorker.kt$WakeNodeWorker$private suspend fun handleLdkEvent(event: Event)</ID>
+    <ID>LongParameterList:ActivityRepo.kt$ActivityRepo$( filter: ActivityFilter? = null, txType: PaymentType? = null, tags: List&lt;String&gt;? = null, search: String? = null, minDate: ULong? = null, maxDate: ULong? = null, limit: UInt? = null, sortDirection: SortDirection? = null, )</ID>
+    <ID>LongParameterList:AppViewModel.kt$AppViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val keychain: Keychain, private val lightningService: LightningRepo, private val walletRepo: WalletRepo, private val coreService: CoreService, private val ldkNodeEventBus: LdkNodeEventBus, private val settingsStore: SettingsStore, private val currencyRepo: CurrencyRepo, private val activityRepo: ActivityRepo, connectivityRepo: ConnectivityRepo, healthRepo: HealthRepo, )</ID>
+    <ID>LongParameterList:BiometricPrompt.kt$( activity: Context, title: String, cancelButtonText: String, onAuthSucceed: () -&gt; Unit, onAuthFailed: (() -&gt; Unit), onAuthError: ((errorCode: Int, errString: CharSequence) -&gt; Unit), )</ID>
+    <ID>LongParameterList:BiometricPrompt.kt$( activity: Context, title: String, cancelButtonText: String, onAuthSucceeded: () -&gt; Unit, onAuthFailed: (() -&gt; Unit), onAuthError: ((errorCode: Int, errString: CharSequence) -&gt; Unit), onUnsupported: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:CoreService.kt$ActivityService$( filter: ActivityFilter? = null, txType: PaymentType? = null, tags: List&lt;String&gt;? = null, search: String? = null, minDate: ULong? = null, maxDate: ULong? = null, limit: UInt? = null, sortDirection: SortDirection? = null, )</ID>
+    <ID>LongParameterList:CoreService.kt$BlocktankService$( channelSizeSat: ULong, invoiceSat: ULong, invoiceDescription: String, nodeId: String, channelExpiryWeeks: UInt, options: CreateCjitOptions, )</ID>
+    <ID>LongParameterList:CoreService.kt$OnchainService$( mnemonicPhrase: String, derivationPathStr: String?, network: Network?, bip39Passphrase: String?, isChange: Boolean?, startIndex: UInt?, count: UInt?, )</ID>
+    <ID>LongParameterList:DevSettingsViewModel.kt$DevSettingsViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val firebaseMessaging: FirebaseMessaging, private val lightningRepo: LightningRepo, private val walletRepo: WalletRepo, private val widgetsStore: WidgetsStore, private val currencyRepo: CurrencyRepo, private val logsRepo: LogsRepo, private val cacheStore: CacheStore, private val blocktankRepo: BlocktankRepo, )</ID>
+    <ID>LongParameterList:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningRepo: LightningRepo, internal val blocktankRepo: BlocktankRepo, private val logsRepo: LogsRepo, private val addressChecker: AddressChecker, private val ldkNodeEventBus: LdkNodeEventBus, private val walletRepo: WalletRepo, )</ID>
+    <ID>LongParameterList:LightningRepo.kt$LightningRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningService: LightningService, private val ldkNodeEventBus: LdkNodeEventBus, private val settingsStore: SettingsStore, private val coreService: CoreService, private val blocktankNotificationsService: BlocktankNotificationsService, private val firebaseMessaging: FirebaseMessaging, private val keychain: Keychain, private val lnurlService: LnurlService, private val cacheStore: CacheStore, )</ID>
+    <ID>LongParameterList:LightningRepo.kt$LightningRepo$( walletIndex: Int = 0, timeout: Duration? = null, shouldRetry: Boolean = true, eventHandler: NodeEventHandler? = null, customServer: ElectrumServer? = null, customRgsServerUrl: String? = null, )</ID>
+    <ID>LongParameterList:Nav.kt$( typeMap: Map&lt;KType, NavType&lt;*&gt;&gt; = emptyMap(), deepLinks: List&lt;NavDeepLink&gt; = emptyList(), noinline enterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenSlideIn }, noinline exitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenScaleOut }, noinline popEnterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenScaleIn }, noinline popExitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenSlideOut }, noinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -&gt; Unit, )</ID>
+    <ID>LongParameterList:Notifications.kt$( title: String?, text: String?, extras: Bundle? = null, bigText: String? = null, id: Int = Random.nextInt(), context: Context, )</ID>
+    <ID>LongParameterList:WalletRepo.kt$WalletRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val db: AppDb, private val keychain: Keychain, private val coreService: CoreService, private val settingsStore: SettingsStore, private val addressChecker: AddressChecker, private val lightningRepo: LightningRepo, private val cacheStore: CacheStore, )</ID>
+    <ID>LongParameterList:WidgetsRepo.kt$WidgetsRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val newsService: NewsService, private val factsService: FactsService, private val blocksService: BlocksService, private val weatherService: WeatherService, private val priceService: PriceService, private val widgetsStore: WidgetsStore, private val settingsStore: SettingsStore, )</ID>
+    <ID>LoopWithTooManyJumpStatements:CoreService.kt$ActivityService$for</ID>
+    <ID>LoopWithTooManyJumpStatements:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$for</ID>
+    <ID>LoopWithTooManyJumpStatements:TransferViewModel.kt$TransferViewModel$while</ID>
+    <ID>MagicNumber:ActivityDetailScreen.kt$40</ID>
+    <ID>MagicNumber:ActivityExploreScreen.kt$40</ID>
+    <ID>MagicNumber:ActivityIcon.kt$0.5f</ID>
+    <ID>MagicNumber:ActivityListViewModel.kt$ActivityListViewModel$1000</ID>
+    <ID>MagicNumber:ActivityListViewModel.kt$ActivityListViewModel$300</ID>
+    <ID>MagicNumber:ActivityRepo.kt$ActivityRepo$1000</ID>
+    <ID>MagicNumber:AddressViewerScreen.kt$1500000L</ID>
+    <ID>MagicNumber:AddressViewerScreen.kt$250000L</ID>
+    <ID>MagicNumber:AddressViewerScreen.kt$50000L</ID>
+    <ID>MagicNumber:AddressViewerViewModel.kt$AddressViewerViewModel$300</ID>
+    <ID>MagicNumber:AllActivityScreen.kt$0.5f</ID>
+    <ID>MagicNumber:AllActivityScreen.kt$0xFF161616</ID>
+    <ID>MagicNumber:AllActivityScreen.kt$0xFF1e1e1e</ID>
+    <ID>MagicNumber:AllActivityScreen.kt$1500f</ID>
+    <ID>MagicNumber:AmountInput.kt$8</ID>
+    <ID>MagicNumber:AndroidKeyStore.kt$AndroidKeyStore$12</ID>
+    <ID>MagicNumber:AndroidKeyStore.kt$AndroidKeyStore$128</ID>
+    <ID>MagicNumber:AndroidKeyStore.kt$AndroidKeyStore$256</ID>
+    <ID>MagicNumber:AppStatus.kt$0.2f</ID>
+    <ID>MagicNumber:AppStatus.kt$0.4f</ID>
+    <ID>MagicNumber:AppStatus.kt$0.5f</ID>
+    <ID>MagicNumber:AppStatus.kt$0.6f</ID>
+    <ID>MagicNumber:AppStatus.kt$2000</ID>
+    <ID>MagicNumber:AppStatus.kt$600</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$0.5</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$10</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$1000</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$250</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$300</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$500</ID>
+    <ID>MagicNumber:AppViewModel.kt$AppViewModel$5000</ID>
+    <ID>MagicNumber:ArticleModel.kt$24</ID>
+    <ID>MagicNumber:ArticleModel.kt$30</ID>
+    <ID>MagicNumber:ArticleModel.kt$60</ID>
+    <ID>MagicNumber:AutoReadClipboardHandler.kt$1000</ID>
+    <ID>MagicNumber:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$200</ID>
+    <ID>MagicNumber:BackupSettingsScreen.kt$1000</ID>
+    <ID>MagicNumber:BackupSettingsScreen.kt$35</ID>
+    <ID>MagicNumber:BackupSettingsScreen.kt$5</ID>
+    <ID>MagicNumber:BackupSettingsScreen.kt$60</ID>
+    <ID>MagicNumber:BackupsRepo.kt$BackupsRepo$60000</ID>
+    <ID>MagicNumber:BackupsViewModel.kt$BackupsViewModel$500</ID>
+    <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$200</ID>
+    <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$300</ID>
+    <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$350</ID>
+    <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$380</ID>
+    <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$400</ID>
+    <ID>MagicNumber:BiometricCrypto.kt$BiometricCrypto$256</ID>
+    <ID>MagicNumber:BiometricsView.kt$5</ID>
+    <ID>MagicNumber:Bip21Utils.kt$Bip21Utils$8</ID>
+    <ID>MagicNumber:Bip39Utils.kt$0xFF</ID>
+    <ID>MagicNumber:Bip39Utils.kt$12</ID>
+    <ID>MagicNumber:Bip39Utils.kt$128</ID>
+    <ID>MagicNumber:Bip39Utils.kt$24</ID>
+    <ID>MagicNumber:Bip39Utils.kt$256</ID>
+    <ID>MagicNumber:Bip39Utils.kt$32</ID>
+    <ID>MagicNumber:Bip39Utils.kt$8</ID>
+    <ID>MagicNumber:BlocksService.kt$BlocksService$1000L</ID>
+    <ID>MagicNumber:BlocksService.kt$BlocksService$1024.0</ID>
+    <ID>MagicNumber:BlocksService.kt$BlocksService$1_000_000_000_000.0</ID>
+    <ID>MagicNumber:BlocktankRepo.kt$BlocktankRepo$1.1</ID>
+    <ID>MagicNumber:BlocktankRepo.kt$BlocktankRepo$1000</ID>
+    <ID>MagicNumber:BlocktankRepo.kt$BlocktankRepo$225</ID>
+    <ID>MagicNumber:BlocktankRepo.kt$BlocktankRepo$450</ID>
+    <ID>MagicNumber:BlocktankRepo.kt$BlocktankRepo$495</ID>
+    <ID>MagicNumber:BlocktankViewModel.kt$BlocktankViewModel$5000</ID>
+    <ID>MagicNumber:Button.kt$0.5f</ID>
+    <ID>MagicNumber:ChangePinConfirmScreen.kt$500</ID>
+    <ID>MagicNumber:ChannelDetailScreen.kt$1.5f</ID>
+    <ID>MagicNumber:ChannelOrdersScreen.kt$10</ID>
+    <ID>MagicNumber:ChannelOrdersScreen.kt$100</ID>
+    <ID>MagicNumber:ChannelOrdersScreen.kt$30</ID>
+    <ID>MagicNumber:ChannelOrdersScreen.kt$40</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF000000</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF0085FF</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF151515</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF1C1C1D</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF3A343C</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF48484A</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF636366</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF75BF72</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFF8E8E93</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFFB95CE8</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFFE95164</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFFFF4400</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFFFFD200</ID>
+    <ID>MagicNumber:Colors.kt$Colors$0xFFFFFFFF</ID>
+    <ID>MagicNumber:ConfirmMnemonicScreen.kt$12</ID>
+    <ID>MagicNumber:ConfirmMnemonicScreen.kt$24</ID>
+    <ID>MagicNumber:ConfirmMnemonicScreen.kt$300</ID>
+    <ID>MagicNumber:ConfirmMnemonicScreen.kt$6</ID>
+    <ID>MagicNumber:ConfirmPinScreen.kt$500</ID>
+    <ID>MagicNumber:ContentView.kt$100</ID>
+    <ID>MagicNumber:ContentView.kt$500</ID>
+    <ID>MagicNumber:Context.kt$1024</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$10</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$1000</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$1_000_000</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$24</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$3</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$30L</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$60</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$64</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$7</ID>
+    <ID>MagicNumber:CoreService.kt$ActivityService$8</ID>
+    <ID>MagicNumber:Crypto.kt$Crypto$128</ID>
+    <ID>MagicNumber:Crypto.kt$Crypto$16</ID>
+    <ID>MagicNumber:Crypto.kt$Crypto$32</ID>
+    <ID>MagicNumber:CurrencyService.kt$CurrencyService$1000L</ID>
+    <ID>MagicNumber:CurrencyService.kt$CurrencyService$3</ID>
+    <ID>MagicNumber:DateRangeSelectorSheet.kt$.775f</ID>
+    <ID>MagicNumber:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$65535</ID>
+    <ID>MagicNumber:ElectrumServer.kt$50001</ID>
+    <ID>MagicNumber:ElectrumServer.kt$50002</ID>
+    <ID>MagicNumber:ElectrumServer.kt$60001</ID>
+    <ID>MagicNumber:ElectrumServer.kt$60002</ID>
+    <ID>MagicNumber:ExternalConnectionScreen.kt$66</ID>
+    <ID>MagicNumber:FeeSettingsViewModel.kt$FeeSettingsViewModel$5000</ID>
+    <ID>MagicNumber:HomeScreen.kt$0.5f</ID>
+    <ID>MagicNumber:HomeScreen.kt$0.8f</ID>
+    <ID>MagicNumber:HomeScreen.kt$3</ID>
+    <ID>MagicNumber:HttpModule.kt$HttpModule$30_000</ID>
+    <ID>MagicNumber:HttpModule.kt$HttpModule$60_000</ID>
+    <ID>MagicNumber:InactivityTracker.kt$1000</ID>
+    <ID>MagicNumber:InitializingWalletView.kt$2000</ID>
+    <ID>MagicNumber:InitializingWalletView.kt$500</ID>
+    <ID>MagicNumber:InitializingWalletView.kt$8000</ID>
+    <ID>MagicNumber:InitializingWalletView.kt$99.9</ID>
+    <ID>MagicNumber:Keyboard.kt$0.2f</ID>
+    <ID>MagicNumber:Keyboard.kt$3</ID>
+    <ID>MagicNumber:LightningChannel.kt$0.5f</ID>
+    <ID>MagicNumber:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$10</ID>
+    <ID>MagicNumber:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$500</ID>
+    <ID>MagicNumber:LiquidityScreen.kt$200_000L</ID>
+    <ID>MagicNumber:LiquidityScreen.kt$50_000L</ID>
+    <ID>MagicNumber:LnurlChannelScreen.kt$24</ID>
+    <ID>MagicNumber:Logger.kt$Logger$1024L</ID>
+    <ID>MagicNumber:Logger.kt$Logger$4</ID>
+    <ID>MagicNumber:LogsRepo.kt$LogsRepo$3</ID>
+    <ID>MagicNumber:MainActivity.kt$MainActivity$4</ID>
+    <ID>MagicNumber:MigrationService.kt$MigrationService$1000</ID>
+    <ID>MagicNumber:MigrationService.kt$MigrationService$1000L</ID>
+    <ID>MagicNumber:NewsService.kt$NewsService$10</ID>
+    <ID>MagicNumber:OnboardingSlidesScreen.kt$3</ID>
+    <ID>MagicNumber:OnboardingSlidesScreen.kt$4</ID>
+    <ID>MagicNumber:OnboardingSlidesScreen.kt$5</ID>
+    <ID>MagicNumber:Perf.kt$1000.0</ID>
+    <ID>MagicNumber:PinPromptScreen.kt$0.8f</ID>
+    <ID>MagicNumber:PreviewItems.kt$10</ID>
+    <ID>MagicNumber:PreviewItems.kt$1000</ID>
+    <ID>MagicNumber:PreviewItems.kt$3</ID>
+    <ID>MagicNumber:PriceCard.kt$1000</ID>
+    <ID>MagicNumber:PriceCard.kt$3.0</ID>
+    <ID>MagicNumber:PriceCard.kt$4.0</ID>
+    <ID>MagicNumber:PricePreviewScreen.kt$3.0</ID>
+    <ID>MagicNumber:PricePreviewScreen.kt$4.0</ID>
+    <ID>MagicNumber:PriceService.kt$PriceService$100</ID>
+    <ID>MagicNumber:PriceService.kt$PriceService$1000</ID>
+    <ID>MagicNumber:PriceService.kt$PriceService$6</ID>
+    <ID>MagicNumber:ProgressSteps.kt$12f</ID>
+    <ID>MagicNumber:QrScanningScreen.kt$100</ID>
+    <ID>MagicNumber:QuickPaySettingsScreen.kt$10</ID>
+    <ID>MagicNumber:QuickPaySettingsScreen.kt$20</ID>
+    <ID>MagicNumber:QuickPaySettingsScreen.kt$5</ID>
+    <ID>MagicNumber:QuickPaySettingsScreen.kt$50</ID>
+    <ID>MagicNumber:ReceiveAmountScreen.kt$500</ID>
+    <ID>MagicNumber:ReceiveLiquidityScreen.kt$100.0</ID>
+    <ID>MagicNumber:ReceiveQrScreen.kt$17.33f</ID>
+    <ID>MagicNumber:ReceiveQrScreen.kt$32</ID>
+    <ID>MagicNumber:RectangleButton.kt$0.5f</ID>
+    <ID>MagicNumber:RestoreWalletScreen.kt$12</ID>
+    <ID>MagicNumber:RestoreWalletScreen.kt$24</ID>
+    <ID>MagicNumber:RestoreWalletScreen.kt$3</ID>
+    <ID>MagicNumber:RestoreWalletScreen.kt$6</ID>
+    <ID>MagicNumber:SavingsConfirmScreen.kt$300</ID>
+    <ID>MagicNumber:SavingsProgressScreen.kt$2500</ID>
+    <ID>MagicNumber:SavingsProgressScreen.kt$5000</ID>
+    <ID>MagicNumber:SendAndReviewScreen.kt$300</ID>
+    <ID>MagicNumber:SettingUpScreen.kt$3</ID>
+    <ID>MagicNumber:SettingUpScreen.kt$5000</ID>
+    <ID>MagicNumber:SettingsButtonRow.kt$0.5f</ID>
+    <ID>MagicNumber:SettingsTextButtonRow.kt$0.5f</ID>
+    <ID>MagicNumber:SettingsViewModel.kt$SettingsViewModel$5000</ID>
+    <ID>MagicNumber:ShareSheet.kt$100</ID>
+    <ID>MagicNumber:ShowMnemonicScreen.kt$0.075f</ID>
+    <ID>MagicNumber:ShowMnemonicScreen.kt$12</ID>
+    <ID>MagicNumber:ShowMnemonicScreen.kt$24</ID>
+    <ID>MagicNumber:ShowMnemonicScreen.kt$300</ID>
+    <ID>MagicNumber:Slider.kt$10</ID>
+    <ID>MagicNumber:Slider.kt$20</ID>
+    <ID>MagicNumber:Slider.kt$5</ID>
+    <ID>MagicNumber:Slider.kt$50</ID>
+    <ID>MagicNumber:SpendingConfirmScreen.kt$300</ID>
+    <ID>MagicNumber:String.kt$3</ID>
+    <ID>MagicNumber:SwipeToConfirm.kt$0.8f</ID>
+    <ID>MagicNumber:SwipeToConfirm.kt$1500</ID>
+    <ID>MagicNumber:SwipeToConfirm.kt$500</ID>
+    <ID>MagicNumber:TabBar.kt$0.5f</ID>
+    <ID>MagicNumber:TabBar.kt$40</ID>
+    <ID>MagicNumber:TermsOfUseScreen.kt$0x52FF6600</ID>
+    <ID>MagicNumber:Theme.kt$0xFF212121</ID>
+    <ID>MagicNumber:Theme.kt$0xFFF4F4F4</ID>
+    <ID>MagicNumber:Thread.kt$4</ID>
+    <ID>MagicNumber:ToastView.kt$0XFF032E56</ID>
+    <ID>MagicNumber:ToastView.kt$0XFF1D2F1C</ID>
+    <ID>MagicNumber:ToastView.kt$0XFF2B1637</ID>
+    <ID>MagicNumber:ToastView.kt$0XFF3C1001</ID>
+    <ID>MagicNumber:ToastView.kt$0XFF491F25</ID>
+    <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$0.025</ID>
+    <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$0.98</ID>
+    <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$225</ID>
+    <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$450</ID>
+    <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$495</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$200</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$299</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$400</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$401</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$404</ID>
+    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$409</ID>
+    <ID>MagicNumber:WalletRepo.kt$WalletRepo$0.9</ID>
+    <ID>MatchingDeclarationName:AddressType.kt$AddressTypeInfo</ID>
+    <ID>MatchingDeclarationName:AdvancedSettingsScreen.kt$AdvancedSettingsTestTags</ID>
+    <ID>MatchingDeclarationName:BackupSettingsScreen.kt$BackupSettingsTestTags</ID>
+    <ID>MatchingDeclarationName:BoostTransactionViewModelTest.kt$BoostTransactionViewModelSimplifiedTest : BaseUnitTest</ID>
+    <ID>MatchingDeclarationName:Button.kt$ButtonSize</ID>
+    <ID>MatchingDeclarationName:CoinSelectPreferenceScreen.kt$CoinSelectPreferenceTestTags</ID>
+    <ID>MatchingDeclarationName:CoinSelectionScreen.kt$CoinSelectionTestTags</ID>
+    <ID>MatchingDeclarationName:EnablePolling.kt$CurrencyModule</ID>
+    <ID>MatchingDeclarationName:LightningChannel.kt$ChannelStatusUi</ID>
+    <ID>MatchingDeclarationName:LightningConnectionsScreen.kt$LightningConnectionsTestTags</ID>
+    <ID>MatchingDeclarationName:ReceiveConfirmScreen.kt$CjitEntryDetails</ID>
+    <ID>MatchingDeclarationName:ReportIssueScreen.kt$ReportIssueTestTags</ID>
+    <ID>MatchingDeclarationName:ResetAndRestoreScreen.kt$ResetAndRestoreTestTags</ID>
+    <ID>MatchingDeclarationName:SavingsProgressScreen.kt$SavingsProgressState</ID>
+    <ID>MatchingDeclarationName:SecuritySettingsScreen.kt$SecuritySettingsTestTags</ID>
+    <ID>MatchingDeclarationName:SettingsButtonRow.kt$SettingsButtonValue</ID>
+    <ID>MatchingDeclarationName:WalletInitResultView.kt$WalletInitResult</ID>
+    <ID>MaxLineLength:ActivityDetailScreen.kt$description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance"</ID>
+    <ID>MaxLineLength:ActivityDetailScreen.kt$text = stringResource(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost)</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$"Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity"</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$"findActivityByPaymentId error. Parameters:\n paymentHashOrTxId:$paymentHashOrTxId type:$type txType:$txType"</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$"getActivities error. Parameters:\nfilter:$filter txType:$txType tags:$tags search:$search minDate:$minDate maxDate:$maxDate limit:$limit sortDirection:$sortDirection"</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$* Updates an activity and delete other one. In case of failure in the update or deletion, the data will be cached to try again on the next sync</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$if (paymentHashOrTxId.isEmpty()) return@withContext Result.failure(IllegalArgumentException("paymentHashOrTxId is empty"))</ID>
+    <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$return@withContext Result.failure(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))</ID>
+    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$// TODO: fee is not the sats sent. Need to get this amount from elsewhere like send flow or something.</ID>
+    <ID>MaxLineLength:AppViewModel.kt$AppViewModel$// TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.</ID>
+    <ID>MaxLineLength:BackupNavigationSheet.kt$BackupContract.SideEffect.NavigateToConfirmMnemonic -&gt; navController.navigate(BackupRoute.ConfirmMnemonic)</ID>
+    <ID>MaxLineLength:BackupNavigationSheet.kt$BackupContract.SideEffect.NavigateToConfirmPassphrase -&gt; navController.navigate(BackupRoute.ConfirmPassphrase)</ID>
+    <ID>MaxLineLength:BackupNavigationSheet.kt$BackupContract.SideEffect.NavigateToMultipleDevices -&gt; navController.navigate(BackupRoute.MultipleDevices)</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art" to true</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon" to false</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon" to false</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon" to false</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"dignity pass list indicate nasty swamp pool script soccer toe leaf photo multiply desk host tomato cradle drill spread actor shine dismiss champion exotic" to true</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth title" to true</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$"letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless" to true</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon actor").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon invalidword").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon zoo").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertFalse(listOf("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$assertTrue("AbAnDoN abandon ABANDON abandon abandon abandon abandon abandon abandon abandon abandon about".toWordList().validBip39Checksum())</ID>
+    <ID>MaxLineLength:Bip39Test.kt$Bip39Test$val validMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"</ID>
+    <ID>MaxLineLength:Bip39Utils.kt$val bip39Words = setOf( "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance", "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent", "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol", "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also", "alter", "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry", "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique", "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april", "arch", "arctic", "area", "arena", "argue", "arm", "armed", "armor", "army", "around", "arrange", "arrest", "arrive", "arrow", "art", "artefact", "artist", "artwork", "ask", "aspect", "assault", "asset", "assist", "assume", "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction", "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid", "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby", "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo", "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic", "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef", "before", "begin", "behave", "behind", "believe", "below", "belt", "bench", "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid", "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade", "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom", "blouse", "blue", "blur", "blush", "board", "boat", "body", "boil", "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow", "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand", "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright", "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown", "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk", "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business", "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus", "cage", "cake", "call", "calm", "camera", "camp", "can", "canal", "cancel", "candy", "cannon", "canoe", "canvas", "canyon", "capable", "capital", "captain", "car", "carbon", "card", "cargo", "carpet", "carry", "cart", "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch", "category", "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery", "cement", "census", "century", "cereal", "certain", "chair", "chalk", "champion", "change", "chaos", "chapter", "charge", "chase", "chat", "cheap", "check", "cheese", "chef", "cherry", "chest", "chicken", "chief", "child", "chimney", "choice", "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle", "citizen", "city", "civil", "claim", "clap", "clarify", "claw", "clay", "clean", "clerk", "clever", "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog", "close", "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch", "coach", "coast", "coconut", "code", "coffee", "coil", "coin", "collect", "color", "column", "combine", "come", "comfort", "comic", "common", "company", "concert", "conduct", "confirm", "congress", "connect", "consider", "control", "convince", "cook", "cool", "copper", "copy", "coral", "core", "corn", "correct", "cost", "cotton", "couch", "country", "couple", "course", "cousin", "cover", "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream", "credit", "creek", "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial", "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup", "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad", "damage", "damp", "dance", "danger", "daring", "dash", "daughter", "dawn", "day", "deal", "debate", "debris", "decade", "december", "decide", "decline", "decorate", "decrease", "deer", "defense", "define", "defy", "degree", "delay", "deliver", "demand", "demise", "denial", "dentist", "deny", "depart", "depend", "deposit", "depth", "deputy", "derive", "describe", "desert", "design", "desk", "despair", "destroy", "detail", "detect", "develop", "device", "devote", "diagram", "dial", "diamond", "diary", "dice", "diesel", "diet", "differ", "digital", "dignity", "dilemma", "dinner", "dinosaur", "direct", "dirt", "disagree", "discover", "disease", "dish", "dismiss", "disorder", "display", "distance", "divert", "divide", "divorce", "dizzy", "doctor", "document", "dog", "doll", "dolphin", "domain", "donate", "donkey", "donor", "door", "dose", "double", "dove", "draft", "dragon", "drama", "drastic", "draw", "dream", "dress", "drift", "drill", "drink", "drip", "drive", "drop", "drum", "dry", "duck", "dumb", "dune", "during", "dust", "dutch", "duty", "dwarf", "dynamic", "eager", "eagle", "early", "earn", "earth", "easily", "east", "easy", "echo", "ecology", "economy", "edge", "edit", "educate", "effort", "egg", "eight", "either", "elbow", "elder", "electric", "elegant", "element", "elephant", "elevator", "elite", "else", "embark", "embody", "embrace", "emerge", "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless", "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy", "enlist", "enough", "enrich", "enroll", "ensure", "enter", "entire", "entry", "envelope", "episode", "equal", "equip", "era", "erase", "erode", "erosion", "error", "erupt", "escape", "essay", "essence", "estate", "eternal", "ethics", "evidence", "evil", "evoke", "evolve", "exact", "example", "excess", "exchange", "excite", "exclude", "excuse", "execute", "exercise", "exhaust", "exhibit", "exile", "exist", "exit", "exotic", "expand", "expect", "expire", "explain", "expose", "express", "extend", "extra", "eye", "eyebrow", "fabric", "face", "faculty", "fade", "faint", "faith", "fall", "false", "fame", "family", "famous", "fan", "fancy", "fantasy", "farm", "fashion", "fat", "fatal", "father", "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed", "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber", "fiction", "field", "figure", "file", "film", "filter", "final", "find", "fine", "finger", "finish", "fire", "firm", "first", "fiscal", "fish", "fit", "fitness", "fix", "flag", "flame", "flash", "flat", "flavor", "flee", "flight", "flip", "float", "flock", "floor", "flower", "fluid", "flush", "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food", "foot", "force", "forest", "forget", "fork", "fortune", "forum", "forward", "fossil", "foster", "found", "fox", "fragile", "frame", "frequent", "fresh", "friend", "fringe", "frog", "front", "frost", "frown", "frozen", "fruit", "fuel", "fun", "funny", "furnace", "fury", "future", "gadget", "gain", "galaxy", "gallery", "game", "gap", "garage", "garbage", "garden", "garlic", "garment", "gas", "gasp", "gate", "gather", "gauge", "gaze", "general", "genius", "genre", "gentle", "genuine", "gesture", "ghost", "giant", "gift", "giggle", "ginger", "giraffe", "girl", "give", "glad", "glance", "glare", "glass", "glide", "glimpse", "globe", "gloom", "glory", "glove", "glow", "glue", "goat", "goddess", "gold", "good", "goose", "gorilla", "gospel", "gossip", "govern", "gown", "grab", "grace", "grain", "grant", "grape", "grass", "gravity", "great", "green", "grid", "grief", "grit", "grocery", "group", "grow", "grunt", "guard", "guess", "guide", "guilt", "guitar", "gun", "gym", "habit", "hair", "half", "hammer", "hamster", "hand", "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk", "hazard", "head", "health", "heart", "heavy", "hedgehog", "height", "hello", "helmet", "help", "hen", "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby", "hockey", "hold", "hole", "holiday", "hollow", "home", "honey", "hood", "hope", "horn", "horror", "horse", "hospital", "host", "hotel", "hour", "hover", "hub", "huge", "human", "humble", "humor", "hundred", "hungry", "hunt", "hurdle", "hurry", "hurt", "husband", "hybrid", "ice", "icon", "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image", "imitate", "immense", "immune", "impact", "impose", "improve", "impulse", "inch", "include", "income", "increase", "index", "indicate", "indoor", "industry", "infant", "inflict", "inform", "inhale", "inherit", "initial", "inject", "injury", "inmate", "inner", "innocent", "input", "inquiry", "insane", "insect", "inside", "inspire", "install", "intact", "interest", "into", "invest", "invite", "involve", "iron", "island", "isolate", "issue", "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans", "jelly", "jewel", "job", "join", "joke", "journey", "joy", "judge", "juice", "jump", "jungle", "junior", "junk", "just", "kangaroo", "keen", "keep", "ketchup", "key", "kick", "kid", "kidney", "kind", "kingdom", "kiss", "kit", "kitchen", "kite", "kitten", "kiwi", "knee", "knife", "knock", "know", "lab", "label", "labor", "ladder", "lady", "lake", "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry", "lava", "law", "lawn", "lawsuit", "layer", "lazy", "leader", "leaf", "learn", "leave", "lecture", "left", "leg", "legal", "legend", "leisure", "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level", "liar", "liberty", "library", "license", "life", "lift", "light", "like", "limb", "limit", "link", "lion", "liquid", "list", "little", "live", "lizard", "load", "loan", "lobster", "local", "lock", "logic", "lonely", "long", "loop", "lottery", "loud", "lounge", "love", "loyal", "lucky", "luggage", "lumber", "lunar", "lunch", "luxury", "lyrics", "machine", "mad", "magic", "magnet", "maid", "mail", "main", "major", "make", "mammal", "man", "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march", "margin", "marine", "market", "marriage", "mask", "mass", "master", "match", "material", "math", "matrix", "matter", "maximum", "maze", "meadow", "mean", "measure", "meat", "mechanic", "medal", "media", "melody", "melt", "member", "memory", "mention", "menu", "mercy", "merge", "merit", "merry", "mesh", "message", "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind", "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake", "mix", "mixed", "mixture", "mobile", "model", "modify", "mom", "moment", "monitor", "monkey", "monster", "month", "moon", "moral", "more", "morning", "mosquito", "mother", "motion", "motor", "mountain", "mouse", "move", "movie", "much", "muffin", "mule", "multiply", "muscle", "museum", "mushroom", "music", "must", "mutual", "myself", "mystery", "myth", "naive", "name", "napkin", "narrow", "nasty", "nation", "nature", "near", "neck", "need", "negative", "neglect", "neither", "nephew", "nerve", "nest", "net", "network", "neutral", "never", "news", "next", "nice", "night", "noble", "noise", "nominee", "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice", "novel", "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object", "oblige", "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october", "odor", "off", "offer", "office", "often", "oil", "okay", "old", "olive", "olympic", "omit", "once", "one", "onion", "online", "only", "open", "opera", "opinion", "oppose", "option", "orange", "orbit", "orchard", "order", "ordinary", "organ", "orient", "original", "orphan", "ostrich", "other", "outdoor", "outer", "output", "outside", "oval", "oven", "over", "own", "owner", "oxygen", "oyster", "ozone", "pact", "paddle", "page", "pair", "palace", "palm", "panda", "panel", "panic", "panther", "paper", "parade", "parent", "park", "parrot", "party", "pass", "patch", "path", "patient", "patrol", "pattern", "pause", "pave", "payment", "peace", "peanut", "pear", "peasant", "pelican", "pen", "penalty", "pencil", "people", "pepper", "perfect", "permit", "person", "pet", "phone", "photo", "phrase", "physical", "piano", "picnic", "picture", "piece", "pig", "pigeon", "pill", "pilot", "pink", "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet", "plastic", "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem", "poet", "point", "polar", "pole", "police", "pond", "pony", "pool", "popular", "portion", "position", "possible", "post", "potato", "pottery", "poverty", "powder", "power", "practice", "praise", "predict", "prefer", "prepare", "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority", "prison", "private", "prize", "problem", "process", "produce", "profit", "program", "project", "promote", "proof", "property", "prosper", "protect", "proud", "provide", "public", "pudding", "pull", "pulp", "pulse", "pumpkin", "punch", "pupil", "puppy", "purchase", "purity", "purpose", "purse", "push", "put", "puzzle", "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz", "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rail", "rain", "raise", "rally", "ramp", "ranch", "random", "range", "rapid", "rare", "rate", "rather", "raven", "raw", "razor", "ready", "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe", "record", "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject", "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove", "render", "renew", "rent", "reopen", "repair", "repeat", "replace", "report", "require", "rescue", "resemble", "resist", "resource", "response", "result", "retire", "retreat", "return", "reunion", "reveal", "review", "reward", "rhythm", "rib", "ribbon", "rice", "rich", "ride", "ridge", "rifle", "right", "rigid", "ring", "riot", "ripple", "risk", "ritual", "rival", "river", "road", "roast", "robot", "robust", "rocket", "romance", "roof", "rookie", "room", "rose", "rotate", "rough", "round", "route", "royal", "rubber", "rude", "rug", "rule", "run", "runway", "rural", "sad", "saddle", "sadness", "safe", "sail", "salad", "salmon", "salon", "salt", "salute", "same", "sample", "sand", "satisfy", "satoshi", "sauce", "sausage", "save", "say", "scale", "scan", "scare", "scatter", "scene", "scheme", "school", "science", "scissors", "scorpion", "scout", "scrap", "screen", "script", "scrub", "sea", "search", "season", "seat", "second", "secret", "section", "security", "seed", "seek", "segment", "select", "sell", "seminar", "senior", "sense", "sentence", "series", "service", "session", "settle", "setup", "seven", "shadow", "shaft", "shallow", "share", "shed", "shell", "sheriff", "shield", "shift", "shine", "ship", "shiver", "shock", "shoe", "shoot", "shop", "short", "shoulder", "shove", "shrimp", "shrug", "shuffle", "shy", "sibling", "sick", "side", "siege", "sight", "sign", "silent", "silk", "silly", "silver", "similar", "simple", "since", "sing", "siren", "sister", "situate", "six", "size", "skate", "sketch", "ski", "skill", "skin", "skirt", "skull", "slab", "slam", "sleep", "slender", "slice", "slide", "slight", "slim", "slogan", "slot", "slow", "slush", "small", "smart", "smile", "smoke", "smooth", "snack", "snake", "snap", "sniff", "snow", "soap", "soccer", "social", "sock", "soda", "soft", "solar", "soldier", "solid", "solution", "solve", "someone", "song", "soon", "sorry", "sort", "soul", "sound", "soup", "source", "south", "space", "spare", "spatial", "spawn", "speak", "special", "speed", "spell", "spend", "sphere", "spice", "spider", "spike", "spin", "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray", "spread", "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff", "stage", "stairs", "stamp", "stand", "start", "state", "stay", "steak", "steel", "stem", "step", "stereo", "stick", "still", "sting", "stock", "stomach", "stone", "stool", "story", "stove", "strategy", "street", "strike", "strong", "struggle", "student", "stuff", "stumble", "style", "subject", "submit", "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit", "summer", "sun", "sunny", "sunset", "super", "supply", "supreme", "sure", "surface", "surge", "surprise", "surround", "survey", "suspect", "sustain", "swallow", "swamp", "swap", "swarm", "swear", "sweet", "swift", "swim", "swing", "switch", "sword", "symbol", "symptom", "syrup", "system", "table", "tackle", "tag", "tail", "talent", "talk", "tank", "tape", "target", "task", "taste", "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis", "tent", "term", "test", "text", "thank", "that", "theme", "then", "theory", "there", "they", "thing", "this", "thought", "three", "thrive", "throw", "thumb", "thunder", "ticket", "tide", "tiger", "tilt", "timber", "time", "tiny", "tip", "tired", "tissue", "title", "toast", "tobacco", "today", "toddler", "toe", "together", "toilet", "token", "tomato", "tomorrow", "tone", "tongue", "tonight", "tool", "tooth", "top", "topic", "topple", "torch", "tornado", "tortoise", "toss", "total", "tourist", "toward", "tower", "town", "toy", "track", "trade", "traffic", "tragic", "train", "transfer", "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial", "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck", "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna", "tunnel", "turkey", "turn", "turtle", "twelve", "twenty", "twice", "twin", "twist", "two", "type", "typical", "ugly", "umbrella", "unable", "unaware", "uncle", "uncover", "under", "undo", "unfair", "unfold", "unhappy", "uniform", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual", "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge", "usage", "use", "used", "useful", "useless", "usual", "utility", "vacant", "vacuum", "vague", "valid", "valley", "valve", "van", "vanish", "vapor", "various", "vast", "vault", "vehicle", "velvet", "vendor", "venture", "venue", "verb", "verify", "version", "very", "vessel", "veteran", "viable", "vibrant", "vicious", "victory", "video", "view", "village", "vintage", "violin", "virtual", "virus", "visa", "visit", "visual", "vital", "vivid", "vocal", "voice", "void", "volcano", "volume", "vote", "voyage", "wage", "wagon", "wait", "walk", "wall", "walnut", "want", "warfare", "warm", "warrior", "wash", "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear", "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "west", "wet", "whale", "what", "wheat", "wheel", "when", "where", "whip", "whisper", "wide", "width", "wife", "wild", "will", "win", "window", "wine", "wing", "wink", "winner", "winter", "wire", "wisdom", "wise", "wish", "witness", "wolf", "woman", "wonder", "wood", "wool", "word", "work", "world", "worry", "worth", "wrap", "wreck", "wrestle", "wrist", "write", "wrong", "yard", "year", "yellow", "you", "young", "youth", "zebra", "zero", "zone", "zoo")</ID>
+    <ID>MaxLineLength:BlocksEditScreen.kt$enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showSource }</ID>
+    <ID>MaxLineLength:BlocktankRegtestScreen.kt$Logger.debug("Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter")</ID>
+    <ID>MaxLineLength:BlocktankRepo.kt$BlocktankRepo$"Buying channel with lspBalanceSat: $receivingBalanceSats, channelExpiryWeeks: $channelExpiryWeeks, options: $options"</ID>
+    <ID>MaxLineLength:BoostTransactionViewModel.kt$BoostTransactionViewModel$Logger.error("Activity $newTxId not found. Caching data to try again on next sync", e = error, context = TAG)</ID>
+    <ID>MaxLineLength:ChannelOrdersScreen.kt$lnurl = "LNURL1DP68GURN8GHJ7CTSDYH8XARPVUHXYMR0VD4HGCTWDVH8GME0VFKX7CMTW3SKU6E0V9CXJTMKXGHKCTENVV6NVDP4XUEJ6ETRX33Z6DPEXU6Z6C34XQEZ6DT9XENX2WFNXQ6RXDTXGQAH4MLNURL1DP68GURN8GHJ7CTSDYH8XARPVUHXYMR0VD4HGCTWDVH8GME0VFKX7CMTW3SKU6E0V9CXJTMKXGHKCTENVV6NVDP4XUEJ6ETRX33Z6DPEXU6Z6C34XQEZ6DT9XENX2WFNXQ6RXDTXGQAH4M"</ID>
+    <ID>MaxLineLength:CoreService.kt$ActivityService$if</ID>
+    <ID>MaxLineLength:CoreService.kt$CoreService$// val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }.orEmpty()</ID>
+    <ID>MaxLineLength:CryptoTest.kt$CryptoTest$val ciphertext = "l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=".fromBase64()</ID>
+    <ID>MaxLineLength:CryptoTest.kt$CryptoTest$val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""</ID>
+    <ID>MaxLineLength:EditInvoiceVM.kt$EditInvoiceVM$private fun editInvoiceEffect(effect: EditInvoiceScreenEffects)</ID>
+    <ID>MaxLineLength:Env.kt$Env$private const val BITREFILL_PARAMS = "?ref=${BITREFILL_REF}&amp;paymentMethod=${BITREFILL_PAYMENT_METHOD}&amp;theme=dark&amp;utm_source=${BITREFILL_APP_NAME}"</ID>
+    <ID>MaxLineLength:ExternalConfirmScreen.kt$Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))</ID>
+    <ID>MaxLineLength:FundingAdvancedScreen.kt$Display(text = stringResource(R.string.lightning__funding_advanced__title).withAccent(accentColor = Colors.Purple))</ID>
+    <ID>MaxLineLength:HeadlineCard.kt$headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow"</ID>
+    <ID>MaxLineLength:LightningBalance.kt$is LightningBalance.ClaimableAwaitingConfirmations -&gt; "Claimable Awaiting Confirmations (Height: $confirmationHeight)"</ID>
+    <ID>MaxLineLength:LightningConnectionsScreen.kt$if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show</ID>
+    <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"</ID>
+    <ID>MaxLineLength:LightningRepo.kt$LightningRepo$Exception("Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting")</ID>
+    <ID>MaxLineLength:LightningRepo.kt$LightningRepo$Logger.debug("accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress")</ID>
+    <ID>MaxLineLength:LightningRepo.kt$LightningRepo$Logger.debug("bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat")</ID>
+    <ID>MaxLineLength:LightningService.kt$LightningService$Logger.info("🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat")</ID>
+    <ID>MaxLineLength:MainActivity.kt$MainActivity$onRestoreClick = { startupNavController.navigate(StartupRoutes.WarningMultipleDevices) }</ID>
+    <ID>MaxLineLength:Nav.kt$* Adds the [androidx.compose.runtime.Composable] to the [androidx.navigation.NavGraphBuilder] with the default screen transitions.</ID>
+    <ID>MaxLineLength:Nav.kt$noinline enterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenSlideIn }</ID>
+    <ID>MaxLineLength:Nav.kt$noinline exitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenScaleOut }</ID>
+    <ID>MaxLineLength:Nav.kt$noinline popEnterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenScaleIn }</ID>
+    <ID>MaxLineLength:Nav.kt$noinline popExitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenSlideOut }</ID>
+    <ID>MaxLineLength:NumberPadTextField.kt$if (displayUnit == BitcoinDisplayUnit.MODERN) input else (input.toLongOrDefault(0L) * SATS_IN_BTC).toString()</ID>
+    <ID>MaxLineLength:PriceViewModel.kt$PriceViewModel$_previewPrice.update { _allPrices.value.firstOrNull { it.widgets.firstOrNull()?.period == _customPreferences.value.period } }</ID>
+    <ID>MaxLineLength:ProfileIntroScreen.kt$text = stringResource(R.string.slashtags__onboarding_profile1_header).withAccent(accentColor = Colors.Brand)</ID>
+    <ID>MaxLineLength:ReceiveConfirmScreen.kt$text</ID>
+    <ID>MaxLineLength:ReceiveLiquidityScreen.kt$BodyMB(text = stringResource(if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label))</ID>
+    <ID>MaxLineLength:ReceiveLiquidityScreen.kt$stringResource(if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title)</ID>
+    <ID>MaxLineLength:ReceiveLiquidityScreen.kt$text = stringResource(if (isAdditional) R.string.wallet__receive_liquidity__text_additional else R.string.wallet__receive_liquidity__text)</ID>
+    <ID>MaxLineLength:ReceiveQrScreen.kt$active &amp;&amp; lightningState.shouldBlockLightning -&gt; navController.navigate(ReceiveRoutes.LOCATION_BLOCK)</ID>
+    <ID>MaxLineLength:ReceiveQrScreen.kt$text = stringResource(R.string.wallet__receive_text_lnfunds).withAccent(accentColor = Colors.Purple)</ID>
+    <ID>MaxLineLength:RestoreWalletScreen.kt$placeholder = { Text(text = stringResource(R.string.onboarding__restore_passphrase_placeholder)) }</ID>
+    <ID>MaxLineLength:RestoreWalletScreen.kt$text = stringResource(R.string.onboarding__restore_red_explain).withAccent(accentColor = Colors.Red)</ID>
+    <ID>MaxLineLength:SavingsProgressScreen.kt$SavingsProgressState.INTERRUPTED</ID>
+    <ID>MaxLineLength:SecuritySettingsScreen.kt$if (isPinEnabled) R.string.settings__security__pin_enabled else R.string.settings__security__pin_disabled</ID>
+    <ID>MaxLineLength:SendAddressScreen.kt$addressInput = "bitcoin:bc17tq4mtkq86vte7a26e0za560kgflwqsvxznmer5?lightning=LNBC1PQUVNP8KHGPLNF6REGS3VY5F40AJFUN4S2JUDQQNP4TK9MP6LWWLWTC3XX3UUEVYZ4EVQU3X4NQDX348QPP5WJC9DWNTAFN7FZEZFVDC3MHV67SX2LD2MG602E3LEZDMFT29JLWQSP54QKM4G8A2KD5RGEKACA3CH4XV4M2MQDN62F8S2CCRES9QYYSGQCQPCXQRRSSRZJQWQKZS03MNNHSTKR9DN2XQRC8VW5X6CEWAL8C6RW6QQ3T02T3R"</ID>
+    <ID>MaxLineLength:SettingUpScreen.kt$text = stringResource(R.string.lightning__savings_progress__title).withAccent(accentColor = Colors.Purple)</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$if (newValue) R.string.settings__dev_enabled_message else R.string.settings__dev_disabled_message</ID>
+    <ID>MaxLineLength:VssBackupsClient.kt$VssBackupsClient$throw VssError.ServerError("Request failed with status: ${response.status}, message: ${errorResponse?.message}")</ID>
+    <ID>MaxLineLength:VssStoreIdProvider.kt$VssStoreIdProvider$error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")</ID>
+    <ID>MaxLineLength:WalletViewModelTest.kt$WalletViewModelTest$fun</ID>
+    <ID>MaxLineLength:WeatherService.kt$WeatherService$else -&gt; throw WeatherError.InvalidResponse("Failed to fetch historical fee data: ${response.status.description}")</ID>
+    <ID>MaxLineLength:WeatherService.kt$WeatherService$val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY).getOrNull() ?: return FeeCondition.AVERAGE</ID>
+    <ID>MaximumLineLength:ActivityDetailScreen.kt$ </ID>
+    <ID>MaximumLineLength:ActivityRepo.kt$ActivityRepo$ </ID>
+    <ID>MaximumLineLength:BackupNavigationSheet.kt$ </ID>
+    <ID>MaximumLineLength:Bip39Test.kt$Bip39Test$ </ID>
+    <ID>MaximumLineLength:Bip39Utils.kt$val</ID>
+    <ID>MaximumLineLength:BlocksEditScreen.kt$ </ID>
+    <ID>MaximumLineLength:BlocktankRegtestScreen.kt$ </ID>
+    <ID>MaximumLineLength:BlocktankRepo.kt$BlocktankRepo$ </ID>
+    <ID>MaximumLineLength:BoostTransactionViewModel.kt$BoostTransactionViewModel$ </ID>
+    <ID>MaximumLineLength:ChannelOrdersScreen.kt$ </ID>
+    <ID>MaximumLineLength:CoreService.kt$ActivityService$ </ID>
+    <ID>MaximumLineLength:CryptoTest.kt$CryptoTest$ </ID>
+    <ID>MaximumLineLength:EditInvoiceVM.kt$EditInvoiceVM$ </ID>
+    <ID>MaximumLineLength:Env.kt$Env$ </ID>
+    <ID>MaximumLineLength:ExternalConfirmScreen.kt$ </ID>
+    <ID>MaximumLineLength:FundingAdvancedScreen.kt$ </ID>
+    <ID>MaximumLineLength:HeadlineCard.kt$ </ID>
+    <ID>MaximumLineLength:LightningBalance.kt$ </ID>
+    <ID>MaximumLineLength:LightningConnectionsScreen.kt$ </ID>
+    <ID>MaximumLineLength:LightningRepo.kt$LightningRepo$ </ID>
+    <ID>MaximumLineLength:LightningService.kt$LightningService$ </ID>
+    <ID>MaximumLineLength:MainActivity.kt$MainActivity$ </ID>
+    <ID>MaximumLineLength:Nav.kt$ </ID>
+    <ID>MaximumLineLength:NumberPadTextField.kt$ </ID>
+    <ID>MaximumLineLength:PriceViewModel.kt$PriceViewModel$ </ID>
+    <ID>MaximumLineLength:ProfileIntroScreen.kt$ </ID>
+    <ID>MaximumLineLength:ReceiveConfirmScreen.kt$ </ID>
+    <ID>MaximumLineLength:ReceiveLiquidityScreen.kt$ </ID>
+    <ID>MaximumLineLength:ReceiveQrScreen.kt$ </ID>
+    <ID>MaximumLineLength:RestoreWalletScreen.kt$ </ID>
+    <ID>MaximumLineLength:SavingsProgressScreen.kt$ </ID>
+    <ID>MaximumLineLength:SecuritySettingsScreen.kt$ </ID>
+    <ID>MaximumLineLength:SendAddressScreen.kt$ </ID>
+    <ID>MaximumLineLength:SettingUpScreen.kt$ </ID>
+    <ID>MaximumLineLength:SettingsScreen.kt$ </ID>
+    <ID>MaximumLineLength:VssBackupsClient.kt$VssBackupsClient$ </ID>
+    <ID>MaximumLineLength:VssStoreIdProvider.kt$VssStoreIdProvider$ </ID>
+    <ID>MaximumLineLength:WalletViewModelTest.kt$WalletViewModelTest$ </ID>
+    <ID>MaximumLineLength:WeatherService.kt$WeatherService$ </ID>
+    <ID>MayBeConst:Env.kt$Env$val walletSyncIntervalSecs = 10_uL // TODO review</ID>
+    <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees * required to include them in a block would be greater than the value of the transaction itself. * */ val dustLimit = 546u</ID>
+    <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** Total recommended tx base fee in sats */ val recommendedBaseFee = 256u</ID>
+    <ID>MemberNameEqualsClassName:Keychain.kt$Keychain$private val keychain = context.keychainDataStore</ID>
+    <ID>ModifierComposed:AllActivityScreen.kt$swipeToChangeTab</ID>
+    <ID>ModifierComposed:Modifiers.kt$clickableAlpha</ID>
+    <ID>ModifierListSpacing:App.kt$App$@Inject lateinit</ID>
+    <ID>ModifierListSpacing:AppDb.kt$AppDb$@Database( entities = [ ConfigEntity::class, InvoiceTagEntity::class, ], version = 2, ) @TypeConverters(StringListConverter::class) abstract</ID>
+    <ID>ModifierListSpacing:Change.kt$Change$@Serializable data</ID>
+    <ID>ModifierMissing:AboutScreen.kt$AboutScreen</ID>
+    <ID>ModifierMissing:ActivityDetailScreen.kt$ActivityDetailScreen</ID>
+    <ID>ModifierMissing:ActivityListSimple.kt$ActivityListSimple</ID>
+    <ID>ModifierMissing:ActivityRow.kt$ActivityRow</ID>
+    <ID>ModifierMissing:AddTagScreen.kt$AddTagScreen</ID>
+    <ID>ModifierMissing:AddWidgetsScreen.kt$AddWidgetsScreen</ID>
+    <ID>ModifierMissing:AmountInput.kt$AmountInput</ID>
+    <ID>ModifierMissing:AppTopBar.kt$AppTopBar</ID>
+    <ID>ModifierMissing:AppTopBar.kt$BackNavIcon</ID>
+    <ID>ModifierMissing:AppTopBar.kt$CloseNavIcon</ID>
+    <ID>ModifierMissing:AppTopBar.kt$ScanNavIcon</ID>
+    <ID>ModifierMissing:BackupIntroScreen.kt$BackupIntroScreen</ID>
+    <ID>ModifierMissing:BackupNavigationSheet.kt$BackupNavigationSheet</ID>
+    <ID>ModifierMissing:BackupSheet.kt$BackupSheet</ID>
+    <ID>ModifierMissing:BalanceHeaderView.kt$LargeRow</ID>
+    <ID>ModifierMissing:BiometricsView.kt$BiometricsView</ID>
+    <ID>ModifierMissing:BlocksEditScreen.kt$BlocksEditContent</ID>
+    <ID>ModifierMissing:BlocksPreviewScreen.kt$BlocksPreviewContent</ID>
+    <ID>ModifierMissing:BlocktankRegtestScreen.kt$BlocktankRegtestScreen</ID>
+    <ID>ModifierMissing:BuyIntroScreen.kt$BuyIntroContent</ID>
+    <ID>ModifierMissing:CalculatorPreviewScreen.kt$CalculatorPreviewContent</ID>
+    <ID>ModifierMissing:CameraPermissionView.kt$DeniedContent</ID>
+    <ID>ModifierMissing:ChannelStatusView.kt$ChannelStatusView</ID>
+    <ID>ModifierMissing:ChoosePinScreen.kt$ChoosePinScreen</ID>
+    <ID>ModifierMissing:CreateProfileScreen.kt$CreateProfileScreen</ID>
+    <ID>ModifierMissing:CreateWalletWithPassphraseScreen.kt$CreateWalletWithPassphraseScreen</ID>
+    <ID>ModifierMissing:DefaultUnitSettingsScreen.kt$DefaultUnitSettingsScreenContent</ID>
+    <ID>ModifierMissing:DevSettingsScreen.kt$DevSettingsScreen</ID>
+    <ID>ModifierMissing:EditInvoiceScreen.kt$EditInvoiceContent</ID>
+    <ID>ModifierMissing:FactsEditScreen.kt$FactsEditContent</ID>
+    <ID>ModifierMissing:FactsPreviewScreen.kt$FactsPreviewContent</ID>
+    <ID>ModifierMissing:FundingAdvancedScreen.kt$FundingAdvancedScreen</ID>
+    <ID>ModifierMissing:FundingScreen.kt$FundingScreen</ID>
+    <ID>ModifierMissing:HeadlinesEditScreen.kt$HeadlinesEditContent</ID>
+    <ID>ModifierMissing:HeadlinesPreviewScreen.kt$HeadlinesPreviewContent</ID>
+    <ID>ModifierMissing:HighBalanceWarningSheet.kt$HighBalanceWarningContent</ID>
+    <ID>ModifierMissing:HomeNav.kt$HomeNav</ID>
+    <ID>ModifierMissing:InfoScreenContent.kt$InfoScreenContent</ID>
+    <ID>ModifierMissing:InfoTextField.kt$InfoTextField</ID>
+    <ID>ModifierMissing:InitializingWalletView.kt$InitializingWalletView</ID>
+    <ID>ModifierMissing:IntroScreen.kt$IntroScreen</ID>
+    <ID>ModifierMissing:LocalCurrencySettingsScreen.kt$LocalCurrencySettingsContent</ID>
+    <ID>ModifierMissing:LocationBlockScreen.kt$LocationBlockScreen</ID>
+    <ID>ModifierMissing:LogsScreen.kt$LogDetailScreen</ID>
+    <ID>ModifierMissing:LogsScreen.kt$LogsScreen</ID>
+    <ID>ModifierMissing:Money.kt$MoneyDisplay</ID>
+    <ID>ModifierMissing:NewTransactionSheet.kt$NewTransactionSheetView</ID>
+    <ID>ModifierMissing:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
+    <ID>ModifierMissing:PinNavigationSheet.kt$PinNavigationSheet</ID>
+    <ID>ModifierMissing:PinPromptScreen.kt$PinPromptScreen</ID>
+    <ID>ModifierMissing:PriceEditScreen.kt$PriceEditContent</ID>
+    <ID>ModifierMissing:PricePreviewScreen.kt$PricePreviewContent</ID>
+    <ID>ModifierMissing:ProfileIntroScreen.kt$ProfileIntroScreen</ID>
+    <ID>ModifierMissing:QrScanningScreen.kt$QrScanningScreen</ID>
+    <ID>ModifierMissing:QuickPayIntroScreen.kt$QuickPayIntroScreen</ID>
+    <ID>ModifierMissing:QuickPaySettingsScreen.kt$QuickPaySettingsScreenContent</ID>
+    <ID>ModifierMissing:ReceiveAmountScreen.kt$ReceiveAmountScreen</ID>
+    <ID>ModifierMissing:ReceiveLiquidityScreen.kt$ReceiveLiquidityScreen</ID>
+    <ID>ModifierMissing:ReportIssueResultScreen.kt$ReportIssueResultScreen</ID>
+    <ID>ModifierMissing:ReportIssueScreen.kt$ReportIssueContent</ID>
+    <ID>ModifierMissing:RestoreWalletScreen.kt$MnemonicInputField</ID>
+    <ID>ModifierMissing:RestoreWalletScreen.kt$RestoreWalletView</ID>
+    <ID>ModifierMissing:SavingsAdvancedScreen.kt$ChannelItem</ID>
+    <ID>ModifierMissing:SavingsAvailabilityScreen.kt$SavingsAvailabilityScreen</ID>
+    <ID>ModifierMissing:SavingsIntroScreen.kt$SavingsIntroScreen</ID>
+    <ID>ModifierMissing:SavingsWalletScreen.kt$SavingsWalletScreen</ID>
+    <ID>ModifierMissing:SendAddressScreen.kt$SendAddressScreen</ID>
+    <ID>ModifierMissing:SendAmountScreen.kt$SendAmountContent</ID>
+    <ID>ModifierMissing:SendOptionsView.kt$SendOptionsView</ID>
+    <ID>ModifierMissing:SettingsScreen.kt$SettingsScreenContent</ID>
+    <ID>ModifierMissing:SheetHost.kt$SheetHost</ID>
+    <ID>ModifierMissing:ShopDiscoverScreen.kt$ShopDiscoverScreen</ID>
+    <ID>ModifierMissing:ShopIntroScreen.kt$ShopIntroScreen</ID>
+    <ID>ModifierMissing:ShopWebViewScreen.kt$ShopWebViewScreen</ID>
+    <ID>ModifierMissing:Spacers.kt$FillHeight</ID>
+    <ID>ModifierMissing:Spacers.kt$FillWidth</ID>
+    <ID>ModifierMissing:Spacers.kt$HorizontalSpacer</ID>
+    <ID>ModifierMissing:Spacers.kt$VerticalSpacer</ID>
+    <ID>ModifierMissing:SpendingAdvancedScreen.kt$SpendingAdvancedScreen</ID>
+    <ID>ModifierMissing:SpendingAmountScreen.kt$SpendingAmountScreen</ID>
+    <ID>ModifierMissing:SpendingIntroScreen.kt$SpendingIntroScreen</ID>
+    <ID>ModifierMissing:SpendingWalletScreen.kt$SpendingWalletScreen</ID>
+    <ID>ModifierMissing:SplashScreen.kt$SplashScreen</ID>
+    <ID>ModifierMissing:TermsOfUseScreen.kt$TermsOfUseScreen</ID>
+    <ID>ModifierMissing:ToastView.kt$ToastView</ID>
+    <ID>ModifierMissing:TransferAnimationView.kt$TransferAnimationView</ID>
+    <ID>ModifierMissing:TransferIntroScreen.kt$TransferIntroScreen</ID>
+    <ID>ModifierMissing:WalletInitResultView.kt$WalletInitResultView</ID>
+    <ID>ModifierMissing:WarningMultipleDevicesScreen.kt$WarningMultipleDevicesScreen</ID>
+    <ID>ModifierMissing:WeatherEditScreen.kt$WeatherEditContent</ID>
+    <ID>ModifierMissing:WeatherPreviewScreen.kt$WeatherPreviewContent</ID>
+    <ID>ModifierMissing:WidgetsIntroScreen.kt$WidgetsIntroScreen</ID>
+    <ID>ModifierMissing:WithdrawConfirmScreen.kt$WithdrawConfirmScreen</ID>
+    <ID>ModifierMissing:WithdrawErrorScreen.kt$WithDrawErrorScreen</ID>
+    <ID>ModifierNotUsedAtRoot:QrScanningScreen.kt$modifier = modifier .fillMaxWidth() .clip(RoundedCornerShape(16.dp)) .weight(1f)</ID>
+    <ID>ModifierNotUsedAtRoot:SettingsTextButtonRow.kt$modifier = modifier.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)</ID>
+    <ID>ModifierReused:QrScanningScreen.kt$Box( modifier = modifier .fillMaxWidth() .clip(RoundedCornerShape(16.dp)) .weight(1f) ) { AndroidView( modifier = Modifier .fillMaxSize() .clipToBounds(), factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } } ) IconButton( onClick = onClickGallery, modifier = Modifier .padding(16.dp) .clip(CircleShape) .background(Colors.White64) .size(48.dp) .align(Alignment.TopStart) ) { Icon( painter = painterResource(R.drawable.ic_image_square), contentDescription = null, tint = Colors.White ) } IconButton( onClick = onClickFlashlight, modifier = Modifier .padding(16.dp) .clip(CircleShape) .background(Colors.White64) .size(48.dp) .align(Alignment.TopEnd) ) { Icon( painter = painterResource(R.drawable.ic_flashlight), contentDescription = null, tint = Colors.White ) } }</ID>
+    <ID>ModifierReused:QrScanningScreen.kt$Column( modifier = modifier .fillMaxSize() .padding(horizontal = 16.dp) ) { Box( modifier = modifier .fillMaxWidth() .clip(RoundedCornerShape(16.dp)) .weight(1f) ) { AndroidView( modifier = Modifier .fillMaxSize() .clipToBounds(), factory = { previewView.apply { setLayerType(LAYER_TYPE_HARDWARE, null) } } ) IconButton( onClick = onClickGallery, modifier = Modifier .padding(16.dp) .clip(CircleShape) .background(Colors.White64) .size(48.dp) .align(Alignment.TopStart) ) { Icon( painter = painterResource(R.drawable.ic_image_square), contentDescription = null, tint = Colors.White ) } IconButton( onClick = onClickFlashlight, modifier = Modifier .padding(16.dp) .clip(CircleShape) .background(Colors.White64) .size(48.dp) .align(Alignment.TopEnd) ) { Icon( painter = painterResource(R.drawable.ic_flashlight), contentDescription = null, tint = Colors.White ) } } Spacer(modifier = Modifier.height(16.dp)) PrimaryButton( icon = { Icon( painterResource(R.drawable.ic_clipboard_text_simple), contentDescription = stringResource(R.string.other__qr_paste), ) }, text = stringResource(R.string.other__qr_paste), onClick = onPasteFromClipboard ) Spacer(modifier = Modifier.height(16.dp)) }</ID>
+    <ID>ModifierWithoutDefault:ReceiveQrScreen.kt$modifier</ID>
+    <ID>ModifierWithoutDefault:SyncNodeView.kt$modifier</ID>
+    <ID>ModifierWithoutDefault:WalletBalanceView.kt$modifier</ID>
+    <ID>MultiLineIfElse:AddressViewerScreen.kt$address.address.contains(uiState.searchText, ignoreCase = true)</ID>
+    <ID>MultiLineIfElse:AddressViewerScreen.kt$true</ID>
+    <ID>MultiLineIfElse:AmountInput.kt$it.isDigit()</ID>
+    <ID>MultiLineIfElse:AmountInput.kt$it.isDigit() || it == '.'</ID>
+    <ID>MultiLineIfElse:ChannelDetailScreen.kt$null</ID>
+    <ID>MultiLineIfElse:DefaultUnitSettingsScreen.kt$R.string.settings__general__denomination_classic</ID>
+    <ID>MultiLineIfElse:DefaultUnitSettingsScreen.kt$R.string.settings__general__denomination_modern</ID>
+    <ID>MultiLineIfElse:DragDropColumn.kt$Modifier</ID>
+    <ID>MultiLineIfElse:InfoTextField.kt$buildAnnotatedString { append(originalText.take(maxLength - ellipsis.length)) append(ellipsis) }</ID>
+    <ID>MultiLineIfElse:InfoTextField.kt$originalText</ID>
+    <ID>MultiLineIfElse:NumberPadTextField.kt$""</ID>
+    <ID>MultiLineIfElse:NumberPadTextField.kt$convertedAmount?.formatted.toString()</ID>
+    <ID>MultiLineIfElse:QrCodeImage.kt$Modifier</ID>
+    <ID>MultiLineIfElse:QrCodeImage.kt$android.graphics.Color.BLACK</ID>
+    <ID>MultiLineIfElse:QrCodeImage.kt$android.graphics.Color.WHITE</ID>
+    <ID>MultiLineIfElse:Slider.kt$emptyList()</ID>
+    <ID>MultiLineIfElse:Slider.kt$steps.indices.map { index -&gt; val numSteps = (steps.size - 1).coerceAtLeast(1) (index.toFloat() / numSteps) * sliderWidth }</ID>
+    <ID>MultiLineIfElse:VssBackupsClient.kt$VssBackupsClient$null</ID>
+    <ID>MultipleEmitters:ActivityExploreScreen.kt$LightningDetails</ID>
+    <ID>MultipleEmitters:BoostTransactionSheet.kt$DefaultModeContent</ID>
+    <ID>MultipleEmitters:DrawerMenu.kt$DrawerMenu</ID>
+    <ID>MultipleEmitters:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
+    <ID>MultipleEmitters:SendAndReviewScreen.kt$LnurlCommentSection</ID>
+    <ID>MultipleEmitters:SendAndReviewScreen.kt$TagsSection</ID>
+    <ID>MultipleEmitters:WalletInitResultView.kt$WalletInitResultView</ID>
+    <ID>MutableStateAutoboxing:DragDropColumn.kt$mutableStateOf(0f)</ID>
+    <ID>MutableStateAutoboxing:SpendingAmountScreen.kt$mutableStateOf(0uL)</ID>
+    <ID>MutableStateParam:ReceiveQrScreen.kt$cjitActive</ID>
+    <ID>MutableStateParam:ReceiveQrScreen.kt$cjitInvoice</ID>
+    <ID>NestedBlockDepth:Context.kt$fun Context.copyAssetToStorage(asset: String, dest: String)</ID>
+    <ID>NestedBlockDepth:LogsRepo.kt$LogsRepo$private fun createZipBase64(logFiles: List&lt;LogFile&gt;): String</ID>
+    <ID>NestedBlockDepth:MonetaryVisualTransformation.kt$MonetaryVisualTransformation$private fun createOffsetMapping(original: String, transformed: String): OffsetMapping</ID>
+    <ID>NestedBlockDepth:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun postMessage(message: String)</ID>
+    <ID>NoBlankLineBeforeRbrace:AddressChecker.kt$AddressChecker$ </ID>
+    <ID>NoBlankLineBeforeRbrace:Bip39Test.kt$Bip39Test$ </ID>
+    <ID>NoBlankLineBeforeRbrace:BlocktankRegtestScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:CreateProfileScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:PriceService.kt$PriceService$ </ID>
+    <ID>NoBlankLineBeforeRbrace:ReceiveQrScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:SendAddressScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:SendAmountScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:SendAndReviewScreen.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:ShareSheet.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:SuggestionCard.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:WeatherCard.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:AboutScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ActivityListSimple.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ActivityRepo.kt$ActivityRepo$ </ID>
+    <ID>NoConsecutiveBlankLines:ActivityRepoTest.kt$ActivityRepoTest$ </ID>
+    <ID>NoConsecutiveBlankLines:AddTagScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:AddWidgetsScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:AddressChecker.kt$AddressChecker$ </ID>
+    <ID>NoConsecutiveBlankLines:BackupIntroScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:BackupsRepo.kt$BackupsRepo$ </ID>
+    <ID>NoConsecutiveBlankLines:Bip39Test.kt$Bip39Test$ </ID>
+    <ID>NoConsecutiveBlankLines:BlocksEditScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:BlocksService.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:BlocktankRepoTest.kt$BlocktankRepoTest$ </ID>
+    <ID>NoConsecutiveBlankLines:Button.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:CalculatorPreviewScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:CalculatorViewModel.kt$CalculatorViewModel$ </ID>
+    <ID>NoConsecutiveBlankLines:CreateProfileScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:EnablePolling.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:FactsEditScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:FactsPreviewScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:FactsViewModel.kt$FactsViewModel$ </ID>
+    <ID>NoConsecutiveBlankLines:HeadlinesEditScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:HeadlinesPreviewScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:HeadlinesViewModel.kt$HeadlinesViewModel$ </ID>
+    <ID>NoConsecutiveBlankLines:HighlightLabel.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:HomeViewModel.kt$HomeViewModel$ </ID>
+    <ID>NoConsecutiveBlankLines:LogsRepo.kt$LogsRepo$ </ID>
+    <ID>NoConsecutiveBlankLines:Money.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:NewsService.kt$NewsService$ </ID>
+    <ID>NoConsecutiveBlankLines:NumberPadTextField.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:PriceService.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:PriceService.kt$PriceService$ </ID>
+    <ID>NoConsecutiveBlankLines:ProfileIntroScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:QuickPayIntroScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:QuickPaySettingsScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ReportIssueResultScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ReportIssueScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ShopIntroScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:ShopWebViewScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:String.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:SuggestionCard.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:SyncNodeView.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:Text.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:WalletViewModelTest.kt$WalletViewModelTest$ </ID>
+    <ID>NoConsecutiveBlankLines:WeatherEditScreen.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:WeatherService.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ActivityRepo.kt$ActivityRepo$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:AddTagScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:BuyIntroScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:CoreService.kt$ActivityService$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:CreateProfileScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:EditInvoiceScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:FactsCard.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:LightningRepo.kt$LightningRepo$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:NewTransactionSheet.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:NumberPadTextField.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ProfileIntroScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:QuickPayIntroScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ReceiveConfirmScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ReceiveQrScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ReportIssueResultScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:ReportIssueScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:RestoreWalletScreen.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:SyncNodeView.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:Tooltip.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:TransferViewModel.kt$TransferViewModel$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:WeatherModel.kt$ </ID>
+    <ID>NoMultipleSpaces:Bip39Utils.kt$ </ID>
+    <ID>NoUnusedImports:AppCacheSerializer.kt$to.bitkit.data.serializers.AppCacheSerializer.kt</ID>
+    <ID>NoUnusedImports:BoostTransactionSheet.kt$to.bitkit.ui.screens.wallets.activity.BoostTransactionSheet.kt</ID>
+    <ID>NoUnusedImports:ChatwootHttpClient.kt$to.bitkit.data.ChatwootHttpClient.kt</ID>
+    <ID>NoUnusedImports:DevSettingsViewModel.kt$to.bitkit.viewmodels.DevSettingsViewModel.kt</ID>
+    <ID>NoUnusedImports:FactsEditScreen.kt$to.bitkit.ui.screens.widgets.facts.FactsEditScreen.kt</ID>
+    <ID>NoUnusedImports:HeadlinesEditScreen.kt$to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen.kt</ID>
+    <ID>NoUnusedImports:HealthRepoTest.kt$to.bitkit.repositories.HealthRepoTest.kt</ID>
+    <ID>NoUnusedImports:HighBalanceWarningSheet.kt$to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet.kt</ID>
+    <ID>NoUnusedImports:MapWebViewClient.kt$to.bitkit.ui.screens.shop.shopDiscover.MapWebViewClient.kt</ID>
+    <ID>NoUnusedImports:PinDots.kt$to.bitkit.ui.components.PinDots.kt</ID>
+    <ID>NoUnusedImports:PriceCard.kt$to.bitkit.ui.screens.widgets.price.PriceCard.kt</ID>
+    <ID>NoUnusedImports:QrCodeImage.kt$to.bitkit.ui.components.QrCodeImage.kt</ID>
+    <ID>NoUnusedImports:ReceiveQrScreen.kt$to.bitkit.ui.screens.wallets.receive.ReceiveQrScreen.kt</ID>
+    <ID>NoUnusedImports:ShopDiscoverScreen.kt$to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen.kt</ID>
+    <ID>NoUnusedImports:ShopWebViewInterface.kt$to.bitkit.ui.screens.shop.shopWebView.ShopWebViewInterface.kt</ID>
+    <ID>NoUnusedImports:ShopWebViewScreen.kt$to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen.kt</ID>
+    <ID>NoUnusedImports:Spacers.kt$to.bitkit.ui.components.Spacers.kt</ID>
+    <ID>NoUnusedImports:TagsViewModel.kt$to.bitkit.viewmodels.TagsViewModel.kt</ID>
+    <ID>NoUnusedImports:WeatherService.kt$to.bitkit.data.widgets.WeatherService.kt</ID>
+    <ID>NoUnusedImports:WeatherViewModel.kt$to.bitkit.ui.screens.widgets.weather.WeatherViewModel.kt</ID>
+    <ID>NoUnusedImports:WidgetsSerializer.kt$to.bitkit.data.serializers.WidgetsSerializer.kt</ID>
+    <ID>NoWildcardImports:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
+    <ID>ParameterListWrapping:EditInvoiceVM.kt$EditInvoiceVM$(effect: EditInvoiceScreenEffects)</ID>
+    <ID>ParameterNaming:AddTagScreen.kt$onInputUpdated</ID>
+    <ID>ParameterNaming:AddTagScreen.kt$onTagConfirmed</ID>
+    <ID>ParameterNaming:AddTagScreen.kt$onTagSelected</ID>
+    <ID>ParameterNaming:AddWidgetsScreen.kt$onWidgetSelected</ID>
+    <ID>ParameterNaming:AddressViewerScreen.kt$onAddressSelected</ID>
+    <ID>ParameterNaming:AddressViewerScreen.kt$onSearchTextChanged</ID>
+    <ID>ParameterNaming:BiometricPrompt.kt$onFailed</ID>
+    <ID>ParameterNaming:BiometricPrompt.kt$onUnsupported</ID>
+    <ID>ParameterNaming:ChoosePinScreen.kt$onPinChosen</ID>
+    <ID>ParameterNaming:ConfirmPinScreen.kt$onPinConfirmed</ID>
+    <ID>ParameterNaming:EditInvoiceScreen.kt$onInputChanged</ID>
+    <ID>ParameterNaming:EditInvoiceScreen.kt$onInputUpdated</ID>
+    <ID>ParameterNaming:EditInvoiceScreen.kt$onTextChanged</ID>
+    <ID>ParameterNaming:ExternalConnectionScreen.kt$onNodeConnected</ID>
+    <ID>ParameterNaming:FundingScreen.kt$onAdvanced</ID>
+    <ID>ParameterNaming:LnurlChannelScreen.kt$onConnected</ID>
+    <ID>ParameterNaming:LocationBlockScreen.kt$onBackPressed</ID>
+    <ID>ParameterNaming:NumberPadTextField.kt$onAmountCalculated</ID>
+    <ID>ParameterNaming:NumberPadTextField.kt$onInputChanged</ID>
+    <ID>ParameterNaming:QrCodeImage.kt$onBitmapGenerated</ID>
+    <ID>ParameterNaming:ReceiveAmountScreen.kt$onCjitCreated</ID>
+    <ID>ParameterNaming:RestoreWalletScreen.kt$onPositionChanged</ID>
+    <ID>ParameterNaming:RestoreWalletScreen.kt$onValueChanged</ID>
+    <ID>ParameterNaming:SendAmountScreen.kt$onInputChanged</ID>
+    <ID>ParameterNaming:SpendingAdvancedScreen.kt$onOrderCreated</ID>
+    <ID>ParameterNaming:SpendingAmountScreen.kt$onOrderCreated</ID>
+    <ID>ParameterNaming:TransactionSpeedSettingsScreen.kt$onSpeedSelected</ID>
+    <ID>PreviewPublic:CameraPermissionView.kt$PreviewDenied</ID>
+    <ID>PreviewPublic:CameraPermissionView.kt$PreviewInSheet</ID>
+    <ID>PreviewPublic:CameraPermissionView.kt$PreviewRequired</ID>
+    <ID>PreviewPublic:EmptyWalletView.kt$EmptyStateViewPreview</ID>
+    <ID>PreviewPublic:HighlightLabel.kt$FlexibleLogoPreview</ID>
+    <ID>PreviewPublic:HighlightLabel.kt$LongTextLogoPreview</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountBitcoinClassicEmpty</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountBitcoinClassicWithValue</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountBitcoinModernEmpty</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountBitcoinModernWithValue</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountBitcoinPartial</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountFiatEmpty</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountFiatPartial</ID>
+    <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountFiatWithValue</ID>
+    <ID>PreviewPublic:RestoreWalletScreen.kt$RestoreWalletViewPreview</ID>
+    <ID>PreviewPublic:SplashScreen.kt$SplashScreenPreview</ID>
+    <ID>PreviewPublic:WalletInitResultView.kt$WalletInitResultViewErrorPreview</ID>
+    <ID>PreviewPublic:WalletInitResultView.kt$WalletInitResultViewRestoredPreview</ID>
+    <ID>PrintStackTrace:ShareSheet.kt$e</ID>
+    <ID>PropertyWrapping:Bip39Utils.kt$val bip39Words = setOf( "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance", "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent", "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol", "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also", "alter", "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry", "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique", "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april", "arch", "arctic", "area", "arena", "argue", "arm", "armed", "armor", "army", "around", "arrange", "arrest", "arrive", "arrow", "art", "artefact", "artist", "artwork", "ask", "aspect", "assault", "asset", "assist", "assume", "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction", "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid", "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby", "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo", "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic", "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef", "before", "begin", "behave", "behind", "believe", "below", "belt", "bench", "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid", "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade", "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom", "blouse", "blue", "blur", "blush", "board", "boat", "body", "boil", "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow", "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand", "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright", "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown", "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk", "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business", "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus", "cage", "cake", "call", "calm", "camera", "camp", "can", "canal", "cancel", "candy", "cannon", "canoe", "canvas", "canyon", "capable", "capital", "captain", "car", "carbon", "card", "cargo", "carpet", "carry", "cart", "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch", "category", "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery", "cement", "census", "century", "cereal", "certain", "chair", "chalk", "champion", "change", "chaos", "chapter", "charge", "chase", "chat", "cheap", "check", "cheese", "chef", "cherry", "chest", "chicken", "chief", "child", "chimney", "choice", "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle", "citizen", "city", "civil", "claim", "clap", "clarify", "claw", "clay", "clean", "clerk", "clever", "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog", "close", "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch", "coach", "coast", "coconut", "code", "coffee", "coil", "coin", "collect", "color", "column", "combine", "come", "comfort", "comic", "common", "company", "concert", "conduct", "confirm", "congress", "connect", "consider", "control", "convince", "cook", "cool", "copper", "copy", "coral", "core", "corn", "correct", "cost", "cotton", "couch", "country", "couple", "course", "cousin", "cover", "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream", "credit", "creek", "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial", "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup", "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad", "damage", "damp", "dance", "danger", "daring", "dash", "daughter", "dawn", "day", "deal", "debate", "debris", "decade", "december", "decide", "decline", "decorate", "decrease", "deer", "defense", "define", "defy", "degree", "delay", "deliver", "demand", "demise", "denial", "dentist", "deny", "depart", "depend", "deposit", "depth", "deputy", "derive", "describe", "desert", "design", "desk", "despair", "destroy", "detail", "detect", "develop", "device", "devote", "diagram", "dial", "diamond", "diary", "dice", "diesel", "diet", "differ", "digital", "dignity", "dilemma", "dinner", "dinosaur", "direct", "dirt", "disagree", "discover", "disease", "dish", "dismiss", "disorder", "display", "distance", "divert", "divide", "divorce", "dizzy", "doctor", "document", "dog", "doll", "dolphin", "domain", "donate", "donkey", "donor", "door", "dose", "double", "dove", "draft", "dragon", "drama", "drastic", "draw", "dream", "dress", "drift", "drill", "drink", "drip", "drive", "drop", "drum", "dry", "duck", "dumb", "dune", "during", "dust", "dutch", "duty", "dwarf", "dynamic", "eager", "eagle", "early", "earn", "earth", "easily", "east", "easy", "echo", "ecology", "economy", "edge", "edit", "educate", "effort", "egg", "eight", "either", "elbow", "elder", "electric", "elegant", "element", "elephant", "elevator", "elite", "else", "embark", "embody", "embrace", "emerge", "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless", "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy", "enlist", "enough", "enrich", "enroll", "ensure", "enter", "entire", "entry", "envelope", "episode", "equal", "equip", "era", "erase", "erode", "erosion", "error", "erupt", "escape", "essay", "essence", "estate", "eternal", "ethics", "evidence", "evil", "evoke", "evolve", "exact", "example", "excess", "exchange", "excite", "exclude", "excuse", "execute", "exercise", "exhaust", "exhibit", "exile", "exist", "exit", "exotic", "expand", "expect", "expire", "explain", "expose", "express", "extend", "extra", "eye", "eyebrow", "fabric", "face", "faculty", "fade", "faint", "faith", "fall", "false", "fame", "family", "famous", "fan", "fancy", "fantasy", "farm", "fashion", "fat", "fatal", "father", "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed", "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber", "fiction", "field", "figure", "file", "film", "filter", "final", "find", "fine", "finger", "finish", "fire", "firm", "first", "fiscal", "fish", "fit", "fitness", "fix", "flag", "flame", "flash", "flat", "flavor", "flee", "flight", "flip", "float", "flock", "floor", "flower", "fluid", "flush", "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food", "foot", "force", "forest", "forget", "fork", "fortune", "forum", "forward", "fossil", "foster", "found", "fox", "fragile", "frame", "frequent", "fresh", "friend", "fringe", "frog", "front", "frost", "frown", "frozen", "fruit", "fuel", "fun", "funny", "furnace", "fury", "future", "gadget", "gain", "galaxy", "gallery", "game", "gap", "garage", "garbage", "garden", "garlic", "garment", "gas", "gasp", "gate", "gather", "gauge", "gaze", "general", "genius", "genre", "gentle", "genuine", "gesture", "ghost", "giant", "gift", "giggle", "ginger", "giraffe", "girl", "give", "glad", "glance", "glare", "glass", "glide", "glimpse", "globe", "gloom", "glory", "glove", "glow", "glue", "goat", "goddess", "gold", "good", "goose", "gorilla", "gospel", "gossip", "govern", "gown", "grab", "grace", "grain", "grant", "grape", "grass", "gravity", "great", "green", "grid", "grief", "grit", "grocery", "group", "grow", "grunt", "guard", "guess", "guide", "guilt", "guitar", "gun", "gym", "habit", "hair", "half", "hammer", "hamster", "hand", "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk", "hazard", "head", "health", "heart", "heavy", "hedgehog", "height", "hello", "helmet", "help", "hen", "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby", "hockey", "hold", "hole", "holiday", "hollow", "home", "honey", "hood", "hope", "horn", "horror", "horse", "hospital", "host", "hotel", "hour", "hover", "hub", "huge", "human", "humble", "humor", "hundred", "hungry", "hunt", "hurdle", "hurry", "hurt", "husband", "hybrid", "ice", "icon", "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image", "imitate", "immense", "immune", "impact", "impose", "improve", "impulse", "inch", "include", "income", "increase", "index", "indicate", "indoor", "industry", "infant", "inflict", "inform", "inhale", "inherit", "initial", "inject", "injury", "inmate", "inner", "innocent", "input", "inquiry", "insane", "insect", "inside", "inspire", "install", "intact", "interest", "into", "invest", "invite", "involve", "iron", "island", "isolate", "issue", "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans", "jelly", "jewel", "job", "join", "joke", "journey", "joy", "judge", "juice", "jump", "jungle", "junior", "junk", "just", "kangaroo", "keen", "keep", "ketchup", "key", "kick", "kid", "kidney", "kind", "kingdom", "kiss", "kit", "kitchen", "kite", "kitten", "kiwi", "knee", "knife", "knock", "know", "lab", "label", "labor", "ladder", "lady", "lake", "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry", "lava", "law", "lawn", "lawsuit", "layer", "lazy", "leader", "leaf", "learn", "leave", "lecture", "left", "leg", "legal", "legend", "leisure", "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level", "liar", "liberty", "library", "license", "life", "lift", "light", "like", "limb", "limit", "link", "lion", "liquid", "list", "little", "live", "lizard", "load", "loan", "lobster", "local", "lock", "logic", "lonely", "long", "loop", "lottery", "loud", "lounge", "love", "loyal", "lucky", "luggage", "lumber", "lunar", "lunch", "luxury", "lyrics", "machine", "mad", "magic", "magnet", "maid", "mail", "main", "major", "make", "mammal", "man", "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march", "margin", "marine", "market", "marriage", "mask", "mass", "master", "match", "material", "math", "matrix", "matter", "maximum", "maze", "meadow", "mean", "measure", "meat", "mechanic", "medal", "media", "melody", "melt", "member", "memory", "mention", "menu", "mercy", "merge", "merit", "merry", "mesh", "message", "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind", "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake", "mix", "mixed", "mixture", "mobile", "model", "modify", "mom", "moment", "monitor", "monkey", "monster", "month", "moon", "moral", "more", "morning", "mosquito", "mother", "motion", "motor", "mountain", "mouse", "move", "movie", "much", "muffin", "mule", "multiply", "muscle", "museum", "mushroom", "music", "must", "mutual", "myself", "mystery", "myth", "naive", "name", "napkin", "narrow", "nasty", "nation", "nature", "near", "neck", "need", "negative", "neglect", "neither", "nephew", "nerve", "nest", "net", "network", "neutral", "never", "news", "next", "nice", "night", "noble", "noise", "nominee", "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice", "novel", "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object", "oblige", "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october", "odor", "off", "offer", "office", "often", "oil", "okay", "old", "olive", "olympic", "omit", "once", "one", "onion", "online", "only", "open", "opera", "opinion", "oppose", "option", "orange", "orbit", "orchard", "order", "ordinary", "organ", "orient", "original", "orphan", "ostrich", "other", "outdoor", "outer", "output", "outside", "oval", "oven", "over", "own", "owner", "oxygen", "oyster", "ozone", "pact", "paddle", "page", "pair", "palace", "palm", "panda", "panel", "panic", "panther", "paper", "parade", "parent", "park", "parrot", "party", "pass", "patch", "path", "patient", "patrol", "pattern", "pause", "pave", "payment", "peace", "peanut", "pear", "peasant", "pelican", "pen", "penalty", "pencil", "people", "pepper", "perfect", "permit", "person", "pet", "phone", "photo", "phrase", "physical", "piano", "picnic", "picture", "piece", "pig", "pigeon", "pill", "pilot", "pink", "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet", "plastic", "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem", "poet", "point", "polar", "pole", "police", "pond", "pony", "pool", "popular", "portion", "position", "possible", "post", "potato", "pottery", "poverty", "powder", "power", "practice", "praise", "predict", "prefer", "prepare", "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority", "prison", "private", "prize", "problem", "process", "produce", "profit", "program", "project", "promote", "proof", "property", "prosper", "protect", "proud", "provide", "public", "pudding", "pull", "pulp", "pulse", "pumpkin", "punch", "pupil", "puppy", "purchase", "purity", "purpose", "purse", "push", "put", "puzzle", "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz", "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rail", "rain", "raise", "rally", "ramp", "ranch", "random", "range", "rapid", "rare", "rate", "rather", "raven", "raw", "razor", "ready", "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe", "record", "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject", "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove", "render", "renew", "rent", "reopen", "repair", "repeat", "replace", "report", "require", "rescue", "resemble", "resist", "resource", "response", "result", "retire", "retreat", "return", "reunion", "reveal", "review", "reward", "rhythm", "rib", "ribbon", "rice", "rich", "ride", "ridge", "rifle", "right", "rigid", "ring", "riot", "ripple", "risk", "ritual", "rival", "river", "road", "roast", "robot", "robust", "rocket", "romance", "roof", "rookie", "room", "rose", "rotate", "rough", "round", "route", "royal", "rubber", "rude", "rug", "rule", "run", "runway", "rural", "sad", "saddle", "sadness", "safe", "sail", "salad", "salmon", "salon", "salt", "salute", "same", "sample", "sand", "satisfy", "satoshi", "sauce", "sausage", "save", "say", "scale", "scan", "scare", "scatter", "scene", "scheme", "school", "science", "scissors", "scorpion", "scout", "scrap", "screen", "script", "scrub", "sea", "search", "season", "seat", "second", "secret", "section", "security", "seed", "seek", "segment", "select", "sell", "seminar", "senior", "sense", "sentence", "series", "service", "session", "settle", "setup", "seven", "shadow", "shaft", "shallow", "share", "shed", "shell", "sheriff", "shield", "shift", "shine", "ship", "shiver", "shock", "shoe", "shoot", "shop", "short", "shoulder", "shove", "shrimp", "shrug", "shuffle", "shy", "sibling", "sick", "side", "siege", "sight", "sign", "silent", "silk", "silly", "silver", "similar", "simple", "since", "sing", "siren", "sister", "situate", "six", "size", "skate", "sketch", "ski", "skill", "skin", "skirt", "skull", "slab", "slam", "sleep", "slender", "slice", "slide", "slight", "slim", "slogan", "slot", "slow", "slush", "small", "smart", "smile", "smoke", "smooth", "snack", "snake", "snap", "sniff", "snow", "soap", "soccer", "social", "sock", "soda", "soft", "solar", "soldier", "solid", "solution", "solve", "someone", "song", "soon", "sorry", "sort", "soul", "sound", "soup", "source", "south", "space", "spare", "spatial", "spawn", "speak", "special", "speed", "spell", "spend", "sphere", "spice", "spider", "spike", "spin", "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray", "spread", "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff", "stage", "stairs", "stamp", "stand", "start", "state", "stay", "steak", "steel", "stem", "step", "stereo", "stick", "still", "sting", "stock", "stomach", "stone", "stool", "story", "stove", "strategy", "street", "strike", "strong", "struggle", "student", "stuff", "stumble", "style", "subject", "submit", "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit", "summer", "sun", "sunny", "sunset", "super", "supply", "supreme", "sure", "surface", "surge", "surprise", "surround", "survey", "suspect", "sustain", "swallow", "swamp", "swap", "swarm", "swear", "sweet", "swift", "swim", "swing", "switch", "sword", "symbol", "symptom", "syrup", "system", "table", "tackle", "tag", "tail", "talent", "talk", "tank", "tape", "target", "task", "taste", "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis", "tent", "term", "test", "text", "thank", "that", "theme", "then", "theory", "there", "they", "thing", "this", "thought", "three", "thrive", "throw", "thumb", "thunder", "ticket", "tide", "tiger", "tilt", "timber", "time", "tiny", "tip", "tired", "tissue", "title", "toast", "tobacco", "today", "toddler", "toe", "together", "toilet", "token", "tomato", "tomorrow", "tone", "tongue", "tonight", "tool", "tooth", "top", "topic", "topple", "torch", "tornado", "tortoise", "toss", "total", "tourist", "toward", "tower", "town", "toy", "track", "trade", "traffic", "tragic", "train", "transfer", "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial", "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck", "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna", "tunnel", "turkey", "turn", "turtle", "twelve", "twenty", "twice", "twin", "twist", "two", "type", "typical", "ugly", "umbrella", "unable", "unaware", "uncle", "uncover", "under", "undo", "unfair", "unfold", "unhappy", "uniform", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual", "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge", "usage", "use", "used", "useful", "useless", "usual", "utility", "vacant", "vacuum", "vague", "valid", "valley", "valve", "van", "vanish", "vapor", "various", "vast", "vault", "vehicle", "velvet", "vendor", "venture", "venue", "verb", "verify", "version", "very", "vessel", "veteran", "viable", "vibrant", "vicious", "victory", "video", "view", "village", "vintage", "violin", "virtual", "virus", "visa", "visit", "visual", "vital", "vivid", "vocal", "voice", "void", "volcano", "volume", "vote", "voyage", "wage", "wagon", "wait", "walk", "wall", "walnut", "want", "warfare", "warm", "warrior", "wash", "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear", "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "west", "wet", "whale", "what", "wheat", "wheel", "when", "where", "whip", "whisper", "wide", "width", "wife", "wild", "will", "win", "window", "wine", "wing", "wink", "winner", "winter", "wire", "wisdom", "wise", "wish", "witness", "wolf", "woman", "wonder", "wood", "wool", "word", "work", "world", "worry", "worth", "wrap", "wreck", "wrestle", "wrist", "write", "wrong", "yard", "year", "yellow", "you", "young", "youth", "zebra", "zero", "zone", "zoo")</ID>
+    <ID>ReturnCount:ActivityRow.kt$@Composable private fun AmountView( item: Activity, prefix: String, )</ID>
+    <ID>ReturnCount:AppViewModel.kt$AppViewModel$private fun validateAmount( value: String, payMethod: SendMethod = _sendUiState.value.payMethod, ): Boolean</ID>
+    <ID>ReturnCount:AppViewModel.kt$AppViewModel$private suspend fun handleQuickPayIfApplicable( amountSats: ULong, lnurlPay: LnurlPayData? = null, invoice: LightningInvoice? = null, ): Boolean</ID>
+    <ID>ReturnCount:AppViewModel.kt$AppViewModel$private suspend fun handleSanityChecks(amountSats: ULong)</ID>
+    <ID>ReturnCount:AppViewModel.kt$AppViewModel$private suspend fun onScanLightning(invoice: LightningInvoice)</ID>
+    <ID>ReturnCount:AppViewModel.kt$AppViewModel$private suspend fun onScanLnurlPay(data: LnurlPayData)</ID>
+    <ID>ReturnCount:ArticleModel.kt$private fun timeAgo(dateString: String): String</ID>
+    <ID>ReturnCount:BackupSettingsScreen.kt$@Composable fun BackupSettingsScreen( navController: NavController, )</ID>
+    <ID>ReturnCount:BalanceHeaderView.kt$@Composable fun BalanceHeaderView( sats: Long, modifier: Modifier = Modifier, prefix: String? = null, showBitcoinSymbol: Boolean = true, forceShowBalance: Boolean = false, showEyeIcon: Boolean = false, )</ID>
+    <ID>ReturnCount:Bip39Utils.kt$fun List&lt;String&gt;.validBip39Checksum() : Boolean</ID>
+    <ID>ReturnCount:ChannelDetailScreen.kt$@Composable fun ChannelDetailScreen( navController: NavController, viewModel: LightningConnectionsViewModel, )</ID>
+    <ID>ReturnCount:ChannelDetailScreen.kt$private fun getChannelStatus( channel: ChannelUi, blocktankOrder: IBtOrder?, ): ChannelStatusUi</ID>
+    <ID>ReturnCount:ChannelStatusView.kt$@Composable private fun getStatusInfo( channel: ChannelUi, blocktankOrder: IBtOrder?, ): StatusInfo</ID>
+    <ID>ReturnCount:DevSettingsScreen.kt$@Composable fun DevSettingsScreen( navController: NavController, viewModel: DevSettingsViewModel = hiltViewModel(), )</ID>
+    <ID>ReturnCount:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$private fun getProtocolForPort(port: String): ElectrumProtocol</ID>
+    <ID>ReturnCount:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$private fun isValidURL(data: String): Boolean</ID>
+    <ID>ReturnCount:FcmService.kt$FcmService$private fun decryptPayload(response: EncryptedNotification)</ID>
+    <ID>ReturnCount:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$private fun findUpdatedChannel( currentChannel: ChannelDetails, allChannels: List&lt;ChannelDetails&gt;, ): ChannelDetails?</ID>
+    <ID>ReturnCount:LightningService.kt$LightningService$fun canSend(amountSats: ULong): Boolean</ID>
+    <ID>ReturnCount:LnPeer.kt$LnPeer.Companion$fun parseUri(uriString: String): Result&lt;LnPeer&gt;</ID>
+    <ID>ReturnCount:Logger.kt$Logger$private fun cleanupOldLogFiles(maxTotalSizeMB: Int = 20)</ID>
+    <ID>ReturnCount:MonetaryVisualTransformation.kt$MonetaryVisualTransformation$private fun formatMonetaryValue(text: String): String</ID>
+    <ID>ReturnCount:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$override fun originalToTransformed(offset: Int): Int</ID>
+    <ID>ReturnCount:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$override fun transformedToOriginal(offset: Int): Int</ID>
+    <ID>ReturnCount:Money.kt$@Composable fun rememberMoneyText( sats: Long, reversed: Boolean = false, ): String?</ID>
+    <ID>ReturnCount:NodeInfoScreen.kt$@Composable fun NodeInfoScreen( navController: NavController, )</ID>
+    <ID>ReturnCount:ReceiveAmountScreen.kt$@Composable fun ReceiveAmountScreen( onCjitCreated: (CjitEntryDetails) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>ReturnCount:ReceiveQrScreen.kt$@Composable fun ReceiveQrSheet( navigateToExternalConnection: () -&gt; Unit, walletState: MainUiState, modifier: Modifier = Modifier, )</ID>
+    <ID>ReturnCount:SavingsAdvancedScreen.kt$@Composable fun SavingsAdvancedScreen( onContinueClick: () -&gt; Unit, onBackClick: () -&gt; Unit, onCloseClick: () -&gt; Unit, )</ID>
+    <ID>ReturnCount:SavingsConfirmScreen.kt$@Composable fun SavingsConfirmScreen( onConfirm: () -&gt; Unit, onAdvancedClick: () -&gt; Unit, onBackClick: () -&gt; Unit, onCloseClick: () -&gt; Unit, )</ID>
+    <ID>ReturnCount:SpendingAdvancedScreen.kt$@Composable fun SpendingAdvancedScreen( viewModel: TransferViewModel, onBackClick: () -&gt; Unit = {}, onCloseClick: () -&gt; Unit = {}, onOrderCreated: () -&gt; Unit = {}, )</ID>
+    <ID>ReturnCount:TransferViewModel.kt$TransferViewModel$private fun totalBtChannelsValueSats(info: IBtInfo?): ULong</ID>
+    <ID>ReturnCount:WeatherService.kt$WeatherService$private suspend fun calculateCondition( currentFeeRate: Double, history: List&lt;BlockFeeRates&gt; ): FeeCondition</ID>
+    <ID>SpacingAroundColon:Bip39Utils.kt$:</ID>
+    <ID>SpacingAroundColon:EditInvoiceVM.kt$EditInvoiceVM$:</ID>
+    <ID>SpacingAroundColon:InvoiceTagDao.kt$InvoiceTagDao$:</ID>
+    <ID>SpacingAroundColon:TagsViewModel.kt$TagsViewModel$:</ID>
+    <ID>SpacingAroundComma:EditInvoiceScreen.kt$,</ID>
+    <ID>SpacingAroundKeyword:Activities.kt$when</ID>
+    <ID>SpacingAroundKeyword:EditInvoiceScreen.kt$when</ID>
+    <ID>SpacingAroundKeyword:LnurlChannelScreen.kt$if</ID>
+    <ID>SpacingAroundKeyword:PricePreviewScreen.kt$when</ID>
+    <ID>SpacingAroundKeyword:WeatherModel.kt$when</ID>
+    <ID>SpacingAroundOperators:NodeInfoScreen.kt$?:</ID>
+    <ID>SpacingAroundOperators:WeatherEditScreen.kt$=</ID>
+    <ID>SpacingAroundParens:Bip39Utils.kt$(</ID>
+    <ID>SpacingAroundParens:ContentView.kt$(</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:Defaults.kt$AppTextFieldDefaults$@Stable val semiTransparent: TextFieldColors @Composable get() = TextFieldDefaults.colors( focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedContainerColor = Colors.White10, unfocusedContainerColor = Colors.White10, errorIndicatorColor = Color.Transparent, errorContainerColor = Colors.White10, errorTextColor = Colors.Red, errorPrefixColor = Colors.Red )</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:Defaults.kt$AppTextFieldDefaults$@Stable val transparent: TextFieldColors @Composable get() = noIndicatorColors.copy( unfocusedIndicatorColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), )</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:EditInvoiceVMTest.kt$EditInvoiceVMTest$@Test fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity fails`()</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:Env.kt$Env$// TODO: remove this to load from BT API instead</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:WeatherService.kt$WeatherError$/** * Weather-specific error types */</ID>
+    <ID>SpreadOperator:RestoreWalletScreen.kt$(*Array(24) { "" })</ID>
+    <ID>StringTemplate:LnPeer.kt$LnPeer$${address}</ID>
+    <ID>SwallowedException:Crypto.kt$Crypto$e: Exception</ID>
+    <ID>SwallowedException:FcmService.kt$FcmService$e: SerializationException</ID>
+    <ID>ThrowingExceptionsWithoutMessageOrCause:ActivityRepo.kt$ActivityRepo$Exception()</ID>
+    <ID>ThrowsCount:VssBackupsClient.kt$VssBackupsClient$private suspend fun post(endpoint: String, request: MessageLite): HttpResponse</ID>
+    <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ActivityListViewModel.kt$ActivityListViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ActivityRepo.kt$ActivityRepo$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ActivityRepo.kt$ActivityRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:AddressChecker.kt$AddressChecker$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AppViewModel.kt$AppViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AppViewModel.kt$AppViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ArticleModel.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:BackupsRepo.kt$BackupsRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:BiometricPrompt.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BlocktankRegtestScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BlocktankRepo.kt$BlocktankRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:BoostTransactionViewModel.kt$BoostTransactionViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ChannelOrdersScreen.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:CoinSelectionViewModel.kt$CoinSelectionViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ContentView.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ContentView.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:CoreService.kt$ActivityService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CoreService.kt$ActivityService$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:CoreService.kt$CoreService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:Crypto.kt$Crypto$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CurrencyRepo.kt$CurrencyRepo$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CurrencyService.kt$CurrencyService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LightningRepo.kt$LightningRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:LightningService.kt$LightningService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:Logger.kt$Logger$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:LogsRepo.kt$LogsRepo$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LogsViewModel.kt$LogsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MainActivity.kt$MainActivity$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:NewTransactionSheetDetails.kt$NewTransactionSheetDetails.Companion$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PriceService.kt$PriceService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrScanningScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiveAmountScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiveQrScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ServiceQueue.kt$ServiceQueue$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SettingUpScreen.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ShopWebViewInterface.kt$ShopWebViewInterface$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SpendingAdvancedScreen.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:SpendingAmountScreen.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:TransferViewModel.kt$TransferViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:WakeNodeWorker.kt$WakeNodeWorker$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletRepo.kt$WalletRepo$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletRepo.kt$WalletRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionThrown:BlocktankHttpClient.kt$BlocktankHttpClient$throw Exception("Http error: ${response.status}")</ID>
+    <ID>TooGenericExceptionThrown:FileSystem.kt$throw Error("Cannot create path: $this")</ID>
+    <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("HTTP error: ${response.status}")</ID>
+    <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("LNURL channel error: ${parsedResponse.reason}")</ID>
+    <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("LNURL error: ${withdrawResponse.reason}")</ID>
+    <ID>TooManyFunctions:ActivityListViewModel.kt$ActivityListViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:ActivityRepo.kt$ActivityRepo</ID>
+    <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:BackupsRepo.kt$BackupsRepo</ID>
+    <ID>TooManyFunctions:BlocktankRepo.kt$BlocktankRepo</ID>
+    <ID>TooManyFunctions:BoostTransactionViewModel.kt$BoostTransactionViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:CacheStore.kt$CacheStore</ID>
+    <ID>TooManyFunctions:ChannelDetailScreen.kt$to.bitkit.ui.settings.lightning.ChannelDetailScreen.kt</ID>
+    <ID>TooManyFunctions:ChannelOrdersScreen.kt$to.bitkit.ui.settings.ChannelOrdersScreen.kt</ID>
+    <ID>TooManyFunctions:ChannelStatusView.kt$to.bitkit.ui.settings.lightning.components.ChannelStatusView.kt</ID>
+    <ID>TooManyFunctions:ContentView.kt$to.bitkit.ui.ContentView.kt</ID>
+    <ID>TooManyFunctions:CoreService.kt$ActivityService</ID>
+    <ID>TooManyFunctions:CoreService.kt$BlocktankService</ID>
+    <ID>TooManyFunctions:CurrencyRepo.kt$CurrencyRepo</ID>
+    <ID>TooManyFunctions:DevSettingsViewModel.kt$DevSettingsViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:ElectrumConfigViewModel.kt$ElectrumConfigViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:ExternalNodeViewModel.kt$ExternalNodeViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:HomeViewModel.kt$HomeViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:LightningConnectionsViewModel.kt$LightningConnectionsViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:LightningRepo.kt$LightningRepo</ID>
+    <ID>TooManyFunctions:LightningService.kt$LightningService : BaseCoroutineScope</ID>
+    <ID>TooManyFunctions:Logger.kt$Logger</ID>
+    <ID>TooManyFunctions:NodeInfoScreen.kt$to.bitkit.ui.NodeInfoScreen.kt</ID>
+    <ID>TooManyFunctions:NumberPadTextField.kt$to.bitkit.ui.components.NumberPadTextField.kt</ID>
+    <ID>TooManyFunctions:SendAndReviewScreen.kt$to.bitkit.ui.screens.wallets.send.SendAndReviewScreen.kt</ID>
+    <ID>TooManyFunctions:SettingsViewModel.kt$SettingsViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:TOS.kt$to.bitkit.ui.onboarding.TOS.kt</ID>
+    <ID>TooManyFunctions:Text.kt$to.bitkit.ui.components.Text.kt</ID>
+    <ID>TooManyFunctions:Text.kt$to.bitkit.ui.utils.Text.kt</ID>
+    <ID>TooManyFunctions:TransferViewModel.kt$TransferViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:WalletRepo.kt$WalletRepo</ID>
+    <ID>TooManyFunctions:WalletViewModel.kt$WalletViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:WidgetsRepo.kt$WidgetsRepo</ID>
+    <ID>TooManyFunctions:WidgetsStore.kt$WidgetsStore</ID>
+    <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexMenu = 11f</ID>
+    <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexScrim = 10f</ID>
+    <ID>UnusedParameter:ActivityRow.kt$confirmed: Boolean?</ID>
+    <ID>UnusedPrivateProperty:ActivityDetailViewModel.kt$ActivityDetailViewModel$private val lightningRepo: LightningRepo</ID>
+    <ID>UnusedPrivateProperty:ActivityListViewModel.kt$ActivityListViewModel$private val lightningRepo: LightningRepo</ID>
+    <ID>UnusedPrivateProperty:ActivityRepoTest.kt$ActivityRepoTest$private val testOnChainActivity = mock&lt;Activity.Onchain&gt; { on { v1 } doReturn testOnChainActivityV1 }</ID>
+    <ID>UnusedPrivateProperty:CoreService.kt$CoreService$private val settingsStore: SettingsStore</ID>
+    <ID>UnusedPrivateProperty:CurrencyRepoTest.kt$CurrencyRepoTest$private val toastEventBus: ToastEventBus = mock()</ID>
+    <ID>UseCheckOrError:CurrencyRepo.kt$CurrencyRepo$throw IllegalStateException( "Rate not found for currency: $targetCurrency. Available currencies: ${ _currencyState.value.rates.joinToString { it.quote } }" )</ID>
+    <ID>ViewModelForwarding:ActivityDetailScreen.kt$ActivityAddTagSheet( listViewModel = listViewModel, activityViewModel = detailViewModel, onDismiss = { showAddTagSheet = false }, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$BackupSheet( onDismiss = { appViewModel.hideSheet() }, onBackupClick = { appViewModel.hideSheet() appViewModel.showSheet(BottomSheetType.BackupNavigation) }, walletViewModel = walletViewModel )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$LnurlAuthSheet(sheet, appViewModel)</ID>
+    <ID>ViewModelForwarding:ContentView.kt$RootNavHost( navController = navController, walletViewModel = walletViewModel, appViewModel = appViewModel, activityListViewModel = activityListViewModel, settingsViewModel = settingsViewModel, currencyViewModel = currencyViewModel, transferViewModel = transferViewModel, scope = scope, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SendOptionsView( appViewModel = appViewModel, walletViewModel = walletViewModel, startDestination = sheet.route, onComplete = { txSheet -&gt; appViewModel.resetSendState() appViewModel.hideSheet() appViewModel.clearClipboardForAutoRead() txSheet?.let { appViewModel.showNewTransactionSheet(it) } } )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SettingUpScreen( viewModel = transferViewModel, onCloseClick = { navController.popBackStack&lt;Routes.TransferRoot&gt;(inclusive = true) }, onContinueClick = { navController.popBackStack&lt;Routes.TransferRoot&gt;(inclusive = true) }, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SpendingAdvancedScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onOrderCreated = { navController.popBackStack&lt;Routes.SpendingConfirm&gt;(inclusive = false) }, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SpendingAmountScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onOrderCreated = { navController.navigate(Routes.SpendingConfirm) }, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SpendingConfirmScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) }, onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) }, onConfirm = { navController.navigate(Routes.SettingUp) }, )</ID>
+    <ID>ViewModelForwarding:HomeNav.kt$AllActivityScreen( viewModel = activityListViewModel, onBack = { activityListViewModel.clearFilters() walletNavController.popBackStack() }, onActivityItemClick = { rootNavController.navigateToActivityItem(it) }, )</ID>
+    <ID>ViewModelForwarding:HomeNav.kt$HomeScreen( mainUiState = mainUiState, drawerState = drawerState, rootNavController = rootNavController, walletNavController = walletNavController, settingsViewModel = settingsViewModel, walletViewModel = walletViewModel, appViewModel = appViewModel, activityListViewModel = activityListViewModel, )</ID>
+    <ID>ViewModelForwarding:HomeNav.kt$NavContent( walletNavController = walletNavController, rootNavController = rootNavController, mainUiState = uiState, drawerState = drawerState, settingsViewModel = settingsViewModel, appViewModel = appViewModel, walletViewModel = walletViewModel, activityListViewModel = activityListViewModel, )</ID>
+    <ID>ViewModelForwarding:HomeScreen.kt$DeleteWidgetAlert(type, homeViewModel)</ID>
+    <ID>WildcardImport:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
+    <ID>Wrapping:ActivityDetailScreen.kt$(</ID>
+    <ID>Wrapping:ActivityExploreScreen.kt$(</ID>
+    <ID>Wrapping:BlocktankRegtestScreen.kt$( verticalAlignment = CenterVertically, modifier = Modifier .padding(vertical = 4.dp) .fillMaxWidth() )</ID>
+    <ID>Wrapping:CoreService.kt$ActivityService$(</ID>
+    <ID>Wrapping:EditInvoiceVM.kt$EditInvoiceVM$_editInvoiceEffect.emit(effect)</ID>
+    <ID>Wrapping:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$(</ID>
+    <ID>Wrapping:Nav.kt$screenScaleIn</ID>
+    <ID>Wrapping:Nav.kt$screenScaleOut</ID>
+    <ID>Wrapping:Nav.kt$screenSlideIn</ID>
+    <ID>Wrapping:Nav.kt$screenSlideOut</ID>
+    <ID>Wrapping:NodeInfoScreen.kt$(</ID>
+    <ID>Wrapping:NumberPadTextField.kt$(</ID>
+    <ID>Wrapping:PriceViewModel.kt$PriceViewModel$_allPrices.value.firstOrNull { it.widgets.firstOrNull()?.period == _customPreferences.value.period }</ID>
+    <ID>Wrapping:PriceViewModel.kt$PriceViewModel$it.widgets.firstOrNull()?.period == _customPreferences.value.period</ID>
+    <ID>Wrapping:ReportIssueViewModel.kt$ReportIssueViewModel$it.copy( isSendEnabled = !it.errorEmail &amp;&amp; it.emailInput.isNotBlank() &amp;&amp; it.messageInput.isNotBlank() )</ID>
+    <ID>Wrapping:SettingsTextButtonRow.kt$( verticalArrangement = Arrangement.Center, modifier = Modifier .weight(1f) .padding(end = 16.dp) )</ID>
+    <ID>Wrapping:ShopWebViewClient.kt$ShopWebViewClient$( """ window.ReactNativeWebView = { postMessage: function(data) { Android.postMessage(data); } }; // Override the default postMessage if it exists if (window.postMessage) { window.originalPostMessage = window.postMessage; window.postMessage = function(data) { if (typeof data === 'string') { Android.postMessage(data); } else { Android.postMessage(JSON.stringify(data)); } }; } """.trimIndent(), null )</ID>
+  </CurrentIssues>
+</SmellBaseline>
