@@ -169,7 +169,7 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `backup restore should not be triggered when wallet exists it is not restoring`() = test {
+    fun `backup restore should not be triggered when wallet exists while not restoring`() = test {
         assertEquals(RestoreState.NotRestoring, sut.restoreState)
 
         mockWalletState.value = mockWalletState.value.copy(walletExists = true)
