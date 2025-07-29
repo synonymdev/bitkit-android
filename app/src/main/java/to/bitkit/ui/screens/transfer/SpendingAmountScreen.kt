@@ -22,11 +22,14 @@ import to.bitkit.R
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -99,13 +102,12 @@ private fun Content(
                 .fillMaxSize()
                 .imePadding()
         ) {
-
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(
                 text = stringResource(R.string.lightning__spending_amount__title)
                     .withAccent(accentColor = Colors.Purple)
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             AmountInput(
                 primaryDisplay = currencies.primaryDisplay,
@@ -113,7 +115,7 @@ private fun Content(
                 onSatsChange = onAmountChanged,
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             // Actions
             Row(
@@ -129,7 +131,7 @@ private fun Content(
                     Spacer(modifier = Modifier.height(8.dp))
                     MoneySSB(sats = uiState.balanceAfterFee)
                 }
-                Spacer(modifier = Modifier.weight(1f))
+                FillWidth()
                 UnitButton(color = Colors.Purple)
                 // 25% Button
                 NumberPadActionButton(
@@ -145,7 +147,7 @@ private fun Content(
                 )
             }
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -154,7 +156,7 @@ private fun Content(
                 isLoading = uiState.isLoading,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
