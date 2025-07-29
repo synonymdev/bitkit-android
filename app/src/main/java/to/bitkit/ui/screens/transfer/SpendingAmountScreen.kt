@@ -47,10 +47,6 @@ fun SpendingAmountScreen(
     val currencies = LocalCurrencies.current
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
-    val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
-    val currentToastException by rememberUpdatedState(toastException)
-    val currentToast by rememberUpdatedState(toast)
-
     LaunchedEffect(Unit) {
         viewModel.updateLimits(retry = true)
     }
@@ -58,9 +54,9 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> currentOnOrderCreated()
-                is TransferEffect.ToastError -> currentToast(effect.title, effect.description)
-                is TransferEffect.ToastException -> currentToastException(effect.e)
+                TransferEffect.OnOrderCreated -> onOrderCreated()
+                is TransferEffect.ToastError -> toast(effect.title, effect.description)
+                is TransferEffect.ToastException -> toastException(effect.e)
             }
         }
     }
