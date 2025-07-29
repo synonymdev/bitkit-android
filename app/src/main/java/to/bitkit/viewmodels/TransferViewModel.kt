@@ -82,8 +82,8 @@ class TransferViewModel @Inject constructor(
     fun onClickMaxAmount() {
         _spendingUiState.update {
             it.copy(
-                satsAmount = it.maxAvailableToSend,
-                overrideSats = it.maxAvailableToSend,
+                satsAmount = it.maxAllowedToSend,
+                overrideSats = it.maxAllowedToSend,
             )
         }
         updateLimits(false)
@@ -91,10 +91,22 @@ class TransferViewModel @Inject constructor(
 
     fun onClickQuarter() {
         val quarter = (_spendingUiState.value.balanceAfterFee.toDouble() * QUARTER).roundToLong()
+
+        if (quarter > _spendingUiState.value.maxAllowedToSend) {
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_max__description
+                    ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
+                )
+            )
+        }
+
         _spendingUiState.update {
             it.copy(
-                satsAmount = min(quarter, it.maxAvailableToSend),
-                overrideSats = min(quarter, it.maxAvailableToSend),
+                satsAmount = min(quarter, it.maxAllowedToSend),
+                overrideSats = min(quarter, it.maxAllowedToSend),
             )
         }
         updateLimits(false)
@@ -128,8 +140,21 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onAmountChanged(sats: Long) {
-        //TODO HANDLE MAX AMOUNT
-        _spendingUiState.update { it.copy(satsAmount = sats, overrideSats = null) }
+        var newValue = sats
+        if (sats > _spendingUiState.value.maxAllowedToSend) {
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_max__description
+                    ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
+                )
+            )
+            newValue = _spendingUiState.value.maxAllowedToSend
+        }
+
+        _spendingUiState.update { it.copy(satsAmount = newValue, overrideSats = null) }
+
         retryTimes = 0
         updateLimits(retry = false)
     }
@@ -230,7 +255,7 @@ class TransferViewModel @Inject constructor(
                 _spendingUiState.update {
                     // Calculate the max available to send considering the current balance and LSP policy
                     it.copy(
-                        maxAvailableToSend = min(
+                        maxAllowedToSend = min(
                             _transferValues.value.maxClientBalance.toLong(),
                             balanceAfterLspFee.toLong()
                         ),
@@ -245,7 +270,7 @@ class TransferViewModel @Inject constructor(
                     delay(2.seconds)
                     updateAvailableAmount(retry = retryTimes <= RETRY_LIMIT)
                     retryTimes++
-                } else { //Todo display error
+                } else {
                     _spendingUiState.update { it.copy(isLoading = false) }
                     Logger.error("Failure", exception)
                     setTransferEffect(TransferEffect.ToastException(exception))
@@ -326,7 +351,7 @@ class TransferViewModel @Inject constructor(
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
         val maxClientBalance = getMaxClientBalance(maxChannelSizeAvailableToIncrease)
 
-        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) { // TODO DISPLAY ERROR
+        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) {
             Logger.warn(
                 "Amount clientBalanceSat:$clientBalanceSat too large, max possible: $maxChannelSizeAvailableToIncrease",
                 context = TAG
@@ -501,7 +526,7 @@ data class TransferToSpendingUiState(
     val isAdvanced: Boolean = false,
     val satsAmount: Long = 0,
     val overrideSats: Long? = null,
-    val maxAvailableToSend: Long = 0,
+    val maxAllowedToSend: Long = 0,
     val balanceAfterFee: Long = 0,
     val isLoading: Boolean = false,
 )
