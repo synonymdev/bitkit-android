@@ -12,6 +12,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -46,6 +47,10 @@ fun SpendingAmountScreen(
     val currencies = LocalCurrencies.current
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
+    val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
+    val currentToastException by rememberUpdatedState(toastException)
+    val currentToast by rememberUpdatedState(toast)
+
     LaunchedEffect(Unit) {
         viewModel.updateLimits(retry = true)
     }
@@ -53,9 +58,9 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> onOrderCreated()
-                is TransferEffect.ToastError -> toast(effect.title, effect.description)
-                is TransferEffect.ToastException -> toastException(effect.e)
+                TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                is TransferEffect.ToastError -> currentToast(effect.title, effect.description)
+                is TransferEffect.ToastException -> currentToastException(effect.e)
             }
         }
     }
@@ -123,7 +128,7 @@ fun SpendingAmountScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = viewModel::onConfirmAmount,
-                enabled = uiState.satsAmount != 0L,
+                enabled = uiState.satsAmount != 0L && uiState.satsAmount <= uiState.maxAllowedToSend,
                 isLoading = uiState.isLoading,
             )
 

@@ -140,7 +140,6 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onAmountChanged(sats: Long) {
-        var newValue = sats
         if (sats > _spendingUiState.value.maxAllowedToSend) {
             setTransferEffect(
                 TransferEffect.ToastError(
@@ -150,10 +149,9 @@ class TransferViewModel @Inject constructor(
                     ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
                 )
             )
-            newValue = _spendingUiState.value.maxAllowedToSend
         }
 
-        _spendingUiState.update { it.copy(satsAmount = newValue, overrideSats = null) }
+        _spendingUiState.update { it.copy(satsAmount = sats, overrideSats = null) }
 
         retryTimes = 0
         updateLimits(retry = false)
