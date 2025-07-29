@@ -105,7 +105,7 @@ class TransferViewModel @Inject constructor(
             setTransferEffect(
                 TransferEffect.ToastError(
                     title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    message = context.getString(
+                    description = context.getString(
                         R.string.lightning__spending_amount__error_max__description_zero
                     ),
                 )
@@ -121,7 +121,7 @@ class TransferViewModel @Inject constructor(
                     onOrderCreated(order)
                     _spendingUiState.update { it.copy(isLoading = false) }
                 }.onFailure { e ->
-                    setTransferEffect(TransferEffect.ToastException(Exception(e.message)))
+                    setTransferEffect(TransferEffect.ToastException(e))
                     _spendingUiState.update { it.copy(isLoading = false) }
                 }
         }
@@ -248,6 +248,7 @@ class TransferViewModel @Inject constructor(
                 } else { //Todo display error
                     _spendingUiState.update { it.copy(isLoading = false) }
                     Logger.error("Failure", exception)
+                    setTransferEffect(TransferEffect.ToastException(exception))
                 }
             }
         }
@@ -514,7 +515,7 @@ data class TransferValues(
 
 sealed interface TransferEffect {
     data object OnOrderCreated : TransferEffect
-    data class ToastException(val e: Exception) : TransferEffect
-    data class ToastError(val title: String, val message: String) : TransferEffect
+    data class ToastException(val e: Throwable) : TransferEffect
+    data class ToastError(val title: String, val description: String) : TransferEffect
 }
 // endregion

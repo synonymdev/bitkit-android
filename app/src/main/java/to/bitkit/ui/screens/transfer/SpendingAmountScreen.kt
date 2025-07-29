@@ -12,17 +12,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.MoneySSB
@@ -44,6 +40,8 @@ fun SpendingAmountScreen(
     onBackClick: () -> Unit = {},
     onCloseClick: () -> Unit = {},
     onOrderCreated: () -> Unit = {},
+    toastException: (Throwable) -> Unit,
+    toast: (title: String, description: String) -> Unit,
 ) {
     val currencies = LocalCurrencies.current
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
@@ -54,10 +52,10 @@ fun SpendingAmountScreen(
 
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
-            when(effect) {
+            when (effect) {
                 TransferEffect.OnOrderCreated -> onOrderCreated()
-                is TransferEffect.ToastError -> TODO()
-                is TransferEffect.ToastException -> TODO()
+                is TransferEffect.ToastError -> toast(effect.title, effect.description)
+                is TransferEffect.ToastException -> toastException(effect.e)
             }
         }
     }
