@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ScreenColumn(
@@ -24,9 +24,9 @@ fun ScreenColumn(
         horizontalAlignment = horizontalAlignment,
         content = content,
         modifier = Modifier
-            .systemBarsPadding()
             .fillMaxSize()
-            .then(if (noBackground) Modifier else Modifier.background(Colors.Black))
+            .then(if (noBackground) Modifier else Modifier.background(MaterialTheme.colorScheme.background))
+            .systemBarsPadding()
             .then(modifier)
     )
 }
