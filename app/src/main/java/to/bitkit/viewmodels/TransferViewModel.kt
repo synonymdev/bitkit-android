@@ -339,15 +339,11 @@ class TransferViewModel @Inject constructor(
         val maxChannelSize1 = (maxChannelSizeSat.toDouble() * 0.98).roundToLong().toULong()
 
         // The maximum channel size the user can open including existing channels
-        val maxChannelSize2 = if (maxChannelSize1 > channelsSize) maxChannelSize1 - channelsSize else 0u
+        val maxChannelSize2 = (maxChannelSize1 - channelsSize).coerceAtLeast(0u)
         val maxChannelSizeAvailableToIncrease = min(maxChannelSize1, maxChannelSize2)
 
         val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
-        val maxLspBalance = if (maxChannelSizeAvailableToIncrease > clientBalanceSat) {
-            maxChannelSizeAvailableToIncrease - clientBalanceSat
-        } else {
-            0u
-        }
+        val maxLspBalance = (maxChannelSizeAvailableToIncrease - clientBalanceSat).coerceAtLeast(0u)
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
         val maxClientBalance = getMaxClientBalance(maxChannelSizeAvailableToIncrease)
 
@@ -358,7 +354,7 @@ class TransferViewModel @Inject constructor(
             )
         }
 
-        if (defaultLspBalance < minLspBalance || defaultLspBalance > maxLspBalance) {
+        if (defaultLspBalance !in minLspBalance..maxLspBalance) {
             Logger.warn(
                 "Invalid defaultLspBalance:$defaultLspBalance " +
                     "min possible:$maxLspBalance, " +
