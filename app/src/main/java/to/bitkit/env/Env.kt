@@ -13,9 +13,10 @@ import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
 
-@Suppress("ConstPropertyName")
+@Suppress("ConstPropertyName", "KotlinConstantConditions")
 internal object Env {
     val isDebug = BuildConfig.DEBUG
+    const val isE2eTest = BuildConfig.E2E
     val network = Network.valueOf(BuildConfig.NETWORK)
     val walletSyncIntervalSecs = 10_uL // TODO review
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
@@ -162,14 +163,23 @@ internal object Env {
             ssl = 18484,
             protocol = ElectrumProtocol.TCP,
         )
+        val E2E = ElectrumServer(
+            host = "127.0.0.1",
+            tcp = 60001,
+            ssl = 60002,
+            protocol = ElectrumProtocol.TCP,
+        )
     }
 
     val defaultElectrumServer: ElectrumServer
-        get() = when (network) {
-            Network.REGTEST -> ElectrumServers.REGTEST
-            Network.TESTNET -> ElectrumServers.TESTNET
-            Network.BITCOIN -> ElectrumServers.BITCOIN
-            else -> TODO("${network.name} network not implemented")
+        get() {
+            if (isE2eTest) return ElectrumServers.E2E
+            return when (network) {
+                Network.REGTEST -> ElectrumServers.REGTEST
+                Network.TESTNET -> ElectrumServers.TESTNET
+                Network.BITCOIN -> ElectrumServers.BITCOIN
+                else -> TODO("${network.name} network not implemented")
+            }
         }
 
     const val PIN_LENGTH = 4

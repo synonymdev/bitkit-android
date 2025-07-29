@@ -46,6 +46,7 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
     }
 
     flavorDimensions += "network"
