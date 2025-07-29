@@ -34,11 +34,12 @@ fun WalletRestoreErrorView(
     retryCount: Int,
     onRetry: () -> Unit,
     onProceedWithoutRestore: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
     ScreenColumn(
-        modifier = Modifier.padding(horizontal = 32.dp)
+        modifier = modifier.padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -78,20 +79,20 @@ fun WalletRestoreErrorView(
         }
 
         VerticalSpacer(16.dp)
-    }
 
-    if (showDialog) {
-        AppAlertDialog(
-            title = stringResource(R.string.common__are_you_sure),
-            text = stringResource(R.string.onboarding__restore_no_backup_warn),
-            confirmText = stringResource(R.string.common__yes_proceed),
-            onConfirm = {
-                showDialog = false
-                onProceedWithoutRestore.invoke()
-            },
-            onDismiss = { showDialog = false },
-            modifier = Modifier.testTag("ProceedWithoutBackupDialog")
-        )
+        if (showDialog) {
+            AppAlertDialog(
+                title = stringResource(R.string.common__are_you_sure),
+                text = stringResource(R.string.onboarding__restore_no_backup_warn),
+                confirmText = stringResource(R.string.common__yes_proceed),
+                onConfirm = {
+                    showDialog = false
+                    onProceedWithoutRestore.invoke()
+                },
+                onDismiss = { showDialog = false },
+                modifier = Modifier.testTag("ProceedWithoutBackupDialog")
+            )
+        }
     }
 }
 

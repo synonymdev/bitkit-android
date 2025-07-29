@@ -26,9 +26,10 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun WalletRestoreSuccessView(
     onContinue: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     ScreenColumn(
-        modifier = Modifier.Companion.padding(horizontal = 32.dp)
+        modifier = modifier.padding(horizontal = 32.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -45,9 +46,9 @@ fun WalletRestoreSuccessView(
         Image(
             painter = painterResource(R.drawable.check),
             contentDescription = null,
-            modifier = Modifier.Companion
+            modifier = Modifier
                 .size(256.dp)
-                .align(Alignment.Companion.CenterHorizontally)
+                .align(Alignment.CenterHorizontally)
         )
 
         FillHeight()
@@ -55,13 +56,12 @@ fun WalletRestoreSuccessView(
         PrimaryButton(
             text = stringResource(R.string.onboarding__get_started),
             onClick = onContinue,
-            modifier = Modifier.Companion.testTag("GetStartedButton")
+            modifier = Modifier.testTag("GetStartedButton")
         )
 
         VerticalSpacer(16.dp)
     }
 }
-
 
 @Preview(showSystemUi = true)
 @Composable
