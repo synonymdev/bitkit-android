@@ -74,11 +74,6 @@ class TransferViewModel @Inject constructor(
 
     // region Spending
 
-    private fun onOrderCreated(order: IBtOrder) {
-        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
-        setTransferEffect(TransferEffect.OnOrderCreated)
-    }
-
     fun onClickMaxAmount() {
         _spendingUiState.update {
             it.copy(
@@ -227,6 +222,11 @@ class TransferViewModel @Inject constructor(
             }
             Logger.debug("Stopped watching order '$orderId'", context = TAG)
         }
+    }
+
+    private fun onOrderCreated(order: IBtOrder) {
+        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+        setTransferEffect(TransferEffect.OnOrderCreated)
     }
 
     private fun updateAvailableAmount(retry: Boolean) {
