@@ -77,8 +77,7 @@ fun SpendingAmountScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var overrideSats: Long? by remember { mutableStateOf(null) }
-            var isLoading by remember { mutableStateOf(false) }
+            var overrideSats: Long? by remember { mutableStateOf(null) } //TODO MOVE TO VIEWMODEL
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(
@@ -134,33 +133,9 @@ fun SpendingAmountScreen(
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                onClick = {
-                    if (transferValues.maxLspBalance == 0uL) {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = resources.getString(R.string.lightning__spending_amount__error_max__title),
-                            description = resources.getString(
-                                R.string.lightning__spending_amount__error_max__description_zero
-                            ),
-                        )
-                        return@PrimaryButton
-                    }
-
-                    isLoading = true
-                    scope.launch { //TODO THIS TRIGGERING AN EXCEPTION WHEN THE COMPOSITION IS FINISHED
-                        try {
-                            val order = blocktank.createOrder(uiState.satsAmount.toULong())
-                            viewModel.onOrderCreated(order)
-                            onOrderCreated()
-                        } catch (e: Throwable) {
-                            app.toast(e)
-                        } finally {
-                            isLoading = false
-                        }
-                    }
-                },
-                enabled = !isLoading && uiState.satsAmount != 0L,
-                isLoading = isLoading,
+                onClick = viewModel::onConfirmAmount,
+                enabled = uiState.satsAmount != 0L,
+                isLoading = uiState.isLoading,
             )
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -66,11 +66,39 @@ class TransferViewModel @Inject constructor(
 
     // region Spending
 
-    fun onOrderCreated(order: IBtOrder) {
+    private fun onOrderCreated(order: IBtOrder) {
         _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+        //TODO CALLBACK onOrderCreated
+    }
+
+    fun onConfirmAmount() {
+        if (_transferValues.value.maxLspBalance == 0uL) {
+//            app.toast( //TODO DISPLAY TOAST
+//                type = Toast.ToastType.ERROR,
+//                title = resources.getString(R.string.lightning__spending_amount__error_max__title),
+//                description = resources.getString(
+//                    R.string.lightning__spending_amount__error_max__description_zero
+//                ),
+//            )
+            return
+        }
+
+        _spendingUiState.update { it.copy(isLoading = true) }
+
+        viewModelScope.launch {
+            blocktankRepo.createOrder(_spendingUiState.value.satsAmount.toULong())
+                .onSuccess { order ->
+                    onOrderCreated(order)
+                    _spendingUiState.update { it.copy(isLoading = false) }
+                }.onFailure {
+                    //TODO DISPLAY TOAST
+                    _spendingUiState.update { it.copy(isLoading = false) }
+                }
+        }
     }
 
     fun onAmountChanged(sats: Long) {
+        //TODO HANDLE MAX AMOUNT
         _spendingUiState.update { it.copy(satsAmount = sats) }
         retryTimes = 0
         updateLimits(retry = false)
@@ -150,6 +178,7 @@ class TransferViewModel @Inject constructor(
 
     private fun updateAvailableAmount(retry: Boolean) {
         viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
             val onChainBalance = walletRepo.balanceState.value.totalOnchainSats
             val totalFeeFromAvailableAmount = lightningRepo.calculateTotalFee(amountSats = onChainBalance)
                 .getOrDefault(DEFAULT_TX_FEE.toULong())
@@ -175,6 +204,7 @@ class TransferViewModel @Inject constructor(
                             _transferValues.value.maxClientBalance.toLong(),
                             balanceAfterLspFee.toLong()
                         ),
+                        isLoading = false,
                         balanceAfterFee = availableAmount.toLong()
                     )
                 }
@@ -185,7 +215,8 @@ class TransferViewModel @Inject constructor(
                     delay(2.seconds)
                     updateAvailableAmount(retry = retryTimes <= RETRY_LIMIT)
                     retryTimes++
-                } else {
+                } else { //Todo display error
+                    _spendingUiState.update { it.copy(isLoading = false) }
                     Logger.error("Failure", exception)
                 }
             }
@@ -439,6 +470,7 @@ data class TransferToSpendingUiState(
     val satsAmount: Long = 0,
     val maxAvailableToSend: Long = 0,
     val balanceAfterFee: Long = 0,
+    val isLoading: Boolean = false,
 )
 
 data class TransferValues(
