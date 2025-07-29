@@ -35,6 +35,7 @@ import to.bitkit.ui.scaffold.CloseNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -49,6 +50,16 @@ fun SpendingAmountScreen(
 
     LaunchedEffect(Unit) {
         viewModel.updateLimits(retry = true)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.transferEffects.collect { effect ->
+            when(effect) {
+                TransferEffect.OnOrderCreated -> onOrderCreated()
+                is TransferEffect.ToastError -> TODO()
+                is TransferEffect.ToastException -> TODO()
+            }
+        }
     }
 
     ScreenColumn {

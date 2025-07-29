@@ -1,16 +1,19 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
@@ -44,6 +48,7 @@ private const val EUR_CURRENCY = "EUR"
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val walletRepo: WalletRepo,
@@ -62,13 +67,16 @@ class TransferViewModel @Inject constructor(
 
     private val _transferValues = MutableStateFlow(TransferValues())
     val transferValues = _transferValues.asStateFlow()
+
+    val transferEffects = MutableSharedFlow<TransferEffect>()
+    fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     var retryTimes = 0
 
     // region Spending
 
     private fun onOrderCreated(order: IBtOrder) {
         _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
-        //TODO CALLBACK onOrderCreated
+        setTransferEffect(TransferEffect.OnOrderCreated)
     }
 
     fun onClickMaxAmount() {
@@ -94,13 +102,14 @@ class TransferViewModel @Inject constructor(
 
     fun onConfirmAmount() {
         if (_transferValues.value.maxLspBalance == 0uL) {
-//            app.toast( //TODO DISPLAY TOAST
-//                type = Toast.ToastType.ERROR,
-//                title = resources.getString(R.string.lightning__spending_amount__error_max__title),
-//                description = resources.getString(
-//                    R.string.lightning__spending_amount__error_max__description_zero
-//                ),
-//            )
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    message = context.getString(
+                        R.string.lightning__spending_amount__error_max__description_zero
+                    ),
+                )
+            )
             return
         }
 
@@ -111,8 +120,8 @@ class TransferViewModel @Inject constructor(
                 .onSuccess { order ->
                     onOrderCreated(order)
                     _spendingUiState.update { it.copy(isLoading = false) }
-                }.onFailure {
-                    //TODO DISPLAY TOAST
+                }.onFailure { e ->
+                    setTransferEffect(TransferEffect.ToastException(Exception(e.message)))
                     _spendingUiState.update { it.copy(isLoading = false) }
                 }
         }
@@ -502,4 +511,10 @@ data class TransferValues(
     val maxLspBalance: ULong = 0u,
     val maxClientBalance: ULong = 0u,
 )
+
+sealed interface TransferEffect {
+    data object OnOrderCreated : TransferEffect
+    data class ToastException(val e: Exception) : TransferEffect
+    data class ToastError(val title: String, val message: String) : TransferEffect
+}
 // endregion
