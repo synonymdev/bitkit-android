@@ -34,14 +34,14 @@ fun ChannelStatusView(
     blocktankOrder: IBtOrder?,
 ) {
     Row(
-        verticalAlignment = Alignment.Companion.CenterVertically,
-        modifier = Modifier.Companion.padding(vertical = 8.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 8.dp)
     ) {
         val statusInfo = getStatusInfo(channel, blocktankOrder)
 
         Box(
-            contentAlignment = Alignment.Companion.Center,
-            modifier = Modifier.Companion
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
                 .size(32.dp)
                 .background(statusInfo.backgroundColor, CircleShape),
         ) {
@@ -49,7 +49,7 @@ fun ChannelStatusView(
                 painter = painterResource(statusInfo.iconRes),
                 contentDescription = null,
                 tint = statusInfo.iconColor,
-                modifier = Modifier.Companion.size(16.dp)
+                modifier = Modifier.size(16.dp)
             )
         }
 

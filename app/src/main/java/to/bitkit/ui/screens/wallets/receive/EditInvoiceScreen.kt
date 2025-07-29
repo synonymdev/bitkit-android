@@ -10,7 +10,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -88,7 +87,7 @@ fun EditInvoiceScreen(
 
     LaunchedEffect(Unit) {
         editInvoiceVM.editInvoiceEffect.collect { effect ->
-            when(effect) {
+            when (effect) {
                 is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
                     val receiveSats = satsString.toULongOrNull()
                     updateInvoice(receiveSats)
@@ -111,11 +110,12 @@ fun EditInvoiceScreen(
                                 )
                             )
                         }.onFailure { e ->
-                            Logger.error(e = e, msg = "error creating cjit invoice" ,context = "EditInvoiceScreen")
+                            Logger.error(e = e, msg = "error creating cjit invoice", context = "EditInvoiceScreen")
                             onBack()
                         }
                     }
                 }
+
                 EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> {
                     updateInvoice(satsString.toULongOrNull())
                     onBack()
@@ -425,7 +425,7 @@ private fun Preview3() {
             onInputChanged = {},
             onContinueGeneral = {},
             onContinueKeyboard = {},
-            tags = listOf("Team", "Dinner","Home"),
+            tags = listOf("Team", "Dinner", "Home"),
             onClickAddTag = {},
             onClickTag = {},
             isSoftKeyboardVisible = false,
