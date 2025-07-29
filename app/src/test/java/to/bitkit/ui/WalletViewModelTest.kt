@@ -2,7 +2,9 @@ package to.bitkit.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -45,7 +47,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(mockLightningState)
 
         sut = WalletViewModel(
-            bgDispatcher = Dispatchers.Unconfined,
+            bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
@@ -187,6 +189,7 @@ class WalletViewModelTest : BaseUnitTest() {
         assertEquals(RestoreState.NotRestoring, sut.restoreState)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `proceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
@@ -195,8 +198,8 @@ class WalletViewModelTest : BaseUnitTest() {
         mockWalletState.value = mockWalletState.value.copy(walletExists = true)
         assertEquals(RestoreState.BackupRestoreCompleted, sut.restoreState)
 
-        sut.proceedWithoutRestore()
-
+        sut.proceedWithoutRestore(onDone = {})
+        advanceUntilIdle()
         assertEquals(RestoreState.NotRestoring, sut.restoreState)
     }
 
