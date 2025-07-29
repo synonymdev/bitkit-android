@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -26,11 +27,12 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupsRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.ui.onboarding.WalletInitResult
+import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel
 class WalletViewModel @Inject constructor(
@@ -49,10 +51,7 @@ class WalletViewModel @Inject constructor(
     var walletExists by mutableStateOf(walletRepo.walletExists())
         private set
 
-    var isRestoringWallet by mutableStateOf(false)
-        private set
-
-    var restoreState by mutableStateOf<RestoreState>(RestoreState.None)
+    var restoreState by mutableStateOf<RestoreState>(RestoreState.NotRestoring)
         private set
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -72,7 +71,6 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             walletState.collect { state ->
                 walletExists = state.walletExists
-                isRestoringWallet = state.isRestoringWallet
                 _uiState.update {
                     it.copy(
                         onchainAddress = state.onchainAddress,
@@ -86,9 +84,8 @@ class WalletViewModel @Inject constructor(
                         balanceDetails = state.balanceDetails
                     )
                 }
-                if (state.walletExists && restoreState == RestoreState.WaitingForWallet) {
+                if (state.walletExists && restoreState == RestoreState.RestoringWallet) {
                     triggerBackupRestore()
-                    setRestoringWalletState(false)
                 }
             }
         }
@@ -113,34 +110,27 @@ class WalletViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             backupsRepo.performFullRestoreFromLatestBackup()
-                .onSuccess {
-                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Restored)
-                }
-                .onFailure { error ->
-                    restoreState = RestoreState.BackupRestoreCompleted(WalletInitResult.Failed(error))
-                }
+            // data backup is not critical and mostly for user convenience so there is no reason to propagate errors up
+            restoreState = RestoreState.BackupRestoreCompleted
         }
     }
 
-    fun setRestoringWalletState(isRestoringWallet: Boolean) {
-        walletRepo.setRestoringWalletState(isRestoring = isRestoringWallet)
+    fun setRestoringWalletState() {
+        restoreState = RestoreState.RestoringWallet
+    }
 
-        if (isRestoringWallet) {
-            restoreState = RestoreState.WaitingForWallet
+    fun onRestoreContinue() {
+        restoreState = RestoreState.NotRestoring
+    }
+
+    fun proceedWithoutRestore(onDone: () -> Unit) {
+        viewModelScope.launch {
+            // TODO start LDK without trying to restore backup state from VSS if possible
+            lightningRepo.stop()
+            delay(LOADING_MS.milliseconds)
+            restoreState = RestoreState.NotRestoring
+            onDone()
         }
-    }
-
-    fun onBackupRestoreSuccess() {
-        restoreState = RestoreState.None
-    }
-
-    fun onBackupRestoreRetry() {
-        triggerBackupRestore()
-    }
-
-    fun proceedWithoutRestore() {
-        setRestoringWalletState(false)
-        restoreState = RestoreState.None
     }
 
     fun setInitNodeLifecycleState() {
@@ -332,8 +322,10 @@ sealed interface WalletViewModelEffects {
 }
 
 sealed interface RestoreState {
-    data object None : RestoreState
-    data object WaitingForWallet : RestoreState
+    data object NotRestoring : RestoreState
+    data object RestoringWallet : RestoreState
     data object RestoringBackups : RestoreState
-    data class BackupRestoreCompleted(val result: WalletInitResult) : RestoreState
+    data object BackupRestoreCompleted : RestoreState
+
+    fun isRestoring() = this is RestoringWallet || this is RestoringBackups
 }

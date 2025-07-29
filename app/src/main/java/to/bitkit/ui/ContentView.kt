@@ -6,6 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -26,7 +27,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -37,8 +37,8 @@ import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.BottomSheetType
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.onboarding.InitializingWalletView
-import to.bitkit.ui.onboarding.WalletInitResult
-import to.bitkit.ui.onboarding.WalletInitResultView
+import to.bitkit.ui.onboarding.WalletRestoreErrorView
+import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
 import to.bitkit.ui.screens.scanner.QrScanningScreen
@@ -167,7 +167,6 @@ fun ContentView(
     val navController = rememberNavController()
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val scope = rememberCoroutineScope()
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
@@ -251,24 +250,28 @@ fun ContentView(
     }
 
     val restoreState = walletViewModel.restoreState
-    val isRestoringBackups = walletViewModel.restoreState == RestoreState.RestoringBackups
+    var restoreRetryCount by remember { mutableIntStateOf(0) }
+
     if (walletIsInitializing) {
         // TODO ADAPT THIS LOGIC TO WORK WITH LightningNodeService
         if (nodeLifecycleState is NodeLifecycleState.ErrorStarting) {
-            WalletInitResultView(
-                result = WalletInitResult.Failed(nodeLifecycleState.cause),
-                onButtonClick = {
-                    scope.launch {
-                        try {
-                            walletViewModel.setInitNodeLifecycleState()
-                            walletViewModel.start()
-                        } catch (e: Exception) {
-                            Logger.error("Failed to start wallet on retry", e)
+            WalletRestoreErrorView(
+                retryCount = restoreRetryCount,
+                onRetry = {
+                    restoreRetryCount++
+                    walletViewModel.setInitNodeLifecycleState()
+                    walletViewModel.start()
+                },
+                onProceedWithoutRestore = {
+                    walletViewModel.proceedWithoutRestore(
+                        onDone = {
+                            walletIsInitializing = false
                         }
-                    }
-                }
+                    )
+                },
             )
         } else {
+            // wallet is being created or restored
             InitializingWalletView(
                 shouldFinish = walletInitShouldFinish,
                 onComplete = {
@@ -277,26 +280,13 @@ fun ContentView(
                     if (nodeLifecycleState == NodeLifecycleState.Running) {
                         walletIsInitializing = false
                     }
-                }
+                },
+                isRestoring = restoreState.isRestoring(),
             )
         }
-    } else if (walletViewModel.isRestoringWallet || isRestoringBackups) {
-        InitializingWalletView(
-            shouldFinish = false,
-            onComplete = { /* Loading state, no completion */ },
-            isRestoringBackups = isRestoringBackups
-        )
     } else if (restoreState is RestoreState.BackupRestoreCompleted) {
-        val result = restoreState.result
-        WalletInitResultView(
-            result = result,
-            onButtonClick = {
-                when (result) {
-                    is WalletInitResult.Restored -> walletViewModel.onBackupRestoreSuccess()
-                    is WalletInitResult.Failed -> walletViewModel.onBackupRestoreRetry()
-                }
-            },
-            onProceedWithoutRestore = { walletViewModel.proceedWithoutRestore() }
+        WalletRestoreSuccessView(
+            onContinue = { walletViewModel.onRestoreContinue() },
         )
     } else {
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
@@ -388,7 +378,6 @@ fun ContentView(
                     settingsViewModel = settingsViewModel,
                     currencyViewModel = currencyViewModel,
                     transferViewModel = transferViewModel,
-                    scope = scope,
                 )
             }
         }
@@ -404,8 +393,9 @@ private fun RootNavHost(
     settingsViewModel: SettingsViewModel,
     currencyViewModel: CurrencyViewModel,
     transferViewModel: TransferViewModel,
-    scope: CoroutineScope,
 ) {
+    val scope = rememberCoroutineScope()
+
     NavHost(navController, startDestination = Routes.Home) {
         home(walletViewModel, appViewModel, activityListViewModel, settingsViewModel, navController)
         settings(navController, settingsViewModel)
@@ -740,7 +730,7 @@ private fun NavGraphBuilder.shop(
         )
     }
     composableWithDefaultTransitions<Routes.ShopWebView> {
-        ShopWebViewScreen (
+        ShopWebViewScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
             page = it.toRoute<Routes.ShopWebView>().page,

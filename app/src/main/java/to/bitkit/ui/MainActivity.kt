@@ -164,7 +164,7 @@ class MainActivity : FragmentActivity() {
                                         try {
                                             appViewModel.resetIsAuthenticatedState()
                                             walletViewModel.setInitNodeLifecycleState()
-                                            walletViewModel.setRestoringWalletState(isRestoringWallet = true)
+                                            walletViewModel.setRestoringWalletState()
                                             walletViewModel.restoreWallet(mnemonic, passphrase)
                                         } catch (e: Throwable) {
                                             appViewModel.toast(e)
