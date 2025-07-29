@@ -265,7 +265,7 @@ class TransferViewModel @Inject constructor(
                 }
             }.onFailure { exception ->
                 if (exception is ServiceError.NodeNotStarted && retry) {
-                    //Retry after delay
+                    // Retry after delay
                     Logger.warn("Error getting the available amount. Node not started. trying again in 2 seconds")
                     delay(2.seconds)
                     updateAvailableAmount(retry = retryTimes <= RETRY_LIMIT)
