@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -112,8 +114,9 @@ private fun ReceiveConfirmContent(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBackClick)
         Spacer(Modifier.height(24.dp))
@@ -174,7 +177,7 @@ private fun ReceiveConfirmContent(
     }
 }
 
-@Preview(showBackground = true, name = "Initial flow")
+@Preview(showSystemUi = true, name = "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -191,7 +194,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true, name = "Aditional flow")
+@Preview(showSystemUi = true, name = "Aditional flow")
 @Composable
 private fun Preview2() {
     AppThemeSurface {
@@ -208,7 +211,7 @@ private fun Preview2() {
     }
 }
 
-@Preview(showBackground = true, name = "Small device", widthDp = 400, heightDp = 620)
+@Preview(showSystemUi = true, name = "Small device", widthDp = 400, heightDp = 620)
 @Composable
 private fun Preview3() {
     AppThemeSurface {
@@ -225,7 +228,7 @@ private fun Preview3() {
     }
 }
 
-@Preview(showBackground = true, name = "Tablet", device = PIXEL_TABLET)
+@Preview(showSystemUi = true, name = "Tablet", device = PIXEL_TABLET)
 @Composable
 private fun Preview4() {
     AppThemeSurface {

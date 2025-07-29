@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.withdraw.WithDrawErrorScreen
@@ -228,85 +230,89 @@ private fun SendOptionsContent(
         modifier = Modifier
             .fillMaxSize()
             .gradientBackground()
-            .padding(horizontal = 16.dp)
+            .navigationBarsPadding()
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__send_bitcoin))
-        Spacer(Modifier.height(32.dp))
-        Caption13Up(text = stringResource(R.string.wallet__send_to))
-        Spacer(modifier = Modifier.height(16.dp))
-
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_contact),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_users),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(28.dp),
-                )
-            },
-            modifier = Modifier.padding(bottom = 4.dp)
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            scope.launch {
-                app?.toast(Exception("Coming soon: Contact"))
+            VerticalSpacer(32.dp)
+            Caption13Up(text = stringResource(R.string.wallet__send_to))
+            VerticalSpacer(16.dp)
+
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_contact),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_users),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(28.dp),
+                    )
+                },
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                scope.launch {
+                    app?.toast(Exception("Coming soon: Contact"))
+                }
             }
-        }
 
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_invoice),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_clipboard_text),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(28.dp),
-                )
-            },
-            modifier = Modifier.padding(bottom = 4.dp)
-        ) {
-            onEvent(SendEvent.Paste)
-        }
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_invoice),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clipboard_text),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(28.dp),
+                    )
+                },
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                onEvent(SendEvent.Paste)
+            }
 
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_manual),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_pencil_simple),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(28.dp),
-                )
-            },
-            modifier = Modifier.padding(bottom = 4.dp)
-        ) {
-            onEvent(SendEvent.EnterManually)
-        }
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_manual),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_pencil_simple),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(28.dp),
+                    )
+                },
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                onEvent(SendEvent.EnterManually)
+            }
 
-        RectangleButton(
-            label = stringResource(R.string.wallet__recipient_scan),
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_scan),
-                    contentDescription = null,
-                    tint = Colors.Brand,
-                    modifier = Modifier.size(28.dp),
-                )
-            },
-        ) {
-            onEvent(SendEvent.Scan)
-        }
-        Spacer(modifier = Modifier.weight(1f))
+            RectangleButton(
+                label = stringResource(R.string.wallet__recipient_scan),
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_scan),
+                        contentDescription = null,
+                        tint = Colors.Brand,
+                        modifier = Modifier.size(28.dp),
+                    )
+                },
+            ) {
+                onEvent(SendEvent.Scan)
+            }
+            Spacer(modifier = Modifier.weight(1f))
 
-        Image(
-            painter = painterResource(R.drawable.coin_stack_logo),
-            contentDescription = null,
-            contentScale = ContentScale.FillWidth,
-            modifier = Modifier.fillMaxWidth()
-        )
+            Image(
+                painter = painterResource(R.drawable.coin_stack_logo),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun SendOptionsContentPreview() {
     AppThemeSurface {

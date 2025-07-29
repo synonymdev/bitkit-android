@@ -3,8 +3,10 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -18,6 +20,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -27,8 +30,9 @@ fun LocationBlockScreen(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBackPressed)
 
@@ -58,11 +62,13 @@ fun LocationBlockScreen(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
-    LocationBlockScreen(
-        onBackPressed = {},
-        navigateAdvancedSetup = {}
-    )
+    AppThemeSurface {
+        LocationBlockScreen(
+            onBackPressed = {},
+            navigateAdvancedSetup = {}
+        )
+    }
 }

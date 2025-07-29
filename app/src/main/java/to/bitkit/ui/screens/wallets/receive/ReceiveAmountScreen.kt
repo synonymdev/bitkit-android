@@ -3,8 +3,10 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,8 +69,9 @@ fun ReceiveAmountScreen(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBack)
         Spacer(Modifier.height(24.dp))

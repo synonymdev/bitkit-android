@@ -155,7 +155,6 @@ fun EditInvoiceScreen(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditInvoiceContent(
     input: String,
@@ -176,10 +175,10 @@ fun EditInvoiceContent(
 ) {
     Box(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
-
         AnimatedVisibility(
             visible = !numericKeyboardVisible && !isSoftKeyboardVisible,
             enter = fadeIn(),
@@ -362,7 +361,7 @@ fun EditInvoiceContent(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -386,7 +385,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview2() {
     AppThemeSurface {
@@ -410,7 +409,7 @@ private fun Preview2() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview3() {
     AppThemeSurface {
