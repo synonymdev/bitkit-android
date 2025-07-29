@@ -12,20 +12,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.models.Toast
-import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -42,9 +36,6 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToLong
 
 @Composable
 fun SpendingAmountScreen(
@@ -53,12 +44,7 @@ fun SpendingAmountScreen(
     onCloseClick: () -> Unit = {},
     onOrderCreated: () -> Unit = {},
 ) {
-    val scope = rememberCoroutineScope()
-    val app = appViewModel ?: return
-    val blocktank = blocktankViewModel ?: return
     val currencies = LocalCurrencies.current
-    val resources = LocalContext.current.resources
-    val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
     val uiState by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
@@ -77,7 +63,6 @@ fun SpendingAmountScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            var overrideSats: Long? by remember { mutableStateOf(null) } //TODO MOVE TO VIEWMODEL
 
             Spacer(modifier = Modifier.height(32.dp))
             Display(
@@ -88,7 +73,7 @@ fun SpendingAmountScreen(
 
             AmountInput(
                 primaryDisplay = currencies.primaryDisplay,
-                overrideSats = overrideSats,
+                overrideSats = uiState.overrideSats,
                 onSatsChange = viewModel::onAmountChanged,
             )
 
@@ -114,18 +99,13 @@ fun SpendingAmountScreen(
                 NumberPadActionButton(
                     text = stringResource(R.string.lightning__spending_amount__quarter),
                     color = Colors.Purple,
-                    onClick = {
-                        val quarter = (uiState.balanceAfterFee.toDouble() / 4.0).roundToLong()
-                        overrideSats = min(quarter, uiState.maxAvailableToSend)
-                    },
+                    onClick = viewModel::onClickQuarter,
                 )
                 // Max Button
                 NumberPadActionButton(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
-                    onClick = {
-                        overrideSats = uiState.maxAvailableToSend
-                    },
+                    onClick = viewModel::onClickMaxAmount,
                 )
             }
             HorizontalDivider()

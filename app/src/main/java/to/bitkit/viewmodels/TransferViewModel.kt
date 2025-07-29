@@ -71,6 +71,27 @@ class TransferViewModel @Inject constructor(
         //TODO CALLBACK onOrderCreated
     }
 
+    fun onClickMaxAmount() {
+        _spendingUiState.update {
+            it.copy(
+                satsAmount = it.maxAvailableToSend,
+                overrideSats = it.maxAvailableToSend,
+            )
+        }
+        updateLimits(false)
+    }
+
+    fun onClickQuarter() {
+        val quarter = (_spendingUiState.value.balanceAfterFee.toDouble() * QUARTER).roundToLong()
+        _spendingUiState.update {
+            it.copy(
+                satsAmount = min(quarter, it.maxAvailableToSend),
+                overrideSats = min(quarter, it.maxAvailableToSend),
+            )
+        }
+        updateLimits(false)
+    }
+
     fun onConfirmAmount() {
         if (_transferValues.value.maxLspBalance == 0uL) {
 //            app.toast( //TODO DISPLAY TOAST
@@ -99,7 +120,7 @@ class TransferViewModel @Inject constructor(
 
     fun onAmountChanged(sats: Long) {
         //TODO HANDLE MAX AMOUNT
-        _spendingUiState.update { it.copy(satsAmount = sats) }
+        _spendingUiState.update { it.copy(satsAmount = sats, overrideSats = null) }
         retryTimes = 0
         updateLimits(retry = false)
     }
@@ -459,6 +480,7 @@ class TransferViewModel @Inject constructor(
         private const val TAG = "TransferViewModel"
         private const val DEFAULT_TX_FEE = 512u
         private const val RETRY_LIMIT = 5
+        private const val QUARTER = 0.25
     }
 }
 
@@ -468,6 +490,7 @@ data class TransferToSpendingUiState(
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
     val satsAmount: Long = 0,
+    val overrideSats: Long? = null,
     val maxAvailableToSend: Long = 0,
     val balanceAfterFee: Long = 0,
     val isLoading: Boolean = false,
