@@ -46,6 +46,13 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 - `mainnet` flavour = mainnet
 - `tnet` flavour = testnet
 
+### Build for E2E Testing
+Simply pass `E2E=true` as environment variable and build any flavor.
+
+```sh
+E2E=true ./gradlew assembleDevRelease
+```
+
 ### Build for Release
 
 **Prerequisites**  
