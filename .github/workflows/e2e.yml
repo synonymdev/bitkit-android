@@ -65,3 +65,42 @@ jobs:
 
       - name: List APK directory contents
         run: ls -l bitkit-e2e-tests/aut
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache npm cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: bitkit-e2e-tests
+        run: npm ci
+
+      - name: Run regtest setup
+        working-directory: bitkit-e2e-tests
+        run: |
+          cd docker
+          mkdir lnd && chmod 777 lnd
+          docker compose pull --quiet
+          docker compose up -d
+
+      - name: Wait for electrum server and LND
+        working-directory: bitkit-e2e-tests
+        timeout-minutes: 10
+        run: |
+          while ! nc -z '127.0.0.1' 60001; do sleep 1; done
+          sudo bash -c "while [ ! -f docker/lnd/data/chain/bitcoin/regtest/admin.macaroon ]; do sleep 1; done"
+          sudo chmod -R 777 docker/lnd
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
