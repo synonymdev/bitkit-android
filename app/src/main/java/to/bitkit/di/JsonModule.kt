@@ -5,6 +5,10 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
+import to.bitkit.data.dto.ActivityMetaData
 import javax.inject.Singleton
 
 val json = Json {
@@ -12,6 +16,12 @@ val json = Json {
     isLenient = true
     ignoreUnknownKeys = true
     encodeDefaults = true
+    serializersModule = SerializersModule {
+        polymorphic(ActivityMetaData::class) {
+            subclass(ActivityMetaData.OnChainActivity::class)
+            subclass(ActivityMetaData.Bolt11::class)
+        }
+    }
 }
 
 @Module
