@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.Toast
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.BottomSheetType
@@ -494,6 +495,14 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
                     onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                    toastException = { appViewModel.toast(it) },
+                    toast = { title, description ->
+                        appViewModel.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = title,
+                            description = description
+                        )
+                    },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {

@@ -1,16 +1,19 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,12 +24,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -35,6 +40,7 @@ import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.time.Duration.Companion.seconds
 
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
@@ -42,8 +48,10 @@ private const val EUR_CURRENCY = "EUR"
 
 @HiltViewModel
 class TransferViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
+    private val walletRepo: WalletRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
@@ -60,10 +68,93 @@ class TransferViewModel @Inject constructor(
     private val _transferValues = MutableStateFlow(TransferValues())
     val transferValues = _transferValues.asStateFlow()
 
+    val transferEffects = MutableSharedFlow<TransferEffect>()
+    fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
+    var retryTimes = 0
+
     // region Spending
 
-    fun onOrderCreated(order: IBtOrder) {
-        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+    fun onClickMaxAmount() {
+        _spendingUiState.update {
+            it.copy(
+                satsAmount = it.maxAllowedToSend,
+                overrideSats = it.maxAllowedToSend,
+            )
+        }
+        updateLimits(false)
+    }
+
+    fun onClickQuarter() {
+        val quarter = (_spendingUiState.value.balanceAfterFee.toDouble() * QUARTER).roundToLong()
+
+        if (quarter > _spendingUiState.value.maxAllowedToSend) {
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_max__description
+                    ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
+                )
+            )
+        }
+
+        _spendingUiState.update {
+            it.copy(
+                satsAmount = min(quarter, it.maxAllowedToSend),
+                overrideSats = min(quarter, it.maxAllowedToSend),
+            )
+        }
+        updateLimits(false)
+    }
+
+    fun onConfirmAmount() {
+        if (_transferValues.value.maxLspBalance == 0uL) {
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_max__description_zero
+                    ),
+                )
+            )
+            return
+        }
+
+        _spendingUiState.update { it.copy(isLoading = true) }
+
+        viewModelScope.launch {
+            blocktankRepo.createOrder(_spendingUiState.value.satsAmount.toULong())
+                .onSuccess { order ->
+                    onOrderCreated(order)
+                    _spendingUiState.update { it.copy(isLoading = false) }
+                }.onFailure { e ->
+                    setTransferEffect(TransferEffect.ToastException(e))
+                    _spendingUiState.update { it.copy(isLoading = false) }
+                }
+        }
+    }
+
+    fun onAmountChanged(sats: Long) {
+        if (sats > _spendingUiState.value.maxAllowedToSend) {
+            setTransferEffect(
+                TransferEffect.ToastError(
+                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                    description = context.getString(
+                        R.string.lightning__spending_amount__error_max__description
+                    ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
+                )
+            )
+        }
+
+        _spendingUiState.update { it.copy(satsAmount = sats, overrideSats = null) }
+
+        retryTimes = 0
+        updateLimits(retry = false)
+    }
+
+    fun updateLimits(retry: Boolean) {
+        updateTransferValues(_spendingUiState.value.satsAmount.toULong())
+        updateAvailableAmount(retry = retry)
     }
 
     fun onAdvancedOrderCreated(order: IBtOrder) {
@@ -133,6 +224,56 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    private fun onOrderCreated(order: IBtOrder) {
+        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+        setTransferEffect(TransferEffect.OnOrderCreated)
+    }
+
+    private fun updateAvailableAmount(retry: Boolean) {
+        viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
+
+            // Get the max available balance discounting onChain fee
+            val availableAmount = walletRepo.getMaxSendAmount()
+
+            // Calculate the LSP fee to the total balance
+            blocktankRepo.estimateOrderFee(
+                spendingBalanceSats = availableAmount,
+                receivingBalanceSats = _transferValues.value.maxLspBalance
+            ).onSuccess { estimate ->
+                retryTimes = 0
+                val maxLspFee = estimate.feeSat
+
+                // Calculate the available balance to send after LSP fee
+                val balanceAfterLspFee = availableAmount - maxLspFee
+
+                _spendingUiState.update {
+                    // Calculate the max available to send considering the current balance and LSP policy
+                    it.copy(
+                        maxAllowedToSend = min(
+                            _transferValues.value.maxClientBalance.toLong(),
+                            balanceAfterLspFee.toLong()
+                        ),
+                        isLoading = false,
+                        balanceAfterFee = availableAmount.toLong()
+                    )
+                }
+            }.onFailure { exception ->
+                if (exception is ServiceError.NodeNotStarted && retry) {
+                    // Retry after delay
+                    Logger.warn("Error getting the available amount. Node not started. trying again in 2 seconds")
+                    delay(2.seconds)
+                    updateAvailableAmount(retry = retryTimes <= RETRY_LIMIT)
+                    retryTimes++
+                } else {
+                    _spendingUiState.update { it.copy(isLoading = false) }
+                    Logger.error("Failure", exception)
+                    setTransferEffect(TransferEffect.ToastException(exception))
+                }
+            }
+        }
+    }
+
     private suspend fun updateOrder(order: IBtOrder): Int {
         var currentStep = 0
         if (order.channel != null) {
@@ -193,26 +334,22 @@ class TransferViewModel @Inject constructor(
         val maxChannelSize1 = (maxChannelSizeSat.toDouble() * 0.98).roundToLong().toULong()
 
         // The maximum channel size the user can open including existing channels
-        val maxChannelSize2 = if (maxChannelSize1 > channelsSize) maxChannelSize1 - channelsSize else 0u
+        val maxChannelSize2 = (maxChannelSize1 - channelsSize).coerceAtLeast(0u)
         val maxChannelSizeAvailableToIncrease = min(maxChannelSize1, maxChannelSize2)
 
         val minLspBalance = getMinLspBalance(clientBalanceSat, minChannelSizeSat)
-        val maxLspBalance = if (maxChannelSizeAvailableToIncrease > clientBalanceSat) {
-            maxChannelSizeAvailableToIncrease - clientBalanceSat
-        } else {
-            0u
-        }
+        val maxLspBalance = (maxChannelSizeAvailableToIncrease - clientBalanceSat).coerceAtLeast(0u)
         val defaultLspBalance = getDefaultLspBalance(clientBalanceSat, maxLspBalance)
         val maxClientBalance = getMaxClientBalance(maxChannelSizeAvailableToIncrease)
 
-        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) { // TODO DISPLAY ERROR
+        if (maxChannelSizeAvailableToIncrease < clientBalanceSat) {
             Logger.warn(
                 "Amount clientBalanceSat:$clientBalanceSat too large, max possible: $maxChannelSizeAvailableToIncrease",
                 context = TAG
             )
         }
 
-        if (defaultLspBalance < minLspBalance || defaultLspBalance > maxLspBalance) {
+        if (defaultLspBalance !in minLspBalance..maxLspBalance) {
             Logger.warn(
                 "Invalid defaultLspBalance:$defaultLspBalance " +
                     "min possible:$maxLspBalance, " +
@@ -367,6 +504,8 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
+        private const val RETRY_LIMIT = 5
+        private const val QUARTER = 0.25
     }
 }
 
@@ -375,6 +514,11 @@ data class TransferToSpendingUiState(
     val order: IBtOrder? = null,
     val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
+    val satsAmount: Long = 0,
+    val overrideSats: Long? = null,
+    val maxAllowedToSend: Long = 0,
+    val balanceAfterFee: Long = 0,
+    val isLoading: Boolean = false,
 )
 
 data class TransferValues(
@@ -383,4 +527,10 @@ data class TransferValues(
     val maxLspBalance: ULong = 0u,
     val maxClientBalance: ULong = 0u,
 )
+
+sealed interface TransferEffect {
+    data object OnOrderCreated : TransferEffect
+    data class ToastException(val e: Throwable) : TransferEffect
+    data class ToastError(val title: String, val description: String) : TransferEffect
+}
 // endregion
