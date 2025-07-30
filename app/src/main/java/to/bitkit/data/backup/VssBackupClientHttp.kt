@@ -17,32 +17,32 @@ import org.vss.KeyValue
 import org.vss.ListKeyVersionsRequest
 import org.vss.ListKeyVersionsResponse
 import org.vss.PutObjectRequest
+import to.bitkit.data.dto.VssListDto
+import to.bitkit.data.dto.VssObjectDto
 import to.bitkit.di.ProtoClient
 import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
-import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class VssBackupsClient @Inject constructor(
+class VssBackupClientHttp @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
-) {
+) : VssBackupClient {
     private fun getVssStoreId(): String = vssStoreIdProvider.getVssStoreId()
 
-    suspend fun putObject(
+    override suspend fun putObject(
         category: BackupCategory,
         data: ByteArray,
-        version: Long? = null,
-    ): Result<VssObjectInfo> =
+    ): Result<VssObjectDto> =
         runCatching {
             Logger.debug("Storing object for category: $category", context = TAG)
 
             val key = category.name.lowercase()
             val dataToBackup = ByteString.copyFrom(data)
-            val useVersion = version ?: getCurrentVersionForKey(key)
+            val useVersion = getCurrentVersionForKey(key)
 
             val keyValue = KeyValue.newBuilder()
                 .setKey(key)
@@ -60,14 +60,14 @@ class VssBackupsClient @Inject constructor(
             // VSS uses optimistic concurrency control: when you specify a version, you're saying
             // "update this object only if the current version matches". If successful, VSS
             // increments the version and returns the new version (useVersion + 1)
-            VssObjectInfo(
+            VssObjectDto(
                 key = key,
                 version = useVersion + 1,
                 data = data,
             )
         }
 
-    suspend fun getObject(category: BackupCategory): Result<VssObjectInfo> = runCatching {
+    override suspend fun getObject(category: BackupCategory): Result<VssObjectDto> = runCatching {
         Logger.debug("Retrieving object for category: $category", context = TAG)
 
         val key = category.name.lowercase()
@@ -80,14 +80,14 @@ class VssBackupsClient @Inject constructor(
         val responseBytes = response.readRawBytes()
         val getResponse = GetObjectResponse.parseFrom(responseBytes)
 
-        VssObjectInfo(
+        VssObjectDto(
             key = getResponse.value.key,
             version = getResponse.value.version,
             data = getResponse.value.value.toByteArray()
         )
     }
 
-    suspend fun deleteObject(category: BackupCategory, version: Long = -1): Result<Unit> = runCatching {
+    override suspend fun deleteObject(category: BackupCategory, version: Long): Result<Unit> = runCatching {
         Logger.debug("Deleting object for category: $category", context = TAG)
 
         val key = category.name.lowercase()
@@ -102,18 +102,14 @@ class VssBackupsClient @Inject constructor(
             .setKeyValue(keyValue)
             .build()
 
-        try {
-            post("/deleteObject", request)
-        } catch (_: VssError.NotFoundError) {
-            // Object doesn't exist - that's fine for delete (idempotent)
-        }
+        post("/deleteObject", request)
     }
 
-    suspend fun listObjects(
-        keyPrefix: String? = null,
-        pageSize: Int? = null,
-        pageToken: String? = null,
-    ): Result<VssListResult> = runCatching {
+    override suspend fun listObjects(
+        keyPrefix: String?,
+        pageSize: Int?,
+        pageToken: String?,
+    ): Result<VssListDto> = runCatching {
         Logger.debug("Listing objects with prefix: $keyPrefix", context = TAG)
 
         val requestBuilder = ListKeyVersionsRequest.newBuilder()
@@ -129,14 +125,14 @@ class VssBackupsClient @Inject constructor(
         val listResponse = ListKeyVersionsResponse.parseFrom(responseBytes)
 
         val objects = listResponse.keyVersionsList.map { keyValue ->
-            VssObjectInfo(
+            VssObjectDto(
                 key = keyValue.key,
                 version = keyValue.version,
                 data = ByteArray(0) // List doesn't include data
             )
         }
 
-        VssListResult(
+        VssListDto(
             objects = objects,
             nextPageToken = if (listResponse.hasNextPageToken()) listResponse.nextPageToken else null,
             globalVersion = if (listResponse.hasGlobalVersion()) listResponse.globalVersion else null
@@ -154,27 +150,9 @@ class VssBackupsClient @Inject constructor(
         // Handle common error responses
         when (response.status.value) {
             in 200..299 -> return response
-            400 -> {
-                val errorResponse = parseErrorResponse(response)
-                throw VssError.InvalidRequestError(errorResponse?.message ?: "Invalid request")
-            }
-
-            401 -> {
-                throw VssError.AuthError("Authentication failed")
-            }
-
-            404 -> {
-                throw VssError.NotFoundError("Resource not found")
-            }
-
-            409 -> {
-                val errorResponse = parseErrorResponse(response)
-                throw VssError.ConflictError("Version conflict: ${errorResponse?.message ?: "Unknown conflict"}")
-            }
-
             else -> {
                 val errorResponse = parseErrorResponse(response)
-                throw VssError.ServerError("Request failed with status: ${response.status}, message: ${errorResponse?.message}")
+                throw Exception("Request failed with status: ${response.status}, message: ${errorResponse?.message}")
             }
         }
     }
@@ -214,54 +192,12 @@ class VssBackupsClient @Inject constructor(
                 .firstOrNull { it.key == key }
                 ?.version ?: 0L // New object starts at version 0
         } else {
-            when (val error = currentVersionResult.exceptionOrNull()) {
-                is VssError.NotFoundError -> 0L // Treat as non-existent object
-                else -> throw error ?: Exception("Failed to get current version")
-            }
+            val error = currentVersionResult.exceptionOrNull()
+            throw error ?: Exception("Failed to get current version")
         }
     }
 
     companion object {
-        private const val TAG = "VssBackupClient"
+        private const val TAG = "VssBackupClientHttp"
     }
-}
-
-data class VssObjectInfo(
-    val key: String,
-    val version: Long,
-    val data: ByteArray,
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as VssObjectInfo
-
-        if (key != other.key) return false
-        if (version != other.version) return false
-        if (!data.contentEquals(other.data)) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = key.hashCode()
-        result = 31 * result + version.hashCode()
-        result = 31 * result + data.contentHashCode()
-        return result
-    }
-}
-
-data class VssListResult(
-    val objects: List<VssObjectInfo>,
-    val nextPageToken: String?,
-    val globalVersion: Long?,
-)
-
-sealed class VssError(message: String) : AppError(message) {
-    class ServerError(message: String) : VssError(message)
-    class AuthError(message: String) : VssError(message)
-    class ConflictError(message: String) : VssError(message)
-    class InvalidRequestError(message: String) : VssError(message)
-    class NotFoundError(message: String) : VssError(message)
 }

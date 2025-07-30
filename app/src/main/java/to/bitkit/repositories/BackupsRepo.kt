@@ -19,8 +19,8 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
-import to.bitkit.data.backup.VssBackupsClient
-import to.bitkit.data.backup.VssObjectInfo
+import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.dto.VssObjectDto
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.json
@@ -38,7 +38,7 @@ class BackupsRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val cacheStore: CacheStore,
-    private val vssBackupsClient: VssBackupsClient,
+    private val backupClient: VssBackupClient,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
 ) {
@@ -59,6 +59,7 @@ class BackupsRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
+        backupClient.setup()
         startBackupStatusObservers()
         startDataStoreListeners()
         startPeriodicBackupFailureCheck()
@@ -99,6 +100,8 @@ class BackupsRepo @Inject constructor(
                         old.synced == new.synced && old.required == new.required
                     }
                     .collect { status ->
+                        Logger.debug("Checking backup status for category: $category", context = TAG)
+
                         if (status.synced < status.required && !status.running && !isRestoring) {
                             scheduleBackup(category)
                         }
@@ -141,6 +144,8 @@ class BackupsRepo @Inject constructor(
     private fun scheduleBackup(category: BackupCategory) {
         // Cancel existing backup job for this category
         backupJobs[category]?.cancel()
+
+        Logger.debug("Scheduling backup for category: $category", context = TAG)
 
         backupJobs[category] = scope.launch {
             delay(BACKUP_DEBOUNCE)
@@ -278,11 +283,11 @@ class BackupsRepo @Inject constructor(
         }
     }
 
-    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssObjectInfo> {
+    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssObjectDto> {
         // TODO encrypt data before upload
         val encrypted = dataBytes
 
-        return vssBackupsClient.putObject(category, encrypted)
+        return backupClient.putObject(category, encrypted)
             .onSuccess {
                 Logger.info("Backup uploaded for category: $category", context = TAG)
             }
@@ -338,7 +343,7 @@ class BackupsRepo @Inject constructor(
     }
 
     private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
-        val objectInfo = vssBackupsClient.getObject(category).getOrThrow()
+        val objectInfo = backupClient.getObject(category).getOrThrow()
         objectInfo.data
     }
 

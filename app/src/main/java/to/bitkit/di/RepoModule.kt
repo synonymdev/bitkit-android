@@ -6,10 +6,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Named
 
-
 @Module
 @InstallIn(SingletonComponent::class)
-object CurrencyModule {
+object RepoModule {
 
     @Provides
     @Named("enablePolling")

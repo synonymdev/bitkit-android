@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 class VssBackupClientIntegrationTest : BaseUnitTest() {
 
     private lateinit var httpClient: HttpClient
-    private lateinit var vssClient: VssBackupsClient
+    private lateinit var vssClient: VssBackupClientHttp
 
     @Before
     fun setUp() {
@@ -37,7 +37,7 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
             on { getVssStoreId() } doReturn "test_vss_storeId"
         }
 
-        vssClient = VssBackupsClient(
+        vssClient = VssBackupClientHttp(
             httpClient = httpClient,
             vssStoreIdProvider = vssStoreIdProvider,
         )
@@ -172,35 +172,5 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
         println("Pagination result: ${listInfo.objects.size} objects returned")
         println("Next page token: ${listInfo.nextPageToken}")
         // Note: We can't guarantee the page size will be respected if there are fewer objects
-    }
-
-    @Test
-    fun `putObject with version should handle conflicts`() = test {
-        val testData1 = "test-version-data1-${System.currentTimeMillis()}".toByteArray()
-        val testData2 = "test-version-data2-${System.currentTimeMillis()}".toByteArray()
-        val category = BackupCategory.SLASHTAGS
-        println("Test data 1: ${String(testData1)}")
-        println("Test data 2: ${String(testData2)}")
-        println("Category: $category")
-
-        // Store initial object
-        println("Storing initial object...")
-        val putResult1 = vssClient.putObject(category, testData1)
-        assertTrue(putResult1.isSuccess, "First put should succeed")
-        val currentVersion = putResult1.getOrNull()?.version ?: 1
-        println("Initial object stored with version: $currentVersion")
-
-        // Try to update with wrong version (should fail with conflict)
-        println("Attempting update with wrong version (0)...")
-        val putResult2 = vssClient.putObject(category, testData2, version = 0)
-        assertTrue(putResult2.isFailure, "Put with wrong version should fail")
-        println("Version conflict detected as expected: ${putResult2.exceptionOrNull()?.message}")
-
-        // Update with correct version
-        println("Updating with correct version ($currentVersion)...")
-        val putResult3 = vssClient.putObject(category, testData2, version = currentVersion)
-        assertTrue(putResult3.isSuccess, "Put with correct version should succeed")
-        val newVersion = putResult3.getOrNull()?.version ?: -1
-        println("Update succeeded with new version: $newVersion")
     }
 }
