@@ -232,12 +232,9 @@ class TransferViewModel @Inject constructor(
     private fun updateAvailableAmount(retry: Boolean) {
         viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }
-            val onChainBalance = walletRepo.balanceState.value.totalOnchainSats
-            val totalFeeFromAvailableAmount = lightningRepo.calculateTotalFee(amountSats = onChainBalance)
-                .getOrDefault(DEFAULT_TX_FEE.toULong())
 
             // Get the max available balance discounting onChain fee
-            val availableAmount = onChainBalance - totalFeeFromAvailableAmount
+            val availableAmount = walletRepo.getMaxSendAmount()
 
             // Calculate the LSP fee to the total balance
             blocktankRepo.estimateOrderFee(
@@ -507,7 +504,6 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
-        private const val DEFAULT_TX_FEE = 512u
         private const val RETRY_LIMIT = 5
         private const val QUARTER = 0.25
     }
