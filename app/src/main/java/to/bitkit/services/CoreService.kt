@@ -282,8 +282,9 @@ class ActivityService(
                             }
 
                             val existingActivity = getActivityById(payment.id)
-                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
-                                    ?: 0u) > payment.latestUpdateTimestamp
+                            if (
+                                existingActivity as? Activity.Onchain != null
+                                && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
@@ -334,19 +335,34 @@ class ActivityService(
                                 continue
                             }
 
-                            val ln = LightningActivity(
-                                id = payment.id,
-                                txType = payment.direction.toPaymentType(),
-                                status = state,
-                                value = payment.amountSats ?: 0u,
-                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                invoice = "lnbc123_todo", // TODO
-                                message = kind.description.orEmpty(),
-                                timestamp = payment.latestUpdateTimestamp,
-                                preimage = kind.preimage,
-                                createdAt = payment.latestUpdateTimestamp,
-                                updatedAt = payment.latestUpdateTimestamp,
-                            )
+                            val existingActivity = getActivityById(payment.id)
+                            if (
+                                existingActivity as? Activity.Lightning != null
+                                && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+                            ) {
+                                continue
+                            }
+
+                            val ln = if (existingActivity is Activity.Lightning) {
+                                existingActivity.v1.copy(
+                                    updatedAt = payment.latestUpdateTimestamp,
+                                    status = state
+                                )
+                            } else {
+                                LightningActivity(
+                                    id = payment.id,
+                                    txType = payment.direction.toPaymentType(),
+                                    status = state,
+                                    value = payment.amountSats ?: 0u,
+                                    fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                    invoice = "loading...",
+                                    message = kind.description.orEmpty(),
+                                    timestamp = payment.latestUpdateTimestamp,
+                                    preimage = kind.preimage,
+                                    createdAt = payment.latestUpdateTimestamp,
+                                    updatedAt = payment.latestUpdateTimestamp,
+                                )
+                            }
 
                             if (getActivityById(payment.id) != null) {
                                 updateActivity(payment.id, Activity.Lightning(ln))

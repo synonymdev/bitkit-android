@@ -15,6 +15,7 @@ import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.dto.rawId
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
@@ -259,6 +260,7 @@ class ActivityRepo @Inject constructor(
                         val updatedActivity = Activity.Lightning(
                             v1 = activityToUpdate.v1.copy(
                                 invoice = metaData?.invoice.orEmpty(),
+                                timestamp = nowTimestamp().toEpochMilli().toULong()
                             )
                         )
 
@@ -266,7 +268,16 @@ class ActivityRepo @Inject constructor(
                             id = updatedActivity.v1.id,
                             activity = updatedActivity
                         ).onSuccess {
+                            Logger.debug(
+                                "updateActivitiesMetaData - Activity updated with success. " +
+                                    "new data: $updatedActivity", context = TAG
+                            )
                             cacheStore.removeActivityMetaData(activityMetaData)
+                        }.onFailure {
+                            Logger.warn(
+                                "updateActivitiesMetaData - Failed updating activity ${updatedActivity.rawId()}",
+                                context = TAG
+                            )
                         }
                     }
 
