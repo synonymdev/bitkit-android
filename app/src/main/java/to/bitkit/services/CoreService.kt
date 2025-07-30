@@ -282,9 +282,8 @@ class ActivityService(
                             }
 
                             val existingActivity = getActivityById(payment.id)
-                            if (
-                                existingActivity as? Activity.Onchain != null
-                                && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
+                                    ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
