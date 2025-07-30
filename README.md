@@ -1,7 +1,7 @@
 # Bitkit Android (Native)
 
 > [!CAUTION]
-> ⚠️This **NOT** the repository of the Bitkit app from the app stores!<br>
+> ⚠️This is **NOT** the repository of the Bitkit app from the app stores!<br>
 > ⚠️Work-in-progress<br>
 > The Bitkit app repository is here: **[github.com/synonymdev/bitkit](https://github.com/synonymdev/bitkit)**
 
