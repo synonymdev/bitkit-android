@@ -172,19 +172,11 @@ class TransferViewModel @Inject constructor(
                     address = order.payment.onchain.address,
                     sats = order.feeSat,
                     speed = speed,
+                    isTransfer = true,
+                    channelId = order.channel?.shortChannelId,
                 )
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)
-                    cacheStore.addActivityMetaData(
-                        ActivityMetaData.OnChainActivity(
-                            txId = txId,
-                            feeRate = 1u, //TODO UPDATE sendOnChain result
-                            address = order.payment.onchain.address,
-                            isTransfer = true,
-                            channelId = order.channel?.shortChannelId,
-                            transferTxId = txId
-                        )
-                    )
                     settingsStore.update { it.copy(lightningSetupStep = 0) }
                     watchOrder(order.id)
                 }

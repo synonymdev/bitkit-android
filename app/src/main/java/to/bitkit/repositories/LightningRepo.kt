@@ -500,6 +500,8 @@ class LightningRepo @Inject constructor(
         sats: ULong,
         speed: TransactionSpeed? = null,
         utxosToSpend: List<SpendableUtxo>? = null,
+        isTransfer: Boolean = false,
+        channelId: String? = null,
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
@@ -523,9 +525,9 @@ class LightningRepo @Inject constructor(
                 txId = txId,
                 feeRate = satsPerVByte,
                 address = address,
-                isTransfer = false,
-                channelId = null,
-                transferTxId = null
+                isTransfer = isTransfer,
+                channelId = channelId,
+                transferTxId = txId.takeIf { isTransfer }
             ))
             syncState()
             Result.success(txId)
