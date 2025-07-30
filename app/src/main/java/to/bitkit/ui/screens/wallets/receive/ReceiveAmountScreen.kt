@@ -3,8 +3,10 @@ package to.bitkit.ui.screens.wallets.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,10 +34,10 @@ import to.bitkit.models.Toast
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.AmountInput
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.clickableAlpha
@@ -67,8 +69,9 @@ fun ReceiveAmountScreen(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin), onBack = onBack)
         Spacer(Modifier.height(24.dp))

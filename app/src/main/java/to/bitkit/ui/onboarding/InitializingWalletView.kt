@@ -43,12 +43,15 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import kotlin.math.roundToInt
 
+const val LOADING_MS = 2000
+const val RESTORING_MS = 8000
+
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun InitializingWalletView(
     shouldFinish: Boolean,
     onComplete: () -> Unit,
-    isRestoringBackups: Boolean = false,
+    isRestoring: Boolean = false,
 ) {
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
@@ -56,7 +59,7 @@ fun InitializingWalletView(
     ) {
         val percentage = remember { Animatable(0f) }
 
-        val animationDuration = if (isRestoringBackups) 8000 else 2000
+        val animationDuration = if (isRestoring) RESTORING_MS else LOADING_MS
 
         // Progress to 100%
         LaunchedEffect(animationDuration) {
