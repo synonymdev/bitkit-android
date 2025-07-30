@@ -77,7 +77,7 @@ fun SpendingConfirmScreen(
         onAdvancedClick = onAdvancedClick,
         onConfirm = onConfirm,
         onUseDefaultLspBalanceClick = { viewModel.onUseDefaultLspBalanceClick() },
-        onTransferToSpendingConfirm = { order -> order },
+        onTransferToSpendingConfirm = { order -> viewModel.onTransferToSpendingConfirm(order) },
         order = order,
         isAdvanced = isAdvanced
     )
