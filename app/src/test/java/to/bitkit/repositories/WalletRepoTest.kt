@@ -283,13 +283,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `setRestoringWalletState should update state`() = test {
-        sut.setRestoringWalletState(true)
-
-        assertTrue(sut.walletState.value.isRestoringWallet)
-    }
-
-    @Test
     fun `setOnchainAddress should update storage and state`() = test {
         val testAddress = "testAddress"
 

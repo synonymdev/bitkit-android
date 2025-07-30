@@ -179,10 +179,6 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    fun setRestoringWalletState(isRestoring: Boolean) {
-        _walletState.update { it.copy(isRestoringWallet = isRestoring) }
-    }
-
     suspend fun createWallet(bip39Passphrase: String?): Result<Unit> = withContext(bgDispatcher) {
         try {
             val mnemonic = generateEntropyMnemonic()
@@ -526,6 +522,5 @@ data class WalletState(
     val selectedTags: List<String> = listOf(),
     val receiveOnSpendingBalance: Boolean = true,
     val walletExists: Boolean = false,
-    val isRestoringWallet: Boolean = false,
     val balanceDetails: BalanceDetails? = null, // TODO KEEP ONLY BalanceState IF POSSIBLE
 )

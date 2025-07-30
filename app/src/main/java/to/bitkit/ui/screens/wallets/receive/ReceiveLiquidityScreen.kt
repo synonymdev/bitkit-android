@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ fun ReceiveLiquidityScreen(
         modifier = Modifier
             .fillMaxWidth()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(
             stringResource(if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title),
@@ -79,7 +81,7 @@ fun ReceiveLiquidityScreen(
     }
 }
 
-@Preview(showBackground = true, name = "Initial flow")
+@Preview(showSystemUi = true, name = "Initial flow")
 @Composable
 private fun Preview() {
     AppThemeSurface {
@@ -99,7 +101,7 @@ private fun Preview() {
     }
 }
 
-@Preview(showBackground = true, name = "Additional flow")
+@Preview(showSystemUi = true, name = "Additional flow")
 @Composable
 private fun Preview2() {
     AppThemeSurface {
