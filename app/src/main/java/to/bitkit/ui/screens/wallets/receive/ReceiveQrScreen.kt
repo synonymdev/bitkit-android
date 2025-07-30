@@ -9,13 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
@@ -128,7 +128,6 @@ fun ReceiveQrSheet(
             .fillMaxWidth()
             .fillMaxHeight(SheetSize.LARGE)
             .imePadding()
-            .navigationBarsPadding()
     ) {
         NavHost(
             navController = navController,
@@ -314,22 +313,20 @@ private fun ReceiveQrScreen(
         mutableIntStateOf(resId)
     }
 
+    val onchainAddress = walletState.onchainAddress
+    val uri = cjitInvoice.value ?: walletState.bip21
+
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
-        Spacer(Modifier.height(24.dp))
-
-        val onchainAddress = walletState.onchainAddress
-        val uri = cjitInvoice.value ?: walletState.bip21
-
         Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .weight(1f)
+            modifier = Modifier.padding(horizontal = 16.dp)
         ) {
+            Spacer(Modifier.height(24.dp))
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)

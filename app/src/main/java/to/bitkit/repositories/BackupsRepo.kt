@@ -313,6 +313,7 @@ class BackupsRepo @Inject constructor(
             Logger.info("Full restore completed", context = TAG)
             Result.success(Unit)
         } catch (e: Throwable) {
+            Logger.warn("Full restore error", e = e, context = TAG)
             Result.failure(e)
         } finally {
             isRestoring = false
