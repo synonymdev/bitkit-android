@@ -3,7 +3,6 @@ package to.bitkit.data.serializers
 import androidx.datastore.core.Serializer
 import kotlinx.serialization.SerializationException
 import to.bitkit.data.AppCacheData
-import to.bitkit.data.SettingsData
 import to.bitkit.di.json
 import to.bitkit.utils.Logger
 import java.io.InputStream

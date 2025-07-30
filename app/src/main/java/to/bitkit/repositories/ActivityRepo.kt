@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.data.CacheStore
+import to.bitkit.data.dto.ActivityMetaData
 import to.bitkit.data.dto.PendingBoostActivity
+import to.bitkit.data.dto.rawId
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.rawId
@@ -46,6 +48,7 @@ class ActivityRepo @Inject constructor(
                 .onSuccess { payments ->
                     Logger.debug("Got payments with success, syncing activities", context = TAG)
                     syncLdkNodePayments(payments = payments)
+                    updateActivitiesMetaData()
                     boostPendingActivities()
                     isSyncingLdkNodePayments = false
                     return@withContext Result.success(Unit)
@@ -183,7 +186,7 @@ class ActivityRepo @Inject constructor(
     suspend fun updateActivity(
         id: String,
         activity: Activity,
-        forceUpdate: Boolean = false
+        forceUpdate: Boolean = false,
     ): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
             if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
@@ -237,6 +240,56 @@ class ActivityRepo @Inject constructor(
         cacheStore.data.first().activitiesPendingDelete.forEach { activityId ->
             deleteActivity(id = activityId).onSuccess {
                 cacheStore.removeActivityFromPendingDelete(activityId)
+            }
+        }
+    }
+
+    private suspend fun updateActivitiesMetaData() = withContext(bgDispatcher) {
+        cacheStore.data.first().activitiesMetaData.forEach { activityMetaData ->
+            findActivityByPaymentId(
+                paymentHashOrTxId = activityMetaData.rawId(),
+                type = ActivityFilter.ALL,
+                txType = PaymentType.SENT
+            ).onSuccess { activityToUpdate ->
+                Logger.debug("updateActivitiesMetaData = Activity found: ${activityToUpdate.rawId()}", context = TAG)
+
+                when (activityToUpdate) {
+                    is Activity.Lightning -> {
+                        val metaData = activityMetaData as? ActivityMetaData.Bolt11
+                        val updatedActivity = Activity.Lightning(
+                            v1 = activityToUpdate.v1.copy(
+                                invoice = metaData?.invoice.orEmpty(),
+                            )
+                        )
+
+                        updateActivity(
+                            id = updatedActivity.v1.id,
+                            activity = updatedActivity
+                        ).onSuccess {
+                            cacheStore.removeActivityMetaData(activityMetaData)
+                        }
+                    }
+
+                    is Activity.Onchain -> {
+                        val metaData = activityMetaData as? ActivityMetaData.OnChainActivity
+                        val updatedActivity = Activity.Onchain(
+                            v1 = activityToUpdate.v1.copy(
+                                feeRate = metaData?.feeRate?.toULong() ?: 1u,
+                                address = metaData?.address.orEmpty(),
+                                isTransfer = metaData?.isTransfer ?: false,
+                                channelId = metaData?.channelId,
+                                transferTxId = metaData?.transferTxId
+                            )
+                        )
+
+                        updateActivity(
+                            id = updatedActivity.v1.id,
+                            activity = updatedActivity
+                        ).onSuccess {
+                            cacheStore.removeActivityMetaData(activityMetaData)
+                        }
+                    }
+                }
             }
         }
     }
@@ -353,7 +406,7 @@ class ActivityRepo @Inject constructor(
         paymentHashOrTxId: String,
         type: ActivityFilter,
         txType: PaymentType,
-        tags: List<String>
+        tags: List<String>,
     ): Result<Unit> = withContext(bgDispatcher) {
 
         if (tags.isEmpty()) return@withContext Result.failure(IllegalArgumentException("No tags selected"))

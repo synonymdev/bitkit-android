@@ -27,6 +27,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.ActivityMetaData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -475,6 +476,10 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
         executeWhenNodeRunning("Pay invoice") {
             val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
+            cacheStore.addActivityMetaData(ActivityMetaData.Bolt11(
+                paymentId = paymentId,
+                invoice = bolt11
+            ))
             syncState()
             Result.success(paymentId)
         }
@@ -514,6 +519,14 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = finalUtxosToSpend,
             )
+            cacheStore.addActivityMetaData(ActivityMetaData.OnChainActivity(
+                txId = txId,
+                feeRate = satsPerVByte,
+                address = address,
+                isTransfer = false,
+                channelId = null,
+                transferTxId = null
+            ))
             syncState()
             Result.success(txId)
         }
