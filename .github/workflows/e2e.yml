@@ -35,11 +35,16 @@ jobs:
           E2E: true
         run: ./gradlew assembleDevDebug
 
+      - name: Rename APK
+        run: |
+          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-android-*-devDebug.apk')
+          mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: bitkit-e2e-apk
-          path: app/build/outputs/apk/dev/debug/bitkit-android-11-devDebug.apk
+          path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -57,9 +62,6 @@ jobs:
         with:
           name: bitkit-e2e-apk
           path: bitkit-e2e-tests/aut
-
-      - name: Rename APK
-        run: mv bitkit-e2e-tests/aut/bitkit-android-11-devDebug.apk bitkit-e2e-tests/aut/bitkit_e2e.apk
 
       - name: List APK directory contents
         run: ls -l bitkit-e2e-tests/aut
