@@ -27,6 +27,8 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.ActivityMetaData
+import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
@@ -173,6 +175,16 @@ class TransferViewModel @Inject constructor(
                 )
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)
+                    cacheStore.addActivityMetaData(
+                        ActivityMetaData.OnChainActivity(
+                            txId = txId,
+                            feeRate = 1u, //TODO UPDATE sendOnChain result
+                            address = order.payment.onchain.address,
+                            isTransfer = true,
+                            channelId = order.channel?.shortChannelId,
+                            transferTxId = txId
+                        )
+                    )
                     settingsStore.update { it.copy(lightningSetupStep = 0) }
                     watchOrder(order.id)
                 }
