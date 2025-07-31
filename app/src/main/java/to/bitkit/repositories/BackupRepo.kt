@@ -19,8 +19,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
-import to.bitkit.data.backup.BackupClient
-import to.bitkit.data.dto.VssObjectDto
+import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.json
@@ -30,6 +29,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.Toast
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import uniffi.vss_rust_client_ffi.VssItem
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,7 +38,7 @@ class BackupRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val cacheStore: CacheStore,
-    private val backupClient: BackupClient,
+    private val vssBackupClient: VssBackupClient,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
 ) {
@@ -59,7 +59,7 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        scope.launch { backupClient.setup() }
+        scope.launch { vssBackupClient.setup() }
         startBackupStatusObservers()
         startDataStoreListeners()
         startPeriodicBackupFailureCheck()
@@ -277,11 +277,11 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssObjectDto> {
+    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssItem> {
         // TODO encrypt data before upload
         val encrypted = dataBytes
 
-        return backupClient.putObject(category, encrypted)
+        return vssBackupClient.putObject(category.name, encrypted)
     }
 
     suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
@@ -319,7 +319,7 @@ class BackupRepo @Inject constructor(
         category: BackupCategory,
         restoreAction: suspend (ByteArray) -> Unit,
     ): Result<Unit> = runCatching {
-        fetchBackupData(category)
+        vssBackupClient.getObject(category.name).map { it?.value }
             .onSuccess { dataBytes ->
                 if (dataBytes == null) {
                     Logger.warn("Restore null for: '$category'", context = TAG)
@@ -335,10 +335,6 @@ class BackupRepo @Inject constructor(
         cacheStore.updateBackupStatus(category) {
             it.copy(running = false, synced = System.currentTimeMillis())
         }
-    }
-
-    private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray?> {
-        return backupClient.getObject(category).map { it?.data }
     }
 
     companion object {
