@@ -411,6 +411,7 @@ private fun ActivityDetailContent(
                     text = stringResource(R.string.wallet__activity_assign),
                     size = ButtonSize.Small,
                     onClick = { /* TODO: Implement assign functionality */ },
+                    enabled = !isSelfSend,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_user_plus),
