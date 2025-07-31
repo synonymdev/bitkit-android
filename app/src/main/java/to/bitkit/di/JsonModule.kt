@@ -19,7 +19,6 @@ val json = Json {
     serializersModule = SerializersModule {
         polymorphic(ActivityMetaData::class) {
             subclass(ActivityMetaData.OnChainActivity::class)
-            subclass(ActivityMetaData.Bolt11::class)
         }
     }
 }
