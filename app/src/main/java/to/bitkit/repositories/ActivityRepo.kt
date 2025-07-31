@@ -103,7 +103,9 @@ class ActivityRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType,
     ): Result<Activity> = withContext(bgDispatcher) {
-        if (paymentHashOrTxId.isEmpty()) return@withContext Result.failure(IllegalArgumentException("paymentHashOrTxId is empty"))
+        if (paymentHashOrTxId.isEmpty()) return@withContext Result.failure(
+            IllegalArgumentException("paymentHashOrTxId is empty")
+        )
 
         return@withContext try {
             suspend fun findActivity(): Activity? = getActivities(
@@ -135,10 +137,13 @@ class ActivityRepo @Inject constructor(
                 }
             }
 
-            if (activity != null) Result.success(activity) else Result.failure(IllegalStateException("Activity not found"))
+            if (activity != null) Result.success(activity) else Result.failure(
+                IllegalStateException("Activity not found")
+            )
         } catch (e: Exception) {
             Logger.error(
-                "findActivityByPaymentId error. Parameters:\n paymentHashOrTxId:$paymentHashOrTxId type:$type txType:$txType",
+                "findActivityByPaymentId error. Parameters:" +
+                    "\n paymentHashOrTxId:$paymentHashOrTxId type:$type txType:$txType",
                 context = TAG
             )
             Result.failure(e)
@@ -162,7 +167,15 @@ class ActivityRepo @Inject constructor(
             coreService.activity.get(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
         }.onFailure { e ->
             Logger.error(
-                "getActivities error. Parameters:\nfilter:$filter txType:$txType tags:$tags search:$search minDate:$minDate maxDate:$maxDate limit:$limit sortDirection:$sortDirection",
+                "getActivities error. Parameters:" +
+                    "\nfilter:$filter " +
+                    "txType:$txType " +
+                    "tags:$tags " +
+                    "search:$search " +
+                    "minDate:$minDate " +
+                    "maxDate:$maxDate " +
+                    "limit:$limit " +
+                    "sortDirection:$sortDirection",
                 e = e,
                 context = TAG
             )
@@ -192,7 +205,11 @@ class ActivityRepo @Inject constructor(
         return@withContext runCatching {
             if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
                 Logger.debug("Activity $id was deleted", context = TAG)
-                return@withContext Result.failure(Exception("Activity $id was deleted. If you want update it, set forceUpdate as true"))
+                return@withContext Result.failure(
+                    Exception(
+                        "Activity $id was deleted. If you want update it, set forceUpdate as true"
+                    )
+                )
             }
             coreService.activity.update(id, activity)
         }.onFailure { e ->
@@ -201,7 +218,8 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Updates an activity and delete other one. In case of failure in the update or deletion, the data will be cached to try again on the next sync
+     * Updates an activity and delete other one. In case of failure in the update or deletion, the data will be cached
+     * to try again on the next sync
      */
     suspend fun replaceActivity(
         id: String,
@@ -228,7 +246,8 @@ class ActivityRepo @Inject constructor(
             },
             onFailure = { e ->
                 Logger.error(
-                    "Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
+                    "Update activity fail. Parameters: id:$id, " +
+                        "activityIdToDelete:$activityIdToDelete activity:$activity",
                     e = e,
                     context = TAG
                 )
