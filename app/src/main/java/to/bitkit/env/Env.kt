@@ -123,7 +123,7 @@ internal object Env {
     }
 
     fun buildBitrefillUri(
-        page: String
+        page: String,
     ): String {
         return "$BIT_REFILL_URL/$page/$BITREFILL_PARAMS"
     }

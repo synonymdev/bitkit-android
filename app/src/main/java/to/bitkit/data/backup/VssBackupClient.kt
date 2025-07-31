@@ -6,7 +6,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.models.BackupCategory
 import to.bitkit.utils.Logger
 import uniffi.vss_rust_client_ffi.VssItem
 import uniffi.vss_rust_client_ffi.vssGet
@@ -34,7 +33,7 @@ class VssBackupClient @Inject constructor(
                 isSetup.complete(Unit)
                 Logger.info("VSS client setup ok", context = TAG)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             isSetup.completeExceptionally(e)
             Logger.error("VSS client setup error", e = e, context = TAG)
         }

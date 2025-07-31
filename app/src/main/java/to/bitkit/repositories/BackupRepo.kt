@@ -139,6 +139,24 @@ class BackupRepo @Inject constructor(
         Logger.debug("Started ${dataListenerJobs.size} data store listeners", context = TAG)
     }
 
+    private fun startPeriodicBackupFailureCheck() {
+        periodicCheckJob = scope.launch {
+            while (true) {
+                delay(BACKUP_CHECK_INTERVAL)
+                checkForFailedBackups()
+            }
+        }
+    }
+
+    private fun markBackupRequired(category: BackupCategory) {
+        scope.launch {
+            cacheStore.updateBackupStatus(category) {
+                it.copy(required = System.currentTimeMillis())
+            }
+            Logger.debug("Marked backup required for: '$category'", context = TAG)
+        }
+    }
+
     private fun scheduleBackup(category: BackupCategory) {
         // Cancel existing backup job for this category
         backupJobs[category]?.cancel()
@@ -152,15 +170,6 @@ class BackupRepo @Inject constructor(
             val status = cacheStore.backupStatuses.first()[category] ?: BackupItemStatus()
             if (status.synced < status.required && !status.running && !isRestoring) {
                 triggerBackup(category)
-            }
-        }
-    }
-
-    private fun startPeriodicBackupFailureCheck() {
-        periodicCheckJob = scope.launch {
-            while (true) {
-                delay(BACKUP_CHECK_INTERVAL)
-                checkForFailedBackups()
             }
         }
     }
@@ -209,7 +218,7 @@ class BackupRepo @Inject constructor(
             it.copy(running = true, required = System.currentTimeMillis())
         }
 
-        performBackup(category)
+        encryptAndUpload(category)
             .onSuccess {
                 cacheStore.updateBackupStatus(category) {
                     it.copy(
@@ -227,18 +236,13 @@ class BackupRepo @Inject constructor(
             }
     }
 
-    fun markBackupRequired(category: BackupCategory) {
-        scope.launch {
-            cacheStore.updateBackupStatus(category) {
-                it.copy(required = System.currentTimeMillis())
-            }
-        }
-        Logger.debug("Marked backup required for: '$category'", context = TAG)
-    }
-
-    private suspend fun performBackup(category: BackupCategory): Result<Unit> = runCatching {
+    private suspend fun encryptAndUpload(category: BackupCategory): Result<VssItem> = runCatching {
         val dataBytes = getBackupDataBytes(category)
-        encryptAndUpload(category, dataBytes).getOrThrow()
+
+        // TODO encrypt data before upload
+        val encrypted = dataBytes
+
+        return vssBackupClient.putObject(category.name, encrypted)
     }
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
@@ -275,13 +279,6 @@ class BackupRepo @Inject constructor(
         BackupCategory.LIGHTNING_CONNECTIONS -> {
             throw NotImplementedError("Lightning connections backup not yet implemented")
         }
-    }
-
-    private suspend fun encryptAndUpload(category: BackupCategory, dataBytes: ByteArray): Result<VssItem> {
-        // TODO encrypt data before upload
-        val encrypted = dataBytes
-
-        return vssBackupClient.putObject(category.name, encrypted)
     }
 
     suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {

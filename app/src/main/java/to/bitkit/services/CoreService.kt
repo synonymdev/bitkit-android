@@ -340,7 +340,7 @@ class ActivityService(
                                 status = state,
                                 value = payment.amountSats ?: 0u,
                                 fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                invoice = kind.bolt11.orEmpty(),
+                                invoice = kind.bolt11 ?: "Loading…",
                                 message = kind.description.orEmpty(),
                                 timestamp = payment.latestUpdateTimestamp,
                                 preimage = kind.preimage,
