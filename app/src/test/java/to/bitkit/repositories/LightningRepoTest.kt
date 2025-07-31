@@ -7,23 +7,31 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.ActivityMetaData
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -338,6 +346,59 @@ class LightningRepoTest : BaseUnitTest() {
     fun `sendOnChain should fail when node is not running`() = test {
         val result = sut.sendOnChain("address", 1000uL)
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `sendOnChain should cache activity meta data`() = test {
+        val mockSettingsData = SettingsData(
+            defaultTransactionSpeed = TransactionSpeed.Fast,
+            coinSelectAuto = false // Disable auto coin selection to simplify the test
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
+
+        wheneverBlocking { cacheStore.addActivityMetaData(any()) }.thenReturn(Unit)
+
+        whenever(
+            lightningService.send(
+                address = any(),
+                sats = any(),
+                satsPerVByte = any(),
+                utxosToSpend = anyOrNull()
+            )
+        ).thenReturn("testPaymentId")
+
+        startNodeForTesting()
+
+        // Create a spy to mock the getFeeRateForSpeed method
+        val spySut = spy(sut)
+        doReturn(Result.success(10uL)).whenever(spySut).getFeeRateForSpeed(any())
+
+        val result = spySut.sendOnChain(
+            address = "test_address",
+            sats = 1000uL,
+            speed = TransactionSpeed.Fast,
+            utxosToSpend = null, // This was the missing parameter!
+            isTransfer = true,
+            channelId = "test_channel_id"
+        )
+
+        // Verify the result is successful
+        assertTrue(result.isSuccess)
+        assertEquals("testPaymentId", result.getOrNull())
+
+        // Verify the cache call
+        val captor = argumentCaptor<ActivityMetaData.OnChainActivity>()
+        verifyBlocking(cacheStore) {
+            addActivityMetaData(captor.capture())
+        }
+
+        val capturedActivity = captor.firstValue
+        assertEquals("testPaymentId", capturedActivity.txId)
+        assertEquals("test_address", capturedActivity.address)
+        assertEquals(true, capturedActivity.isTransfer)
+        assertEquals("test_channel_id", capturedActivity.channelId)
+        assertEquals("testPaymentId", capturedActivity.transferTxId)
+        assertEquals(10u, capturedActivity.feeRate)
     }
 
     @Test
