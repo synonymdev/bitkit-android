@@ -144,6 +144,8 @@ class TransferViewModel @Inject constructor(
                     ).replace("{amount}", _spendingUiState.value.maxAllowedToSend.toString()),
                 )
             )
+            _spendingUiState.update { it.copy(overrideSats = it.satsAmount) }
+            return
         }
 
         _spendingUiState.update { it.copy(satsAmount = sats, overrideSats = null) }

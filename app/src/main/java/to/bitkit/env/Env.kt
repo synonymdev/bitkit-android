@@ -21,6 +21,7 @@ internal object Env {
     val walletSyncIntervalSecs = 10_uL // TODO review
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
@@ -122,7 +123,7 @@ internal object Env {
     }
 
     fun buildBitrefillUri(
-        page: String
+        page: String,
     ): String {
         return "$BIT_REFILL_URL/$page/$BITREFILL_PARAMS"
     }
@@ -194,7 +195,8 @@ internal object Env {
     private const val BITREFILL_REF = "AL6dyZYt"
     private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
     private const val BITREFILL_APP_NAME = "Bitkit"
-    private const val BITREFILL_PARAMS = "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
+    private const val BITREFILL_PARAMS =
+        "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
     const val SYNONYM_CONTACT = "https://synonym.to/contact"
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"

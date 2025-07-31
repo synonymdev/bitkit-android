@@ -86,7 +86,7 @@ ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "k
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 #ldk-node-android = { module = "org.lightningdevkit:ldk-node-android", version = "0.6.1" } # upstream
-ldk-node-android = { module = "com.github.synonymdev:ldk-node", version = "v0.6.1-rc.3" } # fork
+ldk-node-android = { module = "com.github.synonymdev:ldk-node", version = "v0.6.1-rc.4" } # fork
 lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
@@ -116,7 +116,6 @@ lottie = { module = "com.airbnb.android:lottie-compose", version.ref = "lottieVe
 charts = { module = "io.github.ehsannarmani:compose-charts", version.ref = "composeChartsVersion" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
-protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version = "4.31.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -127,5 +126,4 @@ hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-protobuf = { id = "com.google.protobuf", version = "0.9.5" }
 room = { id = "androidx.room", version.ref = "room" }

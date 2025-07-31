@@ -21,10 +21,6 @@ import javax.inject.Qualifier
 import javax.inject.Singleton
 import io.ktor.client.plugins.logging.Logger as KtorLogger
 
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class ProtoClient
-
 @Module
 @InstallIn(SingletonComponent::class)
 object HttpModule {
@@ -44,20 +40,6 @@ object HttpModule {
             }
             defaultRequest {
                 contentType(ContentType.Application.Json)
-            }
-        }
-    }
-
-    @ProtoClient
-    @Provides
-    @Singleton
-    fun provideProtoHttpClient(): HttpClient {
-        return HttpClient {
-            install(HttpTimeout) {
-                this@install.defaultTimeoutConfig()
-            }
-            install(Logging) {
-                this@install.defaultLoggingConfig()
             }
         }
     }
