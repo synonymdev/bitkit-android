@@ -206,6 +206,7 @@ private fun ActivityDetailContent(
         is Activity.Lightning -> item.v1.fee
         is Activity.Onchain -> item.v1.fee
     }
+    val isSelfSend = isSent && paymentValue == 0uL
 
     Column(
         modifier = Modifier
@@ -226,7 +227,7 @@ private fun ActivityDetailContent(
                 forceShowBalance = true,
                 modifier = Modifier.weight(1f)
             )
-            ActivityIcon(activity = item, size = 48.dp)
+            ActivityIcon(activity = item, size = 48.dp) //TODO Display the user avatar when selfsend
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -289,7 +290,11 @@ private fun ActivityDetailContent(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Caption13Up(
-                        text = stringResource(R.string.wallet__activity_payment),
+                        text = if (isSelfSend) {
+                            "Sent to myself" //TODO translation
+                        } else {
+                            stringResource(R.string.wallet__activity_payment)
+                        },
                         color = Colors.White64,
                         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                     )
@@ -436,7 +441,13 @@ private fun ActivityDetailContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 PrimaryButton(
-                    text = stringResource(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost),
+                    text = stringResource(
+                        if (item.isBoosted()) {
+                            R.string.wallet__activity_boosted
+                        } else {
+                            R.string.wallet__activity_boost
+                        }
+                    ),
                     size = ButtonSize.Small,
                     onClick = onClickBoost,
                     enabled = item.canBeBoosted(),

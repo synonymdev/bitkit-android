@@ -24,7 +24,6 @@ class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val addressChecker: AddressChecker,
     private val coreService: CoreService,
-    private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TxDetails?>(null)
