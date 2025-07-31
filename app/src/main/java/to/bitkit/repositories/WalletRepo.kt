@@ -322,10 +322,8 @@ class WalletRepo @Inject constructor(
         }
 
         try {
-            val minFeeBuffer = 1000uL
-            val amountSats = (totalOnchainSats - minFeeBuffer).coerceAtLeast(0uL)
-            val fee = lightningRepo.calculateTotalFee(amountSats).getOrThrow()
-            val maxSendable = (totalOnchainSats - fee).coerceAtLeast(0uL)
+            val fee = lightningRepo.calculateTotalFee(totalOnchainSats).getOrThrow()
+            val maxSendable = (totalOnchainSats - fee).coerceAtLeast(0u)
 
             return@withContext maxSendable
         } catch (_: Throwable) {

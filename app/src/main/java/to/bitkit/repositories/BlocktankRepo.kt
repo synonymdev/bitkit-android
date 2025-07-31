@@ -230,6 +230,8 @@ class BlocktankRepo @Inject constructor(
         receivingBalanceSats: ULong,
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtEstimateFeeResponse2> = withContext(bgDispatcher) {
+        Logger.info("Estimating order fee for spendingSats=$spendingBalanceSats, receivingSats=$receivingBalanceSats")
+
         try {
             val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 
@@ -238,6 +240,8 @@ class BlocktankRepo @Inject constructor(
                 channelExpiryWeeks = channelExpiryWeeks,
                 options = options,
             )
+
+            Logger.debug("Estimated order fee: '$estimate'")
 
             Result.success(estimate)
         } catch (e: Throwable) {
