@@ -19,7 +19,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
-import to.bitkit.data.backup.VssBackupClient
+import to.bitkit.data.backup.BackupClient
 import to.bitkit.data.dto.VssObjectDto
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
@@ -34,11 +34,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BackupsRepo @Inject constructor(
+class BackupRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val cacheStore: CacheStore,
-    private val backupClient: VssBackupClient,
+    private val backupClient: BackupClient,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
 ) {
@@ -100,8 +100,6 @@ class BackupsRepo @Inject constructor(
                         old.synced == new.synced && old.required == new.required
                     }
                     .collect { status ->
-                        Logger.debug("Checking backup status for category: $category", context = TAG)
-
                         if (status.synced < status.required && !status.running && !isRestoring) {
                             scheduleBackup(category)
                         }

@@ -4,15 +4,15 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import to.bitkit.data.backup.VssBackupClient
-import to.bitkit.data.backup.VssBackupClientRust
+import to.bitkit.data.backup.BackupClient
+import to.bitkit.data.backup.BackupClientRust
 
 @Module
 @InstallIn(SingletonComponent::class)
 object BackupModule {
 
     @Provides
-    fun provideBackupClient(client: VssBackupClientRust) : VssBackupClient {
+    fun provideBackupClient(client: BackupClientRust) : BackupClient {
         return client
     }
 }

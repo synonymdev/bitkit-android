@@ -24,7 +24,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.repositories.BackupsRepo
+import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.onboarding.LOADING_MS
@@ -40,7 +40,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
-    private val backupsRepo: BackupsRepo,
+    private val backupRepo: BackupRepo,
 ) : ViewModel() {
 
     val lightningState = lightningRepo.lightningState
@@ -109,7 +109,7 @@ class WalletViewModel @Inject constructor(
         restoreState = RestoreState.RestoringBackups
 
         viewModelScope.launch(bgDispatcher) {
-            backupsRepo.performFullRestoreFromLatestBackup()
+            backupRepo.performFullRestoreFromLatestBackup()
             // data backup is not critical and mostly for user convenience so there is no reason to propagate errors up
             restoreState = RestoreState.BackupRestoreCompleted
         }

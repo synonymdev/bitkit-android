@@ -27,10 +27,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class VssBackupClientHttp @Inject constructor(
+class BackupClientHttp @Inject constructor(
     @ProtoClient private val httpClient: HttpClient,
     private val vssStoreIdProvider: VssStoreIdProvider,
-) : VssBackupClient {
+) : BackupClient {
     private fun getVssStoreId(): String = vssStoreIdProvider.getVssStoreId()
 
     override suspend fun putObject(
@@ -198,6 +198,6 @@ class VssBackupClientHttp @Inject constructor(
     }
 
     companion object {
-        private const val TAG = "VssBackupClientHttp"
+        private const val TAG = "BackupClientHttp"
     }
 }

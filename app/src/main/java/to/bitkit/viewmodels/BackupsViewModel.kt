@@ -12,14 +12,14 @@ import to.bitkit.data.CacheStore
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.repositories.BackupsRepo
+import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class BackupsViewModel @Inject constructor(
     private val cacheStore: CacheStore,
-    private val backupsRepo: BackupsRepo,
+    private val backupRepo: BackupRepo,
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
@@ -51,8 +51,8 @@ class BackupsViewModel @Inject constructor(
         viewModelScope.launch {
             lightningRepo.lightningState.collect { lightningState ->
                 when (lightningState.nodeLifecycleState) {
-                    NodeLifecycleState.Running -> backupsRepo.startObservingBackups()
-                    else -> backupsRepo.stopObservingBackups()
+                    NodeLifecycleState.Running -> backupRepo.startObservingBackups()
+                    else -> backupRepo.stopObservingBackups()
                 }
             }
         }
@@ -60,13 +60,13 @@ class BackupsViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        backupsRepo.stopObservingBackups()
+        backupRepo.stopObservingBackups()
     }
 
     fun retryBackup(category: BackupCategory) {
         viewModelScope.launch {
             delay(500) // small delay for UX feedback
-            backupsRepo.triggerBackup(category)
+            backupRepo.triggerBackup(category)
         }
     }
 }

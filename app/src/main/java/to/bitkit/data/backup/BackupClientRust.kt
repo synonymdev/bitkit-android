@@ -23,10 +23,10 @@ import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-class VssBackupClientRust @Inject constructor(
+class BackupClientRust @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val vssStoreIdProvider: VssStoreIdProvider,
-) : VssBackupClient {
+) : BackupClient {
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -149,6 +149,6 @@ class VssBackupClientRust @Inject constructor(
     }
 
     companion object {
-        private const val TAG = "VssBackupClientRust"
+        private const val TAG = "BackupClientRust"
     }
 }

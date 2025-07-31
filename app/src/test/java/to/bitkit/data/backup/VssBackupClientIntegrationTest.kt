@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 class VssBackupClientIntegrationTest : BaseUnitTest() {
 
     private lateinit var httpClient: HttpClient
-    private lateinit var vssClient: VssBackupClientHttp
+    private lateinit var vssClient: BackupClientHttp
 
     @Before
     fun setUp() {
@@ -37,7 +37,7 @@ class VssBackupClientIntegrationTest : BaseUnitTest() {
             on { getVssStoreId() } doReturn "test_vss_storeId"
         }
 
-        vssClient = VssBackupClientHttp(
+        vssClient = BackupClientHttp(
             httpClient = httpClient,
             vssStoreIdProvider = vssStoreIdProvider,
         )

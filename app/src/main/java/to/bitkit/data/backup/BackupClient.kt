@@ -4,7 +4,7 @@ import to.bitkit.data.dto.VssListDto
 import to.bitkit.data.dto.VssObjectDto
 import to.bitkit.models.BackupCategory
 
-interface VssBackupClient {
+interface BackupClient {
     fun setup() = Unit
     suspend fun putObject(category: BackupCategory, data: ByteArray): Result<VssObjectDto>
     suspend fun getObject(category: BackupCategory): Result<VssObjectDto>
