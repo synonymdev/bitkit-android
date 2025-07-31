@@ -48,7 +48,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: bitkit-e2e-apk
+          name: bitkit-e2e-apk_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
   e2e-tests:
@@ -71,7 +71,7 @@ jobs:
       - name: Download APK
         uses: actions/download-artifact@v4
         with:
-          name: bitkit-e2e-apk
+          name: bitkit-e2e-apk_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
 
       - name: List APK directory contents
@@ -127,7 +127,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-artifacts
+          name: e2e-artifacts_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
 
       - name: Dump docker logs on failure
