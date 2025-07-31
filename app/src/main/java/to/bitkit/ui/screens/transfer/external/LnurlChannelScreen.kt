@@ -15,12 +15,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.models.LnPeer
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
@@ -28,6 +29,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -93,7 +95,7 @@ private fun Content(
             VerticalSpacer(8.dp)
 
             val peer = uiState.peer
-            if(peer != null) {
+            if (peer != null) {
                 BodyM(text = stringResource(R.string.other__lnurl_channel_message), color = Colors.White64)
                 VerticalSpacer(48.dp)
 
@@ -102,7 +104,7 @@ private fun Content(
 
                 InfoRow(
                     label = stringResource(R.string.other__lnurl_channel_node),
-                    value = peer.nodeId.ellipsisMiddle(24),
+                    value = peer.nodeId,
                 )
                 InfoRow(
                     label = stringResource(R.string.other__lnurl_channel_host),
@@ -151,14 +153,14 @@ private fun InfoRow(
     value: String,
 ) {
     Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 16.dp)
     ) {
         CaptionB(text = label)
-        CaptionB(text = value)
+        FillWidth(min = 24.dp)
+        CaptionB(text = value, maxLines = 1, overflow = TextOverflow.MiddleEllipsis, textAlign = TextAlign.End)
     }
     HorizontalDivider()
 }
