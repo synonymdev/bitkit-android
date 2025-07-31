@@ -101,9 +101,11 @@ class ActivityRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType,
     ): Result<Activity> = withContext(bgDispatcher) {
-        if (paymentHashOrTxId.isEmpty()) return@withContext Result.failure(
-            IllegalArgumentException("paymentHashOrTxId is empty")
-        )
+        if (paymentHashOrTxId.isEmpty()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("paymentHashOrTxId is empty")
+            )
+        }
 
         return@withContext try {
             suspend fun findActivity(): Activity? = getActivities(
@@ -135,9 +137,11 @@ class ActivityRepo @Inject constructor(
                 }
             }
 
-            if (activity != null) Result.success(activity) else Result.failure(
-                IllegalStateException("Activity not found")
-            )
+            if (activity != null) {
+                Result.success(activity)
+            } else {
+                Result.failure(IllegalStateException("Activity not found"))
+            }
         } catch (e: Exception) {
             Logger.error(
                 "findActivityByPaymentId error. Parameters:" +
