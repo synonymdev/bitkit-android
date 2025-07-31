@@ -17,6 +17,6 @@ sealed interface ActivityMetaData {
     ) : ActivityMetaData
 }
 
-fun ActivityMetaData.rawId() = when(this) {
+fun ActivityMetaData.rawId() = when (this) {
     is ActivityMetaData.OnChainActivity -> txId
 }

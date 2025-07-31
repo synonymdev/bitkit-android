@@ -519,13 +519,14 @@ class LightningRepo @Inject constructor(
             )
             cacheStore.addActivityMetaData(
                 ActivityMetaData.OnChainActivity(
-                txId = txId,
-                feeRate = satsPerVByte,
-                address = address,
-                isTransfer = isTransfer,
-                channelId = channelId,
-                transferTxId = txId.takeIf { isTransfer }
-            ))
+                    txId = txId,
+                    feeRate = satsPerVByte,
+                    address = address,
+                    isTransfer = isTransfer,
+                    channelId = channelId,
+                    transferTxId = txId.takeIf { isTransfer }
+                )
+            )
             syncState()
             Result.success(txId)
         }

@@ -338,8 +338,8 @@ class ActivityService(
 
                             val existingActivity = getActivityById(payment.id)
                             if (
-                                existingActivity as? Activity.Lightning != null
-                                && (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+                                existingActivity as? Activity.Lightning != null &&
+                                (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
