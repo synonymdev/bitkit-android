@@ -119,7 +119,10 @@ jobs:
           avd-name: Pixel_6
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: cd bitkit-e2e-tests && npm run e2e:android -- --mochaOpts.grep "Can start onboarding"
+          script: |
+            # adb port forwarding for regtest
+            adb reverse tcp:60001 tcp:60001 
+            cd bitkit-e2e-tests && npm run e2e:android -- --mochaOpts.grep "Can start onboarding"
         env:
           RECORD_VIDEO: true
 
