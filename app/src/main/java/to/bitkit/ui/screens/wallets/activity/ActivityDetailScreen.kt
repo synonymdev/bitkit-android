@@ -157,7 +157,7 @@ fun ActivityDetailScreen(
                         app.toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.wallet__send_fee_error),
-                            description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance" //TODO CREATE STRING RESOURCE
+                            description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance" // TODO CREATE STRING RESOURCE
                         )
                     },
                     onMinFee = {
@@ -227,7 +227,7 @@ private fun ActivityDetailContent(
                 forceShowBalance = true,
                 modifier = Modifier.weight(1f)
             )
-            ActivityIcon(activity = item, size = 48.dp) //TODO Display the user avatar when selfsend
+            ActivityIcon(activity = item, size = 48.dp) // TODO Display the user avatar when selfsend
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -291,7 +291,7 @@ private fun ActivityDetailContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Caption13Up(
                         text = if (isSelfSend) {
-                            "Sent to myself" //TODO translation
+                            "Sent to myself" // TODO translation
                         } else {
                             stringResource(R.string.wallet__activity_payment)
                         },
