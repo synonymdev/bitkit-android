@@ -115,3 +115,12 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: cd bitkit-e2e-tests && npm run e2e:android -- --mochaOpts.grep "Can start onboarding"
+        env:
+          RECORD_VIDEO: true
+
+      - name: Upload E2E Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: bitkit-e2e-tests/artifacts/
