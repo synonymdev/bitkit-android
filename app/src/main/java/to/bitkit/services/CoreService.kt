@@ -300,16 +300,16 @@ class ActivityService(
                                     txId = kind.txid,
                                     value = payment.amountSats ?: 0u,
                                     fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                    feeRate = 1u,
-                                    address = "Loading...",
+                                    feeRate = 1u, // TODO: get from somewhere
+                                    address = "Loading...", // TODO: find address
                                     confirmed = isConfirmed,
                                     timestamp = timestamp,
                                     isBoosted = false,
-                                    isTransfer = false,
+                                    isTransfer = false, // TODO: handle when paying for order
                                     doesExist = true,
                                     confirmTimestamp = confirmedTimestamp,
-                                    channelId = null,
-                                    transferTxId = null,
+                                    channelId = null, // TODO: get from linked order
+                                    transferTxId = null, // TODO: get from linked order
                                     createdAt = timestamp,
                                     updatedAt = timestamp,
                                 )
