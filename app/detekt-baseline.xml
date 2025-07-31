@@ -4,6 +4,7 @@
   <CurrentIssues>
     <ID>AnnotationSpacing:AppDb.kt$AppDb$@Database( entities = [ ConfigEntity::class, InvoiceTagEntity::class, ], version = 2, ) @TypeConverters(StringListConverter::class) abstract</ID>
     <ID>AnnotationSpacing:Change.kt$Change$@Serializable data</ID>
+    <ID>AnnotationSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend</ID>
     <ID>ArgumentListWrapping:ActivityDetailScreen.kt$(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost)</ID>
     <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$("Activity $id was deleted. If you want update it, set forceUpdate as true")</ID>
     <ID>ArgumentListWrapping:ActivityRepo.kt$ActivityRepo$("Activity not found")</ID>
@@ -71,10 +72,23 @@
     <ID>ArgumentListWrapping:SettingUpScreen.kt$(accentColor = Colors.Purple)</ID>
     <ID>ArgumentListWrapping:SettingsTextButtonRow.kt$( verticalArrangement = Arrangement.Center, modifier = Modifier .weight(1f) .padding(end = 16.dp) )</ID>
     <ID>ArgumentListWrapping:ShopWebViewClient.kt$ShopWebViewClient$( """ window.ReactNativeWebView = { postMessage: function(data) { Android.postMessage(data); } }; // Override the default postMessage if it exists if (window.postMessage) { window.originalPostMessage = window.postMessage; window.postMessage = function(data) { if (typeof data === 'string') { Android.postMessage(data); } else { Android.postMessage(JSON.stringify(data)); } }; } """.trimIndent(), null )</ID>
-    <ID>ArgumentListWrapping:VssBackupsClient.kt$VssBackupsClient$("Request failed with status: ${response.status}, message: ${errorResponse?.message}")</ID>
     <ID>ArgumentListWrapping:VssStoreIdProvider.kt$VssStoreIdProvider$("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")</ID>
     <ID>ArgumentListWrapping:WeatherService.kt$WeatherService$("Failed to fetch historical fee data: ${response.status.description}")</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(FfiConverterOptionalString.lower(`prefix`),)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(FfiConverterSequenceTypeKeyValue.lower(`items`),)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(FfiConverterString.lower(`baseUrl`),FfiConverterString.lower(`storeId`),)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(FfiConverterString.lower(`key`),FfiConverterByteArray.lower(`value`),)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`baseUrl`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`items`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`key`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`prefix`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`storeId`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(`value`)</ID>
+    <ID>ArgumentListWrapping:vss_rust_client_ffi.kt$(future, continuation)</ID>
     <ID>BlockCommentInitialStarAlignment:Theme.kt$ColorPalette$/* onPrimary = Color.White, onSecondary = Color.Black, onBackground = Color.Black, onSurface = Color.Black, */</ID>
+    <ID>ChainWrapping:vss_rust_client_ffi.kt$FfiConverterTypeVssError$+</ID>
+    <ID>ClassNaming:vss_rust_client_ffi.kt$_UniFFILib : Library</ID>
+    <ID>ClassNaming:vss_rust_client_ffi.kt$uniffiRustFutureContinuationCallback : UniFffiRustFutureContinuationCallbackType</ID>
     <ID>CommentSpacing:ActivityDetailScreen.kt$//TODO CREATE STRING RESOURCE</ID>
     <ID>CommentSpacing:CreateProfileScreen.kt$//TODO IMPLEMENT</ID>
     <ID>CommentSpacing:NumberPadTextField.kt$//Convert fiat to sats</ID>
@@ -125,6 +139,7 @@
     <ID>ComposableParamOrder:SendAmountScreen.kt$SendAmountContent</ID>
     <ID>ComposableParamOrder:SendAmountScreen.kt$SendAmountScreen</ID>
     <ID>ComposableParamOrder:SheetHost.kt$SheetHost</ID>
+    <ID>ComposableParamOrder:SpendingAmountScreen.kt$SpendingAmountScreen</ID>
     <ID>ComposableParamOrder:SuggestionCard.kt$SuggestionCard</ID>
     <ID>ComposableParamOrder:SwipeToConfirm.kt$SwipeToConfirm</ID>
     <ID>ComposableParamOrder:TextInput.kt$TextInput</ID>
@@ -178,7 +193,6 @@
     <ID>CyclomaticComplexMethod:SettingsButtonRow.kt$@Composable fun SettingsButtonRow( title: String, modifier: Modifier = Modifier, subtitle: String? = null, value: SettingsButtonValue = SettingsButtonValue.None, description: String? = null, iconRes: Int? = null, iconTint: Color = Color.Unspecified, iconSize: Dp = 32.dp, maxLinesSubtitle: Int = Int.MAX_VALUE, enabled: Boolean = true, loading: Boolean = false, onClick: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:Slider.kt$@Composable fun StepSlider( value: Int, steps: List&lt;Int&gt;, onValueChange: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
     <ID>CyclomaticComplexMethod:WakeNodeWorker.kt$WakeNodeWorker$private suspend fun handleLdkEvent(event: Event)</ID>
-    <ID>CyclomaticComplexMethod:WalletInitResultView.kt$@Composable fun WalletInitResultView( result: WalletInitResult, onButtonClick: () -&gt; Unit, onProceedWithoutRestore: (() -&gt; Unit)? = null, )</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:ActivityRow.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:BalanceHeaderView.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:DefaultUnitSettingsScreen.kt$val (_, _, _, selectedCurrency, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
@@ -195,7 +209,7 @@
     <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$orderPaymentConfirmed</ID>
     <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$wakeToTimeout</ID>
     <ID>Filename:BoostTransactionViewModelTest.kt$to.bitkit.ui.screens.wallets.activity.BoostTransactionViewModelTest.kt</ID>
-    <ID>Filename:EnablePolling.kt$to.bitkit.di.EnablePolling.kt</ID>
+    <ID>Filename:vss_rust_client_ffi.kt$uniffi.vss_rust_client_ffi.vss_rust_client_ffi.kt</ID>
     <ID>ForbiddenComment:ActivityDetailScreen.kt$/* TODO: Implement assign functionality */</ID>
     <ID>ForbiddenComment:ActivityDetailScreen.kt$// TODO: handle isTransfer</ID>
     <ID>ForbiddenComment:ActivityListViewModel.kt$ActivityListViewModel$// TODO: sync only on specific events for better performance</ID>
@@ -203,7 +217,7 @@
     <ID>ForbiddenComment:AppViewModel.kt$AppViewModel$// TODO: fee is not the sats sent. Need to get this amount from elsewhere like send flow or something.</ID>
     <ID>ForbiddenComment:AppViewModel.kt$AppViewModel$// TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.</ID>
     <ID>ForbiddenComment:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$// TODO: get from actual repository state</ID>
-    <ID>ForbiddenComment:BackupsRepo.kt$BackupsRepo$// TODO: Add other backup categories as they get implemented:</ID>
+    <ID>ForbiddenComment:BackupRepo.kt$BackupRepo$// TODO: Add other backup categories as they get implemented:</ID>
     <ID>ForbiddenComment:BoostTransactionViewModel.kt$BoostTransactionUiState$// TODO: Implement dynamic time estimation</ID>
     <ID>ForbiddenComment:ChannelStatusView.kt$// TODO: handle closed channels marking &amp; detection</ID>
     <ID>ForbiddenComment:CoreService.kt$ActivityService$// TODO: find address</ID>
@@ -218,10 +232,121 @@
     <ID>ForbiddenComment:SuccessScreen.kt$// TODO: verify backup</ID>
     <ID>ForbiddenComment:TransferIntroScreen.kt$// TODO: show on first LN suggestion card click</ID>
     <ID>ForbiddenComment:TransferViewModel.kt$TransferViewModel$// TODO: showBottomSheet: forceTransfer</ID>
-    <ID>FunctionOnlyReturningConstant:EnablePolling.kt$CurrencyModule$@Provides @Named("enablePolling") fun provideEnablePolling(): Boolean</ID>
+    <ID>ForbiddenComment:vss_rust_client_ffi.kt$UniFfiHandleMap$// TODO: refactor callbacks to use this class</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssDelete`(`key`: String) : Boolean</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssGet`(`key`: String) : VssItem?</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssListKeys`(`prefix`: String?) : List&lt;KeyVersion&gt;</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssList`(`prefix`: String?) : List&lt;VssItem&gt;</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssNewClient`(`baseUrl`: String, `storeId`: String)</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssPutWithKeyPrefix`(`items`: List&lt;KeyValue&gt;) : List&lt;VssItem&gt;</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssStore`(`key`: String, `value`: ByteArray) : VssItem</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_f32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_f64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_i16(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_i32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_i64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_i8(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_pointer(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_rust_buffer(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_u16(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_u32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_u64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_u8(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_cancel_void(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_f32(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Float</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_f64(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Double</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_i16(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_i32(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Int</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_i64(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Long</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_i8(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Byte</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_pointer(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_rust_buffer(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): RustBuffer.ByValue</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_u16(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_u32(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Int</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_u64(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Long</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_u8(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Byte</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_complete_void(`handle`: Pointer,_uniffi_out_err: RustCallStatus, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_continuation_callback_set(`callback`: UniFffiRustFutureContinuationCallbackType, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_f32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_f64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_i16(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_i32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_i64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_i8(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_pointer(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_rust_buffer(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_u16(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_u32(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_u64(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_u8(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_free_void(`handle`: Pointer, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_f32(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_f64(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_i16(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_i32(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_i64(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_i8(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_pointer(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_rust_buffer(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_u16(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_u32(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_u64(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_u8(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rust_future_poll_void(`handle`: Pointer,`uniffiCallback`: USize, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rustbuffer_alloc(`size`: Int,_uniffi_out_err: RustCallStatus, ): RustBuffer.ByValue</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rustbuffer_free(`buf`: RustBuffer.ByValue,_uniffi_out_err: RustCallStatus, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,_uniffi_out_err: RustCallStatus, ): RustBuffer.ByValue</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Int,_uniffi_out_err: RustCallStatus, ): RustBuffer.ByValue</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun ffi_vss_rust_client_ffi_uniffi_contract_version( ): Int</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_delete( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_get( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_list( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_list_keys( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_new_client( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_put_with_key_prefix( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_shutdown_client( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_checksum_func_vss_store( ): Short</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_delete(`key`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_get(`key`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_list(`prefix`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_list_keys(`prefix`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_new_client(`baseUrl`: RustBuffer.ByValue,`storeId`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_put_with_key_prefix(`items`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_shutdown_client(_uniffi_out_err: RustCallStatus, ): Unit</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$_UniFFILib$fun uniffi_vss_rust_client_ffi_fn_func_vss_store(`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue, ): Pointer</ID>
+    <ID>FunctionNaming:vss_rust_client_ffi.kt$fun `vssShutdownClient`()</ID>
+    <ID>FunctionOnlyReturningConstant:RepoModule.kt$RepoModule$@Provides @Named("enablePolling") fun provideEnablePolling(): Boolean</ID>
     <ID>FunctionOnlyReturningConstant:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun isReady(): Boolean</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$CallStatusErrorHandler$error_buf: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$_uniffi_out_err: RustCallStatus</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`additional`: Int</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`baseUrl`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`buf`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`bytes`: ForeignBytes.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`callback`: UniFffiRustFutureContinuationCallbackType</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`handle`: Pointer</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`items`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`key`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`prefix`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`size`: Int</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`storeId`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`uniffiCallback`: USize</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$_UniFFILib$`value`: RustBuffer.ByValue</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`baseUrl`: String</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`items`: List&lt;KeyValue&gt;</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`key`: String</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`prefix`: String?</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`storeId`: String</ID>
+    <ID>FunctionParameterNaming:vss_rust_client_ffi.kt$`value`: ByteArray</ID>
     <ID>FunctionReturnTypeSpacing:Bip39Utils.kt$fun List&lt;String&gt;.validBip39Checksum() : Boolean</ID>
     <ID>FunctionReturnTypeSpacing:InvoiceTagDao.kt$InvoiceTagDao$@Query("SELECT * FROM invoice_tag WHERE paymentHash = :paymentHash LIMIT 1") suspend fun searchInvoice(paymentHash: String) : InvoiceTagEntity?</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssDelete`(`key`: String) : Boolean</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssGet`(`key`: String) : VssItem?</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssListKeys`(`prefix`: String?) : List&lt;KeyVersion&gt;</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssList`(`prefix`: String?) : List&lt;VssItem&gt;</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssPutWithKeyPrefix`(`items`: List&lt;KeyValue&gt;) : List&lt;VssItem&gt;</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssStore`(`key`: String, `value`: ByteArray) : VssItem</ID>
+    <ID>FunctionReturnTypeSpacing:vss_rust_client_ffi.kt$USize.Companion$fun readFromBuffer(buf: ByteBuffer) : USize</ID>
     <ID>ImplicitDefaultLocale:BlocksService.kt$BlocksService$String.format("%.2f", blockInfo.difficulty / 1_000_000_000_000.0)</ID>
     <ID>ImplicitDefaultLocale:PriceService.kt$PriceService$String.format("%.2f", price)</ID>
     <ID>ImportOrdering:ActivityListFilter.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.width import androidx.compose.material3.Tab import androidx.compose.material3.TabRow import androidx.compose.material3.Text import androidx.compose.runtime.Composable import androidx.compose.ui.Modifier import androidx.compose.ui.graphics.Color import androidx.compose.ui.platform.LocalFocusManager import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import to.bitkit.R import to.bitkit.ui.components.SearchInputIconButton import to.bitkit.ui.components.SearchInput import to.bitkit.ui.theme.AppThemeSurface</ID>
@@ -242,13 +367,32 @@
     <ID>ImportOrdering:NumberPadTextField.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.saveable.rememberSaveable import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.platform.LocalInspectionMode import androidx.compose.ui.semantics.contentDescription import androidx.compose.ui.semantics.semantics import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import okhttp3.internal.toLongOrDefault import to.bitkit.ext.removeSpaces import to.bitkit.models.BITCOIN_SYMBOL import to.bitkit.models.BitcoinDisplayUnit import to.bitkit.models.PrimaryDisplay import to.bitkit.models.SATS_IN_BTC import to.bitkit.models.formatToModernDisplay import to.bitkit.models.asBtc import to.bitkit.ui.currencyViewModel import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.viewmodels.CurrencyViewModel import java.math.BigDecimal</ID>
     <ID>ImportOrdering:PinCheckScreen.kt$import androidx.compose.animation.AnimatedVisibility import androidx.compose.foundation.background import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.text.style.TextAlign import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import to.bitkit.R import to.bitkit.env.Env import to.bitkit.ui.appViewModel import to.bitkit.ui.components.BodyM import to.bitkit.ui.components.BodyS import to.bitkit.ui.components.KEY_DELETE import to.bitkit.ui.components.PinDots import to.bitkit.ui.components.NumberPadSimple import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors</ID>
     <ID>ImportOrdering:PinDots.kt$import androidx.compose.foundation.background import androidx.compose.foundation.border import androidx.compose.foundation.layout.Box import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.shape.CircleShape import androidx.compose.runtime.Composable import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.draw.clip import androidx.compose.ui.unit.dp import to.bitkit.env.Env import to.bitkit.ui.theme.Colors</ID>
-    <ID>ImportOrdering:ReceiveAmountScreen.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.material3.CircularProgressIndicator import androidx.compose.material3.HorizontalDivider import androidx.compose.runtime.Composable import androidx.compose.runtime.LaunchedEffect import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableLongStateOf import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.rememberCoroutineScope import androidx.compose.runtime.saveable.rememberSaveable import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.res.stringResource import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import kotlinx.coroutines.delay import kotlinx.coroutines.isActive import kotlinx.coroutines.launch import to.bitkit.R import to.bitkit.models.NodeLifecycleState import to.bitkit.models.Toast import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.appViewModel import to.bitkit.ui.blocktankViewModel import to.bitkit.ui.components.Caption13Up import to.bitkit.ui.components.MoneySSB import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.components.AmountInput import to.bitkit.ui.components.UnitButton import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.clickableAlpha import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.Colors import to.bitkit.ui.walletViewModel import to.bitkit.utils.Logger</ID>
     <ID>ImportOrdering:SendAmountScreen.kt$import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.fillMaxSize import androidx.compose.foundation.layout.fillMaxWidth import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.navigationBarsPadding import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.width import androidx.compose.material3.HorizontalDivider import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.runtime.mutableStateOf import androidx.compose.runtime.remember import androidx.compose.runtime.setValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.platform.testTag import androidx.compose.ui.res.stringResource import androidx.compose.ui.tooling.preview.Preview import androidx.compose.ui.unit.dp import com.synonym.bitkitcore.LnurlPayData import com.synonym.bitkitcore.LnurlWithdrawData import to.bitkit.R import to.bitkit.models.BalanceState import to.bitkit.models.BitcoinDisplayUnit import to.bitkit.models.NodeLifecycleState import to.bitkit.models.PrimaryDisplay import to.bitkit.ext.maxSendableSat import to.bitkit.ext.maxWithdrawableSat import to.bitkit.ui.LocalBalances import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.components.AmountInputHandler import to.bitkit.ui.components.Keyboard import to.bitkit.ui.components.MoneySSB import to.bitkit.ui.components.NumberPadActionButton import to.bitkit.ui.components.NumberPadTextField import to.bitkit.ui.components.PrimaryButton import to.bitkit.ui.components.SyncNodeView import to.bitkit.ui.components.Text13Up import to.bitkit.ui.components.UnitButton import to.bitkit.ui.currencyViewModel import to.bitkit.ui.scaffold.SheetTopBar import to.bitkit.ui.shared.util.gradientBackground import to.bitkit.ui.theme.AppThemeSurface import to.bitkit.ui.theme.Colors import to.bitkit.viewmodels.CurrencyUiState import to.bitkit.viewmodels.LnurlParams import to.bitkit.viewmodels.MainUiState import to.bitkit.viewmodels.SendEvent import to.bitkit.viewmodels.SendMethod import to.bitkit.viewmodels.SendUiState</ID>
     <ID>ImportOrdering:WakeNodeWorker.kt$import android.content.Context import androidx.hilt.work.HiltWorker import androidx.work.CoroutineWorker import androidx.work.WorkerParameters import androidx.work.workDataOf import dagger.assisted.Assisted import dagger.assisted.AssistedInject import kotlinx.coroutines.CompletableDeferred import kotlinx.coroutines.withTimeout import kotlinx.serialization.json.JsonObject import kotlinx.serialization.json.JsonPrimitive import kotlinx.serialization.json.contentOrNull import kotlinx.serialization.json.jsonObject import org.lightningdevkit.ldknode.Event import to.bitkit.di.json import to.bitkit.models.NewTransactionSheetDetails import to.bitkit.models.NewTransactionSheetDirection import to.bitkit.models.NewTransactionSheetType import to.bitkit.models.BlocktankNotificationType import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived import to.bitkit.models.BlocktankNotificationType.incomingHtlc import to.bitkit.models.BlocktankNotificationType.mutualClose import to.bitkit.models.BlocktankNotificationType.orderPaymentConfirmed import to.bitkit.models.BlocktankNotificationType.wakeToTimeout import to.bitkit.repositories.LightningRepo import to.bitkit.services.CoreService import to.bitkit.ui.pushNotification import to.bitkit.utils.Logger import to.bitkit.utils.withPerformanceLogging import kotlin.time.Duration.Companion.minutes</ID>
     <ID>ImportOrdering:WalletBalanceView.kt$import androidx.compose.animation.AnimatedContent import androidx.compose.foundation.layout.Arrangement import androidx.compose.foundation.layout.Column import androidx.compose.foundation.layout.Row import androidx.compose.foundation.layout.RowScope import androidx.compose.foundation.layout.Spacer import androidx.compose.foundation.layout.height import androidx.compose.foundation.layout.padding import androidx.compose.foundation.layout.size import androidx.compose.material3.Icon import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.graphics.Color import androidx.compose.ui.graphics.painter.Painter import androidx.compose.ui.unit.dp import androidx.lifecycle.compose.collectAsStateWithLifecycle import to.bitkit.models.ConvertedAmount import to.bitkit.models.PrimaryDisplay import to.bitkit.ui.LocalCurrencies import to.bitkit.ui.currencyViewModel import to.bitkit.ui.settingsViewModel import to.bitkit.ui.shared.animations.BalanceAnimations import to.bitkit.ui.shared.UiConstants import to.bitkit.ui.theme.Colors</ID>
+    <ID>ImportOrdering:vss_rust_client_ffi.kt$import com.sun.jna.Library import com.sun.jna.IntegerType import com.sun.jna.Native import com.sun.jna.Pointer import com.sun.jna.Structure import com.sun.jna.Callback import com.sun.jna.ptr.* import java.nio.ByteBuffer import java.nio.ByteOrder import java.nio.CharBuffer import java.nio.charset.CodingErrorAction import java.util.concurrent.ConcurrentHashMap import kotlin.coroutines.resume import kotlinx.coroutines.CancellableContinuation import kotlinx.coroutines.suspendCancellableCoroutine</ID>
     <ID>Indentation:App.kt$App$ </ID>
     <ID>Indentation:BalanceAnimations.kt$BalanceAnimations$ </ID>
     <ID>Indentation:HighBalanceWarningSheet.kt$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverter$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverterTypeKeyValue$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverterTypeKeyVersion$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverterTypeListKeyVersionsResponse$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverterTypeVssError$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$FfiConverterTypeVssItem$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$RustBuffer.Companion$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.AuthException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.ConnectionException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.DeleteException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.GetException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.InvalidData$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.ListException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.NetworkException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.PutException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.StoreException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$VssException.UnknownException$ </ID>
+    <ID>Indentation:vss_rust_client_ffi.kt$_UniFFILib.Companion$ </ID>
     <ID>InstanceOfCheckForException:LightningService.kt$LightningService$e is NodeException</ID>
     <ID>LambdaParameterEventTrailing:BoostTransactionSheet.kt$onSwipe</ID>
     <ID>LambdaParameterEventTrailing:CalculatorCard.kt$onFiatChange</ID>
@@ -285,6 +429,9 @@
     <ID>LambdaParameterInRestartableEffect:SendAndReviewScreen.kt$onNavigateToPin</ID>
     <ID>LambdaParameterInRestartableEffect:SendOptionsView.kt$onComplete</ID>
     <ID>LambdaParameterInRestartableEffect:SheetHost.kt$onDismiss</ID>
+    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$onOrderCreated</ID>
+    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$toast</ID>
+    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$toastException</ID>
     <ID>LargeClass:AppViewModel.kt$AppViewModel : ViewModel</ID>
     <ID>LongMethod:AppViewModel.kt$AppViewModel$private fun observeLdkNodeEvents()</ID>
     <ID>LongMethod:AppViewModel.kt$AppViewModel$private suspend fun proceedWithPayment()</ID>
@@ -308,8 +455,10 @@
     <ID>LongParameterList:LightningRepo.kt$LightningRepo$( walletIndex: Int = 0, timeout: Duration? = null, shouldRetry: Boolean = true, eventHandler: NodeEventHandler? = null, customServer: ElectrumServer? = null, customRgsServerUrl: String? = null, )</ID>
     <ID>LongParameterList:Nav.kt$( typeMap: Map&lt;KType, NavType&lt;*&gt;&gt; = emptyMap(), deepLinks: List&lt;NavDeepLink&gt; = emptyList(), noinline enterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenSlideIn }, noinline exitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenScaleOut }, noinline popEnterTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; EnterTransition?)? = { screenScaleIn }, noinline popExitTransition: (AnimatedContentTransitionScope&lt;NavBackStackEntry&gt;.() -&gt; ExitTransition?)? = { screenSlideOut }, noinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -&gt; Unit, )</ID>
     <ID>LongParameterList:Notifications.kt$( title: String?, text: String?, extras: Bundle? = null, bigText: String? = null, id: Int = Random.nextInt(), context: Context, )</ID>
+    <ID>LongParameterList:TransferViewModel.kt$TransferViewModel$( @ApplicationContext private val context: Context, private val lightningRepo: LightningRepo, private val blocktankRepo: BlocktankRepo, private val walletRepo: WalletRepo, private val currencyRepo: CurrencyRepo, private val settingsStore: SettingsStore, private val cacheStore: CacheStore, )</ID>
     <ID>LongParameterList:WalletRepo.kt$WalletRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val db: AppDb, private val keychain: Keychain, private val coreService: CoreService, private val settingsStore: SettingsStore, private val addressChecker: AddressChecker, private val lightningRepo: LightningRepo, private val cacheStore: CacheStore, )</ID>
     <ID>LongParameterList:WidgetsRepo.kt$WidgetsRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val newsService: NewsService, private val factsService: FactsService, private val blocksService: BlocksService, private val weatherService: WeatherService, private val priceService: PriceService, private val widgetsStore: WidgetsStore, private val settingsStore: SettingsStore, )</ID>
+    <ID>LongParameterList:vss_rust_client_ffi.kt$( rustFuture: Pointer, pollFunc: (Pointer, USize) -&gt; Unit, completeFunc: (Pointer, RustCallStatus) -&gt; F, freeFunc: (Pointer) -&gt; Unit, liftFunc: (F) -&gt; T, errorHandler: CallStatusErrorHandler&lt;E&gt; )</ID>
     <ID>LoopWithTooManyJumpStatements:CoreService.kt$ActivityService$for</ID>
     <ID>LoopWithTooManyJumpStatements:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$for</ID>
     <ID>LoopWithTooManyJumpStatements:TransferViewModel.kt$TransferViewModel$while</ID>
@@ -349,11 +498,11 @@
     <ID>MagicNumber:ArticleModel.kt$60</ID>
     <ID>MagicNumber:AutoReadClipboardHandler.kt$1000</ID>
     <ID>MagicNumber:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$200</ID>
+    <ID>MagicNumber:BackupRepo.kt$BackupRepo$60000</ID>
     <ID>MagicNumber:BackupSettingsScreen.kt$1000</ID>
     <ID>MagicNumber:BackupSettingsScreen.kt$35</ID>
     <ID>MagicNumber:BackupSettingsScreen.kt$5</ID>
     <ID>MagicNumber:BackupSettingsScreen.kt$60</ID>
-    <ID>MagicNumber:BackupsRepo.kt$BackupsRepo$60000</ID>
     <ID>MagicNumber:BackupsViewModel.kt$BackupsViewModel$500</ID>
     <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$200</ID>
     <ID>MagicNumber:BalanceAnimations.kt$BalanceAnimations$300</ID>
@@ -437,9 +586,7 @@
     <ID>MagicNumber:HttpModule.kt$HttpModule$30_000</ID>
     <ID>MagicNumber:HttpModule.kt$HttpModule$60_000</ID>
     <ID>MagicNumber:InactivityTracker.kt$1000</ID>
-    <ID>MagicNumber:InitializingWalletView.kt$2000</ID>
     <ID>MagicNumber:InitializingWalletView.kt$500</ID>
-    <ID>MagicNumber:InitializingWalletView.kt$8000</ID>
     <ID>MagicNumber:InitializingWalletView.kt$99.9</ID>
     <ID>MagicNumber:Keyboard.kt$0.2f</ID>
     <ID>MagicNumber:Keyboard.kt$3</ID>
@@ -526,13 +673,29 @@
     <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$225</ID>
     <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$450</ID>
     <ID>MagicNumber:TransferViewModel.kt$TransferViewModel$495</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$200</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$299</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$400</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$401</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$404</ID>
-    <ID>MagicNumber:VssBackupsClient.kt$VssBackupsClient$409</ID>
     <ID>MagicNumber:WalletRepo.kt$WalletRepo$0.9</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$24</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterByteArray$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterSequenceTypeKeyValue$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterSequenceTypeKeyVersion$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterSequenceTypeVssItem$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterString$3</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterString$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$10</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$3</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$5</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$6</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$7</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$8</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$FfiConverterTypeVssError$9</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$RustBufferByReference$16</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$RustBufferByReference$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$RustBufferByReference$8</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$USize$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$USize$8</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$USize.Companion$4</ID>
+    <ID>MagicNumber:vss_rust_client_ffi.kt$USize.Companion$8</ID>
     <ID>MatchingDeclarationName:AddressType.kt$AddressTypeInfo</ID>
     <ID>MatchingDeclarationName:AdvancedSettingsScreen.kt$AdvancedSettingsTestTags</ID>
     <ID>MatchingDeclarationName:BackupSettingsScreen.kt$BackupSettingsTestTags</ID>
@@ -540,7 +703,6 @@
     <ID>MatchingDeclarationName:Button.kt$ButtonSize</ID>
     <ID>MatchingDeclarationName:CoinSelectPreferenceScreen.kt$CoinSelectPreferenceTestTags</ID>
     <ID>MatchingDeclarationName:CoinSelectionScreen.kt$CoinSelectionTestTags</ID>
-    <ID>MatchingDeclarationName:EnablePolling.kt$CurrencyModule</ID>
     <ID>MatchingDeclarationName:LightningChannel.kt$ChannelStatusUi</ID>
     <ID>MatchingDeclarationName:LightningConnectionsScreen.kt$LightningConnectionsTestTags</ID>
     <ID>MatchingDeclarationName:ReceiveConfirmScreen.kt$CjitEntryDetails</ID>
@@ -549,7 +711,6 @@
     <ID>MatchingDeclarationName:SavingsProgressScreen.kt$SavingsProgressState</ID>
     <ID>MatchingDeclarationName:SecuritySettingsScreen.kt$SecuritySettingsTestTags</ID>
     <ID>MatchingDeclarationName:SettingsButtonRow.kt$SettingsButtonValue</ID>
-    <ID>MatchingDeclarationName:WalletInitResultView.kt$WalletInitResult</ID>
     <ID>MaxLineLength:ActivityDetailScreen.kt$description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance"</ID>
     <ID>MaxLineLength:ActivityDetailScreen.kt$text = stringResource(if (item.isBoosted()) R.string.wallet__activity_boosted else R.string.wallet__activity_boost)</ID>
     <ID>MaxLineLength:ActivityRepo.kt$ActivityRepo$"Update activity fail. Parameters: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity"</ID>
@@ -591,7 +752,6 @@
     <ID>MaxLineLength:CryptoTest.kt$CryptoTest$val ciphertext = "l2fInfyw64gO12odo8iipISloQJ45Rc4WjFmpe95brdaAMDq+T/L9ZChcmMCXnR0J6BXd8sSIJe/0bmby8uSZZJuVCzwF76XHfY5oq0Y1/hKzyZTn8nG3dqfiLHnAPy1tZFQfm5ALgjwWnViYJLXoGFpXs7kLMA=".fromBase64()</ID>
     <ID>MaxLineLength:CryptoTest.kt$CryptoTest$val decryptedPayload = """{"source":"blocktank","type":"incomingHtlc","payload":{"secretMessage":"hello"},"createdAt":"2024-09-18T13:33:52.555Z"}"""</ID>
     <ID>MaxLineLength:EditInvoiceVM.kt$EditInvoiceVM$private fun editInvoiceEffect(effect: EditInvoiceScreenEffects)</ID>
-    <ID>MaxLineLength:Env.kt$Env$private const val BITREFILL_PARAMS = "?ref=${BITREFILL_REF}&amp;paymentMethod=${BITREFILL_PAYMENT_METHOD}&amp;theme=dark&amp;utm_source=${BITREFILL_APP_NAME}"</ID>
     <ID>MaxLineLength:ExternalConfirmScreen.kt$Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))</ID>
     <ID>MaxLineLength:FundingAdvancedScreen.kt$Display(text = stringResource(R.string.lightning__funding_advanced__title).withAccent(accentColor = Colors.Purple))</ID>
     <ID>MaxLineLength:HeadlineCard.kt$headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow"</ID>
@@ -629,11 +789,21 @@
     <ID>MaxLineLength:SendAddressScreen.kt$addressInput = "bitcoin:bc17tq4mtkq86vte7a26e0za560kgflwqsvxznmer5?lightning=LNBC1PQUVNP8KHGPLNF6REGS3VY5F40AJFUN4S2JUDQQNP4TK9MP6LWWLWTC3XX3UUEVYZ4EVQU3X4NQDX348QPP5WJC9DWNTAFN7FZEZFVDC3MHV67SX2LD2MG602E3LEZDMFT29JLWQSP54QKM4G8A2KD5RGEKACA3CH4XV4M2MQDN62F8S2CCRES9QYYSGQCQPCXQRRSSRZJQWQKZS03MNNHSTKR9DN2XQRC8VW5X6CEWAL8C6RW6QQ3T02T3R"</ID>
     <ID>MaxLineLength:SettingUpScreen.kt$text = stringResource(R.string.lightning__savings_progress__title).withAccent(accentColor = Colors.Purple)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$if (newValue) R.string.settings__dev_enabled_message else R.string.settings__dev_disabled_message</ID>
-    <ID>MaxLineLength:VssBackupsClient.kt$VssBackupsClient$throw VssError.ServerError("Request failed with status: ${response.status}, message: ${errorResponse?.message}")</ID>
     <ID>MaxLineLength:VssStoreIdProvider.kt$VssStoreIdProvider$error("Do not run this on mainnet until VSS auth is implemented. Below hack is a temporary fix and not safe for mainnet.")</ID>
-    <ID>MaxLineLength:WalletViewModelTest.kt$WalletViewModelTest$fun</ID>
     <ID>MaxLineLength:WeatherService.kt$WeatherService$else -&gt; throw WeatherError.InvalidResponse("Failed to fetch historical fee data: ${response.status.description}")</ID>
     <ID>MaxLineLength:WeatherService.kt$WeatherService$val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY).getOrNull() ?: return FeeCondition.AVERAGE</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$_UniFFILib$fun</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$_UniFFILib.INSTANCE.uniffi_vss_rust_client_ffi_fn_func_vss_list_keys(FfiConverterOptionalString.lower(`prefix`),)</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$_UniFFILib.INSTANCE.uniffi_vss_rust_client_ffi_fn_func_vss_new_client(FfiConverterString.lower(`baseUrl`),FfiConverterString.lower(`storeId`),)</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$_UniFFILib.INSTANCE.uniffi_vss_rust_client_ffi_fn_func_vss_put_with_key_prefix(FfiConverterSequenceTypeKeyValue.lower(`items`),)</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$_UniFFILib.INSTANCE.uniffi_vss_rust_client_ffi_fn_func_vss_store(FfiConverterString.lower(`key`),FfiConverterByteArray.lower(`value`),)</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt$private inline</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_complete_i8(future, continuation) }</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_complete_rust_buffer(future, continuation) }</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_complete_void(future, continuation) }</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_poll_i8(future, continuation) }</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_poll_rust_buffer(future, continuation) }</ID>
+    <ID>MaxLineLength:vss_rust_client_ffi.kt${ future, continuation -&gt; _UniFFILib.INSTANCE.ffi_vss_rust_client_ffi_rust_future_poll_void(future, continuation) }</ID>
     <ID>MaximumLineLength:ActivityDetailScreen.kt$ </ID>
     <ID>MaximumLineLength:ActivityRepo.kt$ActivityRepo$ </ID>
     <ID>MaximumLineLength:BackupNavigationSheet.kt$ </ID>
@@ -647,7 +817,6 @@
     <ID>MaximumLineLength:CoreService.kt$ActivityService$ </ID>
     <ID>MaximumLineLength:CryptoTest.kt$CryptoTest$ </ID>
     <ID>MaximumLineLength:EditInvoiceVM.kt$EditInvoiceVM$ </ID>
-    <ID>MaximumLineLength:Env.kt$Env$ </ID>
     <ID>MaximumLineLength:ExternalConfirmScreen.kt$ </ID>
     <ID>MaximumLineLength:FundingAdvancedScreen.kt$ </ID>
     <ID>MaximumLineLength:HeadlineCard.kt$ </ID>
@@ -669,10 +838,11 @@
     <ID>MaximumLineLength:SendAddressScreen.kt$ </ID>
     <ID>MaximumLineLength:SettingUpScreen.kt$ </ID>
     <ID>MaximumLineLength:SettingsScreen.kt$ </ID>
-    <ID>MaximumLineLength:VssBackupsClient.kt$VssBackupsClient$ </ID>
     <ID>MaximumLineLength:VssStoreIdProvider.kt$VssStoreIdProvider$ </ID>
-    <ID>MaximumLineLength:WalletViewModelTest.kt$WalletViewModelTest$ </ID>
     <ID>MaximumLineLength:WeatherService.kt$WeatherService$ </ID>
+    <ID>MaximumLineLength:vss_rust_client_ffi.kt$ </ID>
+    <ID>MaximumLineLength:vss_rust_client_ffi.kt$_UniFFILib$ </ID>
+    <ID>MaximumLineLength:vss_rust_client_ffi.kt$private</ID>
     <ID>MayBeConst:Env.kt$Env$val walletSyncIntervalSecs = 10_uL // TODO review</ID>
     <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees * required to include them in a block would be greater than the value of the transaction itself. * */ val dustLimit = 546u</ID>
     <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** Total recommended tx base fee in sats */ val recommendedBaseFee = 256u</ID>
@@ -682,6 +852,7 @@
     <ID>ModifierListSpacing:App.kt$App$@Inject lateinit</ID>
     <ID>ModifierListSpacing:AppDb.kt$AppDb$@Database( entities = [ ConfigEntity::class, InvoiceTagEntity::class, ], version = 2, ) @TypeConverters(StringListConverter::class) abstract</ID>
     <ID>ModifierListSpacing:Change.kt$Change$@Serializable data</ID>
+    <ID>ModifierListSpacing:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend</ID>
     <ID>ModifierMissing:AboutScreen.kt$AboutScreen</ID>
     <ID>ModifierMissing:ActivityDetailScreen.kt$ActivityDetailScreen</ID>
     <ID>ModifierMissing:ActivityListSimple.kt$ActivityListSimple</ID>
@@ -761,7 +932,6 @@
     <ID>ModifierMissing:Spacers.kt$HorizontalSpacer</ID>
     <ID>ModifierMissing:Spacers.kt$VerticalSpacer</ID>
     <ID>ModifierMissing:SpendingAdvancedScreen.kt$SpendingAdvancedScreen</ID>
-    <ID>ModifierMissing:SpendingAmountScreen.kt$SpendingAmountScreen</ID>
     <ID>ModifierMissing:SpendingIntroScreen.kt$SpendingIntroScreen</ID>
     <ID>ModifierMissing:SpendingWalletScreen.kt$SpendingWalletScreen</ID>
     <ID>ModifierMissing:SplashScreen.kt$SplashScreen</ID>
@@ -769,7 +939,6 @@
     <ID>ModifierMissing:ToastView.kt$ToastView</ID>
     <ID>ModifierMissing:TransferAnimationView.kt$TransferAnimationView</ID>
     <ID>ModifierMissing:TransferIntroScreen.kt$TransferIntroScreen</ID>
-    <ID>ModifierMissing:WalletInitResultView.kt$WalletInitResultView</ID>
     <ID>ModifierMissing:WarningMultipleDevicesScreen.kt$WarningMultipleDevicesScreen</ID>
     <ID>ModifierMissing:WeatherEditScreen.kt$WeatherEditContent</ID>
     <ID>ModifierMissing:WeatherPreviewScreen.kt$WeatherPreviewContent</ID>
@@ -800,16 +969,13 @@
     <ID>MultiLineIfElse:QrCodeImage.kt$android.graphics.Color.WHITE</ID>
     <ID>MultiLineIfElse:Slider.kt$emptyList()</ID>
     <ID>MultiLineIfElse:Slider.kt$steps.indices.map { index -&gt; val numSteps = (steps.size - 1).coerceAtLeast(1) (index.toFloat() / numSteps) * sliderWidth }</ID>
-    <ID>MultiLineIfElse:VssBackupsClient.kt$VssBackupsClient$null</ID>
     <ID>MultipleEmitters:ActivityExploreScreen.kt$LightningDetails</ID>
     <ID>MultipleEmitters:BoostTransactionSheet.kt$DefaultModeContent</ID>
     <ID>MultipleEmitters:DrawerMenu.kt$DrawerMenu</ID>
     <ID>MultipleEmitters:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
     <ID>MultipleEmitters:SendAndReviewScreen.kt$LnurlCommentSection</ID>
     <ID>MultipleEmitters:SendAndReviewScreen.kt$TagsSection</ID>
-    <ID>MultipleEmitters:WalletInitResultView.kt$WalletInitResultView</ID>
     <ID>MutableStateAutoboxing:DragDropColumn.kt$mutableStateOf(0f)</ID>
-    <ID>MutableStateAutoboxing:SpendingAmountScreen.kt$mutableStateOf(0uL)</ID>
     <ID>MutableStateParam:ReceiveQrScreen.kt$cjitActive</ID>
     <ID>MutableStateParam:ReceiveQrScreen.kt$cjitInvoice</ID>
     <ID>NestedBlockDepth:Context.kt$fun Context.copyAssetToStorage(asset: String, dest: String)</ID>
@@ -828,6 +994,9 @@
     <ID>NoBlankLineBeforeRbrace:ShareSheet.kt$ </ID>
     <ID>NoBlankLineBeforeRbrace:SuggestionCard.kt$ </ID>
     <ID>NoBlankLineBeforeRbrace:WeatherCard.kt$ </ID>
+    <ID>NoBlankLineBeforeRbrace:vss_rust_client_ffi.kt$FfiConverterTypeVssError$ </ID>
+    <ID>NoBlankLineBeforeRbrace:vss_rust_client_ffi.kt$VssException$ </ID>
+    <ID>NoBlankLineBeforeRbrace:vss_rust_client_ffi.kt$_UniFFILib$ </ID>
     <ID>NoConsecutiveBlankLines:AboutScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:ActivityListSimple.kt$ </ID>
     <ID>NoConsecutiveBlankLines:ActivityRepo.kt$ActivityRepo$ </ID>
@@ -836,7 +1005,6 @@
     <ID>NoConsecutiveBlankLines:AddWidgetsScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:AddressChecker.kt$AddressChecker$ </ID>
     <ID>NoConsecutiveBlankLines:BackupIntroScreen.kt$ </ID>
-    <ID>NoConsecutiveBlankLines:BackupsRepo.kt$BackupsRepo$ </ID>
     <ID>NoConsecutiveBlankLines:Bip39Test.kt$Bip39Test$ </ID>
     <ID>NoConsecutiveBlankLines:BlocksEditScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:BlocksService.kt$ </ID>
@@ -845,7 +1013,6 @@
     <ID>NoConsecutiveBlankLines:CalculatorPreviewScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:CalculatorViewModel.kt$CalculatorViewModel$ </ID>
     <ID>NoConsecutiveBlankLines:CreateProfileScreen.kt$ </ID>
-    <ID>NoConsecutiveBlankLines:EnablePolling.kt$ </ID>
     <ID>NoConsecutiveBlankLines:FactsEditScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:FactsPreviewScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:FactsViewModel.kt$FactsViewModel$ </ID>
@@ -874,12 +1041,14 @@
     <ID>NoConsecutiveBlankLines:WalletViewModelTest.kt$WalletViewModelTest$ </ID>
     <ID>NoConsecutiveBlankLines:WeatherEditScreen.kt$ </ID>
     <ID>NoConsecutiveBlankLines:WeatherService.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:vss_rust_client_ffi.kt$ </ID>
+    <ID>NoConsecutiveBlankLines:vss_rust_client_ffi.kt$FfiConverterTypeVssError$ </ID>
+    <ID>NoConsecutiveBlankLines:vss_rust_client_ffi.kt$VssException$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:ActivityRepo.kt$ActivityRepo$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:AddTagScreen.kt$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:BuyIntroScreen.kt$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:CoreService.kt$ActivityService$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:CreateProfileScreen.kt$ </ID>
-    <ID>NoEmptyFirstLineInMethodBlock:EditInvoiceScreen.kt$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:FactsCard.kt$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:LightningRepo.kt$LightningRepo$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:NewTransactionSheet.kt$ </ID>
@@ -895,7 +1064,19 @@
     <ID>NoEmptyFirstLineInMethodBlock:Tooltip.kt$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:TransferViewModel.kt$TransferViewModel$ </ID>
     <ID>NoEmptyFirstLineInMethodBlock:WeatherModel.kt$ </ID>
+    <ID>NoEmptyFirstLineInMethodBlock:vss_rust_client_ffi.kt$FfiConverterTypeVssError$ </ID>
     <ID>NoMultipleSpaces:Bip39Utils.kt$ </ID>
+    <ID>NoSemicolons:vss_rust_client_ffi.kt$;</ID>
+    <ID>NoSemicolons:vss_rust_client_ffi.kt$CallStatusErrorHandler$;</ID>
+    <ID>NoSemicolons:vss_rust_client_ffi.kt$UniFffiRustFutureContinuationCallbackType$;</ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$FfiConverterTypeVssError$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$KeyValue$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$KeyVersion$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$ListKeyVersionsResponse$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$VssException$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$VssItem$ </ID>
+    <ID>NoTrailingSpaces:vss_rust_client_ffi.kt$_UniFFILib$ </ID>
     <ID>NoUnusedImports:AppCacheSerializer.kt$to.bitkit.data.serializers.AppCacheSerializer.kt</ID>
     <ID>NoUnusedImports:BoostTransactionSheet.kt$to.bitkit.ui.screens.wallets.activity.BoostTransactionSheet.kt</ID>
     <ID>NoUnusedImports:ChatwootHttpClient.kt$to.bitkit.data.ChatwootHttpClient.kt</ID>
@@ -904,11 +1085,11 @@
     <ID>NoUnusedImports:HeadlinesEditScreen.kt$to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen.kt</ID>
     <ID>NoUnusedImports:HealthRepoTest.kt$to.bitkit.repositories.HealthRepoTest.kt</ID>
     <ID>NoUnusedImports:HighBalanceWarningSheet.kt$to.bitkit.ui.screens.wallets.sheets.HighBalanceWarningSheet.kt</ID>
+    <ID>NoUnusedImports:HttpModule.kt$to.bitkit.di.HttpModule.kt</ID>
     <ID>NoUnusedImports:MapWebViewClient.kt$to.bitkit.ui.screens.shop.shopDiscover.MapWebViewClient.kt</ID>
     <ID>NoUnusedImports:PinDots.kt$to.bitkit.ui.components.PinDots.kt</ID>
     <ID>NoUnusedImports:PriceCard.kt$to.bitkit.ui.screens.widgets.price.PriceCard.kt</ID>
     <ID>NoUnusedImports:QrCodeImage.kt$to.bitkit.ui.components.QrCodeImage.kt</ID>
-    <ID>NoUnusedImports:ReceiveQrScreen.kt$to.bitkit.ui.screens.wallets.receive.ReceiveQrScreen.kt</ID>
     <ID>NoUnusedImports:ShopDiscoverScreen.kt$to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen.kt</ID>
     <ID>NoUnusedImports:ShopWebViewInterface.kt$to.bitkit.ui.screens.shop.shopWebView.ShopWebViewInterface.kt</ID>
     <ID>NoUnusedImports:ShopWebViewScreen.kt$to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen.kt</ID>
@@ -918,7 +1099,26 @@
     <ID>NoUnusedImports:WeatherViewModel.kt$to.bitkit.ui.screens.widgets.weather.WeatherViewModel.kt</ID>
     <ID>NoUnusedImports:WidgetsSerializer.kt$to.bitkit.data.serializers.WidgetsSerializer.kt</ID>
     <ID>NoWildcardImports:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
+    <ID>NoWildcardImports:vss_rust_client_ffi.kt$import com.sun.jna.ptr.*</ID>
+    <ID>PackageName:vss_rust_client_ffi.kt$package uniffi.vss_rust_client_ffi;</ID>
+    <ID>PackageNaming:vss_rust_client_ffi.kt$package uniffi.vss_rust_client_ffi;</ID>
     <ID>ParameterListWrapping:EditInvoiceVM.kt$EditInvoiceVM$(effect: EditInvoiceScreenEffects)</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$(RustCallStatus)</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$(errorHandler: CallStatusErrorHandler&lt;E&gt;, callback: (RustCallStatus) -&gt; U)</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(_uniffi_out_err: RustCallStatus, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`baseUrl`: RustBuffer.ByValue,`storeId`: RustBuffer.ByValue, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`buf`: RustBuffer.ByValue,_uniffi_out_err: RustCallStatus, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`buf`: RustBuffer.ByValue,`additional`: Int,_uniffi_out_err: RustCallStatus, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`bytes`: ForeignBytes.ByValue,_uniffi_out_err: RustCallStatus, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`callback`: UniFffiRustFutureContinuationCallbackType, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`handle`: Pointer, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`handle`: Pointer,_uniffi_out_err: RustCallStatus, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`handle`: Pointer,`uniffiCallback`: USize, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`items`: RustBuffer.ByValue, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`key`: RustBuffer.ByValue, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`prefix`: RustBuffer.ByValue, )</ID>
+    <ID>ParameterListWrapping:vss_rust_client_ffi.kt$_UniFFILib$(`size`: Int,_uniffi_out_err: RustCallStatus, )</ID>
     <ID>ParameterNaming:AddTagScreen.kt$onInputUpdated</ID>
     <ID>ParameterNaming:AddTagScreen.kt$onTagConfirmed</ID>
     <ID>ParameterNaming:AddTagScreen.kt$onTagSelected</ID>
@@ -944,6 +1144,7 @@
     <ID>ParameterNaming:RestoreWalletScreen.kt$onValueChanged</ID>
     <ID>ParameterNaming:SendAmountScreen.kt$onInputChanged</ID>
     <ID>ParameterNaming:SpendingAdvancedScreen.kt$onOrderCreated</ID>
+    <ID>ParameterNaming:SpendingAmountScreen.kt$onAmountChanged</ID>
     <ID>ParameterNaming:SpendingAmountScreen.kt$onOrderCreated</ID>
     <ID>ParameterNaming:TransactionSpeedSettingsScreen.kt$onSpeedSelected</ID>
     <ID>PreviewPublic:CameraPermissionView.kt$PreviewDenied</ID>
@@ -962,8 +1163,6 @@
     <ID>PreviewPublic:NumberPadTextField.kt$PreviewMoneyAmountFiatWithValue</ID>
     <ID>PreviewPublic:RestoreWalletScreen.kt$RestoreWalletViewPreview</ID>
     <ID>PreviewPublic:SplashScreen.kt$SplashScreenPreview</ID>
-    <ID>PreviewPublic:WalletInitResultView.kt$WalletInitResultViewErrorPreview</ID>
-    <ID>PreviewPublic:WalletInitResultView.kt$WalletInitResultViewRestoredPreview</ID>
     <ID>PrintStackTrace:ShareSheet.kt$e</ID>
     <ID>PropertyWrapping:Bip39Utils.kt$val bip39Words = setOf( "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual", "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance", "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent", "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol", "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha", "already", "also", "alter", "always", "amateur", "amazing", "among", "amount", "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry", "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique", "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april", "arch", "arctic", "area", "arena", "argue", "arm", "armed", "armor", "army", "around", "arrange", "arrest", "arrive", "arrow", "art", "artefact", "artist", "artwork", "ask", "aspect", "assault", "asset", "assist", "assume", "asthma", "athlete", "atom", "attack", "attend", "attitude", "attract", "auction", "audit", "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid", "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby", "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo", "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic", "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef", "before", "begin", "behave", "behind", "believe", "below", "belt", "bench", "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid", "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade", "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom", "blouse", "blue", "blur", "blush", "board", "boat", "body", "boil", "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow", "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand", "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright", "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown", "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk", "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business", "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus", "cage", "cake", "call", "calm", "camera", "camp", "can", "canal", "cancel", "candy", "cannon", "canoe", "canvas", "canyon", "capable", "capital", "captain", "car", "carbon", "card", "cargo", "carpet", "carry", "cart", "case", "cash", "casino", "castle", "casual", "cat", "catalog", "catch", "category", "cattle", "caught", "cause", "caution", "cave", "ceiling", "celery", "cement", "census", "century", "cereal", "certain", "chair", "chalk", "champion", "change", "chaos", "chapter", "charge", "chase", "chat", "cheap", "check", "cheese", "chef", "cherry", "chest", "chicken", "chief", "child", "chimney", "choice", "choose", "chronic", "chuckle", "chunk", "churn", "cigar", "cinnamon", "circle", "citizen", "city", "civil", "claim", "clap", "clarify", "claw", "clay", "clean", "clerk", "clever", "click", "client", "cliff", "climb", "clinic", "clip", "clock", "clog", "close", "cloth", "cloud", "clown", "club", "clump", "cluster", "clutch", "coach", "coast", "coconut", "code", "coffee", "coil", "coin", "collect", "color", "column", "combine", "come", "comfort", "comic", "common", "company", "concert", "conduct", "confirm", "congress", "connect", "consider", "control", "convince", "cook", "cool", "copper", "copy", "coral", "core", "corn", "correct", "cost", "cotton", "couch", "country", "couple", "course", "cousin", "cover", "coyote", "crack", "cradle", "craft", "cram", "crane", "crash", "crater", "crawl", "crazy", "cream", "credit", "creek", "crew", "cricket", "crime", "crisp", "critic", "crop", "cross", "crouch", "crowd", "crucial", "cruel", "cruise", "crumble", "crunch", "crush", "cry", "crystal", "cube", "culture", "cup", "cupboard", "curious", "current", "curtain", "curve", "cushion", "custom", "cute", "cycle", "dad", "damage", "damp", "dance", "danger", "daring", "dash", "daughter", "dawn", "day", "deal", "debate", "debris", "decade", "december", "decide", "decline", "decorate", "decrease", "deer", "defense", "define", "defy", "degree", "delay", "deliver", "demand", "demise", "denial", "dentist", "deny", "depart", "depend", "deposit", "depth", "deputy", "derive", "describe", "desert", "design", "desk", "despair", "destroy", "detail", "detect", "develop", "device", "devote", "diagram", "dial", "diamond", "diary", "dice", "diesel", "diet", "differ", "digital", "dignity", "dilemma", "dinner", "dinosaur", "direct", "dirt", "disagree", "discover", "disease", "dish", "dismiss", "disorder", "display", "distance", "divert", "divide", "divorce", "dizzy", "doctor", "document", "dog", "doll", "dolphin", "domain", "donate", "donkey", "donor", "door", "dose", "double", "dove", "draft", "dragon", "drama", "drastic", "draw", "dream", "dress", "drift", "drill", "drink", "drip", "drive", "drop", "drum", "dry", "duck", "dumb", "dune", "during", "dust", "dutch", "duty", "dwarf", "dynamic", "eager", "eagle", "early", "earn", "earth", "easily", "east", "easy", "echo", "ecology", "economy", "edge", "edit", "educate", "effort", "egg", "eight", "either", "elbow", "elder", "electric", "elegant", "element", "elephant", "elevator", "elite", "else", "embark", "embody", "embrace", "emerge", "emotion", "employ", "empower", "empty", "enable", "enact", "end", "endless", "endorse", "enemy", "energy", "enforce", "engage", "engine", "enhance", "enjoy", "enlist", "enough", "enrich", "enroll", "ensure", "enter", "entire", "entry", "envelope", "episode", "equal", "equip", "era", "erase", "erode", "erosion", "error", "erupt", "escape", "essay", "essence", "estate", "eternal", "ethics", "evidence", "evil", "evoke", "evolve", "exact", "example", "excess", "exchange", "excite", "exclude", "excuse", "execute", "exercise", "exhaust", "exhibit", "exile", "exist", "exit", "exotic", "expand", "expect", "expire", "explain", "expose", "express", "extend", "extra", "eye", "eyebrow", "fabric", "face", "faculty", "fade", "faint", "faith", "fall", "false", "fame", "family", "famous", "fan", "fancy", "fantasy", "farm", "fashion", "fat", "fatal", "father", "fatigue", "fault", "favorite", "feature", "february", "federal", "fee", "feed", "feel", "female", "fence", "festival", "fetch", "fever", "few", "fiber", "fiction", "field", "figure", "file", "film", "filter", "final", "find", "fine", "finger", "finish", "fire", "firm", "first", "fiscal", "fish", "fit", "fitness", "fix", "flag", "flame", "flash", "flat", "flavor", "flee", "flight", "flip", "float", "flock", "floor", "flower", "fluid", "flush", "fly", "foam", "focus", "fog", "foil", "fold", "follow", "food", "foot", "force", "forest", "forget", "fork", "fortune", "forum", "forward", "fossil", "foster", "found", "fox", "fragile", "frame", "frequent", "fresh", "friend", "fringe", "frog", "front", "frost", "frown", "frozen", "fruit", "fuel", "fun", "funny", "furnace", "fury", "future", "gadget", "gain", "galaxy", "gallery", "game", "gap", "garage", "garbage", "garden", "garlic", "garment", "gas", "gasp", "gate", "gather", "gauge", "gaze", "general", "genius", "genre", "gentle", "genuine", "gesture", "ghost", "giant", "gift", "giggle", "ginger", "giraffe", "girl", "give", "glad", "glance", "glare", "glass", "glide", "glimpse", "globe", "gloom", "glory", "glove", "glow", "glue", "goat", "goddess", "gold", "good", "goose", "gorilla", "gospel", "gossip", "govern", "gown", "grab", "grace", "grain", "grant", "grape", "grass", "gravity", "great", "green", "grid", "grief", "grit", "grocery", "group", "grow", "grunt", "guard", "guess", "guide", "guilt", "guitar", "gun", "gym", "habit", "hair", "half", "hammer", "hamster", "hand", "happy", "harbor", "hard", "harsh", "harvest", "hat", "have", "hawk", "hazard", "head", "health", "heart", "heavy", "hedgehog", "height", "hello", "helmet", "help", "hen", "hero", "hidden", "high", "hill", "hint", "hip", "hire", "history", "hobby", "hockey", "hold", "hole", "holiday", "hollow", "home", "honey", "hood", "hope", "horn", "horror", "horse", "hospital", "host", "hotel", "hour", "hover", "hub", "huge", "human", "humble", "humor", "hundred", "hungry", "hunt", "hurdle", "hurry", "hurt", "husband", "hybrid", "ice", "icon", "idea", "identify", "idle", "ignore", "ill", "illegal", "illness", "image", "imitate", "immense", "immune", "impact", "impose", "improve", "impulse", "inch", "include", "income", "increase", "index", "indicate", "indoor", "industry", "infant", "inflict", "inform", "inhale", "inherit", "initial", "inject", "injury", "inmate", "inner", "innocent", "input", "inquiry", "insane", "insect", "inside", "inspire", "install", "intact", "interest", "into", "invest", "invite", "involve", "iron", "island", "isolate", "issue", "item", "ivory", "jacket", "jaguar", "jar", "jazz", "jealous", "jeans", "jelly", "jewel", "job", "join", "joke", "journey", "joy", "judge", "juice", "jump", "jungle", "junior", "junk", "just", "kangaroo", "keen", "keep", "ketchup", "key", "kick", "kid", "kidney", "kind", "kingdom", "kiss", "kit", "kitchen", "kite", "kitten", "kiwi", "knee", "knife", "knock", "know", "lab", "label", "labor", "ladder", "lady", "lake", "lamp", "language", "laptop", "large", "later", "latin", "laugh", "laundry", "lava", "law", "lawn", "lawsuit", "layer", "lazy", "leader", "leaf", "learn", "leave", "lecture", "left", "leg", "legal", "legend", "leisure", "lemon", "lend", "length", "lens", "leopard", "lesson", "letter", "level", "liar", "liberty", "library", "license", "life", "lift", "light", "like", "limb", "limit", "link", "lion", "liquid", "list", "little", "live", "lizard", "load", "loan", "lobster", "local", "lock", "logic", "lonely", "long", "loop", "lottery", "loud", "lounge", "love", "loyal", "lucky", "luggage", "lumber", "lunar", "lunch", "luxury", "lyrics", "machine", "mad", "magic", "magnet", "maid", "mail", "main", "major", "make", "mammal", "man", "manage", "mandate", "mango", "mansion", "manual", "maple", "marble", "march", "margin", "marine", "market", "marriage", "mask", "mass", "master", "match", "material", "math", "matrix", "matter", "maximum", "maze", "meadow", "mean", "measure", "meat", "mechanic", "medal", "media", "melody", "melt", "member", "memory", "mention", "menu", "mercy", "merge", "merit", "merry", "mesh", "message", "metal", "method", "middle", "midnight", "milk", "million", "mimic", "mind", "minimum", "minor", "minute", "miracle", "mirror", "misery", "miss", "mistake", "mix", "mixed", "mixture", "mobile", "model", "modify", "mom", "moment", "monitor", "monkey", "monster", "month", "moon", "moral", "more", "morning", "mosquito", "mother", "motion", "motor", "mountain", "mouse", "move", "movie", "much", "muffin", "mule", "multiply", "muscle", "museum", "mushroom", "music", "must", "mutual", "myself", "mystery", "myth", "naive", "name", "napkin", "narrow", "nasty", "nation", "nature", "near", "neck", "need", "negative", "neglect", "neither", "nephew", "nerve", "nest", "net", "network", "neutral", "never", "news", "next", "nice", "night", "noble", "noise", "nominee", "noodle", "normal", "north", "nose", "notable", "note", "nothing", "notice", "novel", "now", "nuclear", "number", "nurse", "nut", "oak", "obey", "object", "oblige", "obscure", "observe", "obtain", "obvious", "occur", "ocean", "october", "odor", "off", "offer", "office", "often", "oil", "okay", "old", "olive", "olympic", "omit", "once", "one", "onion", "online", "only", "open", "opera", "opinion", "oppose", "option", "orange", "orbit", "orchard", "order", "ordinary", "organ", "orient", "original", "orphan", "ostrich", "other", "outdoor", "outer", "output", "outside", "oval", "oven", "over", "own", "owner", "oxygen", "oyster", "ozone", "pact", "paddle", "page", "pair", "palace", "palm", "panda", "panel", "panic", "panther", "paper", "parade", "parent", "park", "parrot", "party", "pass", "patch", "path", "patient", "patrol", "pattern", "pause", "pave", "payment", "peace", "peanut", "pear", "peasant", "pelican", "pen", "penalty", "pencil", "people", "pepper", "perfect", "permit", "person", "pet", "phone", "photo", "phrase", "physical", "piano", "picnic", "picture", "piece", "pig", "pigeon", "pill", "pilot", "pink", "pioneer", "pipe", "pistol", "pitch", "pizza", "place", "planet", "plastic", "plate", "play", "please", "pledge", "pluck", "plug", "plunge", "poem", "poet", "point", "polar", "pole", "police", "pond", "pony", "pool", "popular", "portion", "position", "possible", "post", "potato", "pottery", "poverty", "powder", "power", "practice", "praise", "predict", "prefer", "prepare", "present", "pretty", "prevent", "price", "pride", "primary", "print", "priority", "prison", "private", "prize", "problem", "process", "produce", "profit", "program", "project", "promote", "proof", "property", "prosper", "protect", "proud", "provide", "public", "pudding", "pull", "pulp", "pulse", "pumpkin", "punch", "pupil", "puppy", "purchase", "purity", "purpose", "purse", "push", "put", "puzzle", "pyramid", "quality", "quantum", "quarter", "question", "quick", "quit", "quiz", "quote", "rabbit", "raccoon", "race", "rack", "radar", "radio", "rail", "rain", "raise", "rally", "ramp", "ranch", "random", "range", "rapid", "rare", "rate", "rather", "raven", "raw", "razor", "ready", "real", "reason", "rebel", "rebuild", "recall", "receive", "recipe", "record", "recycle", "reduce", "reflect", "reform", "refuse", "region", "regret", "regular", "reject", "relax", "release", "relief", "rely", "remain", "remember", "remind", "remove", "render", "renew", "rent", "reopen", "repair", "repeat", "replace", "report", "require", "rescue", "resemble", "resist", "resource", "response", "result", "retire", "retreat", "return", "reunion", "reveal", "review", "reward", "rhythm", "rib", "ribbon", "rice", "rich", "ride", "ridge", "rifle", "right", "rigid", "ring", "riot", "ripple", "risk", "ritual", "rival", "river", "road", "roast", "robot", "robust", "rocket", "romance", "roof", "rookie", "room", "rose", "rotate", "rough", "round", "route", "royal", "rubber", "rude", "rug", "rule", "run", "runway", "rural", "sad", "saddle", "sadness", "safe", "sail", "salad", "salmon", "salon", "salt", "salute", "same", "sample", "sand", "satisfy", "satoshi", "sauce", "sausage", "save", "say", "scale", "scan", "scare", "scatter", "scene", "scheme", "school", "science", "scissors", "scorpion", "scout", "scrap", "screen", "script", "scrub", "sea", "search", "season", "seat", "second", "secret", "section", "security", "seed", "seek", "segment", "select", "sell", "seminar", "senior", "sense", "sentence", "series", "service", "session", "settle", "setup", "seven", "shadow", "shaft", "shallow", "share", "shed", "shell", "sheriff", "shield", "shift", "shine", "ship", "shiver", "shock", "shoe", "shoot", "shop", "short", "shoulder", "shove", "shrimp", "shrug", "shuffle", "shy", "sibling", "sick", "side", "siege", "sight", "sign", "silent", "silk", "silly", "silver", "similar", "simple", "since", "sing", "siren", "sister", "situate", "six", "size", "skate", "sketch", "ski", "skill", "skin", "skirt", "skull", "slab", "slam", "sleep", "slender", "slice", "slide", "slight", "slim", "slogan", "slot", "slow", "slush", "small", "smart", "smile", "smoke", "smooth", "snack", "snake", "snap", "sniff", "snow", "soap", "soccer", "social", "sock", "soda", "soft", "solar", "soldier", "solid", "solution", "solve", "someone", "song", "soon", "sorry", "sort", "soul", "sound", "soup", "source", "south", "space", "spare", "spatial", "spawn", "speak", "special", "speed", "spell", "spend", "sphere", "spice", "spider", "spike", "spin", "spirit", "split", "spoil", "sponsor", "spoon", "sport", "spot", "spray", "spread", "spring", "spy", "square", "squeeze", "squirrel", "stable", "stadium", "staff", "stage", "stairs", "stamp", "stand", "start", "state", "stay", "steak", "steel", "stem", "step", "stereo", "stick", "still", "sting", "stock", "stomach", "stone", "stool", "story", "stove", "strategy", "street", "strike", "strong", "struggle", "student", "stuff", "stumble", "style", "subject", "submit", "subway", "success", "such", "sudden", "suffer", "sugar", "suggest", "suit", "summer", "sun", "sunny", "sunset", "super", "supply", "supreme", "sure", "surface", "surge", "surprise", "surround", "survey", "suspect", "sustain", "swallow", "swamp", "swap", "swarm", "swear", "sweet", "swift", "swim", "swing", "switch", "sword", "symbol", "symptom", "syrup", "system", "table", "tackle", "tag", "tail", "talent", "talk", "tank", "tape", "target", "task", "taste", "tattoo", "taxi", "teach", "team", "tell", "ten", "tenant", "tennis", "tent", "term", "test", "text", "thank", "that", "theme", "then", "theory", "there", "they", "thing", "this", "thought", "three", "thrive", "throw", "thumb", "thunder", "ticket", "tide", "tiger", "tilt", "timber", "time", "tiny", "tip", "tired", "tissue", "title", "toast", "tobacco", "today", "toddler", "toe", "together", "toilet", "token", "tomato", "tomorrow", "tone", "tongue", "tonight", "tool", "tooth", "top", "topic", "topple", "torch", "tornado", "tortoise", "toss", "total", "tourist", "toward", "tower", "town", "toy", "track", "trade", "traffic", "tragic", "train", "transfer", "trap", "trash", "travel", "tray", "treat", "tree", "trend", "trial", "tribe", "trick", "trigger", "trim", "trip", "trophy", "trouble", "truck", "true", "truly", "trumpet", "trust", "truth", "try", "tube", "tuition", "tumble", "tuna", "tunnel", "turkey", "turn", "turtle", "twelve", "twenty", "twice", "twin", "twist", "two", "type", "typical", "ugly", "umbrella", "unable", "unaware", "uncle", "uncover", "under", "undo", "unfair", "unfold", "unhappy", "uniform", "unique", "unit", "universe", "unknown", "unlock", "until", "unusual", "unveil", "update", "upgrade", "uphold", "upon", "upper", "upset", "urban", "urge", "usage", "use", "used", "useful", "useless", "usual", "utility", "vacant", "vacuum", "vague", "valid", "valley", "valve", "van", "vanish", "vapor", "various", "vast", "vault", "vehicle", "velvet", "vendor", "venture", "venue", "verb", "verify", "version", "very", "vessel", "veteran", "viable", "vibrant", "vicious", "victory", "video", "view", "village", "vintage", "violin", "virtual", "virus", "visa", "visit", "visual", "vital", "vivid", "vocal", "voice", "void", "volcano", "volume", "vote", "voyage", "wage", "wagon", "wait", "walk", "wall", "walnut", "want", "warfare", "warm", "warrior", "wash", "wasp", "waste", "water", "wave", "way", "wealth", "weapon", "wear", "weasel", "weather", "web", "wedding", "weekend", "weird", "welcome", "west", "wet", "whale", "what", "wheat", "wheel", "when", "where", "whip", "whisper", "wide", "width", "wife", "wild", "will", "win", "window", "wine", "wing", "wink", "winner", "winter", "wire", "wisdom", "wise", "wish", "witness", "wolf", "woman", "wonder", "wood", "wool", "word", "work", "world", "worry", "worth", "wrap", "wreck", "wrestle", "wrist", "write", "wrong", "yard", "year", "yellow", "you", "young", "youth", "zebra", "zero", "zone", "zoo")</ID>
     <ID>ReturnCount:ActivityRow.kt$@Composable private fun AmountView( item: Activity, prefix: String, )</ID>
@@ -1003,27 +1202,74 @@
     <ID>SpacingAroundColon:EditInvoiceVM.kt$EditInvoiceVM$:</ID>
     <ID>SpacingAroundColon:InvoiceTagDao.kt$InvoiceTagDao$:</ID>
     <ID>SpacingAroundColon:TagsViewModel.kt$TagsViewModel$:</ID>
-    <ID>SpacingAroundComma:EditInvoiceScreen.kt$,</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterBoolean$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterByteArray$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterLong$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterOptionalString$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterOptionalTypeVssItem$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterRustBuffer$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterSequenceTypeKeyValue$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterSequenceTypeKeyVersion$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterSequenceTypeVssItem$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterString$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterTypeKeyValue$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterTypeKeyVersion$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterTypeListKeyVersionsResponse$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterTypeVssFilterType$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$FfiConverterTypeVssItem$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$NullCallStatusErrorHandler$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$RustBuffer.ByReference$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$RustBuffer.ByValue$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$RustCallStatus.ByValue$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$USize.Companion$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$UniFfiHandleMap$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$VssException$:</ID>
+    <ID>SpacingAroundColon:vss_rust_client_ffi.kt$uniffiRustFutureContinuationCallback$:</ID>
+    <ID>SpacingAroundComma:vss_rust_client_ffi.kt$,</ID>
+    <ID>SpacingAroundComma:vss_rust_client_ffi.kt$VssFilterType.PREFIX$,</ID>
+    <ID>SpacingAroundComma:vss_rust_client_ffi.kt$_UniFFILib$,</ID>
     <ID>SpacingAroundKeyword:Activities.kt$when</ID>
-    <ID>SpacingAroundKeyword:EditInvoiceScreen.kt$when</ID>
     <ID>SpacingAroundKeyword:LnurlChannelScreen.kt$if</ID>
     <ID>SpacingAroundKeyword:PricePreviewScreen.kt$when</ID>
     <ID>SpacingAroundKeyword:WeatherModel.kt$when</ID>
+    <ID>SpacingAroundKeyword:vss_rust_client_ffi.kt$FfiConverterTypeVssError$when</ID>
+    <ID>SpacingAroundKeyword:vss_rust_client_ffi.kt$RustBuffer.Companion$if</ID>
     <ID>SpacingAroundOperators:NodeInfoScreen.kt$?:</ID>
     <ID>SpacingAroundOperators:WeatherEditScreen.kt$=</ID>
     <ID>SpacingAroundParens:Bip39Utils.kt$(</ID>
-    <ID>SpacingAroundParens:ContentView.kt$(</ID>
+    <ID>SpacingAroundParens:vss_rust_client_ffi.kt$KeyValue$(</ID>
+    <ID>SpacingAroundParens:vss_rust_client_ffi.kt$KeyVersion$(</ID>
+    <ID>SpacingAroundParens:vss_rust_client_ffi.kt$ListKeyVersionsResponse$(</ID>
+    <ID>SpacingAroundParens:vss_rust_client_ffi.kt$VssItem$(</ID>
+    <ID>SpacingAroundParens:vss_rust_client_ffi.kt$_UniFFILib$(</ID>
     <ID>SpacingBetweenDeclarationsWithAnnotations:Defaults.kt$AppTextFieldDefaults$@Stable val semiTransparent: TextFieldColors @Composable get() = TextFieldDefaults.colors( focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedContainerColor = Colors.White10, unfocusedContainerColor = Colors.White10, errorIndicatorColor = Color.Transparent, errorContainerColor = Colors.White10, errorTextColor = Colors.Red, errorPrefixColor = Colors.Red )</ID>
     <ID>SpacingBetweenDeclarationsWithAnnotations:Defaults.kt$AppTextFieldDefaults$@Stable val transparent: TextFieldColors @Composable get() = noIndicatorColors.copy( unfocusedIndicatorColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), )</ID>
     <ID>SpacingBetweenDeclarationsWithAnnotations:EditInvoiceVMTest.kt$EditInvoiceVMTest$@Test fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity fails`()</ID>
-    <ID>SpacingBetweenDeclarationsWithComments:Env.kt$Env$// TODO: remove this to load from BT API instead</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssGet`(`key`: String) : VssItem?</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssListKeys`(`prefix`: String?) : List&lt;KeyVersion&gt;</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssList`(`prefix`: String?) : List&lt;VssItem&gt;</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssNewClient`(`baseUrl`: String, `storeId`: String)</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$@Throws(VssException::class) @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE") suspend fun `vssPutWithKeyPrefix`(`items`: List&lt;KeyValue&gt;) : List&lt;VssItem&gt;</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$ForeignBytes$@JvmField var data: Pointer? = null</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$RustBuffer$@JvmField var data: Pointer? = null</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$RustBuffer$@JvmField var len: Int = 0</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$RustCallStatus : Structure</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$RustCallStatus$@JvmField var error_buf: RustBuffer.ByValue = RustBuffer.ByValue()</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:vss_rust_client_ffi.kt$USize$@Deprecated("`toInt().toChar()` is deprecated") override fun toChar()</ID>
     <ID>SpacingBetweenDeclarationsWithComments:WeatherService.kt$WeatherError$/** * Weather-specific error types */</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:vss_rust_client_ffi.kt$FfiConverter$// The FfiConverter interface handles converter types to and from the FFI</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:vss_rust_client_ffi.kt$RustCallStatus$// A handful of classes and functions to support the generated data structures.</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:vss_rust_client_ffi.kt$USize$// Needed until https://youtrack.jetbrains.com/issue/KT-47902 is fixed.</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:vss_rust_client_ffi.kt$UniFfiHandleMap$// Use AtomicInteger for our counter, since we may be on a 32-bit system. 4 billion possible</ID>
     <ID>SpreadOperator:RestoreWalletScreen.kt$(*Array(24) { "" })</ID>
     <ID>StringTemplate:LnPeer.kt$LnPeer$${address}</ID>
+    <ID>StringTemplate:vss_rust_client_ffi.kt$RustBuffer.Companion$${size}</ID>
     <ID>SwallowedException:Crypto.kt$Crypto$e: Exception</ID>
     <ID>SwallowedException:FcmService.kt$FcmService$e: SerializationException</ID>
     <ID>ThrowingExceptionsWithoutMessageOrCause:ActivityRepo.kt$ActivityRepo$Exception()</ID>
-    <ID>ThrowsCount:VssBackupsClient.kt$VssBackupsClient$private suspend fun post(endpoint: String, request: MessageLite): HttpResponse</ID>
+    <ID>ThrowsCount:vss_rust_client_ffi.kt$@Suppress("UNUSED_PARAMETER") private fun uniffiCheckApiChecksums(lib: _UniFFILib)</ID>
+    <ID>ThrowsCount:vss_rust_client_ffi.kt$private fun&lt;E: Exception&gt; checkCallStatus(errorHandler: CallStatusErrorHandler&lt;E&gt;, status: RustCallStatus)</ID>
     <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ActivityListViewModel.kt$ActivityListViewModel$e: Exception</ID>
@@ -1034,14 +1280,13 @@
     <ID>TooGenericExceptionCaught:AppViewModel.kt$AppViewModel$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ArticleModel.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel$e: Throwable</ID>
-    <ID>TooGenericExceptionCaught:BackupsRepo.kt$BackupsRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:BackupRepo.kt$BackupRepo$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:BiometricPrompt.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BlocktankRegtestScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BlocktankRepo.kt$BlocktankRepo$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:BoostTransactionViewModel.kt$BoostTransactionViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ChannelOrdersScreen.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CoinSelectionViewModel.kt$CoinSelectionViewModel$e: Throwable</ID>
-    <ID>TooGenericExceptionCaught:ContentView.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ContentView.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CoreService.kt$ActivityService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CoreService.kt$ActivityService$e: Throwable</ID>
@@ -1066,21 +1311,31 @@
     <ID>TooGenericExceptionCaught:SettingUpScreen.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ShopWebViewInterface.kt$ShopWebViewInterface$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SpendingAdvancedScreen.kt$e: Throwable</ID>
-    <ID>TooGenericExceptionCaught:SpendingAmountScreen.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:TransferViewModel.kt$TransferViewModel$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:VssBackupClient.kt$VssBackupClient$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:WakeNodeWorker.kt$WakeNodeWorker$e: Exception</ID>
     <ID>TooGenericExceptionCaught:WalletRepo.kt$WalletRepo$e: Exception</ID>
     <ID>TooGenericExceptionCaught:WalletRepo.kt$WalletRepo$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:vss_rust_client_ffi.kt$FfiConverter$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:vss_rust_client_ffi.kt$FfiConverterTypeVssFilterType$e: IndexOutOfBoundsException</ID>
     <ID>TooGenericExceptionThrown:BlocktankHttpClient.kt$BlocktankHttpClient$throw Exception("Http error: ${response.status}")</ID>
     <ID>TooGenericExceptionThrown:FileSystem.kt$throw Error("Cannot create path: $this")</ID>
     <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("HTTP error: ${response.status}")</ID>
     <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("LNURL channel error: ${parsedResponse.reason}")</ID>
     <ID>TooGenericExceptionThrown:LnurlService.kt$LnurlService$throw Exception("LNURL error: ${withdrawResponse.reason}")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$FfiConverter$throw RuntimeException("junk remaining in buffer after lifting, something is very wrong!!")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$FfiConverterTypeVssError$throw RuntimeException("invalid error enum value, something is very wrong!!")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$FfiConverterTypeVssFilterType$throw RuntimeException("invalid enum value, something is very wrong!!", e)</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$RustBuffer.Companion$throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$USize$throw RuntimeException("Invalid SIZE_T_SIZE: ${Native.SIZE_T_SIZE}")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$USize.Companion$throw RuntimeException("Invalid SIZE_T_SIZE: ${Native.SIZE_T_SIZE}")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")</ID>
+    <ID>TooGenericExceptionThrown:vss_rust_client_ffi.kt$throw RuntimeException("UniFFI contract version mismatch: try cleaning and rebuilding your project")</ID>
     <ID>TooManyFunctions:ActivityListViewModel.kt$ActivityListViewModel : ViewModel</ID>
     <ID>TooManyFunctions:ActivityRepo.kt$ActivityRepo</ID>
     <ID>TooManyFunctions:AppViewModel.kt$AppViewModel : ViewModel</ID>
     <ID>TooManyFunctions:BackupNavigationSheetViewModel.kt$BackupNavigationSheetViewModel : ViewModel</ID>
-    <ID>TooManyFunctions:BackupsRepo.kt$BackupsRepo</ID>
+    <ID>TooManyFunctions:BackupRepo.kt$BackupRepo</ID>
     <ID>TooManyFunctions:BlocktankRepo.kt$BlocktankRepo</ID>
     <ID>TooManyFunctions:BoostTransactionViewModel.kt$BoostTransactionViewModel : ViewModel</ID>
     <ID>TooManyFunctions:CacheStore.kt$CacheStore</ID>
@@ -1111,8 +1366,12 @@
     <ID>TooManyFunctions:WalletViewModel.kt$WalletViewModel : ViewModel</ID>
     <ID>TooManyFunctions:WidgetsRepo.kt$WidgetsRepo</ID>
     <ID>TooManyFunctions:WidgetsStore.kt$WidgetsStore</ID>
+    <ID>TooManyFunctions:vss_rust_client_ffi.kt$_UniFFILib : Library</ID>
+    <ID>TooManyFunctions:vss_rust_client_ffi.kt$uniffi.vss_rust_client_ffi.vss_rust_client_ffi.kt</ID>
     <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexMenu = 11f</ID>
     <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexScrim = 10f</ID>
+    <ID>UnnecessaryParenthesesBeforeTrailingLambda:vss_rust_client_ffi.kt$()</ID>
+    <ID>UnnecessaryParenthesesBeforeTrailingLambda:vss_rust_client_ffi.kt$RustBuffer.Companion$()</ID>
     <ID>UnusedParameter:ActivityRow.kt$confirmed: Boolean?</ID>
     <ID>UnusedPrivateProperty:ActivityDetailViewModel.kt$ActivityDetailViewModel$private val lightningRepo: LightningRepo</ID>
     <ID>UnusedPrivateProperty:ActivityListViewModel.kt$ActivityListViewModel$private val lightningRepo: LightningRepo</ID>
@@ -1120,20 +1379,25 @@
     <ID>UnusedPrivateProperty:CoreService.kt$CoreService$private val settingsStore: SettingsStore</ID>
     <ID>UnusedPrivateProperty:CurrencyRepoTest.kt$CurrencyRepoTest$private val toastEventBus: ToastEventBus = mock()</ID>
     <ID>UseCheckOrError:CurrencyRepo.kt$CurrencyRepo$throw IllegalStateException( "Rate not found for currency: $targetCurrency. Available currencies: ${ _currencyState.value.rates.joinToString { it.quote } }" )</ID>
+    <ID>VariableNaming:vss_rust_client_ffi.kt$RustCallStatus$@JvmField var error_buf: RustBuffer.ByValue = RustBuffer.ByValue()</ID>
+    <ID>VariableNaming:vss_rust_client_ffi.kt$val bindings_contract_version = 24</ID>
+    <ID>VariableNaming:vss_rust_client_ffi.kt$val return_value = callback(status)</ID>
+    <ID>VariableNaming:vss_rust_client_ffi.kt$val scaffolding_contract_version = lib.ffi_vss_rust_client_ffi_uniffi_contract_version()</ID>
     <ID>ViewModelForwarding:ActivityDetailScreen.kt$ActivityAddTagSheet( listViewModel = listViewModel, activityViewModel = detailViewModel, onDismiss = { showAddTagSheet = false }, )</ID>
     <ID>ViewModelForwarding:ContentView.kt$BackupSheet( onDismiss = { appViewModel.hideSheet() }, onBackupClick = { appViewModel.hideSheet() appViewModel.showSheet(BottomSheetType.BackupNavigation) }, walletViewModel = walletViewModel )</ID>
     <ID>ViewModelForwarding:ContentView.kt$LnurlAuthSheet(sheet, appViewModel)</ID>
-    <ID>ViewModelForwarding:ContentView.kt$RootNavHost( navController = navController, walletViewModel = walletViewModel, appViewModel = appViewModel, activityListViewModel = activityListViewModel, settingsViewModel = settingsViewModel, currencyViewModel = currencyViewModel, transferViewModel = transferViewModel, scope = scope, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$RootNavHost( navController = navController, walletViewModel = walletViewModel, appViewModel = appViewModel, activityListViewModel = activityListViewModel, settingsViewModel = settingsViewModel, currencyViewModel = currencyViewModel, transferViewModel = transferViewModel, )</ID>
     <ID>ViewModelForwarding:ContentView.kt$SendOptionsView( appViewModel = appViewModel, walletViewModel = walletViewModel, startDestination = sheet.route, onComplete = { txSheet -&gt; appViewModel.resetSendState() appViewModel.hideSheet() appViewModel.clearClipboardForAutoRead() txSheet?.let { appViewModel.showNewTransactionSheet(it) } } )</ID>
     <ID>ViewModelForwarding:ContentView.kt$SettingUpScreen( viewModel = transferViewModel, onCloseClick = { navController.popBackStack&lt;Routes.TransferRoot&gt;(inclusive = true) }, onContinueClick = { navController.popBackStack&lt;Routes.TransferRoot&gt;(inclusive = true) }, )</ID>
     <ID>ViewModelForwarding:ContentView.kt$SpendingAdvancedScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onOrderCreated = { navController.popBackStack&lt;Routes.SpendingConfirm&gt;(inclusive = false) }, )</ID>
-    <ID>ViewModelForwarding:ContentView.kt$SpendingAmountScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onOrderCreated = { navController.navigate(Routes.SpendingConfirm) }, )</ID>
+    <ID>ViewModelForwarding:ContentView.kt$SpendingAmountScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onOrderCreated = { navController.navigate(Routes.SpendingConfirm) }, toastException = { appViewModel.toast(it) }, toast = { title, description -&gt; appViewModel.toast( type = Toast.ToastType.ERROR, title = title, description = description ) }, )</ID>
     <ID>ViewModelForwarding:ContentView.kt$SpendingConfirmScreen( viewModel = transferViewModel, onBackClick = { navController.popBackStack() }, onCloseClick = { navController.navigateToHome() }, onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) }, onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) }, onConfirm = { navController.navigate(Routes.SettingUp) }, )</ID>
     <ID>ViewModelForwarding:HomeNav.kt$AllActivityScreen( viewModel = activityListViewModel, onBack = { activityListViewModel.clearFilters() walletNavController.popBackStack() }, onActivityItemClick = { rootNavController.navigateToActivityItem(it) }, )</ID>
     <ID>ViewModelForwarding:HomeNav.kt$HomeScreen( mainUiState = mainUiState, drawerState = drawerState, rootNavController = rootNavController, walletNavController = walletNavController, settingsViewModel = settingsViewModel, walletViewModel = walletViewModel, appViewModel = appViewModel, activityListViewModel = activityListViewModel, )</ID>
     <ID>ViewModelForwarding:HomeNav.kt$NavContent( walletNavController = walletNavController, rootNavController = rootNavController, mainUiState = uiState, drawerState = drawerState, settingsViewModel = settingsViewModel, appViewModel = appViewModel, walletViewModel = walletViewModel, activityListViewModel = activityListViewModel, )</ID>
     <ID>ViewModelForwarding:HomeScreen.kt$DeleteWidgetAlert(type, homeViewModel)</ID>
     <ID>WildcardImport:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:vss_rust_client_ffi.kt$import com.sun.jna.ptr.*</ID>
     <ID>Wrapping:ActivityDetailScreen.kt$(</ID>
     <ID>Wrapping:ActivityExploreScreen.kt$(</ID>
     <ID>Wrapping:BlocktankRegtestScreen.kt$( verticalAlignment = CenterVertically, modifier = Modifier .padding(vertical = 4.dp) .fillMaxWidth() )</ID>
@@ -1151,5 +1415,6 @@
     <ID>Wrapping:ReportIssueViewModel.kt$ReportIssueViewModel$it.copy( isSendEnabled = !it.errorEmail &amp;&amp; it.emailInput.isNotBlank() &amp;&amp; it.messageInput.isNotBlank() )</ID>
     <ID>Wrapping:SettingsTextButtonRow.kt$( verticalArrangement = Arrangement.Center, modifier = Modifier .weight(1f) .padding(end = 16.dp) )</ID>
     <ID>Wrapping:ShopWebViewClient.kt$ShopWebViewClient$( """ window.ReactNativeWebView = { postMessage: function(data) { Android.postMessage(data); } }; // Override the default postMessage if it exists if (window.postMessage) { window.originalPostMessage = window.postMessage; window.postMessage = function(data) { if (typeof data === 'string') { Android.postMessage(data); } else { Android.postMessage(JSON.stringify(data)); } }; } """.trimIndent(), null )</ID>
+    <ID>Wrapping:vss_rust_client_ffi.kt$_UniFFILib$(</ID>
   </CurrentIssues>
 </SmellBaseline>
