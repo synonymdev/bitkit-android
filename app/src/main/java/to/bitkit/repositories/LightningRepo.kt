@@ -476,10 +476,6 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
         executeWhenNodeRunning("Pay invoice") {
             val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
-            cacheStore.addActivityMetaData(ActivityMetaData.Bolt11(
-                paymentId = paymentId,
-                invoice = bolt11
-            ))
             syncState()
             Result.success(paymentId)
         }
@@ -521,7 +517,8 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = finalUtxosToSpend,
             )
-            cacheStore.addActivityMetaData(ActivityMetaData.OnChainActivity(
+            cacheStore.addActivityMetaData(
+                ActivityMetaData.OnChainActivity(
                 txId = txId,
                 feeRate = satsPerVByte,
                 address = address,

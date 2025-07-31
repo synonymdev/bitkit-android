@@ -52,7 +52,6 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
@@ -70,7 +69,6 @@ import kotlin.random.Random
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
-    private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
 ) {
     private var walletIndex: Int = 0
@@ -282,8 +280,9 @@ class ActivityService(
                             }
 
                             val existingActivity = getActivityById(payment.id)
-                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
-                                    ?: 0u) > payment.latestUpdateTimestamp
+                            if (existingActivity != null &&
+                                existingActivity is Activity.Onchain &&
+                                (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
@@ -301,16 +300,16 @@ class ActivityService(
                                     txId = kind.txid,
                                     value = payment.amountSats ?: 0u,
                                     fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                    feeRate = 1u, // TODO: get from somewhere
-                                    address = "todo_find_address", // TODO: find address
+                                    feeRate = 1u,
+                                    address = "Loading...",
                                     confirmed = isConfirmed,
                                     timestamp = timestamp,
                                     isBoosted = false,
-                                    isTransfer = false, // TODO: handle when paying for order
+                                    isTransfer = false,
                                     doesExist = true,
                                     confirmTimestamp = confirmedTimestamp,
-                                    channelId = null, // TODO: get from linked order
-                                    transferTxId = null, // TODO: get from linked order
+                                    channelId = null,
+                                    transferTxId = null,
                                     createdAt = timestamp,
                                     updatedAt = timestamp,
                                 )
@@ -330,7 +329,10 @@ class ActivityService(
 
                         is PaymentKind.Bolt11 -> {
                             // Skip pending inbound payments, just means they created an invoice
-                            if (payment.status == PaymentStatus.PENDING && payment.direction == PaymentDirection.INBOUND) {
+                            if (
+                                payment.status == PaymentStatus.PENDING &&
+                                payment.direction == PaymentDirection.INBOUND
+                            ) {
                                 continue
                             }
 
@@ -354,7 +356,7 @@ class ActivityService(
                                     status = state,
                                     value = payment.amountSats ?: 0u,
                                     fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                    invoice = "loading...",
+                                    invoice = kind.bolt11 ?: "Loading...",
                                     message = kind.description.orEmpty(),
                                     timestamp = payment.latestUpdateTimestamp,
                                     preimage = kind.preimage,

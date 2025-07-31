@@ -15,15 +15,8 @@ sealed interface ActivityMetaData {
         val channelId: String?,
         val transferTxId: String?,
     ) : ActivityMetaData
-    @Serializable
-    @SerialName("bolt11")
-    data class Bolt11(
-        val paymentId: String,
-        val invoice: String,
-    ) : ActivityMetaData
 }
 
 fun ActivityMetaData.rawId() = when(this) {
-    is ActivityMetaData.Bolt11 -> paymentId
     is ActivityMetaData.OnChainActivity -> txId
 }
