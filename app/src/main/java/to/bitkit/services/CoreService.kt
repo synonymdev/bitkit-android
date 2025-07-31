@@ -52,7 +52,6 @@ import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.LnPeer
@@ -70,7 +69,6 @@ import kotlin.random.Random
 class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
-    private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
 ) {
     private var walletIndex: Int = 0
@@ -282,8 +280,9 @@ class ActivityService(
                             }
 
                             val existingActivity = getActivityById(payment.id)
-                            if (existingActivity != null && existingActivity is Activity.Onchain && (existingActivity.v1.updatedAt
-                                    ?: 0u) > payment.latestUpdateTimestamp
+                            if (existingActivity != null &&
+                                existingActivity is Activity.Onchain &&
+                                (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
                             ) {
                                 continue
                             }
@@ -302,7 +301,7 @@ class ActivityService(
                                     value = payment.amountSats ?: 0u,
                                     fee = (payment.feePaidMsat ?: 0u) / 1000u,
                                     feeRate = 1u, // TODO: get from somewhere
-                                    address = "todo_find_address", // TODO: find address
+                                    address = "Loading...", // TODO: find address
                                     confirmed = isConfirmed,
                                     timestamp = timestamp,
                                     isBoosted = false,
@@ -330,23 +329,41 @@ class ActivityService(
 
                         is PaymentKind.Bolt11 -> {
                             // Skip pending inbound payments, just means they created an invoice
-                            if (payment.status == PaymentStatus.PENDING && payment.direction == PaymentDirection.INBOUND) {
+                            if (
+                                payment.status == PaymentStatus.PENDING &&
+                                payment.direction == PaymentDirection.INBOUND
+                            ) {
                                 continue
                             }
 
-                            val ln = LightningActivity(
-                                id = payment.id,
-                                txType = payment.direction.toPaymentType(),
-                                status = state,
-                                value = payment.amountSats ?: 0u,
-                                fee = (payment.feePaidMsat ?: 0u) / 1000u,
-                                invoice = kind.bolt11 ?: "Loading…",
-                                message = kind.description.orEmpty(),
-                                timestamp = payment.latestUpdateTimestamp,
-                                preimage = kind.preimage,
-                                createdAt = payment.latestUpdateTimestamp,
-                                updatedAt = payment.latestUpdateTimestamp,
-                            )
+                            val existingActivity = getActivityById(payment.id)
+                            if (
+                                existingActivity as? Activity.Lightning != null &&
+                                (existingActivity.v1.updatedAt ?: 0u) > payment.latestUpdateTimestamp
+                            ) {
+                                continue
+                            }
+
+                            val ln = if (existingActivity is Activity.Lightning) {
+                                existingActivity.v1.copy(
+                                    updatedAt = payment.latestUpdateTimestamp,
+                                    status = state
+                                )
+                            } else {
+                                LightningActivity(
+                                    id = payment.id,
+                                    txType = payment.direction.toPaymentType(),
+                                    status = state,
+                                    value = payment.amountSats ?: 0u,
+                                    fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                                    invoice = kind.bolt11 ?: "Loading...",
+                                    message = kind.description.orEmpty(),
+                                    timestamp = payment.latestUpdateTimestamp,
+                                    preimage = kind.preimage,
+                                    createdAt = payment.latestUpdateTimestamp,
+                                    updatedAt = payment.latestUpdateTimestamp,
+                                )
+                            }
 
                             if (getActivityById(payment.id) != null) {
                                 updateActivity(payment.id, Activity.Lightning(ln))

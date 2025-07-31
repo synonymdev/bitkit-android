@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.PendingBoostActivity
+import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -113,6 +114,22 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun addTransactionMetadata(item: TransactionMetadata) {
+        if (item.txId in store.data.first().transactionsMetadata.map { it.txId }) return
+
+        store.updateData {
+            it.copy(transactionsMetadata = it.transactionsMetadata + item)
+        }
+    }
+
+    suspend fun removeTransactionMetadata(item: TransactionMetadata) {
+        if (item.txId !in store.data.first().transactionsMetadata.map { it.txId }) return
+
+        store.updateData {
+            it.copy(transactionsMetadata = it.transactionsMetadata - item)
+        }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -135,4 +152,5 @@ data class AppCacheData(
     val deletedActivities: List<String> = listOf(),
     val activitiesPendingDelete: List<String> = listOf(),
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
+    val transactionsMetadata: List<TransactionMetadata> = listOf(),
 )

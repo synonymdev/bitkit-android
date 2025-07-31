@@ -172,6 +172,8 @@ class TransferViewModel @Inject constructor(
                     address = order.payment.onchain.address,
                     sats = order.feeSat,
                     speed = speed,
+                    isTransfer = true,
+                    channelId = order.channel?.shortChannelId,
                 )
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)

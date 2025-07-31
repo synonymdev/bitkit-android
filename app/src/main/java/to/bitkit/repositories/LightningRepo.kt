@@ -27,6 +27,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -495,6 +496,8 @@ class LightningRepo @Inject constructor(
         sats: ULong,
         speed: TransactionSpeed? = null,
         utxosToSpend: List<SpendableUtxo>? = null,
+        isTransfer: Boolean = false,
+        channelId: String? = null,
     ): Result<Txid> =
         executeWhenNodeRunning("Send on-chain") {
             val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
@@ -513,6 +516,16 @@ class LightningRepo @Inject constructor(
                 sats = sats,
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = finalUtxosToSpend,
+            )
+            cacheStore.addTransactionMetadata(
+                TransactionMetadata(
+                    txId = txId,
+                    feeRate = satsPerVByte,
+                    address = address,
+                    isTransfer = isTransfer,
+                    channelId = channelId,
+                    transferTxId = txId.takeIf { isTransfer }
+                )
             )
             syncState()
             Result.success(txId)
