@@ -59,7 +59,7 @@ class BackupRepo @Inject constructor(
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
 
-        backupClient.setup()
+        scope.launch { backupClient.setup() }
         startBackupStatusObservers()
         startDataStoreListeners()
         startPeriodicBackupFailureCheck()
@@ -143,7 +143,7 @@ class BackupRepo @Inject constructor(
         // Cancel existing backup job for this category
         backupJobs[category]?.cancel()
 
-        Logger.debug("Scheduling backup for category: $category", context = TAG)
+        Logger.debug("Scheduling backup for: '$category'", context = TAG)
 
         backupJobs[category] = scope.launch {
             delay(BACKUP_DEBOUNCE)
@@ -203,7 +203,7 @@ class BackupRepo @Inject constructor(
     }
 
     suspend fun triggerBackup(category: BackupCategory) = withContext(bgDispatcher) {
-        Logger.debug("Backup starting for category: $category", context = TAG)
+        Logger.debug("Backup starting for: '$category'", context = TAG)
 
         cacheStore.updateBackupStatus(category) {
             it.copy(running = true, required = System.currentTimeMillis())
@@ -217,13 +217,13 @@ class BackupRepo @Inject constructor(
                         synced = System.currentTimeMillis(),
                     )
                 }
-                Logger.info("Backup succeeded for category: $category", context = TAG)
+                Logger.info("Backup succeeded for: '$category'", context = TAG)
             }
             .onFailure { e ->
                 cacheStore.updateBackupStatus(category) {
                     it.copy(running = false)
                 }
-                Logger.error("Backup failed for category: $category", e = e, context = TAG)
+                Logger.error("Backup failed for: '$category'", e = e, context = TAG)
             }
     }
 
@@ -233,16 +233,12 @@ class BackupRepo @Inject constructor(
                 it.copy(required = System.currentTimeMillis())
             }
         }
-        Logger.debug("Marked backup required for category: $category", context = TAG)
+        Logger.debug("Marked backup required for: '$category'", context = TAG)
     }
 
-    private suspend fun performBackup(category: BackupCategory): Result<Unit> {
-        Logger.debug("Performing backup for category: $category", context = TAG)
-
-        return runCatching {
-            val dataBytes = getBackupDataBytes(category)
-            encryptAndUpload(category, dataBytes).getOrThrow()
-        }
+    private suspend fun performBackup(category: BackupCategory): Result<Unit> = runCatching {
+        val dataBytes = getBackupDataBytes(category)
+        encryptAndUpload(category, dataBytes).getOrThrow()
     }
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
@@ -286,11 +282,7 @@ class BackupRepo @Inject constructor(
         val encrypted = dataBytes
 
         return backupClient.putObject(category, encrypted)
-            .onSuccess {
-                Logger.info("Backup uploaded for category: $category", context = TAG)
-            }
     }
-
 
     suspend fun performFullRestoreFromLatestBackup(): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("Full restore starting", context = TAG)
@@ -327,22 +319,26 @@ class BackupRepo @Inject constructor(
         category: BackupCategory,
         restoreAction: suspend (ByteArray) -> Unit,
     ): Result<Unit> = runCatching {
-        val dataBytes = fetchBackupData(category).getOrThrow()
-
-        restoreAction(dataBytes)
+        fetchBackupData(category)
+            .onSuccess { dataBytes ->
+                if (dataBytes == null) {
+                    Logger.warn("Restore null for: '$category'", context = TAG)
+                } else {
+                    restoreAction(dataBytes)
+                    Logger.info("Restore success for: '$category'", context = TAG)
+                }
+            }
+            .onFailure {
+                Logger.debug("Restore error for: '$category'", context = TAG)
+            }
 
         cacheStore.updateBackupStatus(category) {
             it.copy(running = false, synced = System.currentTimeMillis())
         }
-
-        Logger.info("Restore success for category: $category", context = TAG)
-    }.onFailure { exception ->
-        Logger.debug("Restore error for category: $category", context = TAG)
     }
 
-    private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray> = runCatching {
-        val objectInfo = backupClient.getObject(category).getOrThrow()
-        objectInfo.data
+    private suspend fun fetchBackupData(category: BackupCategory): Result<ByteArray?> {
+        return backupClient.getObject(category).map { it?.data }
     }
 
     companion object {

@@ -67,7 +67,7 @@ class BackupClientHttp @Inject constructor(
             )
         }
 
-    override suspend fun getObject(category: BackupCategory): Result<VssObjectDto> = runCatching {
+    override suspend fun getObject(category: BackupCategory): Result<VssObjectDto?> = runCatching {
         Logger.debug("Retrieving object for category: $category", context = TAG)
 
         val key = category.name.lowercase()

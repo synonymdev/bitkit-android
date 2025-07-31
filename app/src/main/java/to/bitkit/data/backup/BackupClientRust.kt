@@ -2,9 +2,6 @@ package to.bitkit.data.backup
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.data.dto.VssListDto
@@ -27,29 +24,22 @@ class BackupClientRust @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val vssStoreIdProvider: VssStoreIdProvider,
 ) : BackupClient {
-
-    private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
-
-    private fun getVssStoreId(): String = vssStoreIdProvider.getVssStoreId()
-
     private val isSetup = CompletableDeferred<Unit>()
 
-    override fun setup() {
-        scope.launch {
-            try {
-                withTimeout(30.seconds) {
-                    Logger.debug("Setting up vss client…", context = TAG)
-                    vssNewClient(
-                        baseUrl = Env.vssServerUrl,
-                        storeId = getVssStoreId(),
-                    )
-                    isSetup.complete(Unit)
-                    Logger.debug("VSS client setup complete", context = TAG)
-                }
-            } catch (e: Exception) {
-                isSetup.completeExceptionally(e)
-                Logger.error("VSS client setup error", e = e, context = TAG)
+    override suspend fun setup() = withContext(bgDispatcher) {
+        try {
+            withTimeout(30.seconds) {
+                Logger.debug("VSS client setting up…", context = TAG)
+                vssNewClient(
+                    baseUrl = Env.vssServerUrl,
+                    storeId = vssStoreIdProvider.getVssStoreId(),
+                )
+                isSetup.complete(Unit)
+                Logger.info("VSS client setup ok", context = TAG)
             }
+        } catch (e: Exception) {
+            isSetup.completeExceptionally(e)
+            Logger.error("VSS client setup error", e = e, context = TAG)
         }
     }
 
@@ -61,7 +51,7 @@ class BackupClientRust @Inject constructor(
 
         val key = category.name.lowercase()
 
-        Logger.debug("VSS putObject call for '$key'", context = TAG)
+        Logger.debug("VSS 'putObject' call for '$key'", context = TAG)
 
         runCatching {
             val item = vssStore(
@@ -69,7 +59,7 @@ class BackupClientRust @Inject constructor(
                 value = data,
             )
 
-            Logger.debug("VSS stored backup '$key' at version: ${item.version}", context = TAG)
+            Logger.debug("VSS 'putObject' success for '$key' at version: ${item.version}", context = TAG)
 
             VssObjectDto(
                 key = item.key,
@@ -77,23 +67,26 @@ class BackupClientRust @Inject constructor(
                 data = item.value,
             )
         }.onFailure { e ->
-            Logger.error("VSS putObject error for '$key'", e = e, context = TAG)
+            Logger.error("VSS 'putObject' error for '$key'", e = e, context = TAG)
         }
     }
 
-    override suspend fun getObject(category: BackupCategory): Result<VssObjectDto> = withContext(bgDispatcher) {
+    override suspend fun getObject(category: BackupCategory): Result<VssObjectDto?> = withContext(bgDispatcher) {
         isSetup.await()
 
         val key = category.name.lowercase()
 
-        Logger.debug("VSS getObject call for '$key'", context = TAG)
+        Logger.debug("VSS 'getObject' call for '$key'", context = TAG)
 
         runCatching {
             val item = vssGet(
                 key = key,
             )
 
-            requireNotNull(item) { "VSS expected to find backup for '$key'" }
+            if (item == null) {
+                Logger.warn("VSS 'getObject' found no backup for '$key'", context = TAG)
+                return@runCatching null
+            }
 
             VssObjectDto(
                 key = item.key,
@@ -101,29 +94,35 @@ class BackupClientRust @Inject constructor(
                 data = item.value,
             )
         }.onFailure { e ->
-            Logger.error("VSS getObject error for '$key'", e = e, context = TAG)
+            Logger.error("VSS 'getObject' error for '$key'", e = e, context = TAG)
         }
     }
 
-    override suspend fun deleteObject(category: BackupCategory, version: Long): Result<Unit> = withContext(bgDispatcher) {
-        isSetup.await()
+    // TODO remove
+    override suspend fun deleteObject(category: BackupCategory, version: Long): Result<Unit> =
+        withContext(bgDispatcher) {
+            isSetup.await()
 
-        val key = category.name.lowercase()
-        runCatching {
+            val key = category.name.lowercase()
 
-            val wasDeleted = vssDelete(
-                key = category.name.lowercase(),
-            )
+            Logger.debug("VSS 'deleteObject' call for '$key'", context = TAG)
 
-            if (!wasDeleted) throw IllegalStateException("VSS found no backup to delete for '$key'")
+            runCatching {
 
-            Logger.debug("VSS deleted backup '$key'", context = TAG)
-        }
-            .onFailure { e ->
-                Logger.error("VSS deleteObject error for '$key'", e = e, context = TAG)
+                val wasDeleted = vssDelete(
+                    key = category.name.lowercase(),
+                )
+
+                if (!wasDeleted) throw IllegalStateException("VSS found no backup to delete for '$key'")
+
+                Logger.debug("VSS deleted backup '$key'", context = TAG)
             }
-    }
+                .onFailure { e ->
+                    Logger.error("VSS deleteObject error for '$key'", e = e, context = TAG)
+                }
+        }
 
+    // TODO remove
     override suspend fun listObjects(
         keyPrefix: String?,
         pageSize: Int?,
