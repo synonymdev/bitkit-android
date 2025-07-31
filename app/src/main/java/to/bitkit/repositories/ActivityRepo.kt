@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.Activity.Onchain
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
@@ -15,7 +16,6 @@ import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.dto.rawId
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
-import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
@@ -255,35 +255,9 @@ class ActivityRepo @Inject constructor(
                 Logger.debug("updateActivitiesMetaData = Activity found: ${activityToUpdate.rawId()}", context = TAG)
 
                 when (activityToUpdate) {
-                    is Activity.Lightning -> {
-                        val metaData = activityMetaData as? ActivityMetaData.Bolt11
-                        val updatedActivity = Activity.Lightning(
-                            v1 = activityToUpdate.v1.copy(
-                                invoice = metaData?.invoice.orEmpty(),
-                                timestamp = nowTimestamp().toEpochMilli().toULong()
-                            )
-                        )
-
-                        updateActivity(
-                            id = updatedActivity.v1.id,
-                            activity = updatedActivity
-                        ).onSuccess {
-                            Logger.debug(
-                                "updateActivitiesMetaData - Activity updated with success. " +
-                                    "new data: $updatedActivity", context = TAG
-                            )
-                            cacheStore.removeActivityMetaData(activityMetaData)
-                        }.onFailure {
-                            Logger.warn(
-                                "updateActivitiesMetaData - Failed updating activity ${updatedActivity.rawId()}",
-                                context = TAG
-                            )
-                        }
-                    }
-
                     is Activity.Onchain -> {
                         val metaData = activityMetaData as? ActivityMetaData.OnChainActivity
-                        val updatedActivity = Activity.Onchain(
+                        val updatedActivity = Onchain(
                             v1 = activityToUpdate.v1.copy(
                                 feeRate = metaData?.feeRate?.toULong() ?: 1u,
                                 address = metaData?.address.orEmpty(),
@@ -300,6 +274,8 @@ class ActivityRepo @Inject constructor(
                             cacheStore.removeActivityMetaData(activityMetaData)
                         }
                     }
+
+                    is Activity.Lightning -> Unit
                 }
             }
         }
