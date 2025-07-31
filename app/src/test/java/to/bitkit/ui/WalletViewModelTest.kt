@@ -1,7 +1,6 @@
 package to.bitkit.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,7 +17,7 @@ import org.mockito.kotlin.whenever
 import org.robolectric.annotation.Config
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.LnPeer
-import to.bitkit.repositories.BackupsRepo
+import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletRepo
@@ -37,7 +36,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val walletRepo: WalletRepo = mock()
     private val lightningRepo: LightningRepo = mock()
     private val settingsStore: SettingsStore = mock()
-    private val backupsRepo: BackupsRepo = mock()
+    private val backupRepo: BackupRepo = mock()
     private val mockLightningState = MutableStateFlow(LightningState())
     private val mockWalletState = MutableStateFlow(WalletState())
 
@@ -51,7 +50,7 @@ class WalletViewModelTest : BaseUnitTest() {
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
             settingsStore = settingsStore,
-            backupsRepo = backupsRepo,
+            backupRepo = backupRepo,
         )
     }
 
@@ -174,12 +173,12 @@ class WalletViewModelTest : BaseUnitTest() {
 
         mockWalletState.value = mockWalletState.value.copy(walletExists = true)
 
-        verify(backupsRepo, never()).performFullRestoreFromLatestBackup()
+        verify(backupRepo, never()).performFullRestoreFromLatestBackup()
     }
 
     @Test
     fun `onBackupRestoreSuccess should reset restoreState`() = test {
-        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         mockWalletState.value = mockWalletState.value.copy(walletExists = true)
         sut.setRestoringWalletState()
         assertEquals(RestoreState.RestoringWallet, sut.restoreState)
@@ -193,7 +192,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `proceedWithoutRestore should exit restore flow`() = test {
         val testError = Exception("Test error")
-        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
+        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.failure(testError))
         sut.setRestoringWalletState()
         mockWalletState.value = mockWalletState.value.copy(walletExists = true)
         assertEquals(RestoreState.BackupRestoreCompleted, sut.restoreState)
@@ -205,7 +204,7 @@ class WalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `restore state should transition as expected`() = test {
-        whenever(backupsRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
         assertEquals(RestoreState.NotRestoring, sut.restoreState)
 
         sut.setRestoringWalletState()

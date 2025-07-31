@@ -248,7 +248,7 @@ class BlocktankRepo @Inject constructor(
 
     suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
         try {
-            Logger.debug("Opening channel for order: $orderId", context = TAG)
+            Logger.debug("Opening channel for order: '$orderId'", context = TAG)
             val order = coreService.blocktank.open(orderId)
 
             // Update the order in state
