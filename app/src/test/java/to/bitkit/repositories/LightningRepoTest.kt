@@ -385,7 +385,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals("testPaymentId", result.getOrNull())
 
         // Verify the cache call
-        val captor = argumentCaptor<TransactionMetadata.OnChainActivity>()
+        val captor = argumentCaptor<TransactionMetadata>()
         verifyBlocking(cacheStore) {
             addTransactionMetadata(captor.capture())
         }

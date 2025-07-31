@@ -11,9 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.data.CacheStore
-import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.dto.PendingBoostActivity
-import to.bitkit.data.dto.rawId
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.rawId
@@ -267,7 +265,7 @@ class ActivityRepo @Inject constructor(
     private suspend fun updateActivitiesMetadata() = withContext(bgDispatcher) {
         cacheStore.data.first().transactionsMetadata.forEach { activityMetaData ->
             findActivityByPaymentId(
-                paymentHashOrTxId = activityMetaData.rawId(),
+                paymentHashOrTxId = activityMetaData.txId,
                 type = ActivityFilter.ALL,
                 txType = PaymentType.SENT
             ).onSuccess { activityToUpdate ->
@@ -275,14 +273,13 @@ class ActivityRepo @Inject constructor(
 
                 when (activityToUpdate) {
                     is Activity.Onchain -> {
-                        val metaData = activityMetaData as? TransactionMetadata.OnChainActivity
                         val updatedActivity = Onchain(
                             v1 = activityToUpdate.v1.copy(
-                                feeRate = metaData?.feeRate?.toULong() ?: 1u,
-                                address = metaData?.address.orEmpty(),
-                                isTransfer = metaData?.isTransfer ?: false,
-                                channelId = metaData?.channelId,
-                                transferTxId = metaData?.transferTxId
+                                feeRate = activityMetaData.feeRate.toULong(),
+                                address = activityMetaData.address,
+                                isTransfer = activityMetaData.isTransfer,
+                                channelId = activityMetaData.channelId,
+                                transferTxId = activityMetaData.transferTxId
                             )
                         )
 

@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.dto.TransactionMetadata
-import to.bitkit.data.dto.rawId
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -116,7 +115,7 @@ class CacheStore @Inject constructor(
     }
 
     suspend fun addTransactionMetadata(item: TransactionMetadata) {
-        if (item.rawId() in store.data.first().transactionsMetadata.map { it.rawId() }) return
+        if (item.txId in store.data.first().transactionsMetadata.map { it.txId }) return
 
         store.updateData {
             it.copy(transactionsMetadata = it.transactionsMetadata + item)
@@ -124,7 +123,7 @@ class CacheStore @Inject constructor(
     }
 
     suspend fun removeTransactionMetadata(item: TransactionMetadata) {
-        if (item.rawId() !in store.data.first().transactionsMetadata.map { it.rawId() }) return
+        if (item.txId !in store.data.first().transactionsMetadata.map { it.txId }) return
 
         store.updateData {
             it.copy(transactionsMetadata = it.transactionsMetadata - item)

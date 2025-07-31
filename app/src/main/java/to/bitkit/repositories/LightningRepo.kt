@@ -518,7 +518,7 @@ class LightningRepo @Inject constructor(
                 utxosToSpend = finalUtxosToSpend,
             )
             cacheStore.addTransactionMetadata(
-                TransactionMetadata.OnChainActivity(
+                TransactionMetadata(
                     txId = txId,
                     feeRate = satsPerVByte,
                     address = address,
