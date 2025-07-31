@@ -164,7 +164,7 @@ internal object Env {
             protocol = ElectrumProtocol.TCP,
         )
         val E2E = ElectrumServer(
-            host = "127.0.0.1",
+            host = "10.0.2.2",
             tcp = 60001,
             ssl = 60002,
             protocol = ElectrumProtocol.TCP,
