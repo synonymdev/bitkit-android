@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.data.CacheStore
-import to.bitkit.data.dto.ActivityMetaData
+import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.dto.rawId
 import to.bitkit.di.BgDispatcher
@@ -49,7 +49,7 @@ class ActivityRepo @Inject constructor(
                 .onSuccess { payments ->
                     Logger.debug("Got payments with success, syncing activities", context = TAG)
                     syncLdkNodePayments(payments = payments)
-                    updateActivitiesMetaData()
+                    updateActivitiesMetadata()
                     boostPendingActivities()
                     isSyncingLdkNodePayments = false
                     return@withContext Result.success(Unit)
@@ -245,8 +245,8 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    private suspend fun updateActivitiesMetaData() = withContext(bgDispatcher) {
-        cacheStore.data.first().activitiesMetaData.forEach { activityMetaData ->
+    private suspend fun updateActivitiesMetadata() = withContext(bgDispatcher) {
+        cacheStore.data.first().transactionsMetadata.forEach { activityMetaData ->
             findActivityByPaymentId(
                 paymentHashOrTxId = activityMetaData.rawId(),
                 type = ActivityFilter.ALL,
@@ -256,7 +256,7 @@ class ActivityRepo @Inject constructor(
 
                 when (activityToUpdate) {
                     is Activity.Onchain -> {
-                        val metaData = activityMetaData as? ActivityMetaData.OnChainActivity
+                        val metaData = activityMetaData as? TransactionMetadata.OnChainActivity
                         val updatedActivity = Onchain(
                             v1 = activityToUpdate.v1.copy(
                                 feeRate = metaData?.feeRate?.toULong() ?: 1u,
@@ -271,7 +271,7 @@ class ActivityRepo @Inject constructor(
                             id = updatedActivity.v1.id,
                             activity = updatedActivity
                         ).onSuccess {
-                            cacheStore.removeActivityMetaData(activityMetaData)
+                            cacheStore.removeTransactionMetadata(activityMetaData)
                         }
                     }
 

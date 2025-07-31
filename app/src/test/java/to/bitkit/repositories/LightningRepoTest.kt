@@ -23,7 +23,7 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.dto.ActivityMetaData
+import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.ElectrumServer
@@ -354,7 +354,7 @@ class LightningRepoTest : BaseUnitTest() {
         )
         whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
 
-        wheneverBlocking { cacheStore.addActivityMetaData(any()) }.thenReturn(Unit)
+        wheneverBlocking { cacheStore.addTransactionMetadata(any()) }.thenReturn(Unit)
 
         whenever(
             lightningService.send(
@@ -385,9 +385,9 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals("testPaymentId", result.getOrNull())
 
         // Verify the cache call
-        val captor = argumentCaptor<ActivityMetaData.OnChainActivity>()
+        val captor = argumentCaptor<TransactionMetadata.OnChainActivity>()
         verifyBlocking(cacheStore) {
-            addActivityMetaData(captor.capture())
+            addTransactionMetadata(captor.capture())
         }
 
         val capturedActivity = captor.firstValue

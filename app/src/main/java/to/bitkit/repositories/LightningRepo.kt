@@ -27,7 +27,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.dto.ActivityMetaData
+import to.bitkit.data.dto.TransactionMetadata
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -517,8 +517,8 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
                 utxosToSpend = finalUtxosToSpend,
             )
-            cacheStore.addActivityMetaData(
-                ActivityMetaData.OnChainActivity(
+            cacheStore.addTransactionMetadata(
+                TransactionMetadata.OnChainActivity(
                     txId = txId,
                     feeRate = satsPerVByte,
                     address = address,

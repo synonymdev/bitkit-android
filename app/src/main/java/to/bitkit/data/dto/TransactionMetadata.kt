@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-sealed interface ActivityMetaData {
+sealed interface TransactionMetadata {
     @Serializable
     @SerialName("onchain")
     data class OnChainActivity(
@@ -14,9 +14,9 @@ sealed interface ActivityMetaData {
         val isTransfer: Boolean,
         val channelId: String?,
         val transferTxId: String?,
-    ) : ActivityMetaData
+    ) : TransactionMetadata
 }
 
-fun ActivityMetaData.rawId() = when (this) {
-    is ActivityMetaData.OnChainActivity -> txId
+fun TransactionMetadata.rawId() = when (this) {
+    is TransactionMetadata.OnChainActivity -> txId
 }

@@ -8,7 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
-import to.bitkit.data.dto.ActivityMetaData
+import to.bitkit.data.dto.TransactionMetadata
 import javax.inject.Singleton
 
 val json = Json {
@@ -17,8 +17,8 @@ val json = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
     serializersModule = SerializersModule {
-        polymorphic(ActivityMetaData::class) {
-            subclass(ActivityMetaData.OnChainActivity::class)
+        polymorphic(TransactionMetadata::class) {
+            subclass(TransactionMetadata.OnChainActivity::class)
         }
     }
 }
