@@ -108,10 +108,10 @@ jobs:
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: Baklava
-          arch: x86_64
           profile: pixel_6
-          avd-name: Pixel_6_2
+          api-level: 33
+          arch: x86_64
+          avd-name: Pixel_6
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: cd bitkit-e2e-tests && npm run e2e:android -- --mochaOpts.grep "Can start onboarding"
