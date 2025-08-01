@@ -86,7 +86,7 @@ class AppViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
-    private val lightningService: LightningRepo,
+    private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
     private val coreService: CoreService,
     private val ldkNodeEventBus: LdkNodeEventBus,
@@ -200,7 +200,7 @@ class AppViewModel @Inject constructor(
 
                         is Event.ChannelReady -> {
                             // TODO: handle ONLY cjit as payment received. This makes it look like any channel confirmed is a received payment.
-                            val channel = lightningService.getChannels()?.find { it.channelId == event.channelId }
+                            val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
                             if (channel != null) {
                                 showNewTransactionSheet(
                                     NewTransactionSheetDetails(
@@ -403,12 +403,12 @@ class AppViewModel @Inject constructor(
         val lnurl = _sendUiState.value.lnurl
 
         val isValidLNAmount = when (lnurl) {
-            null -> lightningService.canSend(amount)
+            null -> lightningRepo.canSend(amount)
             is LnurlParams.LnurlPay -> {
                 val minSat = lnurl.data.minSendableSat()
                 val maxSat = lnurl.data.maxSendableSat()
 
-                amount in minSat..maxSat && lightningService.canSend(amount)
+                amount in minSat..maxSat && lightningRepo.canSend(amount)
             }
 
             is LnurlParams.LnurlWithdraw -> {
@@ -531,7 +531,7 @@ class AppViewModel @Inject constructor(
         val quickPayHandled = handleQuickPayIfApplicable(amountSats = invoice.amountSatoshis, invoice = invoice)
         if (quickPayHandled) return
 
-        if (!lightningService.canSend(invoice.amountSatoshis)) {
+        if (!lightningRepo.canSend(invoice.amountSatoshis)) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = "Insufficient Funds",
@@ -574,7 +574,7 @@ class AppViewModel @Inject constructor(
         val minSendable = data.minSendableSat()
         val maxSendable = data.maxSendableSat()
 
-        if (!lightningService.canSend(minSendable)) {
+        if (!lightningRepo.canSend(minSendable)) {
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
@@ -662,7 +662,7 @@ class AppViewModel @Inject constructor(
     fun requestLnurlAuth(callback: String, k1: String, domain: String) {
         viewModelScope.launch {
             // TODO pass callback and domain from bitkit-core when updated to accept decoded callback and return domain
-            lightningService.requestLnurlAuth(
+            lightningRepo.requestLnurlAuth(
                 callback = callback,
                 k1 = k1,
                 domain = domain,
@@ -803,7 +803,7 @@ class AppViewModel @Inject constructor(
 
         if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
 
-        val totalFee = lightningService.calculateTotalFee(
+        val totalFee = lightningRepo.calculateTotalFee(
             amountSats = amountSats,
             address = _sendUiState.value.address,
             speed = _sendUiState.value.speed,
@@ -841,7 +841,7 @@ class AppViewModel @Inject constructor(
         val isLnurlPay = lnurl is LnurlParams.LnurlPay
 
         if (isLnurlPay) {
-            lightningService.fetchLnurlInvoice(
+            lightningRepo.fetchLnurlInvoice(
                 callbackUrl = lnurl.data.callback,
                 amountSats = amount,
                 comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
@@ -942,7 +942,7 @@ class AppViewModel @Inject constructor(
                 )
             }
 
-            val invoice = lightningService.createInvoice(
+            val invoice = lightningRepo.createInvoice(
                 amountSats = _sendUiState.value.amount,
                 description = lnurl.data.defaultDescription,
                 expirySeconds = 3600u,
@@ -954,7 +954,7 @@ class AppViewModel @Inject constructor(
                 return@launch
             }
 
-            lightningService.requestLnurlWithdraw(
+            lightningRepo.requestLnurlWithdraw(
                 k1 = lnurl.data.k1,
                 callback = lnurl.data.callback,
                 paymentRequest = invoice
@@ -994,7 +994,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun sendOnchain(address: String, amount: ULong): Result<Txid> {
         val utxos = _sendUiState.value.selectedUtxos
-        return lightningService.sendOnChain(
+        return lightningRepo.sendOnChain(
             address = address,
             sats = amount,
             utxosToSpend = utxos,
@@ -1005,7 +1005,7 @@ class AppViewModel @Inject constructor(
         bolt11: String,
         amount: ULong? = null,
     ): Result<PaymentId> {
-        return lightningService.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
+        return lightningRepo.payInvoice(bolt11 = bolt11, sats = amount).onSuccess { hash ->
             // Wait until matching payment event is received
             val result = ldkNodeEventBus.events.watchUntil { event ->
                 when (event) {

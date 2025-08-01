@@ -1,7 +1,7 @@
 [versions]
 accompanistPermissions = "0.36.0"
 activityCompose = "1.10.1"
-agp = "8.11.1"
+agp = "8.12.0"
 appcompat = "1.7.0"
 barcodeScanning = "17.3.0"
 biometric = "1.4.0-alpha02"
@@ -86,7 +86,7 @@ ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "k
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 #ldk-node-android = { module = "org.lightningdevkit:ldk-node-android", version = "0.6.1" } # upstream
-ldk-node-android = { module = "com.github.synonymdev:ldk-node", version = "v0.6.1-rc.4" } # fork
+ldk-node-android = { module = "com.github.synonymdev:ldk-node", version = "v0.6.1-rc.5" } # fork
 lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
