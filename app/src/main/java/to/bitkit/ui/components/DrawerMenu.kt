@@ -62,6 +62,7 @@ fun DrawerMenu(
     walletNavController: NavController,
     rootNavController: NavController,
     hasSeenWidgetsIntro: Boolean,
+    hasSeenShopIntro: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -103,7 +104,14 @@ fun DrawerMenu(
                 } else {
                     rootNavController.navigate(Routes.AddWidget)
                 }
-            }
+            },
+            onClickShop = {
+                if (!hasSeenShopIntro) {
+                    rootNavController.navigate(Routes.ShopIntro)
+                } else {
+                    rootNavController.navigate(Routes.ShopDiscover)
+                }
+            },
         )
     }
 }
@@ -114,6 +122,7 @@ private fun Menu(
     rootNavController: NavController,
     drawerState: DrawerState,
     onClickAddWidget: () -> Unit,
+    onClickShop: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -168,7 +177,7 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__shop),
             iconRes = R.drawable.ic_store_front,
             onClick = {
-                rootNavController.navigate(Routes.ShopDiscover)
+                onClickShop()
                 scope.launch { drawerState.close() }
             }
         )
@@ -285,6 +294,7 @@ private fun Preview() {
                 rootNavController = navController,
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
                 hasSeenWidgetsIntro = false,
+                hasSeenShopIntro = false,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
