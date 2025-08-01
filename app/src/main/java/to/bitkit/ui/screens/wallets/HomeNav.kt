@@ -48,6 +48,7 @@ fun HomeNav(
     val uiState: MainUiState by walletViewModel.uiState.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
+    val hasSeenShopIntro: Boolean by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hazeState = rememberHazeState()
 
     RequestNotificationPermissions()
@@ -87,6 +88,7 @@ fun HomeNav(
             walletNavController = walletNavController,
             rootNavController = rootNavController,
             hasSeenWidgetsIntro = hasSeenWidgetsIntro,
+            hasSeenShopIntro = hasSeenShopIntro,
             modifier = Modifier.align(Alignment.TopEnd)
         )
     }
