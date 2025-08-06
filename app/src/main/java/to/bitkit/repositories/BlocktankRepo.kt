@@ -305,7 +305,7 @@ class BlocktankRepo @Inject constructor(
                 if (order == null) {
                     error = Exception("Order not found '$orderId'")
                     Logger.error("Order not found '$orderId'", context = TAG)
-                    break
+                    continue
                 }
 
                 val step = updateOrder(order)
@@ -315,7 +315,7 @@ class BlocktankRepo @Inject constructor(
                 if (order.state2 == BtOrderState2.EXPIRED) {
                     error = Exception("Order expired '$orderId'")
                     Logger.error("Order expired '$orderId'", context = TAG)
-                    break
+                    continue
                 }
                 if (step > 2) {
                     Logger.debug(
@@ -323,17 +323,16 @@ class BlocktankRepo @Inject constructor(
                         context = TAG
                     )
                     isSettled = true
-                    break
+                    continue
                 }
             } catch (e: Throwable) {
                 Logger.error("Failed to watch order '$orderId'", e, context = TAG)
                 error = e
-                break
+                continue
             }
             delay(frequencyMs)
         }
         Logger.debug("Stopped watching order '$orderId'", context = TAG)
-
     }
 
     private suspend fun updateOrder(order: IBtOrder): Int {
