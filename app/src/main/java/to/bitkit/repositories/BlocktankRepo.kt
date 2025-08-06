@@ -89,11 +89,10 @@ class BlocktankRepo @Inject constructor(
             cacheStore.data
                 .map { it.paidOrders }
                 .distinctUntilChanged()
-                .map { it.keys }
-                .collect { paidOrderIds ->
+                .collect { paidOrders ->
                     _blocktankState.update { state ->
                         state.copy(
-                            paidOrders = state.orders.filter { order -> order.id in paidOrderIds },
+                            paidOrders = state.orders.filter { order -> order.id in paidOrders.map { it.orderId } },
                         )
                     }
                 }
@@ -123,7 +122,7 @@ class BlocktankRepo @Inject constructor(
         try {
             Logger.debug("Refreshing blocktank orders…", context = TAG)
 
-            val paidOrderIds = cacheStore.data.first().paidOrders.keys
+            val paidOrderIds = cacheStore.data.first().paidOrders.map { it.orderId }
 
             // Sync instantly from cache
             val cachedOrders = coreService.blocktank.orders(refresh = false)

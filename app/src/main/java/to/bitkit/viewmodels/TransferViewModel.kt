@@ -28,6 +28,8 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.models.ChannelSetupStep
+import to.bitkit.models.PaidOrderModel
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.CurrencyRepo
@@ -191,7 +193,13 @@ class TransferViewModel @Inject constructor(
                     channelId = order.channel?.shortChannelId,
                 )
                 .onSuccess { txId ->
-                    cacheStore.addPaidOrder(orderId = order.id, txId = txId)
+                    cacheStore.addPaidOrder(
+                        PaidOrderModel(
+                            orderId = order.id,
+                            txId = txId,
+                            channelSetupStep = ChannelSetupStep.PROCESSING_PAYMENT
+                        )
+                    )
                     settingsStore.update { it.copy(lightningSetupStep = 0) }
                     blocktankRepo.watchOrder(order.id)
                 }
