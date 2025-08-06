@@ -292,6 +292,11 @@ class BlocktankRepo @Inject constructor(
         }
     }
 
+    /*
+    * Cache order step
+    * Start cached order watch
+    * Update order status
+    * */
     suspend fun watchOrder(orderId: String, frequencyMs: Long = 2_500) = withContext(bgDispatcher) {
         var isSettled = false
         var error: Throwable? = null

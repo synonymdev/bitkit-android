@@ -16,6 +16,7 @@ import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
+import to.bitkit.models.PaidOrderModel
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,21 +38,35 @@ class CacheStore @Inject constructor(
         store.updateData(transform)
     }
 
-    suspend fun addPaidOrder(orderId: String, txId: String) {
-        if (orderId in store.data.first().paidOrders) {
-            Logger.debug("Order $orderId already added")
+    suspend fun addPaidOrder(orderModel: PaidOrderModel) {
+        if (orderModel in store.data.first().paidOrders) {
+            Logger.debug("Order ${orderModel.orderId} already added")
             return
         }
 
         store.updateData {
-            val newEntry = mapOf(orderId to txId)
-            val updatedOrders = newEntry + it.paidOrders
+            val updatedOrders = listOf(orderModel) + it.paidOrders
             val limitedOrders = when {
-                updatedOrders.size > MAX_PAID_ORDERS -> updatedOrders.toList().take(MAX_PAID_ORDERS).toMap()
+                updatedOrders.size > MAX_PAID_ORDERS -> updatedOrders.take(MAX_PAID_ORDERS)
                 else -> updatedOrders
             }
-            Logger.debug("Cached paid order '$orderId'")
+            Logger.debug("Cached paid order '$orderModel'")
             it.copy(paidOrders = limitedOrders)
+        }
+    }
+
+    suspend fun updatePaidOrder(orderModel: PaidOrderModel) {
+        if (orderModel.orderId !in store.data.first().paidOrders.map { it.orderId }) {
+            Logger.debug("Order ${orderModel.orderId} not cached")
+            return
+        }
+
+        val oldOrder = store.data.first().paidOrders.find { it.orderId == orderModel.orderId } ?: return
+
+        store.updateData {
+            it.copy(
+                paidOrders = it.paidOrders + orderModel - oldOrder
+            )
         }
     }
 
@@ -148,7 +163,7 @@ class CacheStore @Inject constructor(
 @Serializable
 data class AppCacheData(
     val cachedRates: List<FxRate> = listOf(),
-    val paidOrders: Map<String, String> = mapOf(),
+    val paidOrders: List<PaidOrderModel> = listOf(),
     val onchainAddress: String = "",
     val bolt11: String = "",
     val bip21: String = "",
