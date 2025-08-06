@@ -38,6 +38,11 @@ class CacheStore @Inject constructor(
     }
 
     suspend fun addPaidOrder(orderId: String, txId: String) {
+        if (orderId in store.data.first().paidOrders) {
+            Logger.debug("Order $orderId already added")
+            return
+        }
+
         store.updateData {
             val newEntry = mapOf(orderId to txId)
             val updatedOrders = newEntry + it.paidOrders
