@@ -193,53 +193,11 @@ class TransferViewModel @Inject constructor(
                 .onSuccess { txId ->
                     cacheStore.addPaidOrder(orderId = order.id, txId = txId)
                     settingsStore.update { it.copy(lightningSetupStep = 0) }
-                    watchOrder(order.id)
+                    blocktankRepo.watchOrder(order.id)
                 }
                 .onFailure { error ->
                     ToastEventBus.send(error)
                 }
-        }
-    }
-
-    private fun watchOrder(orderId: String, frequencyMs: Long = 2_500) {
-        var isSettled = false
-        var error: Throwable? = null
-
-        viewModelScope.launch {
-            Logger.debug("Started to watch order '$orderId'", context = TAG)
-
-            while (!isSettled && error == null) {
-                try {
-                    Logger.debug("Refreshing order '$orderId'")
-                    val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
-                    if (order == null) {
-                        error = Exception("Order not found '$orderId'")
-                        Logger.error("Order not found '$orderId'", context = TAG)
-                        break
-                    }
-
-                    val step = updateOrder(order)
-                    settingsStore.update { it.copy(lightningSetupStep = step) }
-                    Logger.debug("LN setup step: $step")
-
-                    if (order.state2 == BtOrderState2.EXPIRED) {
-                        error = Exception("Order expired '$orderId'")
-                        Logger.error("Order expired '$orderId'", context = TAG)
-                        break
-                    }
-                    if (step > 2) {
-                        Logger.debug("Order settled, stopping watch order '$orderId'", context = TAG)
-                        isSettled = true
-                        break
-                    }
-                } catch (e: Throwable) {
-                    Logger.error("Failed to watch order '$orderId'", e, context = TAG)
-                    error = e
-                    break
-                }
-                delay(frequencyMs)
-            }
-            Logger.debug("Stopped watching order '$orderId'", context = TAG)
         }
     }
 
@@ -296,31 +254,6 @@ class TransferViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    private suspend fun updateOrder(order: IBtOrder): Int {
-        var currentStep = 0
-        if (order.channel != null) {
-            return 3
-        }
-
-        when (order.state2) {
-            BtOrderState2.CREATED -> {
-                currentStep = 0
-            }
-
-            BtOrderState2.PAID -> {
-                currentStep = 1
-                blocktankRepo.openChannel(order.id)
-            }
-
-            BtOrderState2.EXECUTED -> {
-                currentStep = 2
-            }
-
-            else -> Unit
-        }
-        return currentStep
     }
 
     fun onUseDefaultLspBalanceClick() {

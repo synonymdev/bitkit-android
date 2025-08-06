@@ -1,5 +1,7 @@
 package to.bitkit.repositories
 
+import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CreateCjitOptions
 import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
@@ -26,6 +28,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowTimestamp
@@ -33,6 +36,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.viewmodels.TransferViewModel
 import java.math.BigDecimal
 import javax.inject.Inject
 import javax.inject.Named
@@ -47,6 +51,7 @@ class BlocktankRepo @Inject constructor(
     private val lightningService: LightningService,
     private val currencyRepo: CurrencyRepo,
     private val cacheStore: CacheStore,
+    private val settingsStore: SettingsStore,
     @Named("enablePolling") private val enablePolling: Boolean,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
@@ -285,6 +290,75 @@ class BlocktankRepo @Inject constructor(
             Logger.error("Failed to get order: $orderId", e, context = TAG)
             Result.failure(e)
         }
+    }
+
+    suspend fun watchOrder(orderId: String, frequencyMs: Long = 2_500) = withContext(bgDispatcher) {
+        var isSettled = false
+        var error: Throwable? = null
+
+        Logger.debug("Started to watch order '$orderId'", context = TAG)
+
+        while (!isSettled && error == null) {
+            try {
+                Logger.debug("Refreshing order '$orderId'")
+                val order = getOrder(orderId, refresh = true).getOrNull()
+                if (order == null) {
+                    error = Exception("Order not found '$orderId'")
+                    Logger.error("Order not found '$orderId'", context = TAG)
+                    break
+                }
+
+                val step = updateOrder(order)
+                settingsStore.update { it.copy(lightningSetupStep = step) }
+                Logger.debug("LN setup step: $step")
+
+                if (order.state2 == BtOrderState2.EXPIRED) {
+                    error = Exception("Order expired '$orderId'")
+                    Logger.error("Order expired '$orderId'", context = TAG)
+                    break
+                }
+                if (step > 2) {
+                    Logger.debug(
+                        "Order settled, stopping watch order '$orderId'",
+                        context = TAG
+                    )
+                    isSettled = true
+                    break
+                }
+            } catch (e: Throwable) {
+                Logger.error("Failed to watch order '$orderId'", e, context = TAG)
+                error = e
+                break
+            }
+            delay(frequencyMs)
+        }
+        Logger.debug("Stopped watching order '$orderId'", context = TAG)
+
+    }
+
+    private suspend fun updateOrder(order: IBtOrder): Int {
+        var currentStep = 0
+        if (order.channel != null) {
+            return 3
+        }
+
+        when (order.state2) {
+            BtOrderState2.CREATED -> {
+                currentStep = 0
+            }
+
+            BtOrderState2.PAID -> {
+                currentStep = 1
+                openChannel(order.id)
+            }
+
+            BtOrderState2.EXECUTED -> {
+                currentStep = 2
+            }
+
+            else -> Unit
+        }
+        return currentStep
     }
 
     private suspend fun defaultCreateOrderOptions(clientBalanceSat: ULong): CreateOrderOptions {
