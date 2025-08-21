@@ -45,10 +45,36 @@ fun ActivityIcon(
         is Activity.Lightning -> activity.v1.txType
         is Activity.Onchain -> activity.v1.txType
     }
-    val arrowIcon = painterResource(if (txType == PaymentType.SENT) R.drawable.ic_sent else R.drawable.ic_received)
+
+    ActivityIcon(
+        isLightning = isLightning,
+        status = status,
+        isSent = txType == PaymentType.SENT,
+        isBoosted = activity.isBoosted(),
+        isFished = activity.isFinished(),
+        isTransfer = activity.isTransfer(),
+        size = size,
+        modifier = modifier
+    )
+}
+
+
+@Composable
+fun ActivityIcon(
+    isLightning: Boolean,
+    status: PaymentState?,
+    isSent: Boolean,
+    isBoosted: Boolean,
+    isFished: Boolean,
+    isTransfer: Boolean,
+    size: Dp = 32.dp,
+    modifier: Modifier = Modifier,
+) {
+
+    val arrowIcon = painterResource(if (isSent) R.drawable.ic_sent else R.drawable.ic_received)
 
     when {
-        activity.isBoosted() && !activity.isFinished() -> {
+        isBoosted && !isFished -> {
             CircularIcon(
                 icon = painterResource(R.drawable.ic_timer_alt),
                 iconColor = Colors.Yellow,
@@ -94,11 +120,11 @@ fun ActivityIcon(
 
         else -> {
             CircularIcon(
-                icon = if (activity.isTransfer()) painterResource(R.drawable.ic_transfer) else arrowIcon,
+                icon = if (isTransfer) painterResource(R.drawable.ic_transfer) else arrowIcon,
                 iconColor = Colors.Brand,
                 backgroundColor = Colors.Brand16,
                 size = size,
-                modifier = modifier.testTag(if (activity.isTransfer()) "TransferIcon" else "ActivityIcon"),
+                modifier = modifier.testTag(if (isTransfer) "TransferIcon" else "ActivityIcon"),
             )
         }
     }
