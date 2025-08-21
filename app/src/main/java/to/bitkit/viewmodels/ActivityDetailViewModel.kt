@@ -33,25 +33,22 @@ class ActivityDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ActivityDetailUiState(screenState = ActivityDetailScreenState.Loading))
     val uiState = _uiState.asStateFlow()
 
-    private val _tags = MutableStateFlow<List<String>>(emptyList())
-    val tags = _tags.asStateFlow()
-
     private val _boostSheetVisible = MutableStateFlow(false)
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
         set(value) {
             value?.let { activity ->
-                val paymentValue =  when (activity) {
+                val paymentValue = when (activity) {
                     is Activity.Lightning -> activity.v1.value
                     is Activity.Onchain -> activity.v1.value
                 }
                 _uiState.update {
-                    it.copy( //TODO EXTRACT
+                    it.copy( // TODO EXTRACT
                         screenState = ActivityDetailScreenState.Success(
                             isLightning = activity is Activity.Lightning,
                             isSent = activity.isSent(),
-                            timeStamp= when (activity) {
+                            timeStamp = when (activity) {
                                 is Activity.Lightning -> activity.v1.timestamp
                                 is Activity.Onchain -> when (activity.v1.confirmed) {
                                     true -> activity.v1.confirmTimestamp ?: activity.v1.timestamp
@@ -81,10 +78,17 @@ class ActivityDetailViewModel @Inject constructor(
         viewModelScope.launch(bgDispatcher) {
             try {
                 val activityTags = coreService.activity.tags(forActivityId = id)
-                _tags.value = activityTags
+                (_uiState.value.screenState as? ActivityDetailScreenState.Success)?.let { successState ->
+                    _uiState.update {
+                        ActivityDetailUiState(
+                            successState.copy(
+                                tags = activityTags
+                            )
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 Logger.error("Failed to load tags for activity $id", e, TAG)
-                _tags.value = emptyList()
             }
         }
     }
@@ -160,5 +164,6 @@ sealed interface ActivityDetailScreenState {
         val fee: ULong?,
         val isSelfSend: Boolean,
         val isTransfer: Boolean,
+        val tags: List<String> = emptyList(),
     ) : ActivityDetailScreenState
 }
