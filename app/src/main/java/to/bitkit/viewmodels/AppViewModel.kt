@@ -1028,6 +1028,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClickActivityDetail() {
+        // TODO This method is being called before the activity is added
         val filter = newTransaction.type.toActivityFilter()
         val paymentType = newTransaction.direction.toTxType()
 
