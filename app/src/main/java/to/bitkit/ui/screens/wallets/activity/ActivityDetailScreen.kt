@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -36,20 +37,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.LightningActivity
-import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
-import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.canBeBoosted
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.isBoosted
-import to.bitkit.ext.isSent
-import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
-import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -71,6 +64,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
+import to.bitkit.viewmodels.ActivityDetailScreenState
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -90,7 +84,7 @@ fun ActivityDetailScreen(
     val app = appViewModel ?: return
     val copyToastTitle = stringResource(R.string.common__copied)
 
-    val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+    val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
     val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
 
@@ -111,21 +105,32 @@ fun ActivityDetailScreen(
                 onBackClick = onBackClick,
                 actions = { CloseNavIcon(onClick = onCloseClick) },
             )
-            ActivityDetailContent(
-                item = item,
-                tags = tags,
-                onRemoveTag = { detailViewModel.removeTag(it) },
-                onAddTagClick = { showAddTagSheet = true },
-                onExploreClick = onExploreClick,
-                onCopy = { text ->
-                    app.toast(
-                        type = Toast.ToastType.SUCCESS,
-                        title = copyToastTitle,
-                        description = text.ellipsisMiddle(40)
+            when (val screenState = uiState.screenState) {
+                ActivityDetailScreenState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(32.dp)
+                            .fillMaxSize()
                     )
-                },
-                onClickBoost = detailViewModel::onClickBoost
-            )
+                }
+
+                is ActivityDetailScreenState.Success -> {
+                    ActivityDetailContent(
+                        uiState = screenState,
+                        onRemoveTag = { detailViewModel.removeTag(it) },
+                        onAddTagClick = { showAddTagSheet = true },
+                        onExploreClick = onExploreClick,
+                        onCopy = { text ->
+                            app.toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = copyToastTitle,
+                                description = text.ellipsisMiddle(40)
+                            )
+                        },
+                        onClickBoost = detailViewModel::onClickBoost
+                    )
+                }
+            }
             if (showAddTagSheet) {
                 ActivityAddTagSheet(
                     listViewModel = listViewModel,
@@ -178,35 +183,34 @@ fun ActivityDetailScreen(
 
 @Composable
 private fun ActivityDetailContent(
-    item: Activity,
-    tags: List<String>,
+    uiState: ActivityDetailScreenState.Success,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
     onClickBoost: () -> Unit,
     onExploreClick: (String) -> Unit,
     onCopy: (String) -> Unit,
 ) {
-    val isLightning = item is Activity.Lightning
-    val accentColor = if (isLightning) Colors.Purple else Colors.Brand
-    val isSent = item.isSent()
-    val amountPrefix = if (isSent) "-" else "+"
-    val timestamp = when (item) {
-        is Activity.Lightning -> item.v1.timestamp
-        is Activity.Onchain -> when (item.v1.confirmed) {
-            true -> item.v1.confirmTimestamp ?: item.v1.timestamp
-            else -> item.v1.timestamp
-        }
-    }
-    val paymentValue = when (item) {
-        is Activity.Lightning -> item.v1.value
-        is Activity.Onchain -> item.v1.value
-    }
-    val fee = when (item) {
-        is Activity.Lightning -> item.v1.fee
-        is Activity.Onchain -> item.v1.fee
-    }
-    val isSelfSend = isSent && paymentValue == 0uL
-    val isTransfer = item.isTransfer()
+    // val isLightning = item is Activity.Lightning
+    val accentColor = if (uiState.isLightning) Colors.Purple else Colors.Brand
+    // val isSent = item.isSent()
+    val amountPrefix = if (uiState.isSent) "-" else "+"
+    // val timestamp = when (item) {
+    //     is Activity.Lightning -> item.v1.timestamp
+    //     is Activity.Onchain -> when (item.v1.confirmed) {
+    //         true -> item.v1.confirmTimestamp ?: item.v1.timestamp
+    //         else -> item.v1.timestamp
+    //     }
+    // }
+    // val paymentValue = when (item) {
+    //     is Activity.Lightning -> item.v1.value
+    //     is Activity.Onchain -> item.v1.value
+    // }
+    // val fee = when (item) {
+    //     is Activity.Lightning -> item.v1.fee
+    //     is Activity.Onchain -> item.v1.fee
+    // }
+    // val isSelfSend = isSent && paymentValue == 0uL
+    // val isTransfer = item.isTransfer()
 
     Column(
         modifier = Modifier
@@ -220,17 +224,24 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = item.totalValue().toLong(),
+                sats = uiState.paymentValue.toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 useSwipeToHide = false,
                 modifier = Modifier.weight(1f)
             )
-            ActivityIcon(activity = item, size = 48.dp) // TODO Display the user avatar when selfSend
+            ActivityIcon(
+                isLightning = uiState.isLightning,
+                status = uiState.paymentState,
+                isSent = uiState.isSent,
+                isBoosted = uiState.isBoosted,
+                isFished = uiState.isConfirmed,
+                isTransfer = uiState.isTransfer, size = 48.dp
+            ) // TODO Display the user avatar when selfSend
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        StatusSection(item)
+        StatusSection(uiState)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         // Timestamp section: date and time
@@ -253,7 +264,7 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = timestamp.toActivityItemDate())
+                    BodySSB(text = uiState.timestamp.toActivityItemDate())
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
@@ -274,13 +285,13 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = timestamp.toActivityItemTime())
+                    BodySSB(text = uiState.timestamp.toActivityItemTime())
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
             }
         }
-        if (isSent) {
+        if (uiState.isSent) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -288,8 +299,8 @@ private fun ActivityDetailContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Caption13Up(
                         text = when {
-                            isTransfer -> stringResource(R.string.wallet__activity_transfer_to_spending)
-                            isSelfSend -> "Sent to myself" // TODO add missing localized text
+                            uiState.isTransfer -> stringResource(R.string.wallet__activity_transfer_to_spending)
+                            uiState.isSelfSend -> "Sent to myself" // TODO add missing localized text
                             else -> stringResource(R.string.wallet__activity_payment)
                         },
                         color = Colors.White64,
@@ -301,7 +312,7 @@ private fun ActivityDetailContent(
                     ) {
                         Icon(
                             painter = when {
-                                isTransfer -> painterResource(R.drawable.ic_lightning)
+                                uiState.isTransfer -> painterResource(R.drawable.ic_lightning)
                                 else -> painterResource(R.drawable.ic_user)
                             },
                             contentDescription = null,
@@ -309,12 +320,12 @@ private fun ActivityDetailContent(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        MoneySSB(sats = paymentValue.toLong())
+                        MoneySSB(sats = uiState.paymentValue.toLong())
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider()
                 }
-                if (fee != null) {
+                if (uiState.fee != null) {
                     Column(modifier = Modifier.weight(1f)) {
                         Caption13Up(
                             text = stringResource(R.string.wallet__activity_fee),
@@ -332,7 +343,7 @@ private fun ActivityDetailContent(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            MoneySSB(sats = fee.toLong())
+                            MoneySSB(sats = uiState.fee.toLong())
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         HorizontalDivider()
@@ -342,7 +353,7 @@ private fun ActivityDetailContent(
         }
 
         // Tags section
-        if (tags.isNotEmpty()) {
+        if (uiState.tags.isNotEmpty()) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Caption13Up(
                     text = stringResource(R.string.wallet__tags),
@@ -354,7 +365,7 @@ private fun ActivityDetailContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.testTag("ActivityTags")
                 ) {
-                    tags.forEach { tag ->
+                    uiState.tags.forEach { tag ->
                         TagButton(
                             text = tag,
                             displayIconClose = true,
@@ -368,8 +379,8 @@ private fun ActivityDetailContent(
         }
 
         // Note section for Lightning payments with message
-        if (item is Activity.Lightning && item.v1.message.isNotEmpty()) {
-            val message = item.v1.message
+        if (uiState.isLightning && uiState.message.isNotEmpty()) {
+            val message = uiState.message
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -420,7 +431,7 @@ private fun ActivityDetailContent(
                     text = stringResource(R.string.wallet__activity_assign),
                     size = ButtonSize.Small,
                     onClick = { /* TODO: Implement assign functionality */ },
-                    enabled = !isSelfSend,
+                    enabled = !uiState.isSelfSend,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_user_plus),
@@ -454,7 +465,7 @@ private fun ActivityDetailContent(
             ) {
                 PrimaryButton(
                     text = stringResource(
-                        if (item.isBoosted()) {
+                        if (uiState.isBoosted) {
                             R.string.wallet__activity_boosted
                         } else {
                             R.string.wallet__activity_boost
@@ -462,7 +473,7 @@ private fun ActivityDetailContent(
                     ),
                     size = ButtonSize.Small,
                     onClick = onClickBoost,
-                    enabled = item.canBeBoosted(),
+                    enabled = uiState.canBeBoosted,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_timer_alt),
@@ -475,8 +486,8 @@ private fun ActivityDetailContent(
                         .weight(1f)
                         .testTag(
                             when {
-                                item.isBoosted() -> "BoostedButton"
-                                item.canBeBoosted() -> "BoostButton"
+                                uiState.isBoosted -> "BoostedButton"
+                                uiState.canBeBoosted -> "BoostButton"
                                 else -> "BoostDisabled"
                             }
                         )
@@ -484,7 +495,8 @@ private fun ActivityDetailContent(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_explore),
                     size = ButtonSize.Small,
-                    onClick = { onExploreClick(item.rawId()) },
+                    enabled = uiState.activityId != null,
+                    onClick = { onExploreClick(uiState.activityId.orEmpty()) },
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_git_branch),
@@ -503,7 +515,9 @@ private fun ActivityDetailContent(
 }
 
 @Composable
-private fun StatusSection(item: Activity) {
+private fun StatusSection(
+    uiState: ActivityDetailScreenState.Success,
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
             text = stringResource(R.string.wallet__activity_status),
@@ -511,71 +525,68 @@ private fun StatusSection(item: Activity) {
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            when (item) {
-                is Activity.Lightning -> {
-                    when (item.v1.status) {
-                        PaymentState.PENDING -> {
-                            StatusRow(
-                                painterResource(R.drawable.ic_hourglass_simple),
-                                stringResource(R.string.wallet__activity_pending),
-                                Colors.Purple,
-                            )
-                        }
+            if (uiState.isLightning) {
+                when (uiState.paymentState ?: PaymentState.PENDING) {
+                    PaymentState.PENDING -> {
+                        StatusRow(
+                            painterResource(R.drawable.ic_hourglass_simple),
+                            stringResource(R.string.wallet__activity_pending),
+                            Colors.Purple,
+                        )
+                    }
 
-                        PaymentState.SUCCEEDED -> {
-                            StatusRow(
-                                painterResource(R.drawable.ic_lightning_alt),
-                                stringResource(R.string.wallet__activity_successful),
-                                Colors.Purple,
-                            )
-                        }
+                    PaymentState.SUCCEEDED -> {
+                        StatusRow(
+                            painterResource(R.drawable.ic_lightning_alt),
+                            stringResource(R.string.wallet__activity_successful),
+                            Colors.Purple,
+                        )
+                    }
 
-                        PaymentState.FAILED -> {
-                            StatusRow(
-                                painterResource(R.drawable.ic_x),
-                                stringResource(R.string.wallet__activity_failed),
-                                Colors.Purple,
-                            )
-                        }
+                    PaymentState.FAILED -> {
+                        StatusRow(
+                            painterResource(R.drawable.ic_x),
+                            stringResource(R.string.wallet__activity_failed),
+                            Colors.Purple,
+                        )
                     }
                 }
+            } else {
+                // Default status is confirming
+                var statusIcon = painterResource(R.drawable.ic_hourglass_simple)
+                var statusColor = Colors.Brand
+                var statusText = stringResource(R.string.wallet__activity_confirming)
+                var statusTestTag: String? = null
 
-                is Activity.Onchain -> {
-                    // Default status is confirming
-                    var statusIcon = painterResource(R.drawable.ic_hourglass_simple)
-                    var statusColor = Colors.Brand
-                    var statusText = stringResource(R.string.wallet__activity_confirming)
-                    var statusTestTag: String? = null
-
-                    if (item.v1.isTransfer) {
-                        val duration = 0 // TODO get transfer duration
-                        statusText = stringResource(R.string.wallet__activity_transfer_pending)
-                            .replace("{duration}", "$duration")
-                        statusTestTag = "StatusTransfer"
-                    }
-
-                    if (item.v1.isBoosted) {
-                        statusIcon = painterResource(R.drawable.ic_timer_alt)
-                        statusColor = Colors.Yellow
-                        statusText = stringResource(R.string.wallet__activity_boosting)
-                        statusTestTag = "StatusBoosting"
-                    }
-
-                    if (item.v1.confirmed) {
-                        statusIcon = painterResource(R.drawable.ic_check_circle)
-                        statusColor = Colors.Green
-                        statusText = stringResource(R.string.wallet__activity_confirmed)
-                        statusTestTag = "StatusConfirmed"
-                    }
-
-                    if (!item.v1.doesExist) {
-                        statusIcon = painterResource(R.drawable.ic_x)
-                        statusColor = Colors.Red
-                        statusText = stringResource(R.string.wallet__activity_removed)
-                    }
-
-                    StatusRow(statusIcon, statusText, statusColor, statusTestTag)
+                if (uiState.isTransfer) {
+                    val duration = 0 // TODO get transfer duration
+                    statusText = stringResource(R.string.wallet__activity_transfer_pending)
+                        .replace("{duration}", "$duration")
+                    statusTestTag = "StatusTransfer"
                 }
+
+                if (uiState.isBoosted) {
+                    statusIcon = painterResource(R.drawable.ic_timer_alt)
+                    statusColor = Colors.Yellow
+                    statusText = stringResource(R.string.wallet__activity_boosting)
+                    statusTestTag = "StatusBoosting"
+                }
+
+                if (uiState.isConfirmed) {
+                    statusIcon = painterResource(R.drawable.ic_check_circle)
+                    statusColor = Colors.Green
+                    statusText = stringResource(R.string.wallet__activity_confirmed)
+                    statusTestTag = "StatusConfirmed"
+                }
+
+                if (!uiState.doesExist) {
+                    statusIcon = painterResource(R.drawable.ic_x)
+                    statusColor = Colors.Red
+                    statusText = stringResource(R.string.wallet__activity_removed)
+                }
+
+                StatusRow(statusIcon, statusText, statusColor, statusTestTag)
+
             }
         }
     }
@@ -640,22 +651,23 @@ private fun ZigzagDivider() {
 private fun PreviewLightningSent() {
     AppThemeSurface {
         ActivityDetailContent(
-            item = Activity.Lightning(
-                v1 = LightningActivity(
-                    id = "test-lightning-1",
-                    txType = PaymentType.SENT,
-                    status = PaymentState.SUCCEEDED,
-                    value = 50000UL,
-                    fee = 1UL,
-                    invoice = "lnbc...",
-                    message = "Thanks for paying at the bar. Here's my share.",
-                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    preimage = null,
-                    createdAt = null,
-                    updatedAt = null,
-                )
+            uiState = ActivityDetailScreenState.Success(
+                activityId = "test-onchain-1",
+                isLightning = true,
+                isSent = false,
+                timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                paymentValue = 100000UL,
+                fee = 500UL,
+                isSelfSend = false,
+                isTransfer = false,
+                paymentState = PaymentState.SUCCEEDED,
+                tags = listOf("Lunch", "Drinks"),
+                isBoosted = false,
+                canBeBoosted = false,
+                isConfirmed = true,
+                message = "Thanks for paying at the bar. Here's my share.",
+                doesExist = true,
             ),
-            tags = listOf("Lunch", "Drinks"),
             onRemoveTag = {},
             onAddTagClick = {},
             onExploreClick = {},
@@ -665,33 +677,90 @@ private fun PreviewLightningSent() {
     }
 }
 
-@Preview(showSystemUi = true, showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewOnchain() {
     AppThemeSurface {
         ActivityDetailContent(
-            item = Activity.Onchain(
-                v1 = OnchainActivity(
-                    id = "test-onchain-1",
-                    txType = PaymentType.RECEIVED,
-                    txId = "abc123",
-                    value = 100000UL,
-                    fee = 500UL,
-                    feeRate = 8UL,
-                    address = "bc1...",
-                    confirmed = true,
-                    timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
-                    isBoosted = false,
-                    isTransfer = false,
-                    doesExist = true,
-                    confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    channelId = null,
-                    transferTxId = null,
-                    createdAt = null,
-                    updatedAt = null,
-                )
+            uiState = ActivityDetailScreenState.Success(
+                activityId = "test-onchain-1",
+                isLightning = false,
+                isSent = true,
+                timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                paymentValue = 100000UL,
+                fee = 500UL,
+                isSelfSend = false,
+                isTransfer = false,
+                paymentState = PaymentState.SUCCEEDED,
+                tags = emptyList(),
+                isBoosted = false,
+                canBeBoosted = false,
+                isConfirmed = true,
+                message = "",
+                doesExist = true,
             ),
-            tags = emptyList(),
+            onRemoveTag = {},
+            onAddTagClick = {},
+            onExploreClick = {},
+            onCopy = {},
+            onClickBoost = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewTransfer() {
+    AppThemeSurface {
+        ActivityDetailContent(
+            uiState = ActivityDetailScreenState.Success(
+                activityId = "test-onchain-1",
+                isLightning = false,
+                isSent = false,
+                timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                paymentValue = 100000UL,
+                fee = 500UL,
+                isSelfSend = false,
+                isTransfer = true,
+                paymentState = PaymentState.SUCCEEDED,
+                tags = emptyList(),
+                isBoosted = false,
+                canBeBoosted = false,
+                isConfirmed = true,
+                message = "",
+                doesExist = true,
+            ),
+            onRemoveTag = {},
+            onAddTagClick = {},
+            onExploreClick = {},
+            onCopy = {},
+            onClickBoost = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSelfSend() {
+    AppThemeSurface {
+        ActivityDetailContent(
+            uiState = ActivityDetailScreenState.Success(
+                activityId = "test-onchain-1",
+                isLightning = false,
+                isSent = true,
+                timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                paymentValue = 100000UL,
+                fee = 500UL,
+                isSelfSend = true,
+                isTransfer = false,
+                paymentState = PaymentState.SUCCEEDED,
+                tags = emptyList(),
+                isBoosted = false,
+                canBeBoosted = false,
+                isConfirmed = true,
+                message = "",
+                doesExist = true,
+            ),
             onRemoveTag = {},
             onAddTagClick = {},
             onExploreClick = {},

@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +12,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.canBeBoosted
+import to.bitkit.ext.isBoosted
+import to.bitkit.ext.isFinished
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -37,39 +41,42 @@ class ActivityDetailViewModel @Inject constructor(
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
-        set(value) {
-            value?.let { activity ->
-                val paymentValue = when (activity) {
-                    is Activity.Lightning -> activity.v1.value
-                    is Activity.Onchain -> activity.v1.value
-                }
-                _uiState.update {
-                    it.copy( // TODO EXTRACT
-                        screenState = ActivityDetailScreenState.Success(
-                            isLightning = activity is Activity.Lightning,
-                            isSent = activity.isSent(),
-                            timeStamp = when (activity) {
-                                is Activity.Lightning -> activity.v1.timestamp
-                                is Activity.Onchain -> when (activity.v1.confirmed) {
-                                    true -> activity.v1.confirmTimestamp ?: activity.v1.timestamp
-                                    else -> activity.v1.timestamp
-                                }
-                            },
-                            paymentValue = paymentValue,
-                            fee = when (activity) {
-                                is Activity.Lightning -> activity.v1.fee
-                                is Activity.Onchain -> activity.v1.fee
-                            },
-                            isSelfSend = activity.isSent() && paymentValue == 0uL,
-                            isTransfer = activity.isTransfer()
-                        )
-                    )
-                }
-            }
-        }
 
     fun setActivity(activity: Activity) {
         this.activity = activity
+        val paymentValue = when (activity) {
+            is Activity.Lightning -> activity.v1.value
+            is Activity.Onchain -> activity.v1.value
+        }
+        _uiState.update {
+            it.copy( // TODO EXTRACT
+                screenState = ActivityDetailScreenState.Success(
+                    isLightning = activity is Activity.Lightning,
+                    isSent = activity.isSent(),
+                    timestamp = when (activity) {
+                        is Activity.Lightning -> activity.v1.timestamp
+                        is Activity.Onchain -> when (activity.v1.confirmed) {
+                            true -> activity.v1.confirmTimestamp ?: activity.v1.timestamp
+                            else -> activity.v1.timestamp
+                        }
+                    },
+                    paymentValue = paymentValue,
+                    fee = when (activity) {
+                        is Activity.Lightning -> activity.v1.fee
+                        is Activity.Onchain -> activity.v1.fee
+                    },
+                    isSelfSend = activity.isSent() && paymentValue == 0uL,
+                    isTransfer = activity.isTransfer(),
+                    paymentState = (activity as? Activity.Lightning)?.v1?.status,
+                    isBoosted = activity.isBoosted(),
+                    canBeBoosted = activity.canBeBoosted(),
+                    isConfirmed = activity.isFinished(),
+                    message = (activity as? Activity.Lightning)?.v1?.message.orEmpty(),
+                    activityId = activity.rawId(),
+                    doesExist = (activity as? Activity.Onchain)?.v1?.doesExist == true,
+                )
+            )
+        }
         loadTags()
     }
 
@@ -157,13 +164,20 @@ data class ActivityDetailUiState(
 sealed interface ActivityDetailScreenState {
     data object Loading : ActivityDetailScreenState
     data class Success(
+        val activityId: String?,
         val isLightning: Boolean,
         val isSent: Boolean,
-        val timeStamp: ULong,
+        val timestamp: ULong,
         val paymentValue: ULong,
         val fee: ULong?,
         val isSelfSend: Boolean,
         val isTransfer: Boolean,
+        val paymentState: PaymentState?,
         val tags: List<String> = emptyList(),
+        val isBoosted: Boolean,
+        val canBeBoosted: Boolean,
+        val isConfirmed: Boolean,
+        val message: String,
+        val doesExist: Boolean,
     ) : ActivityDetailScreenState
 }
