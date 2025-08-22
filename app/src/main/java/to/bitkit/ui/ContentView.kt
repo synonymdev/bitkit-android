@@ -26,6 +26,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.synonym.bitkitcore.PaymentState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -946,7 +947,7 @@ private fun NavGraphBuilder.activityItem(
     composableWithDefaultTransitions<Routes.ActivityDetailPreview> {
         val route = it.toRoute<Routes.ActivityDetailPreview>()
         ActivityDetailPreviewScreen(
-            uiState = route.uiState,
+           route = route,
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
@@ -1571,7 +1572,24 @@ sealed interface Routes {
     data class ActivityDetail(val id: String) : Routes
 
     @Serializable
-    data class ActivityDetailPreview(val uiState: ActivityDetailScreenState) : Routes
+    data class ActivityDetailPreview(
+        val activityId: String?,
+        val isLightning: Boolean,
+        val isSent: Boolean,
+        val timestamp: ULong,
+        val paymentValue: ULong,
+        val totalValue: ULong,
+        val fee: ULong?,
+        val isSelfSend: Boolean,
+        val isTransfer: Boolean,
+        val paymentState: PaymentState?,
+        val tags: List<String> = emptyList(),
+        val isBoosted: Boolean,
+        val canBeBoosted: Boolean,
+        val isConfirmed: Boolean,
+        val message: String,
+        val doesExist: Boolean,
+    ) : Routes
 
     @Serializable
     data class ActivityExplore(val id: String) : Routes

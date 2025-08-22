@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.models.Toast
+import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.CloseNavIcon
@@ -26,32 +27,49 @@ import to.bitkit.viewmodels.ActivityDetailScreenState
 
 @Composable
 fun ActivityDetailPreviewScreen(
-    uiState: ActivityDetailScreenState,
+    route:  Routes.ActivityDetailPreview,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
 ) {
     val app = appViewModel ?: return
+
+    val uiState = ActivityDetailScreenState.Success(
+        activityId = route.activityId,
+        isLightning = route.isLightning,
+        isSent = route.isSent,
+        timestamp = route.timestamp,
+        paymentValue = route.paymentValue,
+        totalValue = route.totalValue,
+        fee = route.fee,
+        isSelfSend = route.isSelfSend,
+        isTransfer = route.isTransfer,
+        paymentState = route.paymentState,
+        tags = route.tags,
+        isBoosted = route.isBoosted,
+        canBeBoosted = route.canBeBoosted,
+        isConfirmed = route.isConfirmed,
+        message = route.message,
+        doesExist = route.doesExist
+    )
+
     val copyToastTitle = stringResource(R.string.common__copied)
 
-    val title = when (uiState) {
-        ActivityDetailScreenState.Loading -> R.string.wallet__activity
-        is ActivityDetailScreenState.Success -> {
-            val isSent = uiState.isSent
+    val title = uiState.let {
+        val isSent = uiState.isSent
 
-            var resId = when {
-                isSent -> R.string.wallet__activity_bitcoin_sent
-                else -> R.string.wallet__activity_bitcoin_received
-            }
-
-            if (uiState.isTransfer) {
-                resId = when {
-                    isSent -> R.string.wallet__activity_transfer_spending_done
-                    else -> R.string.wallet__activity_transfer_savings_done
-                }
-            }
-
-            resId
+        var resId = when {
+            isSent -> R.string.wallet__activity_bitcoin_sent
+            else -> R.string.wallet__activity_bitcoin_received
         }
+
+        if (uiState.isTransfer) {
+            resId = when {
+                isSent -> R.string.wallet__activity_transfer_spending_done
+                else -> R.string.wallet__activity_transfer_savings_done
+            }
+        }
+
+        resId
     }
 
     Box(

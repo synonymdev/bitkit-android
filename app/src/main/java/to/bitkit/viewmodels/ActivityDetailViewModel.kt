@@ -164,7 +164,6 @@ data class ActivityDetailUiState(
     val screenState: ActivityDetailScreenState = ActivityDetailScreenState.Loading,
 )
 
-@Serializable
 sealed interface ActivityDetailScreenState {
     data object Loading : ActivityDetailScreenState
     data class Success(

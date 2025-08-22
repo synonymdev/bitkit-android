@@ -1060,7 +1060,7 @@ class AppViewModel @Inject constructor(
                     // TODO CREATE A PREVIEW SCREEN
                     when (val transactionData = newTransaction.transactionSheet) {
                         is TransactionSheet.SendOnChain -> {
-                            val uiStatePreview = ActivityDetailScreenState.Success(
+                            val route = Routes.ActivityDetailPreview(
                                 activityId = null,
                                 isLightning = false,
                                 isSent = true,
@@ -1079,7 +1079,7 @@ class AppViewModel @Inject constructor(
                                 doesExist = true,
                             )
 
-                            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetailPreview(uiStatePreview)))
+                            mainScreenEffect(MainScreenEffect.Navigate(route))
                         }
 
                         null -> TODO()
