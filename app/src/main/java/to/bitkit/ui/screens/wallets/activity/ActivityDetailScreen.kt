@@ -730,7 +730,7 @@ private fun PreviewSelfSend() {
                 isLightning = false,
                 isSent = true,
                 timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
-                paymentValue = 100000UL,
+                paymentValue = 0uL,
                 fee = 500UL,
                 isSelfSend = true,
                 isTransfer = false,
