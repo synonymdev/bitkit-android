@@ -925,6 +925,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(validatedAddress.address, amount)
                     .onSuccess { txId ->
                         val tags = _sendUiState.value.selectedTags
+                        //TODO Tags are not added if the activity is not already created
                         activityRepo.addTagsToTransaction(
                             paymentHashOrTxId = txId,
                             type = ActivityFilter.ONCHAIN,

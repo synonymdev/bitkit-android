@@ -77,6 +77,7 @@ class ActivityRepo @Inject constructor(
 
         for (payment in payments) {
             try {
+                // TODO Reduce repeated calls
                 val existentActivity = coreService.activity.getActivity(payment.id)
                 val wasUpdate = existentActivity != null
 
