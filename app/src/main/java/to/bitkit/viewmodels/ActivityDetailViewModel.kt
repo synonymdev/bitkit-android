@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.canBeBoosted
@@ -163,6 +164,7 @@ data class ActivityDetailUiState(
     val screenState: ActivityDetailScreenState = ActivityDetailScreenState.Loading,
 )
 
+@Serializable
 sealed interface ActivityDetailScreenState {
     data object Loading : ActivityDetailScreenState
     data class Success(

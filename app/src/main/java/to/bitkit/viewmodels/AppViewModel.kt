@@ -1046,7 +1046,6 @@ class AppViewModel @Inject constructor(
         val paymentHashOrTxId = newTransaction.paymentHashOrTxId
 
         viewModelScope.launch(bgDispatcher) {
-
             if (paymentHashOrTxId != null) {
                 activityRepo.findActivityByPaymentId(
                     paymentHashOrTxId = paymentHashOrTxId,

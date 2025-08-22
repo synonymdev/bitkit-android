@@ -70,6 +70,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
 import to.bitkit.ui.screens.wallets.HomeNav
+import to.bitkit.ui.screens.wallets.activity.ActivityDetailPreviewScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
@@ -142,6 +143,7 @@ import to.bitkit.ui.utils.Transitions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.utils.Logger
+import to.bitkit.viewmodels.ActivityDetailScreenState
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
@@ -941,6 +943,14 @@ private fun NavGraphBuilder.activityItem(
             onCloseClick = { navController.navigateToHome() },
         )
     }
+    composableWithDefaultTransitions<Routes.ActivityDetailPreview> {
+        val route = it.toRoute<Routes.ActivityDetailPreview>()
+        ActivityDetailPreviewScreen(
+            uiState = route.uiState,
+            onBackClick = { navController.popBackStack() },
+            onCloseClick = { navController.navigateToHome() },
+        )
+    }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(
             listViewModel = activityListViewModel,
@@ -1559,6 +1569,9 @@ sealed interface Routes {
 
     @Serializable
     data class ActivityDetail(val id: String) : Routes
+
+    @Serializable
+    data class ActivityDetailPreview(val uiState: ActivityDetailScreenState) : Routes
 
     @Serializable
     data class ActivityExplore(val id: String) : Routes

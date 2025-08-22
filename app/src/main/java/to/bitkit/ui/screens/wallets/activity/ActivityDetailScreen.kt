@@ -182,7 +182,7 @@ fun ActivityDetailScreen(
 }
 
 @Composable
-private fun ActivityDetailContent(
+fun ActivityDetailContent(
     uiState: ActivityDetailScreenState.Success,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
