@@ -205,7 +205,7 @@ private fun ActivityDetailContent(
                 .padding(vertical = 16.dp)
         ) {
             BalanceHeaderView(
-                sats = uiState.paymentValue.toLong(),
+                sats = uiState.totalValue.toLong(),
                 prefix = amountPrefix,
                 showBitcoinSymbol = false,
                 useSwipeToHide = false,
@@ -638,6 +638,7 @@ private fun PreviewLightningSent() {
                 isSent = false,
                 timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
                 paymentValue = 100000UL,
+                totalValue = 100000UL,
                 fee = 500UL,
                 isSelfSend = false,
                 isTransfer = false,
@@ -669,6 +670,7 @@ private fun PreviewOnchain() {
                 isSent = true,
                 timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
                 paymentValue = 100000UL,
+                totalValue = 100000UL,
                 fee = 500UL,
                 isSelfSend = false,
                 isTransfer = false,
@@ -700,6 +702,7 @@ private fun PreviewTransfer() {
                 isSent = false,
                 timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
                 paymentValue = 100000UL,
+                totalValue = 100000UL,
                 fee = 500UL,
                 isSelfSend = false,
                 isTransfer = true,
@@ -731,7 +734,8 @@ private fun PreviewSelfSend() {
                 isSent = true,
                 timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
                 paymentValue = 0uL,
-                fee = 500UL,
+                totalValue = 500uL,
+                fee = 500uL,
                 isSelfSend = true,
                 isTransfer = false,
                 paymentState = PaymentState.SUCCEEDED,

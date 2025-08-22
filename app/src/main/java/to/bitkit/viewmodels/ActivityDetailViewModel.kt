@@ -18,6 +18,7 @@ import to.bitkit.ext.isFinished
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
+import to.bitkit.ext.totalValue
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
@@ -61,6 +62,7 @@ class ActivityDetailViewModel @Inject constructor(
                         }
                     },
                     paymentValue = paymentValue,
+                    totalValue = activity.totalValue(),
                     fee = when (activity) {
                         is Activity.Lightning -> activity.v1.fee
                         is Activity.Onchain -> activity.v1.fee
@@ -169,6 +171,7 @@ sealed interface ActivityDetailScreenState {
         val isSent: Boolean,
         val timestamp: ULong,
         val paymentValue: ULong,
+        val totalValue: ULong,
         val fee: ULong?,
         val isSelfSend: Boolean,
         val isTransfer: Boolean,
