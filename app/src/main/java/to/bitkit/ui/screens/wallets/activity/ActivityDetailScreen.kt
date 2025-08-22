@@ -190,27 +190,8 @@ private fun ActivityDetailContent(
     onExploreClick: (String) -> Unit,
     onCopy: (String) -> Unit,
 ) {
-    // val isLightning = item is Activity.Lightning
     val accentColor = if (uiState.isLightning) Colors.Purple else Colors.Brand
-    // val isSent = item.isSent()
     val amountPrefix = if (uiState.isSent) "-" else "+"
-    // val timestamp = when (item) {
-    //     is Activity.Lightning -> item.v1.timestamp
-    //     is Activity.Onchain -> when (item.v1.confirmed) {
-    //         true -> item.v1.confirmTimestamp ?: item.v1.timestamp
-    //         else -> item.v1.timestamp
-    //     }
-    // }
-    // val paymentValue = when (item) {
-    //     is Activity.Lightning -> item.v1.value
-    //     is Activity.Onchain -> item.v1.value
-    // }
-    // val fee = when (item) {
-    //     is Activity.Lightning -> item.v1.fee
-    //     is Activity.Onchain -> item.v1.fee
-    // }
-    // val isSelfSend = isSent && paymentValue == 0uL
-    // val isTransfer = item.isTransfer()
 
     Column(
         modifier = Modifier
