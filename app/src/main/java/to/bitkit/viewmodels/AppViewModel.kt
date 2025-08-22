@@ -925,7 +925,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(validatedAddress.address, amount)
                     .onSuccess { txId ->
                         val tags = _sendUiState.value.selectedTags
-                        //TODO Tags are not added if the activity is not already created
+                        // TODO Tags are not added if the activity is not already created
                         activityRepo.addTagsToTransaction(
                             paymentHashOrTxId = txId,
                             type = ActivityFilter.ONCHAIN,
@@ -939,6 +939,7 @@ class AppViewModel @Inject constructor(
                                     type = NewTransactionSheetType.ONCHAIN,
                                     direction = NewTransactionSheetDirection.SENT,
                                     sats = amount.toLong(),
+                                    paymentHashOrTxId = txId
                                 )
                             )
                         )
@@ -1032,17 +1033,35 @@ class AppViewModel @Inject constructor(
         // TODO This method is being called before the activity is added
         val filter = newTransaction.type.toActivityFilter()
         val paymentType = newTransaction.direction.toTxType()
+        val paymentHashOrTxId = newTransaction.paymentHashOrTxId
 
         viewModelScope.launch(bgDispatcher) {
-            val activity = coreService.activity.get(filter = filter, txType = paymentType, limit = 1u).firstOrNull()
 
-            if (activity == null) {
-                Logger.error(msg = "Activity not found", context = TAG)
-                return@launch
+            if (paymentHashOrTxId != null) {
+                activityRepo.findActivityByPaymentId(
+                    paymentHashOrTxId = paymentHashOrTxId,
+                    type = newTransaction.type.toActivityFilter(),
+                    txType = newTransaction.direction.toTxType(),
+                    retry = false
+                ).onSuccess { activity ->
+                    val nextRoute = Routes.ActivityDetail(activity.rawId())
+                    mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
+                }.onFailure {
+                    // Navigate to activity detail preview if activity doesn't exists yet
+                    // TODO CREATE A PREVIEW SCREEN
+                }
+
+            } else {
+                val activity = coreService.activity.get(filter = filter, txType = paymentType, limit = 1u).firstOrNull()
+                if (activity == null) {
+                    Logger.error(msg = "Activity not found", context = TAG)
+                    return@launch
+                }
+
+                // Navigate to activity detail preview if activity doesn't exists yet
+                val nextRoute = Routes.ActivityDetail(activity.rawId())
+                mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }
-
-            val nextRoute = Routes.ActivityDetail(activity.rawId())
-            mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
         }
     }
 
