@@ -17,6 +17,7 @@ data class NewTransactionSheetDetails(
     val direction: NewTransactionSheetDirection,
     val sats: Long,
     val paymentHashOrTxId: String? = null,
+    val transactionSheet: TransactionSheet? = null
 ) {
     companion object {
         private const val BACKGROUND_TRANSACTION_KEY = "backgroundTransaction"

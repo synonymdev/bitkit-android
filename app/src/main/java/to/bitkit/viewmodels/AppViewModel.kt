@@ -15,6 +15,7 @@ import com.synonym.bitkitcore.LnurlChannelData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
@@ -54,6 +55,7 @@ import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.setClipboardText
@@ -64,6 +66,7 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSheet
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toCoreNetworkType
@@ -939,7 +942,14 @@ class AppViewModel @Inject constructor(
                                     type = NewTransactionSheetType.ONCHAIN,
                                     direction = NewTransactionSheetDirection.SENT,
                                     sats = amount.toLong(),
-                                    paymentHashOrTxId = txId
+                                    transactionSheet = TransactionSheet.SendOnChain(
+                                        sats = amount,
+                                        fee = 10uL, // TODO GET FEE,
+                                        isSelfSend = false,
+                                        isTransfer = false,
+                                        tags = tags,
+                                        timestamp = nowTimestamp().toEpochMilli().toULong(),
+                                    )
                                 )
                             )
                         )
@@ -1049,6 +1059,32 @@ class AppViewModel @Inject constructor(
                 }.onFailure {
                     // Navigate to activity detail preview if activity doesn't exists yet
                     // TODO CREATE A PREVIEW SCREEN
+                    when (val transactionData = newTransaction.transactionSheet) {
+                        is TransactionSheet.SendOnChain -> {
+                            val uiStatePreview = ActivityDetailScreenState.Success(
+                                activityId = null,
+                                isLightning = false,
+                                isSent = true,
+                                timestamp = transactionData.timestamp,
+                                totalValue = transactionData.sats + transactionData.fee,
+                                paymentValue = transactionData.sats,
+                                fee = transactionData.fee,
+                                isSelfSend = transactionData.isSelfSend,
+                                isTransfer = transactionData.isTransfer,
+                                paymentState = PaymentState.PENDING,
+                                tags = transactionData.tags,
+                                isBoosted = false,
+                                canBeBoosted = false,
+                                isConfirmed = false,
+                                message = "",
+                                doesExist = true,
+                            )
+
+                            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetailPreview(uiStatePreview)))
+                        }
+
+                        null -> TODO()
+                    }
                 }
 
             } else {
