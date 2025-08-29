@@ -30,12 +30,14 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun SendErrorScreen(
-    errorMessage: String,
+    errorMessage: String?,
+    stackTrace: String? = null,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
     Content(
         errorMessage = errorMessage,
+        stackTrace = stackTrace,
         onRetry = onRetry,
         onClose = onClose,
     )
@@ -43,12 +45,13 @@ fun SendErrorScreen(
 
 @Composable
 private fun Content(
-    errorMessage: String,
+    errorMessage: String?,
+    stackTrace: String?,
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
-    val errorText = errorMessage.ifEmpty { "Unknown error." }
+    val errorText = errorMessage.orEmpty().ifEmpty { "Unknown error." }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -106,6 +109,10 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 errorMessage = stringResource(R.string.wallet__send_error_create_tx),
+                stackTrace = "Test render error\n" +
+                    "\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in WalletsStack (at SceneView.tsx:132)",
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -119,6 +126,7 @@ private fun PreviewUnknown() {
         BottomSheetPreview {
             Content(
                 errorMessage = "",
+                stackTrace = null,
                 modifier = Modifier.sheetHeight(),
             )
         }

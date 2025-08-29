@@ -74,12 +74,18 @@ fun SendSheet(
                         appViewModel.clearClipboardForAutoRead()
                         navController.navigate(SendRoute.Success)
                     }
+
                     is SendEffect.NavigateToQuickPay -> navController.navigate(SendRoute.QuickPay)
                     is SendEffect.NavigateToWithdrawConfirm -> navController.navigate(SendRoute.WithdrawConfirm)
                     is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
-                    is SendEffect.PaymentError -> TODO()
+                    is SendEffect.PaymentError -> navController.navigate(
+                        SendRoute.Error(
+                            errorMessage = it.errorMessage,
+                            stackTrace = it.stackTrace
+                        )
+                    )
                 }
             }
         }
@@ -299,5 +305,5 @@ sealed interface SendRoute {
     data object Success : SendRoute
 
     @Serializable
-    data class Error(val errorMessage: String) : SendRoute
+    data class Error(val errorMessage: String?, val stackTrace: String? = null) : SendRoute
 }

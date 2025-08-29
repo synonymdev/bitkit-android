@@ -947,7 +947,7 @@ class AppViewModel @Inject constructor(
                         lightningRepo.sync()
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
-                        setSendEffect(SendEffect.PaymentError(e))
+                        setSendEffect(SendEffect.PaymentError(errorMessage = e.message, stackTrace = e.stackTraceToString()))
                     }
             }
 
@@ -971,7 +971,7 @@ class AppViewModel @Inject constructor(
                     setSendEffect(SendEffect.PaymentSuccess())
                 }.onFailure { e ->
                     Logger.error("Error sending lightning payment", e, context = TAG)
-                    setSendEffect(SendEffect.PaymentError(e))
+                    setSendEffect(SendEffect.PaymentError(errorMessage = e.message, stackTrace = e.stackTraceToString()))
                 }
             }
         }
@@ -1497,7 +1497,7 @@ sealed class SendEffect {
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
 
-    data class PaymentError(val e: Throwable) : SendEffect()
+    data class PaymentError(val errorMessage: String?, val stackTrace: String) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
