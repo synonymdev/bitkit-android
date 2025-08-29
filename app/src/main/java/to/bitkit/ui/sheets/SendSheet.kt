@@ -79,6 +79,7 @@ fun SendSheet(
                     is SendEffect.NavigateToWithdrawError -> navController.navigate(SendRoute.WithdrawError)
                     is SendEffect.NavigateToFee -> navController.navigate(SendRoute.FeeRate)
                     is SendEffect.NavigateToFeeCustom -> navController.navigate(SendRoute.FeeCustom)
+                    is SendEffect.PaymentError -> TODO()
                 }
             }
         }

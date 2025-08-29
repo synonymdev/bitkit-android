@@ -947,12 +947,7 @@ class AppViewModel @Inject constructor(
                         lightningRepo.sync()
                     }.onFailure { e ->
                         Logger.error(msg = "Error sending onchain payment", e = e, context = TAG)
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = "Error Sending",
-                            description = e.message ?: "Unknown error"
-                        )
-                        hideSheet()
+                        setSendEffect(SendEffect.PaymentError(e))
                     }
             }
 
@@ -976,8 +971,7 @@ class AppViewModel @Inject constructor(
                     setSendEffect(SendEffect.PaymentSuccess())
                 }.onFailure { e ->
                     Logger.error("Error sending lightning payment", e, context = TAG)
-                    toast(e)
-                    hideSheet()
+                    setSendEffect(SendEffect.PaymentError(e))
                 }
             }
         }
@@ -1502,6 +1496,8 @@ sealed class SendEffect {
     data object NavigateToQuickPay : SendEffect()
     data object NavigateToFee : SendEffect()
     data object NavigateToFeeCustom : SendEffect()
+
+    data class PaymentError(val e: Throwable) : SendEffect()
     data class PaymentSuccess(val sheet: NewTransactionSheetDetails? = null) : SendEffect()
 }
 
