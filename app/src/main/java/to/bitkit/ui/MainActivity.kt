@@ -29,7 +29,6 @@ import kotlinx.serialization.Serializable
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.ui.components.AuthCheckView
-import to.bitkit.ui.components.InactivityTracker
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
@@ -96,18 +95,17 @@ class MainActivity : FragmentActivity() {
                     val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
 
                     IsOnlineTracker(appViewModel)
-                    InactivityTracker(appViewModel, settingsViewModel) {
-                        ContentView(
-                            appViewModel = appViewModel,
-                            walletViewModel = walletViewModel,
-                            blocktankViewModel = blocktankViewModel,
-                            currencyViewModel = currencyViewModel,
-                            activityListViewModel = activityListViewModel,
-                            transferViewModel = transferViewModel,
-                            settingsViewModel = settingsViewModel,
-                            backupsViewModel = backupsViewModel,
-                        )
-                    }
+
+                    ContentView(
+                        appViewModel = appViewModel,
+                        walletViewModel = walletViewModel,
+                        blocktankViewModel = blocktankViewModel,
+                        currencyViewModel = currencyViewModel,
+                        activityListViewModel = activityListViewModel,
+                        transferViewModel = transferViewModel,
+                        settingsViewModel = settingsViewModel,
+                        backupsViewModel = backupsViewModel,
+                    )
 
                     AnimatedVisibility(
                         visible = !isAuthenticated,

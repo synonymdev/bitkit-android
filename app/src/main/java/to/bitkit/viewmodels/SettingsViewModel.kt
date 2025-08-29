@@ -82,15 +82,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val isPinOnIdleEnabled = settingsStore.data.map { it.isPinOnIdleEnabled }
-        .asStateFlow(initialValue = false)
-
-    fun setIsPinOnIdleEnabled(value: Boolean) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(isPinOnIdleEnabled = value) }
-        }
-    }
-
     val isPinForPaymentsEnabled = settingsStore.data.map { it.isPinForPaymentsEnabled }
         .asStateFlow(initialValue = false)
 

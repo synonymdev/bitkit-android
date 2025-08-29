@@ -19,7 +19,6 @@ fun AuthCheckScreen(
 
     val isPinOnLaunchEnabled by settings.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
     val isBiometricEnabled by settings.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isPinOnIdleEnabled by settings.isPinOnIdleEnabled.collectAsStateWithLifecycle()
     val isPinForPaymentsEnabled by settings.isPinForPaymentsEnabled.collectAsStateWithLifecycle()
 
     AuthCheckView(
@@ -37,11 +36,6 @@ fun AuthCheckScreen(
 
                 AuthCheckAction.TOGGLE_PIN_ON_LAUNCH -> {
                     settings.setIsPinOnLaunchEnabled(!isPinOnLaunchEnabled)
-                    navController.popBackStack()
-                }
-
-                AuthCheckAction.TOGGLE_PIN_ON_IDLE -> {
-                    settings.setIsPinOnIdleEnabled(!isPinOnIdleEnabled)
                     navController.popBackStack()
                 }
 
@@ -70,7 +64,6 @@ fun AuthCheckScreen(
 object AuthCheckAction {
     const val TOGGLE_PIN_ON_LAUNCH = "TOGGLE_PIN_ON_LAUNCH"
     const val TOGGLE_BIOMETRICS = "TOGGLE_BIOMETRICS"
-    const val TOGGLE_PIN_ON_IDLE = "TOGGLE_PIN_ON_IDLE"
     const val TOGGLE_PIN_FOR_PAYMENTS = "TOGGLE_PIN_FOR_PAYMENTS"
     const val DISABLE_PIN = "DISABLE_PIN"
     const val NAV_TO_RESET = "NAV_TO_RESET"
