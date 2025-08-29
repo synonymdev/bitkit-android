@@ -44,6 +44,7 @@ fun SendErrorScreen(
     stackTrace: String? = null,
     onRetry: () -> Unit,
     onClose: () -> Unit,
+    onSendReportClick: () -> Unit,
 ) {
     var displayDetails by remember { mutableStateOf(false) }
 
@@ -53,6 +54,7 @@ fun SendErrorScreen(
         onRetry = onRetry,
         onClose = onClose,
         displayDetails = displayDetails,
+        onSendReportClick = onSendReportClick,
         onDisplayDetails = {
             displayDetails = true
         }
@@ -109,7 +111,7 @@ private fun Content(
                         text = stackTrace.orEmpty(),
                         color = Colors.Red,
                         modifier = Modifier
-                            .padding(top = 16.dp)
+                            .padding(vertical = 16.dp)
                             .fillMaxWidth()
                             .background(color = Colors.White10, shape = Shapes.medium)
                             .padding(16.dp)
@@ -170,6 +172,51 @@ private fun Preview() {
                 errorMessage = stringResource(R.string.wallet__send_error_create_tx),
                 stackTrace = "Test render error\n" +
                     "\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
+                    "     in Tabbar (at WalletNavigator.tsx:59)\n" +
                     "     in Tabbar (at WalletNavigator.tsx:59)\n" +
                     "     in Tabbar (at WalletNavigator.tsx:59)\n" +
                     "     in Tabbar (at WalletNavigator.tsx:59)\n" +

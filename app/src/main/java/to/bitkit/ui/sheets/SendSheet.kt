@@ -246,6 +246,9 @@ fun SendSheet(
                             navController.navigate(SendRoute.Success)
                         }
                     },
+                    onSendReportClick = {
+
+                    },
                     onClose = {
                         appViewModel.hideSheet()
                     }
