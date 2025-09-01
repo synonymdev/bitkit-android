@@ -6,23 +6,31 @@ import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.PaymentDetails
+import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.InProgressTransfer
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.dto.TransferType
+import to.bitkit.data.entities.TagMetadataEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.matchesPaymentId
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.services.CoreService
+import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
+import java.security.InvalidParameterException
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Duration.Companion.seconds
+
+private const val SYNC_TIMEOUT_MS = 40_000L
 
 @Singleton
 class ActivityRepo @Inject constructor(
@@ -30,9 +38,10 @@ class ActivityRepo @Inject constructor(
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
+    private val db: AppDb,
+    private val addressChecker: AddressChecker,
 ) {
-
-    var isSyncingLdkNodePayments = false
+    val isSyncingLdkNodePayments = MutableStateFlow(false)
 
     val inProgressTransfers = cacheStore.data.map { it.inProgressTransfers }
 
@@ -40,63 +49,58 @@ class ActivityRepo @Inject constructor(
         Logger.debug("syncActivities called", context = TAG)
 
         return@withContext runCatching {
-            if (isSyncingLdkNodePayments) {
-                Logger.warn("LDK-node payments are already being synced, skipping", context = TAG)
-                return@withContext Result.failure(Exception())
+            withTimeout(SYNC_TIMEOUT_MS) {
+                Logger.debug("isSyncingLdkNodePayments = ${isSyncingLdkNodePayments.value}", context = TAG)
+                isSyncingLdkNodePayments.first { !it }
             }
 
-            deletePendingActivities()
+            isSyncingLdkNodePayments.value = true
 
-            isSyncingLdkNodePayments = true
+            deletePendingActivities()
             return@withContext lightningRepo.getPayments()
                 .onSuccess { payments ->
                     Logger.debug("Got payments with success, syncing activities", context = TAG)
-                    syncLdkNodePayments(payments = payments)
+                    syncLdkNodePayments(payments = payments).onFailure { e ->
+                        return@withContext Result.failure(e)
+                    }
                     updateActivitiesMetadata()
+                    syncTagsMetaData()
                     boostPendingActivities()
                     updateInProgressTransfers()
-                    isSyncingLdkNodePayments = false
+                    isSyncingLdkNodePayments.value = false
                     return@withContext Result.success(Unit)
                 }.onFailure { e ->
                     Logger.error("Failed to sync ldk-node payments", e, context = TAG)
-                    isSyncingLdkNodePayments = false
+                    isSyncingLdkNodePayments.value = false
                     return@withContext Result.failure(e)
                 }.map { Unit }
         }.onFailure { e ->
-            Logger.error("syncLdkNodePayments error", e, context = TAG)
+            when (e) {
+                is TimeoutCancellationException -> {
+                    isSyncingLdkNodePayments.value = false
+                    Logger.warn("Timeout waiting for sync to complete, forcing reset", context = TAG)
+                }
+
+                else -> {
+                    isSyncingLdkNodePayments.value = false
+                    Logger.error("syncActivities error", e, context = TAG)
+                }
+            }
         }
     }
 
     /**
      * Business logic: Syncs LDK node payments with proper error handling and counting
+     * @return a list with added payments
      */
-    private suspend fun syncLdkNodePayments(payments: List<PaymentDetails>) {
-        var addedCount = 0
-        var updatedCount = 0
-        var latestCaughtError: Throwable? = null
-
-        for (payment in payments) {
-            try {
-                val existentActivity = coreService.activity.getActivity(payment.id)
-                val wasUpdate = existentActivity != null
-
-                // Delegate the actual sync to the service layer
-                coreService.activity.syncLdkNodePayments(listOf(payment))
-
-                if (wasUpdate) {
-                    updatedCount++
-                } else {
-                    addedCount++
-                }
-            } catch (e: Throwable) {
-                Logger.error("Error syncing LDK payment:", e, context = TAG)
-                latestCaughtError = e
-            }
+    private suspend fun syncLdkNodePayments(
+        payments: List<PaymentDetails>,
+    ): Result<Unit> {
+        return runCatching {
+            coreService.activity.syncLdkNodePayments(payments)
+        }.onFailure { e ->
+            Logger.error("Error syncing LDK payment:", e, context = TAG)
         }
-
-        latestCaughtError?.let { throw it }
-
-        Logger.info("Synced LDK payments - Added: $addedCount - Updated: $updatedCount", context = TAG)
     }
 
     /**
@@ -105,7 +109,7 @@ class ActivityRepo @Inject constructor(
     suspend fun findActivityByPaymentId(
         paymentHashOrTxId: String,
         type: ActivityFilter,
-        txType: PaymentType,
+        txType: PaymentType?,
         retry: Boolean = true,
     ): Result<Activity> = withContext(bgDispatcher) {
         if (paymentHashOrTxId.isEmpty()) {
@@ -127,9 +131,6 @@ class ActivityRepo @Inject constructor(
                     "activity with paymentHashOrTxId:$paymentHashOrTxId not found, trying again after sync",
                     context = TAG
                 )
-                Logger.debug("5 seconds delay", context = TAG)
-                delay(5.seconds)
-                Logger.debug("Syncing LN node called", context = TAG)
 
                 lightningRepo.sync().onSuccess {
                     Logger.debug("Syncing LN node SUCCESS", context = TAG)
@@ -321,6 +322,79 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    private suspend fun syncTagsMetaData(
+    ) = withContext(context = bgDispatcher) {
+        runCatching {
+            if (db.tagMetadataDao().getAll().isEmpty()) return@withContext
+            val lastActivities = getActivities(limit = 10u).getOrNull() ?: return@withContext
+            Logger.debug("syncTagsMetaData called")
+            lastActivities.forEach { activity ->
+                when (activity) {
+                    is Activity.Lightning -> {
+                        val paymentHash = activity.rawId()
+                        db.tagMetadataDao().searchByPaymentHash(paymentHash = paymentHash)?.let { tagMetadata ->
+                            Logger.debug("Tags metadata found! $tagMetadata", context = TAG)
+                            addTagsToTransaction(
+                                paymentHashOrTxId = paymentHash,
+                                type = ActivityFilter.LIGHTNING,
+                                txType = if (tagMetadata.isReceive) PaymentType.RECEIVED else PaymentType.SENT,
+                                tags = tagMetadata.tags
+                            ).onSuccess {
+                                Logger.debug("Tags synced with success!", context = TAG)
+                                db.tagMetadataDao().deleteByPaymentHash(paymentHash = paymentHash)
+                            }
+                        }
+                    }
+
+                    is Onchain -> {
+                        when (activity.v1.txType) {
+                            PaymentType.RECEIVED -> {
+                                // TODO Temporary solution while whe ldk-node doesn't return the address directly
+                                Logger.debug("Fetching data for txId: ${activity.v1.txId}", context = TAG)
+                                runCatching { addressChecker.getTransaction(activity.v1.txId) }.onSuccess { txDetails ->
+                                    Logger.debug("Tx detail fetched with success: $txDetails", context = TAG)
+                                    txDetails.vout.forEach { vOut ->
+                                        vOut.scriptpubkey_address?.let {
+                                            Logger.debug("Extracted address: $it", context = TAG)
+                                            db.tagMetadataDao().searchByAddress(it)
+                                        }?.let { tagMetadata ->
+                                            Logger.debug("Tags metadata found! $tagMetadata", context = TAG)
+                                            addTagsToTransaction(
+                                                paymentHashOrTxId = txDetails.txid,
+                                                type = ActivityFilter.ONCHAIN,
+                                                txType = PaymentType.RECEIVED,
+                                                tags = tagMetadata.tags
+                                            ).onSuccess {
+                                                Logger.debug("Tags synced with success! $tagMetadata", context = TAG)
+                                                db.tagMetadataDao().deleteByTxId(activity.v1.txId)
+                                            }
+                                        }
+                                    }
+                                }.onFailure {
+                                    Logger.warn("Failed getting transaction detail", context = TAG)
+                                }
+                            }
+
+                            PaymentType.SENT -> {
+                                db.tagMetadataDao().searchByTxId(activity.v1.txId)?.let { tagMetadata ->
+                                    addTagsToTransaction(
+                                        paymentHashOrTxId = activity.v1.txId,
+                                        type = ActivityFilter.ONCHAIN,
+                                        txType = PaymentType.SENT,
+                                        tags = tagMetadata.tags
+                                    ).onSuccess {
+                                        Logger.debug("Tags synced with success! $tagMetadata", context = TAG)
+                                        db.tagMetadataDao().deleteByTxId(activity.v1.txId)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun updateInProgressTransfers() {
         cacheStore.data.first().inProgressTransfers.forEach { transfer ->
             getActivity(transfer.activityId).onSuccess { activity ->
@@ -441,7 +515,7 @@ class ActivityRepo @Inject constructor(
     suspend fun addTagsToTransaction(
         paymentHashOrTxId: String,
         type: ActivityFilter,
-        txType: PaymentType,
+        txType: PaymentType?,
         tags: List<String>,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (tags.isEmpty()) return@withContext Result.failure(IllegalArgumentException("No tags selected"))
@@ -450,7 +524,7 @@ class ActivityRepo @Inject constructor(
             type = type,
             txType = txType
         ).onSuccess { activity ->
-            return@withContext addTagsToActivity(activity.rawId(), tags = tags)
+            addTagsToActivity(activity.rawId(), tags = tags)
         }.onFailure { e ->
             return@withContext Result.failure(e)
         }.map { Unit }
@@ -494,6 +568,37 @@ class ActivityRepo @Inject constructor(
             Logger.error("getAllAvailableTags error", e, context = TAG)
         }
     }
+
+    suspend fun saveTagsMetadata(
+        id: String,
+        paymentHash: String? = null,
+        txId: String? = null,
+        address: String,
+        isReceive: Boolean,
+        tags: List<String>,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        return@withContext runCatching {
+
+            if (tags.isEmpty()) throw InvalidParameterException("tags must not be empty")
+
+            val entity = TagMetadataEntity(
+                id = id,
+                paymentHash = paymentHash,
+                txId = txId,
+                address = address,
+                isReceive = isReceive,
+                tags = tags,
+                createdAt = nowTimestamp().toEpochMilli()
+            )
+            db.tagMetadataDao().saveTagMetadata(
+                tagMetadata = entity
+            )
+            Logger.debug("Tag metadata saved: $entity", context = TAG)
+        }.onFailure { e ->
+            Logger.error("getAllAvailableTags error", e, context = TAG)
+        }
+    }
+
 
     // MARK: - Development/Testing Methods
 

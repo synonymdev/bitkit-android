@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
 import to.bitkit.repositories.ActivityRepo
-import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
@@ -27,9 +26,8 @@ import javax.inject.Inject
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
-    private val lightningRepo: LightningRepo,
     private val ldkNodeEventBus: LdkNodeEventBus,
-    private val activityRepo: ActivityRepo
+    private val activityRepo: ActivityRepo,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
     val filteredActivities = _filteredActivities.asStateFlow()
@@ -224,8 +222,6 @@ class ActivityListViewModel @Inject constructor(
         viewModelScope.launch {
             activityRepo.syncActivities().onSuccess {
                 syncState()
-            }.onFailure { e ->
-                Logger.error("Failed to sync ldk-node payments", e)
             }
         }
     }

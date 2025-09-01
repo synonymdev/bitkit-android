@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
@@ -20,10 +21,11 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.InvoiceTagEntity
+import to.bitkit.data.entities.TagMetadataEntity
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toHex
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.AddressModel
@@ -152,6 +154,9 @@ class WalletRepo @Inject constructor(
             syncBalances()
             return@withContext Result.success(Unit)
         }.onFailure { e ->
+            if (e is TimeoutCancellationException) {
+                syncBalances()
+            }
             return@withContext Result.failure(e)
         }
     }
@@ -395,15 +400,19 @@ class WalletRepo @Inject constructor(
             } else {
                 setBolt11("")
             }
-
+            val address = getOnchainAddress()
             val newBip21 = buildBip21Url(
-                bitcoinAddress = getOnchainAddress(),
+                bitcoinAddress = address,
                 amountSats = _walletState.value.bip21AmountSats,
                 message = description.ifBlank { Env.DEFAULT_INVOICE_MESSAGE },
                 lightningInvoice = getBolt11()
             )
             setBip21(newBip21)
-            saveInvoiceWithTags(bip21Invoice = newBip21, tags = _walletState.value.selectedTags)
+            saveInvoiceWithTags(
+                bip21Invoice = newBip21,
+                onChainAddress = address,
+                tags = _walletState.value.selectedTags
+            )
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Update BIP21 invoice error", e, context = TAG)
@@ -427,37 +436,42 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun saveInvoiceWithTags(bip21Invoice: String, tags: List<String>) = withContext(bgDispatcher) {
-        if (tags.isEmpty()) return@withContext
+    suspend fun saveInvoiceWithTags(bip21Invoice: String, onChainAddress: String, tags: List<String>) =
+        withContext(bgDispatcher) {
+            if (tags.isEmpty()) return@withContext
 
-        try {
-            deleteExpiredInvoices()
-            val decoded = decode(bip21Invoice)
-            val paymentHashOrAddress = when (decoded) {
-                is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
-                is Scanner.OnChain -> decoded.extractLightningHashOrAddress()
-                else -> null
-            }
+            try {
+                deleteExpiredInvoices()
+                val decoded = decode(bip21Invoice)
+                val paymentHash = when (decoded) {
+                    is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
+                    is Scanner.OnChain -> decoded.extractLightningHash()
+                    else -> null
+                }
 
-            paymentHashOrAddress?.let {
-                db.invoiceTagDao().saveInvoice(
-                    invoiceTag = InvoiceTagEntity(
-                        paymentHash = paymentHashOrAddress,
-                        tags = tags,
-                        createdAt = System.currentTimeMillis()
-                    )
+                val entity = TagMetadataEntity(
+                    id = paymentHash ?: onChainAddress,
+                    paymentHash = paymentHash,
+                    tags = tags,
+                    address = onChainAddress,
+                    isReceive = true,
+                    createdAt = nowTimestamp().toEpochMilli()
                 )
+                db.tagMetadataDao().saveTagMetadata(
+                    tagMetadata = entity
+                )
+                Logger.debug("Tag metadata saved: $entity", context = TAG)
+            } catch (e: Throwable) {
+                Logger.error("saveInvoice error", e, context = TAG)
             }
-        } catch (e: Throwable) {
-            Logger.error("saveInvoice error", e, context = TAG)
         }
-    }
 
-    suspend fun searchInvoice(txId: Txid): Result<InvoiceTagEntity> = withContext(bgDispatcher) {
+    suspend fun searchInvoiceByPaymentHash(paymentHash: String): Result<TagMetadataEntity> = withContext(bgDispatcher) {
         return@withContext try {
-            val invoiceTag = db.invoiceTagDao().searchInvoice(paymentHash = txId) ?: return@withContext Result.failure(
-                Exception("Invoice not found")
-            )
+            val invoiceTag =
+                db.tagMetadataDao().searchByPaymentHash(paymentHash = paymentHash) ?: return@withContext Result.failure(
+                    Exception("Invoice not found")
+                )
             Result.success(invoiceTag)
         } catch (e: Throwable) {
             Logger.error("searchInvoice error", e, context = TAG)
@@ -467,7 +481,7 @@ class WalletRepo @Inject constructor(
 
     suspend fun deleteInvoice(txId: Txid) = withContext(bgDispatcher) {
         try {
-            db.invoiceTagDao().deleteInvoiceByPaymentHash(paymentHash = txId)
+            db.tagMetadataDao().deleteByPaymentHash(paymentHash = txId)
         } catch (e: Throwable) {
             Logger.error("deleteInvoice error", e, context = TAG)
         }
@@ -475,7 +489,7 @@ class WalletRepo @Inject constructor(
 
     suspend fun deleteAllInvoices() = withContext(bgDispatcher) {
         try {
-            db.invoiceTagDao().deleteAllInvoices()
+            db.tagMetadataDao().deleteAll()
         } catch (e: Throwable) {
             Logger.error("deleteAllInvoices error", e, context = TAG)
         }
@@ -484,20 +498,19 @@ class WalletRepo @Inject constructor(
     suspend fun deleteExpiredInvoices() = withContext(bgDispatcher) {
         try {
             val twoDaysAgoMillis = Clock.System.now().minus(2.days).toEpochMilliseconds()
-            db.invoiceTagDao().deleteExpiredInvoices(expirationTimeStamp = twoDaysAgoMillis)
+            db.tagMetadataDao().deleteExpired(expirationTimeStamp = twoDaysAgoMillis)
         } catch (e: Throwable) {
             Logger.error("deleteExpiredInvoices error", e, context = TAG)
         }
     }
 
-    private suspend fun Scanner.OnChain.extractLightningHashOrAddress(): String {
-        val address = this.invoice.address
-        val lightningInvoice: String = this.invoice.params?.get("lightning") ?: address
+    private suspend fun Scanner.OnChain.extractLightningHash(): String? {
+        val lightningInvoice: String = this.invoice.params?.get("lightning") ?: return null
         val decoded = decode(lightningInvoice)
 
         return when (decoded) {
             is Scanner.Lightning -> decoded.invoice.paymentHash.toHex()
-            else -> address
+            else -> null
         }
     }
 

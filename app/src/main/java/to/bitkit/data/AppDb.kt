@@ -19,22 +19,22 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import to.bitkit.BuildConfig
-import to.bitkit.data.dao.InvoiceTagDao
+import to.bitkit.data.dao.TagMetadataDao
 import to.bitkit.data.entities.ConfigEntity
-import to.bitkit.data.entities.InvoiceTagEntity
+import to.bitkit.data.entities.TagMetadataEntity
 import to.bitkit.data.typeConverters.StringListConverter
 
 @Database(
     entities = [
         ConfigEntity::class,
-        InvoiceTagEntity::class,
+        TagMetadataEntity::class,
     ],
-    version = 2,
+    version = 3,
 )
 @TypeConverters(StringListConverter::class)
 abstract class AppDb : RoomDatabase() {
     abstract fun configDao(): ConfigDao
-    abstract fun invoiceTagDao(): InvoiceTagDao
+    abstract fun tagMetadataDao(): TagMetadataDao
 
     companion object {
         private const val DB_NAME = "${BuildConfig.APPLICATION_ID}.sqlite"

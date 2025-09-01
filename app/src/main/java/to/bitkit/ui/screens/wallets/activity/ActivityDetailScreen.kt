@@ -71,6 +71,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -85,7 +86,11 @@ fun ActivityDetailScreen(
 ) {
     val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
     val item = activities?.find { it.rawId() == route.id }
-        ?: return
+    if (item == null) {
+        Logger.error("Activity not found")
+        return
+    }
+
 
     val app = appViewModel ?: return
     val copyToastTitle = stringResource(R.string.common__copied)

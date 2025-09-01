@@ -57,6 +57,7 @@ fun NewTransactionSheet(
     settingsViewModel: SettingsViewModel,
 ) {
     val currencies by currencyViewModel.uiState.collectAsState()
+    val newTransaction by appViewModel.newTransaction.collectAsState()
 
     CompositionLocalProvider(
         LocalCurrencyViewModel provides currencyViewModel,
@@ -67,10 +68,9 @@ fun NewTransactionSheet(
             onDismissRequest = { appViewModel.hideNewTransactionSheet() },
         ) {
             NewTransactionSheetView(
-                details = appViewModel.newTransaction,
+                details = newTransaction,
                 onCloseClick = { appViewModel.hideNewTransactionSheet() },
                 onDetailClick = {
-                    appViewModel.hideNewTransactionSheet()
                     appViewModel.onClickActivityDetail()
                 },
             )
@@ -179,6 +179,8 @@ fun NewTransactionSheetView(
                     SecondaryButton(
                         text = stringResource(R.string.wallet__send_details),
                         onClick = onDetailClick,
+                        enabled = details.paymentHashOrTxId != null,
+                        isLoading = details.isLoadingDetails,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("Details")

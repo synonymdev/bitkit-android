@@ -118,6 +118,7 @@ class WakeNodeWorker @AssistedInject constructor(
                     NewTransactionSheetDetails(
                         type = NewTransactionSheetType.LIGHTNING,
                         direction = NewTransactionSheetDirection.RECEIVED,
+                        paymentHashOrTxId = event.paymentHash,
                         sats = sats.toLong(),
                     )
                 )

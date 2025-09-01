@@ -86,17 +86,7 @@ class ActivityRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(lightningRepo).getPayments()
         verify(coreService.activity).syncLdkNodePayments(payments, forceUpdate = false)
-        assertFalse(sut.isSyncingLdkNodePayments)
-    }
-
-    @Test
-    fun `syncActivities skips when already syncing`() = test {
-        sut.isSyncingLdkNodePayments = true
-
-        val result = sut.syncActivities()
-
-        assertTrue(result.isFailure)
-        verify(lightningRepo, never()).getPayments()
+        assertFalse(sut.isSyncingLdkNodePayments.value)
     }
 
     @Test
@@ -108,7 +98,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertEquals(exception, result.exceptionOrNull())
-        assertFalse(sut.isSyncingLdkNodePayments)
+        assertFalse(sut.isSyncingLdkNodePayments.value)
     }
 
     @Test

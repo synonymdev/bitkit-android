@@ -15,7 +15,9 @@ private const val APP_PREFS = "bitkit_prefs"
 data class NewTransactionSheetDetails(
     val type: NewTransactionSheetType,
     val direction: NewTransactionSheetDirection,
+    val paymentHashOrTxId: String? = null,
     val sats: Long,
+    val isLoadingDetails: Boolean = false
 ) {
     companion object {
         private const val BACKGROUND_TRANSACTION_KEY = "backgroundTransaction"
