@@ -19,10 +19,12 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
+import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AddressChecker
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -33,6 +35,8 @@ class ActivityRepoTest : BaseUnitTest() {
     private val coreService: CoreService = mock()
     private val lightningRepo: LightningRepo = mock()
     private val cacheStore: CacheStore = mock()
+    private val addressChecker: AddressChecker = mock()
+    private val db: AppDb = mock()
 
     private lateinit var sut: ActivityRepo
 
@@ -71,6 +75,8 @@ class ActivityRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
             cacheStore = cacheStore,
+            addressChecker = addressChecker,
+            db = db
         )
     }
 
