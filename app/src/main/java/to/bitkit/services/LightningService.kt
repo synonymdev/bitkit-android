@@ -136,11 +136,7 @@ class LightningService @Inject constructor(
             } catch (e: BuildException) {
                 // Check if the build exception is due to network issues
                 val cause = e.cause?.message ?: e.message
-                if (cause?.contains("Read failed") == true ||
-                    cause?.contains("Network") == true ||
-                    cause?.contains("Connection") == true ||
-                    cause?.contains("resolve host") == true
-                ) {
+                if (isNetworkRelatedError(cause)) {
                     Logger.warn("LDK build failed due to network issues: $cause")
                     throw NetworkException("Network error during LDK build: $cause", e)
                 }
@@ -149,6 +145,28 @@ class LightningService @Inject constructor(
         }
 
         Logger.info("LDK node setup")
+    }
+
+    /**
+     * Enhanced network error detection for LDK-specific errors
+     */
+    private fun isNetworkRelatedError(message: String?): Boolean {
+        if (message == null) return false
+        val lowerMessage = message.lowercase()
+        return lowerMessage.contains("read failed") ||
+            lowerMessage.contains("network") ||
+            lowerMessage.contains("connection") ||
+            lowerMessage.contains("resolve host") ||
+            lowerMessage.contains("timeout") ||
+            lowerMessage.contains("dns") ||
+            lowerMessage.contains("unreachable") ||
+            lowerMessage.contains("refused") ||
+            // VSS-specific network errors
+            lowerMessage.contains("vss") ||
+            lowerMessage.contains("auth") ||
+            // LDK build-specific network failures
+            lowerMessage.contains("failed to get") ||
+            lowerMessage.contains("http")
     }
 
     private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
@@ -256,11 +274,7 @@ class LightningService @Inject constructor(
             } catch (e: Exception) {
                 // Check if sync failure is due to network issues
                 val message = e.message?.lowercase() ?: ""
-                if (message.contains("network") ||
-                    message.contains("connection") ||
-                    message.contains("timeout") ||
-                    message.contains("resolve")
-                ) {
+                if (isNetworkRelatedError(message = message)) {
                     Logger.warn("Sync failed due to network issues: ${e.message}")
                     throw NetworkException("Network error during sync: ${e.message}", e)
                 }
@@ -322,11 +336,7 @@ class LightningService @Inject constructor(
 
                     // Check if this is a network-related failure
                     val isNetworkError = e.message?.lowercase()?.let { msg ->
-                        msg.contains("network") ||
-                            msg.contains("connection") ||
-                            msg.contains("timeout") ||
-                            msg.contains("resolve") ||
-                            msg.contains("refused")
+                        isNetworkRelatedError(msg)
                     } ?: false
 
                     if (isNetworkError) {
@@ -363,11 +373,7 @@ class LightningService @Inject constructor(
 
                 // Check if this is a network error
                 val isNetworkError = e.message?.lowercase()?.let { msg ->
-                    msg.contains("network") ||
-                        msg.contains("connection") ||
-                        msg.contains("timeout") ||
-                        msg.contains("resolve") ||
-                        msg.contains("refused")
+                    isNetworkRelatedError(msg)
                 } ?: false
 
                 if (isNetworkError) {
@@ -422,12 +428,7 @@ class LightningService @Inject constructor(
 
                 // Check if this is a network error
                 val isNetworkError = e.message?.lowercase()?.let { msg ->
-                    msg.contains("network") ||
-                        msg.contains("connection") ||
-                        msg.contains("timeout") ||
-                        msg.contains("resolve") ||
-                        msg.contains("refused")
-                } ?: false
+                    isNetworkRelatedError(msg)} ?: false
 
                 if (isNetworkError) {
                     Result.failure(NetworkException("Network error opening channel: ${e.message}", e))
