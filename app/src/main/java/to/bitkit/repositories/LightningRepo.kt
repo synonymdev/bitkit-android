@@ -69,6 +69,7 @@ private const val MAX_RETRY_ATTEMPTS = 5
 private const val INITIAL_RETRY_DELAY_MS = 1000L
 
 @Singleton
+@Suppress("LongParameterList", "LargeClass", "TooManyFunctions")
 class LightningRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
@@ -112,7 +113,8 @@ class LightningRepo @Inject constructor(
         if (!_lightningState.value.nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
                 Exception(
-                    "Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting"
+                    "Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and" +
+                        " not starting"
                 )
             )
         }
@@ -138,6 +140,7 @@ class LightningRepo @Inject constructor(
         return@withContext executeOperation(operationName, operation)
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> executeOperation(
         operationName: String,
         operation: suspend () -> Result<T>,
@@ -150,6 +153,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
@@ -164,6 +168,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught", "LongParameterList", "LongMethod")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -320,6 +325,7 @@ class LightningRepo @Inject constructor(
     }
 
     /**Updates the shouldBlockLightning state and returns the current value*/
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun updateGeoBlockState(): Boolean {
         return try {
             val shouldBlock = coreService.shouldBlockLightning()
@@ -340,6 +346,7 @@ class LightningRepo @Inject constructor(
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
             return@withContext Result.success(Unit)
@@ -356,6 +363,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
         syncState()
         if (_lightningState.value.isSyncingWallet) {
@@ -382,6 +390,7 @@ class LightningRepo @Inject constructor(
         _lightningState.update { it.copy(isSyncingWallet = false) }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
         stop().onSuccess {
@@ -606,6 +615,7 @@ class LightningRepo @Inject constructor(
             Result.success(paymentId)
         }
 
+    @Suppress("LongParameterList")
     suspend fun sendOnChain(
         address: Address,
         sats: ULong,
@@ -765,7 +775,7 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
-    suspend fun syncState() {
+    fun syncState() {
         _lightningState.update {
             it.copy(
                 nodeId = getNodeId().orEmpty(),
@@ -799,6 +809,7 @@ class LightningRepo @Inject constructor(
     fun hasChannels(): Boolean =
         _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
         return@executeWhenNodeRunning try {
             val token = token ?: firebaseMessaging.token.await()
@@ -822,6 +833,7 @@ class LightningRepo @Inject constructor(
 
     fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
         satsPerVByte: UInt,
@@ -848,7 +860,8 @@ class LightningRepo @Inject constructor(
                 satsPerVByte = satsPerVByte,
             )
             Logger.debug(
-                "bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"
+                "bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte"
             )
             Result.success(replacementTxId)
         } catch (e: Throwable) {
@@ -861,6 +874,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun accelerateByCpfp(
         originalTxId: Txid,
         satsPerVByte: UInt,
@@ -897,12 +911,14 @@ class LightningRepo @Inject constructor(
                 destinationAddress = destinationAddress,
             )
             Logger.debug(
-                "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"
+                "accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId," +
+                    "satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"
             )
             Result.success(newDestinationTxId)
         } catch (e: Throwable) {
             Logger.error(
-                "accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
+                "accelerateByCpfp error originalTxId: $originalTxId, " +
+                    "satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress",
                 e,
                 context = TAG
             )

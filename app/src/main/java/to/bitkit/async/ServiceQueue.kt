@@ -23,6 +23,7 @@ enum class ServiceQueue {
 
     private val scope by lazy { CoroutineScope(dispatcher("$name-queue".lowercase()) + SupervisorJob()) }
 
+    @Suppress("TooGenericExceptionCaught")
     fun <T> blocking(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
@@ -39,6 +40,7 @@ enum class ServiceQueue {
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
@@ -59,6 +61,7 @@ enum class ServiceQueue {
      * Handle exceptions for blocking calls (these can be more aggressive as they're usually
      * called from background threads)
      */
+    @Suppress("ThrowsCount")
     private fun <T> handleExceptionForBlocking(e: Exception, functionName: String): T {
         when (e) {
             is UnknownHostException, is SocketTimeoutException, is ConnectException -> {
@@ -93,6 +96,7 @@ enum class ServiceQueue {
      * Handle exceptions for background calls (these are more lenient for network errors
      * to prevent main thread crashes)
      */
+    @Suppress("ThrowsCount", "ReturnCount")
     private fun <T> handleExceptionForBackground(e: Exception, functionName: String): T {
         when (e) {
             is UnknownHostException, is SocketTimeoutException, is ConnectException -> {
@@ -110,7 +114,7 @@ enum class ServiceQueue {
             is IOException -> {
                 Logger.warn("IO error in $functionName: ${e.message}")
                 if (name == CORE.name || name == FOREX.name) {
-                    Logger.warn("Suppressing IO error for ${name} to prevent crash")
+                    Logger.warn("Suppressing IO error for $name to prevent crash")
                     return getNetworkErrorFallback()
                 }
                 val networkException = NetworkException("Connection error: ${e.message}", e)
@@ -121,7 +125,7 @@ enum class ServiceQueue {
             is NetworkException -> {
                 Logger.warn("Network error in $functionName: ${e.message}")
                 if (name == CORE.name || name == FOREX.name) {
-                    Logger.warn("Suppressing network exception for ${name} to prevent crash")
+                    Logger.warn("Suppressing network exception for $name to prevent crash")
                     return getNetworkErrorFallback()
                 }
                 Logger.error("ServiceQueue.$name error", e)
