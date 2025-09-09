@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
+import to.bitkit.async.NetworkException
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.dto.TransactionMetadata
@@ -54,11 +55,15 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 private const val SYNC_TIMEOUT_MS = 10_000L
+private const val MAX_RETRY_ATTEMPTS = 5
+private const val INITIAL_RETRY_DELAY_MS = 1000L
 
 @Singleton
 class LightningRepo @Inject constructor(
@@ -161,6 +166,7 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         customServer: ElectrumServer? = null,
         customRgsServerUrl: String? = null,
+        retryAttempt: Int = 0,
     ): Result<Unit> = withContext(bgDispatcher) {
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
@@ -175,12 +181,32 @@ class LightningRepo @Inject constructor(
             if (lightningService.node == null) {
                 val setupResult = setup(walletIndex, customServer, customRgsServerUrl)
                 if (setupResult.isFailure) {
-                    _lightningState.update {
-                        it.copy(
-                            nodeLifecycleState = NodeLifecycleState.ErrorStarting(
-                                setupResult.exceptionOrNull() ?: Exception("Unknown setup error")
-                            )
+                    val setupError = setupResult.exceptionOrNull()!!
+
+                    // Handle setup failures with retry logic
+                    if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(setupError)) {
+                        Logger.warn(
+                            "Setup failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
+                            setupError,
+                            context = TAG
                         )
+
+                        val retryDelay = calculateRetryDelay(retryAttempt)
+                        delay(retryDelay)
+
+                        return@withContext start(
+                            walletIndex = walletIndex,
+                            timeout = timeout,
+                            shouldRetry = shouldRetry,
+                            eventHandler = eventHandler,
+                            customServer = customServer,
+                            customRgsServerUrl = customRgsServerUrl,
+                            retryAttempt = retryAttempt + 1
+                        )
+                    }
+
+                    _lightningState.update {
+                        it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(setupError))
                     }
                     return@withContext setupResult
                 }
@@ -207,30 +233,45 @@ class LightningRepo @Inject constructor(
             syncState()
             updateGeoBlockState()
 
-            // Perform post-startup tasks
+            // Perform post-startup tasks with error handling
             connectToTrustedPeers().onFailure { e ->
                 Logger.error("Failed to connect to trusted peers", e)
             }
-            sync()
+
+            // Handle sync gracefully even if it fails
+            try {
+                sync()
+            } catch (e: Exception) {
+                Logger.warn("Initial sync failed, but continuing startup", e, context = TAG)
+            }
+
             registerForNotifications()
 
             Result.success(Unit)
         } catch (e: Throwable) {
-            if (shouldRetry) {
-                Logger.warn("Start error, retrying after two seconds...", e = e, context = TAG)
+            if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(e)) {
+                Logger.warn(
+                    "Start failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
+                    e,
+                    context = TAG
+                )
+
                 _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
 
-                delay(2.seconds)
+                val retryDelay = calculateRetryDelay(retryAttempt)
+                delay(retryDelay)
+
                 return@withContext start(
                     walletIndex = walletIndex,
                     timeout = timeout,
-                    shouldRetry = false,
+                    shouldRetry = shouldRetry,
                     eventHandler = eventHandler,
                     customServer = customServer,
                     customRgsServerUrl = customRgsServerUrl,
+                    retryAttempt = retryAttempt + 1
                 )
             } else {
-                Logger.error("Node start error", e, context = TAG)
+                Logger.error("Node start error (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), giving up", e, context = TAG)
                 _lightningState.update {
                     it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
                 }
@@ -239,13 +280,51 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /**
+     * Determines if an error is retryable based on its type and characteristics
+     */
+    private fun isRetryableError(error: Throwable): Boolean {
+        return when {
+            error is NetworkException -> true
+            error.message?.contains("Network unavailable") == true -> true
+            error.message?.contains("Unable to resolve host") == true -> true
+            error.message?.contains("Connection refused") == true -> true
+            error.message?.contains("Read failed") == true -> true
+            error.message?.contains("timeout") == true -> true
+            error.cause is NetworkException -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Calculates retry delay with exponential backoff and jitter
+     */
+    private fun calculateRetryDelay(retryAttempt: Int): Long {
+        val baseDelay = INITIAL_RETRY_DELAY_MS
+        val exponentialDelay = baseDelay * 2.0.pow(retryAttempt.toDouble()).toLong()
+        val maxDelay = 30_000L // 30 seconds max
+        val delayWithCap = min(exponentialDelay, maxDelay)
+
+        // Add jitter (±25% of the delay)
+        val jitter = (delayWithCap * 0.25 * (Math.random() - 0.5)).toLong()
+        return delayWithCap + jitter
+    }
+
     /**Updates the shouldBlockLightning state and returns the current value*/
     private suspend fun updateGeoBlockState(): Boolean {
-        val shouldBlock = coreService.shouldBlockLightning()
-        _lightningState.update {
-            it.copy(shouldBlockLightning = shouldBlock)
+        return try {
+            val shouldBlock = coreService.shouldBlockLightning()
+            _lightningState.update {
+                it.copy(shouldBlockLightning = shouldBlock)
+            }
+            shouldBlock
+        } catch (e: NetworkException) {
+            Logger.warn("Failed to check geo block status due to network, assuming not blocked", e, context = TAG)
+            false
+        } catch (e: Exception) {
+            Logger.error("Failed to check geo block status", e, context = TAG)
+            false
         }
-        return shouldBlock
     }
 
     fun setInitNodeLifecycleState() {
@@ -279,11 +358,19 @@ class LightningRepo @Inject constructor(
         }
 
         _lightningState.update { it.copy(isSyncingWallet = true) }
-        lightningService.sync()
-        syncState()
-        _lightningState.update { it.copy(isSyncingWallet = false) }
 
-        Result.success(Unit)
+        try {
+            lightningService.sync()
+            syncState()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Logger.error("Sync failed", e, context = TAG)
+            Result.failure(e)
+        } finally {
+            _lightningState.update { it.copy(isSyncingWallet = false) }
+        }
+    }.onFailure {
+        _lightningState.update { it.copy(isSyncingWallet = false) }
     }
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
@@ -322,7 +409,7 @@ class LightningRepo @Inject constructor(
         start(
             eventHandler = cachedEventHandler,
             customServer = newServer,
-            shouldRetry = false,
+            shouldRetry = true, // Enable retry for server changes
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -348,7 +435,7 @@ class LightningRepo @Inject constructor(
 
         start(
             eventHandler = cachedEventHandler,
-            shouldRetry = false,
+            shouldRetry = true, // Enable retry for server changes
             customRgsServerUrl = newRgsUrl,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
@@ -374,7 +461,7 @@ class LightningRepo @Inject constructor(
 
         start(
             eventHandler = cachedEventHandler,
-            shouldRetry = false,
+            shouldRetry = true, // Enable retry for recovery
         ).onSuccess {
             Logger.debug("Successfully started node with previous config")
         }.onFailure { e ->
@@ -398,14 +485,19 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {
-        lightningService.connectToTrustedPeers()
-        Result.success(Unit)
+        try {
+            lightningService.connectToTrustedPeers()
+            Result.success(Unit)
+        } catch (e: NetworkException) {
+            Logger.warn("Failed to connect to trusted peers due to network", e, context = TAG)
+            Result.failure(e)
+        }
     }
 
     suspend fun connectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("connectPeer") {
-        lightningService.connectPeer(peer)
-        syncState()
-        Result.success(Unit)
+        lightningService.connectPeer(peer).also {
+            syncState()
+        }
     }
 
     suspend fun disconnectPeer(peer: LnPeer): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
@@ -711,6 +803,9 @@ class LightningRepo @Inject constructor(
 
             blocktankNotificationsService.registerDevice(token)
             Result.success(Unit)
+        } catch (e: NetworkException) {
+            Logger.warn("Failed to register for notifications due to network", e)
+            Result.failure(e)
         } catch (e: Throwable) {
             Logger.error("Register for notifications error", e)
             Result.failure(e)
