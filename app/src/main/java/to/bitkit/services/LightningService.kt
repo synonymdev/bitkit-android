@@ -333,11 +333,7 @@ class LightningService @Inject constructor(
                     Logger.info("Connected to trusted peer: $peer")
                 } catch (e: NodeException) {
                     val ldkError = LdkError(e)
-
-                    // Check if this is a network-related failure
-                    val isNetworkError = e.message?.lowercase()?.let { msg ->
-                        isNetworkRelatedError(msg)
-                    } ?: false
+                    val isNetworkError = isNetworkRelatedError(e.message)
 
                     if (isNetworkError) {
                         networkFailures++
@@ -371,10 +367,7 @@ class LightningService @Inject constructor(
                 val error = LdkError(e)
                 Logger.error("Peer connect error: $peer", error)
 
-                // Check if this is a network error
-                val isNetworkError = e.message?.lowercase()?.let { msg ->
-                    isNetworkRelatedError(msg)
-                } ?: false
+                val isNetworkError = isNetworkRelatedError(e.message)
 
                 if (isNetworkError) {
                     Result.failure(NetworkException("Network error connecting to peer: ${e.message}", e))
