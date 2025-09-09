@@ -34,6 +34,7 @@ import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.UserChannelId
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
+import to.bitkit.async.NetworkException
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
@@ -75,6 +76,7 @@ class LightningService @Inject constructor(
 
     private lateinit var trustedLnPeers: List<LnPeer>
 
+    @Suppress("ComplexCondition")
     suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
@@ -132,6 +134,15 @@ class LightningService @Inject constructor(
                     )
                 }
             } catch (e: BuildException) {
+                // Check if the build exception is due to network issues
+                val cause = e.cause?.message ?: e.message
+                if (cause?.contains("Read failed") == true ||
+                    cause?.contains("Network") == true ||
+                    cause?.contains("Connection") == true ||
+                    cause?.contains("resolve host") == true) {
+                    Logger.warn("LDK build failed due to network issues: $cause")
+                    throw NetworkException("Network error during LDK build: $cause", e)
+                }
                 throw LdkError(e)
             }
         }
@@ -223,13 +234,27 @@ class LightningService @Inject constructor(
         Logger.info("Lightning wallet wiped")
     }
 
+    @Suppress("ComplexCondition", "TooGenericExceptionCaught")
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         Logger.verbose("Syncing LDK…")
         ServiceQueue.LDK.background {
-            node.syncWallets()
-            // launch { setMaxDustHtlcExposureForCurrentChannels() }
+            try {
+                node.syncWallets()
+                // launch { setMaxDustHtlcExposureForCurrentChannels() }
+            } catch (e: Exception) {
+                // Check if sync failure is due to network issues
+                val message = e.message?.lowercase() ?: ""
+                if (message.contains("network") ||
+                    message.contains("connection") ||
+                    message.contains("timeout") ||
+                    message.contains("resolve")) {
+                    Logger.warn("Sync failed due to network issues: ${e.message}")
+                    throw NetworkException("Network error during sync: ${e.message}", e)
+                }
+                throw e
+            }
         }
         Logger.debug("LDK synced")
     }
@@ -274,12 +299,36 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
         ServiceQueue.LDK.background {
+            var networkFailures = 0
+            val maxNetworkFailures = trustedLnPeers.size // Allow all to fail due to network issues
+
             for (peer in trustedLnPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
                     Logger.info("Connected to trusted peer: $peer")
                 } catch (e: NodeException) {
-                    Logger.error("Peer connect error: $peer", LdkError(e))
+                    val ldkError = LdkError(e)
+
+                    // Check if this is a network-related failure
+                    val isNetworkError = e.message?.lowercase()?.let { msg ->
+                        msg.contains("network") ||
+                            msg.contains("connection") ||
+                            msg.contains("timeout") ||
+                            msg.contains("resolve") ||
+                            msg.contains("refused")
+                    } ?: false
+
+                    if (isNetworkError) {
+                        networkFailures++
+                        Logger.warn("Network error connecting to trusted peer: $peer", ldkError)
+
+                        // If all connections failed due to network, throw network exception
+                        if (networkFailures >= maxNetworkFailures) {
+                            throw NetworkException("Failed to connect to any trusted peers due to network issues")
+                        }
+                    } else {
+                        Logger.error("Peer connect error: $peer", ldkError)
+                    }
                 }
             }
         }
@@ -300,7 +349,21 @@ class LightningService @Inject constructor(
             } catch (e: NodeException) {
                 val error = LdkError(e)
                 Logger.error("Peer connect error: $peer", error)
-                Result.failure(error)
+
+                // Check if this is a network error
+                val isNetworkError = e.message?.lowercase()?.let { msg ->
+                    msg.contains("network") ||
+                        msg.contains("connection") ||
+                        msg.contains("timeout") ||
+                        msg.contains("resolve") ||
+                        msg.contains("refused")
+                } ?: false
+
+                if (isNetworkError) {
+                    Result.failure(NetworkException("Network error connecting to peer: ${e.message}", e))
+                } else {
+                    Result.failure(error)
+                }
             }
         }
     }
@@ -345,7 +408,21 @@ class LightningService @Inject constructor(
             } catch (e: NodeException) {
                 val error = LdkError(e)
                 Logger.error("Error initiating channel open", error)
-                Result.failure(error)
+
+                // Check if this is a network error
+                val isNetworkError = e.message?.lowercase()?.let { msg ->
+                    msg.contains("network") ||
+                        msg.contains("connection") ||
+                        msg.contains("timeout") ||
+                        msg.contains("resolve") ||
+                        msg.contains("refused")
+                } ?: false
+
+                if (isNetworkError) {
+                    Result.failure(NetworkException("Network error opening channel: ${e.message}", e))
+                } else {
+                    Result.failure(error)
+                }
             }
         }
     }
