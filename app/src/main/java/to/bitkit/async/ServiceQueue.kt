@@ -6,10 +6,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.io.IOException
 import to.bitkit.ext.callerName
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import kotlin.coroutines.CoroutineContext
@@ -19,6 +23,7 @@ enum class ServiceQueue {
 
     private val scope by lazy { CoroutineScope(dispatcher("$name-queue".lowercase()) + SupervisorJob()) }
 
+    @Suppress("TooGenericExceptionCaught")
     fun <T> blocking(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
@@ -30,12 +35,14 @@ enum class ServiceQueue {
                     block()
                 }
             } catch (e: Exception) {
-                Logger.error("ServiceQueue.$name error", e)
-                throw AppError(e)
+                val wrappedException = handleException(e, functionName)
+                Logger.error("ServiceQueue.$name error", wrappedException)
+                throw wrappedException
             }
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         functionName: String = Thread.currentThread().callerName,
@@ -47,8 +54,27 @@ enum class ServiceQueue {
                     block()
                 }
             } catch (e: Exception) {
-                Logger.error("ServiceQueue.$name error", e)
-                throw AppError(e)
+                val wrappedException = handleException(e, functionName)
+                Logger.error("ServiceQueue.$name error", wrappedException)
+                throw wrappedException
+            }
+        }
+    }
+
+    private fun handleException(e: Exception, functionName: String): Exception {
+        return when (e) {
+            is UnknownHostException, is SocketTimeoutException, is ConnectException -> {
+                Logger.warn("Network error in $functionName: ${e.message}")
+                NetworkException("Network unavailable: ${e.message}", e)
+            }
+
+            is IOException -> {
+                Logger.warn("IO error in $functionName: ${e.message}")
+                NetworkException("Connection error: ${e.message}", e)
+            }
+
+            else -> {
+                AppError(e)
             }
         }
     }
@@ -59,4 +85,5 @@ enum class ServiceQueue {
             return Executors.newSingleThreadExecutor(threadFactory).asCoroutineDispatcher()
         }
     }
+    class NetworkException(message: String, cause: Throwable? = null) : Exception(message, cause)
 }
