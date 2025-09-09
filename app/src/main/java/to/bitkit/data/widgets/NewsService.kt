@@ -31,7 +31,6 @@ class NewsService @Inject constructor(
     // Future services can be added here
     private suspend inline fun <reified T> get(url: String): T {
         val response: HttpResponse = client.get(url)
-        Logger.debug("Http call: $response")
         return when (response.status.isSuccess()) {
             true -> {
                 val responseBody = runCatching { response.body<T>() }.getOrElse {
@@ -39,6 +38,7 @@ class NewsService @Inject constructor(
                 }
                 responseBody
             }
+
             else -> throw NewsError.InvalidResponse(response.status.description)
         }
     }
