@@ -85,5 +85,6 @@ enum class ServiceQueue {
             return Executors.newSingleThreadExecutor(threadFactory).asCoroutineDispatcher()
         }
     }
-    class NetworkException(message: String, cause: Throwable? = null) : Exception(message, cause)
 }
+
+class NetworkException(message: String, cause: Throwable? = null) : Exception(message, cause)

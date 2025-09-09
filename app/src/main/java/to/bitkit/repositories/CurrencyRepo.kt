@@ -19,6 +19,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import to.bitkit.async.NetworkException
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -31,6 +32,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.SATS_IN_BTC
 import to.bitkit.models.Toast
 import to.bitkit.models.asBtc
+import to.bitkit.services.CurrencyError
 import to.bitkit.services.CurrencyService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.utils.formatCurrency
@@ -89,9 +91,9 @@ class CurrencyRepo @Inject constructor(
                 .collect { isStale ->
                     if (isStale) {
                         ToastEventBus.send(
-                            type = Toast.ToastType.ERROR,
-                            title = "Rates currently unavailable",
-                            description = "An error has occurred. Please try again later."
+                            type = Toast.ToastType.WARNING,
+                            title = "Exchange rates outdated",
+                            description = "Using cached rates. Check your connection."
                         )
                     }
                 }
@@ -126,6 +128,7 @@ class CurrencyRepo @Inject constructor(
         refresh()
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
@@ -139,17 +142,52 @@ class CurrencyRepo @Inject constructor(
                     lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
                 )
             }
-            Logger.debug("Currency rates refreshed successfully", context = TAG)
+            Logger.verbose("Currency rates refreshed successfully", context = TAG)
+        } catch (e: CurrencyError.NetworkUnavailable) {
+            Logger.warn("Currency rates refresh failed due to network: ${e.message}", context = TAG)
+            handleNetworkError(e)
+        } catch (e: NetworkException) {
+            Logger.warn("Currency rates refresh failed due to network: ${e.message}", context = TAG)
+            handleNetworkError(e)
         } catch (e: Exception) {
             Logger.error("Currency rates refresh failed", e, context = TAG)
             _currencyState.update { it.copy(error = e) }
 
-            _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
-                val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
-                _currencyState.update { it.copy(hasStaleData = isStale) }
-            }
+            // Show error toast only for non-network errors
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = "Rates update failed",
+                description = "An unexpected error occurred."
+            )
+
+            updateStaleStatus()
         } finally {
             isRefreshing = false
+        }
+    }
+
+    private suspend fun handleNetworkError(e: Exception) {
+        _currencyState.update { it.copy(error = e) }
+
+        // Only show network error toast if we have no cached data
+        if (_currencyState.value.rates.isEmpty()) {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = "Network unavailable",
+                description = "Using default exchange rates."
+            )
+        }
+
+        updateStaleStatus()
+    }
+
+    private suspend fun updateStaleStatus() {
+        _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+            val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
+            _currencyState.update { it.copy(hasStaleData = isStale) }
+        } ?: run {
+            // No previous successful refresh, mark as stale
+            _currencyState.update { it.copy(hasStaleData = true) }
         }
     }
 
@@ -235,7 +273,7 @@ class CurrencyRepo @Inject constructor(
 
     fun convertFiatToSats(
         fiatAmount: Double,
-        currency: String?
+        currency: String?,
     ): Result<ULong> {
         return convertFiatToSats(
             fiatValue = BigDecimal.valueOf(fiatAmount),
@@ -256,5 +294,5 @@ data class CurrencyState(
     val currencySymbol: String = "$",
     val displayUnit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
     val primaryDisplay: PrimaryDisplay = PrimaryDisplay.BITCOIN,
-    val lastSuccessfulRefresh: Long? = null
+    val lastSuccessfulRefresh: Long? = null,
 )
