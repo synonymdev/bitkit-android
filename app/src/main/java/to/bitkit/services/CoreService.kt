@@ -63,6 +63,9 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -112,27 +115,50 @@ class CoreService @Inject constructor(
         }
     }
 
-    /** Returns true if geo blocked */
+    /**
+     * Returns true if geo blocked, false if allowed, null if unable to check
+     */
+    @Suppress("InstanceOfCheckForException", "TooGenericExceptionCaught")
     suspend fun checkGeoStatus(): Boolean? {
-        return ServiceQueue.CORE.background {
-            Logger.verbose("Checking geo status…", context = "GeoCheck")
-            val response = httpClient.get(Env.geoCheckUrl)
+        return try {
+            ServiceQueue.CORE.background {
+                Logger.verbose("Checking geo status…", context = "GeoCheck")
+                val response = httpClient.get(Env.geoCheckUrl)
 
-            when (response.status.value) {
-                HttpStatusCode.OK.value -> {
-                    Logger.verbose("Region allowed", context = "GeoCheck")
-                    false
-                }
+                when (response.status.value) {
+                    HttpStatusCode.OK.value -> {
+                        Logger.verbose("Region allowed", context = "GeoCheck")
+                        false
+                    }
 
-                HttpStatusCode.Forbidden.value -> {
-                    Logger.warn("Region blocked", context = "GeoCheck")
-                    true
-                }
+                    HttpStatusCode.Forbidden.value -> {
+                        Logger.warn("Region blocked", context = "GeoCheck")
+                        true
+                    }
 
-                else -> {
-                    Logger.warn("Unexpected status code: ${response.status.value}", context = "GeoCheck")
-                    null
+                    else -> {
+                        Logger.warn("Unexpected status code: ${response.status.value}", context = "GeoCheck")
+                        null
+                    }
                 }
+            }
+        } catch (e: Exception) {
+            // Handle network failures gracefully
+            val isNetworkError = e is UnknownHostException ||
+                e is SocketTimeoutException ||
+                e is ConnectException ||
+                e.message?.contains("Unable to resolve host") == true ||
+                e.message?.contains("No address associated with hostname") == true
+
+            if (isNetworkError) {
+                Logger.warn(
+                    "Network error during geo check, unable to determine status: ${e.message}",
+                    context = "GeoCheck"
+                )
+                null // Return null when network is unavailable
+            } else {
+                Logger.error("Unexpected error during geo check", e, context = "GeoCheck")
+                null // Return null for any other errors too
             }
         }
     }
@@ -141,7 +167,8 @@ class CoreService @Inject constructor(
         val blocktankPeers = Env.trustedLnPeers
         // TODO get from blocktank info when lightningService.setup sets trustedPeers0conf using BT API
         // pseudocode idea:
-        // val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }.orEmpty()
+        // val blocktankPeers = getInfo(refresh = true)?.nodes?.map { LnPeer(nodeId = it.pubkey, address = "TO_DO") }
+        // .orEmpty()
         return blocktankPeers
     }
 
@@ -149,7 +176,39 @@ class CoreService @Inject constructor(
 
     suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
 
-    suspend fun shouldBlockLightning() = checkGeoStatus() == true && !hasExternalNode()
+    suspend fun shouldBlockLightning(): Boolean {
+        return try {
+            val geoStatus = checkGeoStatus()
+
+            when (geoStatus) {
+                true -> {
+                    // Geo blocked - check if user has external nodes
+                    val hasExternal = hasExternalNode()
+                    val shouldBlock = !hasExternal
+                    Logger.info(
+                        "Geo blocked region, has external node: $hasExternal, blocking: $shouldBlock",
+                        context = "GeoCheck"
+                    )
+                    shouldBlock
+                }
+
+                false -> {
+                    // Geo allowed
+                    Logger.debug("Geo allowed region", context = "GeoCheck")
+                    false
+                }
+
+                null -> {
+                    // Unable to check (network error) - use safe default
+                    Logger.warn("Unable to check geo status, defaulting to not blocked", context = "GeoCheck")
+                    false // Safe default: don't block if we can't verify
+                }
+            }
+        } catch (e: Exception) {
+            Logger.error("Error in shouldBlockLightning, defaulting to not blocked", e, context = "GeoCheck")
+            false // Safe default: don't block on any error
+        }
+    }
 }
 
 // endregion
@@ -530,27 +589,42 @@ class BlocktankService(
     private val coreService: CoreService,
     private val lightningService: LightningService,
 ) {
+
     suspend fun info(refresh: Boolean = true): IBtInfo? {
-        return ServiceQueue.CORE.background {
-            getInfo(refresh = refresh)
+        return try {
+            ServiceQueue.CORE.background {
+                getInfo(refresh = refresh)
+            }
+        } catch (e: Exception) {
+            handleNetworkError("info", e)
         }
     }
 
     private suspend fun fees(refresh: Boolean = true): FeeRates? {
-        return info(refresh)?.onchain?.feeRates
+        return try {
+            info(refresh)?.onchain?.feeRates
+        } catch (e: Exception) {
+            Logger.warn("Failed to get fees: ${e.message}")
+            null
+        }
     }
 
     suspend fun getFees(): Result<FeeRates> {
-        var fees = fees(refresh = true)
-        if (fees == null) {
-            Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
-            fees = fees(refresh = false)
-        }
-        if (fees == null) {
-            return Result.failure(AppError("Fees unavailable from bitkit-core"))
-        }
+        return try {
+            var fees = fees(refresh = true)
+            if (fees == null) {
+                Logger.warn("Failed to fetch fresh fee rate, using cached rate.")
+                fees = fees(refresh = false)
+            }
+            if (fees == null) {
+                return Result.failure(AppError("Fees unavailable from bitkit-core"))
+            }
 
-        return Result.success(fees)
+            Result.success(fees)
+        } catch (e: Exception) {
+            Logger.error("Error getting fees", e)
+            Result.failure(e)
+        }
     }
 
     suspend fun createCjit(
@@ -560,16 +634,20 @@ class BlocktankService(
         nodeId: String,
         channelExpiryWeeks: UInt,
         options: CreateCjitOptions,
-    ): IcJitEntry {
-        return ServiceQueue.CORE.background {
-            createCjitEntry(
-                channelSizeSat = channelSizeSat,
-                invoiceSat = invoiceSat,
-                invoiceDescription = invoiceDescription,
-                nodeId = nodeId,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options
-            )
+    ): IcJitEntry? {
+        return try {
+            ServiceQueue.CORE.background {
+                createCjitEntry(
+                    channelSizeSat = channelSizeSat,
+                    invoiceSat = invoiceSat,
+                    invoiceDescription = invoiceDescription,
+                    nodeId = nodeId,
+                    channelExpiryWeeks = channelExpiryWeeks,
+                    options = options
+                )
+            }
+        } catch (e: Exception) {
+            handleNetworkError("createCjit", e)
         }
     }
 
@@ -578,11 +656,25 @@ class BlocktankService(
         filter: CJitStateEnum? = null,
         refresh: Boolean = true,
     ): List<IcJitEntry> {
-        return ServiceQueue.CORE.background {
-            if (refresh) {
-                refreshActiveCjitEntries()
+        return try {
+            ServiceQueue.CORE.background {
+                if (refresh) {
+                    try {
+                        refreshActiveCjitEntries()
+                    } catch (e: Exception) {
+                        Logger.warn("Failed to refresh CJIT entries: ${e.message}")
+                        // Continue with cached data
+                    }
+                }
+                getCjitEntries(
+                    entryIds = entryIds,
+                    filter = filter,
+                    refresh = false
+                ) // Use cached after refresh attempt
             }
-            getCjitEntries(entryIds = entryIds, filter = filter, refresh = refresh)
+        } catch (e: Exception) {
+            Logger.error("Error getting CJIT orders", e)
+            emptyList() // Return empty list on error
         }
     }
 
@@ -590,9 +682,13 @@ class BlocktankService(
         lspBalanceSat: ULong,
         channelExpiryWeeks: UInt,
         options: CreateOrderOptions,
-    ): IBtOrder {
-        return ServiceQueue.CORE.background {
-            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
+    ): IBtOrder? {
+        return try {
+            ServiceQueue.CORE.background {
+                createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
+            }
+        } catch (e: Exception) {
+            handleNetworkError("newOrder", e)
         }
     }
 
@@ -600,13 +696,17 @@ class BlocktankService(
         lspBalanceSat: ULong,
         channelExpiryWeeks: UInt,
         options: CreateOrderOptions? = null,
-    ): IBtEstimateFeeResponse2 {
-        return ServiceQueue.CORE.background {
-            estimateOrderFeeFull(
-                lspBalanceSat = lspBalanceSat,
-                channelExpiryWeeks = channelExpiryWeeks,
-                options = options,
-            )
+    ): IBtEstimateFeeResponse2? {
+        return try {
+            ServiceQueue.CORE.background {
+                estimateOrderFeeFull(
+                    lspBalanceSat = lspBalanceSat,
+                    channelExpiryWeeks = channelExpiryWeeks,
+                    options = options,
+                )
+            }
+        } catch (e: Exception) {
+            handleNetworkError("estimateFee", e)
         }
     }
 
@@ -615,33 +715,67 @@ class BlocktankService(
         filter: BtOrderState2? = null,
         refresh: Boolean = true,
     ): List<IBtOrder> {
-        return ServiceQueue.CORE.background {
-            if (refresh) {
-                refreshActiveOrders()
+        return try {
+            ServiceQueue.CORE.background {
+                if (refresh) {
+                    try {
+                        refreshActiveOrders()
+                    } catch (e: Exception) {
+                        Logger.warn("Failed to refresh orders: ${e.message}")
+                        // Continue with cached data
+                    }
+                }
+                getOrders(orderIds = orderIds, filter = filter, refresh = false) // Use cached after refresh attempt
             }
-            getOrders(orderIds = orderIds, filter = filter, refresh = refresh)
+        } catch (e: Exception) {
+            Logger.error("Error getting orders", e)
+            emptyList() // Return empty list on error
         }
     }
 
-    suspend fun open(orderId: String): IBtOrder {
-        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+    suspend fun open(orderId: String): IBtOrder? {
+        return try {
+            val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-        val latestOrder = ServiceQueue.CORE.background {
-            getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()
-        }
+            val latestOrder = ServiceQueue.CORE.background {
+                getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()
+            }
 
-        if (latestOrder?.state2 != BtOrderState2.PAID) {
-            throw AppError(
-                message = "Order not paid, Order state: ${latestOrder?.state2}"
-            )
-        }
+            if (latestOrder?.state2 != BtOrderState2.PAID) {
+                throw AppError(
+                    message = "Order not paid, Order state: ${latestOrder?.state2}"
+                )
+            }
 
-        return ServiceQueue.CORE.background {
-            openChannel(orderId = orderId, connectionString = nodeId)
+            ServiceQueue.CORE.background {
+                openChannel(orderId = orderId, connectionString = nodeId)
+            }
+        } catch (e: Exception) {
+            handleNetworkError("open", e)
         }
     }
 
-    // MARK: - Regtest methods
+    /**
+     * Handles network errors gracefully, returning null and logging appropriately
+     */
+    private fun <T> handleNetworkError(operation: String, e: Exception): T? {
+        val isNetworkError = e is UnknownHostException ||
+            e is SocketTimeoutException ||
+            e is ConnectException ||
+            e.message?.contains("Unable to resolve host") == true ||
+            e.message?.contains("Network") == true ||
+            e.message?.contains("api1.blocktank.to") == true
+
+        if (isNetworkError) {
+            Logger.warn("Network error in $operation: ${e.message}")
+        } else {
+            Logger.error("Error in $operation", e)
+        }
+
+        return null
+    }
+
+    // MARK: - Regtest methods (these don't typically require network so keep as-is)
     suspend fun regtestMine(count: UInt = 1u) {
         com.synonym.bitkitcore.regtestMine(count = count)
     }
