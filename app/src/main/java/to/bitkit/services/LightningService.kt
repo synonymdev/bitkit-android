@@ -281,7 +281,7 @@ class LightningService @Inject constructor(
                 throw e
             }
         }
-        Logger.debug("LDK synced")
+        Logger.verbose("LDK synced")
     }
 
     // private fun setMaxDustHtlcExposureForCurrentChannels() {
