@@ -182,6 +182,9 @@ class LightningRepo @Inject constructor(
                 val setupResult = setup(walletIndex, customServer, customRgsServerUrl)
                 if (setupResult.isFailure) {
                     val setupError = setupResult.exceptionOrNull()!!
+                    _lightningState.update {
+                        it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(setupError))
+                    }
 
                     // Handle setup failures with retry logic
                     if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(setupError)) {
@@ -203,10 +206,6 @@ class LightningRepo @Inject constructor(
                             customRgsServerUrl = customRgsServerUrl,
                             retryAttempt = retryAttempt + 1
                         )
-                    }
-
-                    _lightningState.update {
-                        it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(setupError))
                     }
                     return@withContext setupResult
                 }
@@ -249,6 +248,10 @@ class LightningRepo @Inject constructor(
 
             Result.success(Unit)
         } catch (e: Throwable) {
+            _lightningState.update {
+                it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
+            }
+
             if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(e)) {
                 Logger.warn(
                     "Start failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
@@ -271,10 +274,11 @@ class LightningRepo @Inject constructor(
                     retryAttempt = retryAttempt + 1
                 )
             } else {
-                Logger.error("Node start error (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), giving up", e, context = TAG)
-                _lightningState.update {
-                    it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
-                }
+                Logger.error(
+                    "Node start error (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), giving up",
+                    e,
+                    context = TAG
+                )
                 Result.failure(e)
             }
         }
