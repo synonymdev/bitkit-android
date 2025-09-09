@@ -329,7 +329,8 @@ private fun Content(
                     showEyeIcon = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("TotalBalance")
+                        .testTag("TotalBalance"),
+                    testTag = "TotalBalance"
                 )
                 if (!homeUiState.showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))

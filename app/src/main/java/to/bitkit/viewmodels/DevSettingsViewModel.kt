@@ -76,7 +76,7 @@ class DevSettingsViewModel @Inject constructor(
                     deviceToken = firebaseMessaging.token.await(),
                     secretMessage = "hello",
                     notificationType = "incomingHtlc",
-                    customUrl = Env.blocktankPushNotificationServer,
+                    customUrl = Env.blocktankNotificationApiUrl,
                 )
                 ToastEventBus.send(type = Toast.ToastType.INFO, title = "LSP notification sent to this device")
             }.onFailure {

@@ -6,6 +6,7 @@ import androidx.datastore.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
 import to.bitkit.models.BitcoinDisplayUnit
@@ -88,7 +89,7 @@ data class SettingsData(
     val isBiometricEnabled: Boolean = false,
     val isPinOnIdleEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
-    val isDevModeEnabled: Boolean = false,
+    val isDevModeEnabled: Boolean = Env.network != Network.BITCOIN,
     val showWidgets: Boolean = true,
     val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),

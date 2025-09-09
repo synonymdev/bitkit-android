@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,12 +28,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.env.Env
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.ButtonSize
+import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.InfoTextField
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.navigateToHome
@@ -68,7 +66,6 @@ fun BlocktankRegtestScreen(
                 .verticalScroll(rememberScrollState())
                 .imePadding()
         ) {
-            // State variables for form inputs
             var depositAddress by remember { mutableStateOf(uiState.onchainAddress) }
             var depositAmount by remember { mutableStateOf("123000") }
             var mineBlockCount by remember { mutableStateOf("1") }
@@ -78,15 +75,11 @@ fun BlocktankRegtestScreen(
             var vout by remember { mutableStateOf("0") }
             var forceCloseAfter by remember { mutableStateOf("86400") }
 
-            // Flags for loading states
             var isDepositing by remember { mutableStateOf(false) }
             var isMining by remember { mutableStateOf(false) }
 
-            InfoTextField(value = Env.blocktankBaseUrl, label = "Service")
-            Text(
-                text = "These actions are executed on the staging Blocktank server node.",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            VerticalSpacer(16.dp)
+            Caption(text = "These actions are executed on the staging Blocktank server node.")
 
             // Deposit Section
             Caption13Up("DEPOSIT", color = Colors.White64, modifier = Modifier.padding(top = 20.dp))

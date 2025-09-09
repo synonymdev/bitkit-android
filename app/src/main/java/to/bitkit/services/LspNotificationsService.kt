@@ -17,7 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BlocktankNotificationsService @Inject constructor(
+class LspNotificationsService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningService: LightningService,
     private val keychain: Keychain,
@@ -51,7 +51,7 @@ class BlocktankNotificationsService @Inject constructor(
                 nodeId = nodeId,
                 isoTimestamp = "$timestamp",
                 signature = signature,
-                customUrl = Env.blocktankPushNotificationServer,
+                customUrl = Env.blocktankNotificationApiUrl,
                 isProduction = null,
             )
         }

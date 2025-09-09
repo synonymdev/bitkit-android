@@ -9,12 +9,15 @@ import com.synonym.bitkitcore.createWithdrawCallbackUrl
 import com.synonym.bitkitcore.decode
 import com.synonym.bitkitcore.lnurlAuth
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -43,13 +46,13 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.toCoinSelectAlgorithm
 import to.bitkit.models.toCoreNetwork
-import to.bitkit.services.BlocktankNotificationsService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
+import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -72,7 +75,7 @@ class LightningRepo @Inject constructor(
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val settingsStore: SettingsStore,
     private val coreService: CoreService,
-    private val blocktankNotificationsService: BlocktankNotificationsService,
+    private val lspNotificationsService: LspNotificationsService,
     private val firebaseMessaging: FirebaseMessaging,
     private val keychain: Keychain,
     private val lnurlService: LnurlService,
@@ -80,6 +83,8 @@ class LightningRepo @Inject constructor(
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
+
+    private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
     private var cachedEventHandler: NodeEventHandler? = null
 
@@ -794,10 +799,9 @@ class LightningRepo @Inject constructor(
     fun hasChannels(): Boolean =
         _lightningState.value.nodeLifecycleState.isRunning() && lightningService.channels?.isNotEmpty() == true
 
-    // Notification handling
-    suspend fun registerForNotifications(): Result<Unit> = executeWhenNodeRunning("Register for notifications") {
+    suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
         return@executeWhenNodeRunning try {
-            val token = firebaseMessaging.token.await()
+            val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
             if (cachedToken == token) {
@@ -805,7 +809,7 @@ class LightningRepo @Inject constructor(
                 return@executeWhenNodeRunning Result.success(Unit)
             }
 
-            blocktankNotificationsService.registerDevice(token)
+            lspNotificationsService.registerDevice(token)
             Result.success(Unit)
         } catch (e: NetworkException) {
             Logger.warn("Failed to register for notifications due to network", e)
@@ -815,6 +819,8 @@ class LightningRepo @Inject constructor(
             Result.failure(e)
         }
     }
+
+    fun registerForNotificationsAsync(token: String) = scope.launch { registerForNotifications(token) }
 
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,

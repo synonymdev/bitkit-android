@@ -33,7 +33,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.services.BlocktankNotificationsService
+import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
@@ -54,7 +54,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val ldkNodeEventBus: LdkNodeEventBus = mock()
     private val settingsStore: SettingsStore = mock()
     private val coreService: CoreService = mock()
-    private val blocktankNotificationsService: BlocktankNotificationsService = mock()
+    private val lspNotificationsService: LspNotificationsService = mock()
     private val firebaseMessaging: FirebaseMessaging = mock()
     private val keychain: Keychain = mock()
     private val cacheStore: CacheStore = mock()
@@ -70,7 +70,7 @@ class LightningRepoTest : BaseUnitTest() {
             ldkNodeEventBus = ldkNodeEventBus,
             settingsStore = settingsStore,
             coreService = coreService,
-            blocktankNotificationsService = blocktankNotificationsService,
+            lspNotificationsService = lspNotificationsService,
             firebaseMessaging = firebaseMessaging,
             keychain = keychain,
             lnurlService = lnurlService,

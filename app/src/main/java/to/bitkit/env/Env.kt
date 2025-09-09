@@ -63,13 +63,16 @@ internal object Env {
         get() = when (network) {
             Network.REGTEST -> "https://api.stag0.blocktank.to"
             Network.TESTNET -> "https://api.stag0.blocktank.to"
+            Network.BITCOIN -> "https://api1.blocktank.to/"
             else -> TODO("${network.name} network not implemented")
         }
+    val blocktankApiUrl get() = "$blocktankBaseUrl/blocktank/api/v2"
+    val blocktankNotificationApiUrl
+        get() = when (network) {
+            Network.BITCOIN -> "$blocktankBaseUrl/api/notifications"
+            else -> "$blocktankBaseUrl/notifications/api"
+        }
 
-    val blocktankClientServer get() = "$blocktankBaseUrl/blocktank/api/v2"
-    val blocktankPushNotificationServer get() = "$blocktankBaseUrl/notifications/api"
-
-    // const val btcRatesServer = "https://blocktank.synonym.to/fx/rates/btc/"
     const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
     const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
@@ -158,7 +161,7 @@ internal object Env {
             host = "electrum.blockstream.info",
             tcp = 60001, // or 50001
             ssl = 60002, // or 50002
-            protocol = ElectrumProtocol.TCP,
+            protocol = ElectrumProtocol.SSL,
         )
         val REGTEST = ElectrumServer(
             host = "34.65.252.32",

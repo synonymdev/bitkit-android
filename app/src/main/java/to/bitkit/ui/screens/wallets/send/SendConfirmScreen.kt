@@ -202,7 +202,8 @@ private fun Content(
                     onClick = { onEvent(SendEvent.BackToAmount) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("ReviewAmount")
+                        .testTag("ReviewAmount"),
+                    testTag = "ReviewAmount"
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

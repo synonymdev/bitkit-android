@@ -17,6 +17,7 @@ import to.bitkit.env.Env.DERIVATION_NAME
 import to.bitkit.ext.fromBase64
 import to.bitkit.ext.fromHex
 import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Crypto
 import to.bitkit.utils.Logger
@@ -25,6 +26,10 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class FcmService : FirebaseMessagingService() {
+    companion object {
+        private const val TAG = "FcmService"
+    }
+
     private var notificationType: BlocktankNotificationType? = null
     private var notificationPayload: JsonObject? = null
 
@@ -33,6 +38,9 @@ class FcmService : FirebaseMessagingService() {
 
     @Inject
     lateinit var keychain: Keychain
+
+    @Inject
+    lateinit var lightningRepo: LightningRepo
 
     /**
      * Act on received messages. [Debug](https://goo.gl/39bRNJ)
@@ -137,14 +145,14 @@ class FcmService : FirebaseMessagingService() {
             val decoded = json.decodeFromString<T>(encoded)
             block(decoded)
             true
-        } catch (e: SerializationException) {
+        } catch (_: SerializationException) {
             false
         }
     }
 
     override fun onNewToken(token: String) {
-        // this.token = token
-        // TODO call blocktankService.registerDevice(token)
+        Logger.debug("Got new FCM token via FirebaseMessagingService.onNewToken: '$token'", context = TAG)
+        lightningRepo.registerForNotificationsAsync(token)
     }
 }
 

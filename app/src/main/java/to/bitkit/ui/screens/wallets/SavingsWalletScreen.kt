@@ -80,7 +80,8 @@ fun SavingsWalletScreen(
                     sats = balances.totalOnchainSats.toLong(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("TotalBalance")
+                        .testTag("TotalBalance"),
+                    testTag = "TotalBalance"
                 )
                 if (!showEmptyState) {
                     Spacer(modifier = Modifier.height(32.dp))

@@ -14,8 +14,6 @@ coreSplashscreen = "1.0.1"
 datastorePrefs = "1.1.4"
 detekt = "1.23.8"
 espressoCore = "3.6.1"
-firebaseBom = "33.11.0"
-googleServices = "4.4.2"
 hilt = "2.55"
 hiltAndroidx = "1.2.0"
 junit = "4.13.2"
@@ -66,8 +64,7 @@ core-splashscreen = { group = "androidx.core", name = "core-splashscreen", versi
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePrefs" }
 detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.4.23" }
-firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
-firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version = "34.2.0" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
@@ -121,7 +118,7 @@ haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = 
 android-application = { id = "com.android.application", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
-google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+google-services = { id = "com.google.gms.google-services", version = "4.4.3" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

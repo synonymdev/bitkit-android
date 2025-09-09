@@ -84,7 +84,7 @@ android {
             keyPassword = "android"
         }
         create("release") {
-            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotBlank() }
+            val keystoreFile = keystoreProperties.getProperty("storeFile").takeIf { it.isNotEmpty() }
                 ?.let { rootProject.file(it) }
             storeFile = if (keystoreFile?.exists() == true) keystoreFile else null
             // storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
@@ -201,7 +201,6 @@ dependencies {
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
-    implementation(libs.firebase.analytics)
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.ktx)
     implementation(libs.lifecycle.viewmodel.compose) // ViewModel utils for Compose

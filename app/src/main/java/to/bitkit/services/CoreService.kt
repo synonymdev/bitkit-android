@@ -106,7 +106,7 @@ class CoreService @Inject constructor(
             }
 
             try {
-                val blocktankUrl = Env.blocktankClientServer
+                val blocktankUrl = Env.blocktankApiUrl
                 updateBlocktankUrl(newUrl = blocktankUrl)
                 Logger.info("Blocktank URL updated to: $blocktankUrl")
             } catch (e: Exception) {
