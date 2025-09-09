@@ -634,20 +634,16 @@ class BlocktankService(
         nodeId: String,
         channelExpiryWeeks: UInt,
         options: CreateCjitOptions,
-    ): IcJitEntry? {
-        return try {
-            ServiceQueue.CORE.background {
-                createCjitEntry(
-                    channelSizeSat = channelSizeSat,
-                    invoiceSat = invoiceSat,
-                    invoiceDescription = invoiceDescription,
-                    nodeId = nodeId,
-                    channelExpiryWeeks = channelExpiryWeeks,
-                    options = options
-                )
-            }
-        } catch (e: Exception) {
-            handleNetworkError("createCjit", e)
+    ): IcJitEntry {
+        return ServiceQueue.CORE.background {
+            createCjitEntry(
+                channelSizeSat = channelSizeSat,
+                invoiceSat = invoiceSat,
+                invoiceDescription = invoiceDescription,
+                nodeId = nodeId,
+                channelExpiryWeeks = channelExpiryWeeks,
+                options = options
+            )
         }
     }
 
@@ -682,13 +678,9 @@ class BlocktankService(
         lspBalanceSat: ULong,
         channelExpiryWeeks: UInt,
         options: CreateOrderOptions,
-    ): IBtOrder? {
-        return try {
-            ServiceQueue.CORE.background {
-                createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
-            }
-        } catch (e: Exception) {
-            handleNetworkError("newOrder", e)
+    ): IBtOrder {
+        return ServiceQueue.CORE.background {
+            createOrder(lspBalanceSat = lspBalanceSat, channelExpiryWeeks = channelExpiryWeeks, options = options)
         }
     }
 
@@ -696,17 +688,13 @@ class BlocktankService(
         lspBalanceSat: ULong,
         channelExpiryWeeks: UInt,
         options: CreateOrderOptions? = null,
-    ): IBtEstimateFeeResponse2? {
-        return try {
-            ServiceQueue.CORE.background {
-                estimateOrderFeeFull(
-                    lspBalanceSat = lspBalanceSat,
-                    channelExpiryWeeks = channelExpiryWeeks,
-                    options = options,
-                )
-            }
-        } catch (e: Exception) {
-            handleNetworkError("estimateFee", e)
+    ): IBtEstimateFeeResponse2 {
+        return ServiceQueue.CORE.background {
+            estimateOrderFeeFull(
+                lspBalanceSat = lspBalanceSat,
+                channelExpiryWeeks = channelExpiryWeeks,
+                options = options,
+            )
         }
     }
 
@@ -733,25 +721,21 @@ class BlocktankService(
         }
     }
 
-    suspend fun open(orderId: String): IBtOrder? {
-        return try {
-            val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
+    suspend fun open(orderId: String): IBtOrder {
+        val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
 
-            val latestOrder = ServiceQueue.CORE.background {
-                getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()
-            }
+        val latestOrder = ServiceQueue.CORE.background {
+            getOrders(orderIds = listOf(orderId), filter = null, refresh = true).firstOrNull()
+        }
 
-            if (latestOrder?.state2 != BtOrderState2.PAID) {
-                throw AppError(
-                    message = "Order not paid, Order state: ${latestOrder?.state2}"
-                )
-            }
+        if (latestOrder?.state2 != BtOrderState2.PAID) {
+            throw AppError(
+                message = "Order not paid, Order state: ${latestOrder?.state2}"
+            )
+        }
 
-            ServiceQueue.CORE.background {
-                openChannel(orderId = orderId, connectionString = nodeId)
-            }
-        } catch (e: Exception) {
-            handleNetworkError("open", e)
+        return ServiceQueue.CORE.background {
+            openChannel(orderId = orderId, connectionString = nodeId)
         }
     }
 
