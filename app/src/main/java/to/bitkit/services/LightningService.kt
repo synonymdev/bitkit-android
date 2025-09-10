@@ -171,17 +171,12 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
-        try {
-            val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
-            if (rgsServerUrl != null) {
-                Logger.info("Using gossip source rgs url: $rgsServerUrl")
-                setGossipSourceRgs(rgsServerUrl)
-            } else {
-                Logger.info("Using gossip source p2p")
-                setGossipSourceP2p()
-            }
-        } catch (e: NetworkException) {
-            Logger.warn("Failed to configure gossip source due to network, falling back to p2p", e)
+        val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
+        if (rgsServerUrl != null) {
+            Logger.info("Using gossip source rgs url: $rgsServerUrl")
+            setGossipSourceRgs(rgsServerUrl)
+        } else {
+            Logger.info("Using gossip source p2p")
             setGossipSourceP2p()
         }
     }
