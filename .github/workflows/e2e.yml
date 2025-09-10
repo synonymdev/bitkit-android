@@ -71,6 +71,7 @@ jobs:
           - { name: onboarding_backup_numberpad, grep: "@onboarding|@backup|@numberpad" }
           - { name: onchain_receive_widgets, grep: "@onchain|@receive|@widgets" }
           - { name: settings, grep: "@settings" }
+          - { name: send, grep: "@send" }
 
     name: e2e-tests - ${{ matrix.shard.name }}
 
