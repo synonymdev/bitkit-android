@@ -230,7 +230,7 @@ fun MoneyAmount(
         horizontalAlignment = Alignment.Start
     ) {
         if (showSecondaryField) {
-            MoneySSB(sats = satoshis, unit = unit.not(), color = Colors.White64)
+            MoneySSB(sats = satoshis, unit = unit.not(), color = Colors.White64, showSymbol = true)
 
             Spacer(modifier = Modifier.height(12.dp))
         }

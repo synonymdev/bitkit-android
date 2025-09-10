@@ -112,7 +112,12 @@ fun SendSheet(
                 SendAmountScreen(
                     uiState = uiState,
                     walletUiState = walletUiState,
-                    onBack = { navController.popBackStack() },
+                    canGoBack = startDestination != SendRoute.Amount,
+                    onBack = {
+                        if (!navController.popBackStack()) {
+                            appViewModel.hideSheet()
+                        }
+                    },
                     onEvent = { appViewModel.setSendEvent(it) }
                 )
             }
@@ -162,7 +167,12 @@ fun SendSheet(
                 SendConfirmScreen(
                     savedStateHandle = it.savedStateHandle,
                     uiState = uiState,
-                    onBack = { navController.popBackStack() },
+                    canGoBack = startDestination != SendRoute.Confirm,
+                    onBack = {
+                        if (!navController.popBackStack()) {
+                            appViewModel.hideSheet()
+                        }
+                    },
                     onEvent = { e -> appViewModel.setSendEvent(e) },
                     onClickAddTag = { navController.navigate(SendRoute.AddTag) },
                     onClickTag = { tag -> appViewModel.removeTag(tag) },

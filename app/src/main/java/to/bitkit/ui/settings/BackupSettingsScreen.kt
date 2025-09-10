@@ -124,7 +124,7 @@ private fun BackupSettingsScreenContent(
                     color = Colors.White64,
                 )
                 FillWidth()
-                @Suppress("SimplifyBooleanWithConstants", "KotlinConstantConditions")
+                @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
                 if (Env.isE2eTest && allSynced) {
                     Icon(
                         painter = painterResource(R.drawable.ic_check_circle),

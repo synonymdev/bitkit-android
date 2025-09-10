@@ -89,7 +89,8 @@ data class SettingsData(
     val isBiometricEnabled: Boolean = false,
     val isPinOnIdleEnabled: Boolean = false,
     val isPinForPaymentsEnabled: Boolean = false,
-    val isDevModeEnabled: Boolean = Env.network != Network.BITCOIN,
+    @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
+    val isDevModeEnabled: Boolean = !Env.isE2eTest && Env.network != Network.BITCOIN,
     val showWidgets: Boolean = true,
     val showWidgetTitles: Boolean = false,
     val lastUsedTags: List<String> = emptyList(),

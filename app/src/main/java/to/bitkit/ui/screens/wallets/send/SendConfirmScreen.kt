@@ -87,6 +87,7 @@ import java.time.Instant
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
     uiState: SendUiState,
+    canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     onClickAddTag: () -> Unit,
@@ -133,6 +134,7 @@ fun SendConfirmScreen(
         uiState = uiState,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
+        canGoBack = canGoBack,
         onBack = onBack,
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
@@ -163,6 +165,7 @@ private fun Content(
     isLoading: Boolean,
     showBiometrics: Boolean,
     modifier: Modifier = Modifier,
+    canGoBack: Boolean = true,
     onBack: () -> Unit = {},
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
@@ -185,7 +188,7 @@ private fun Content(
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
                 },
-                onBack = onBack,
+                onBack = onBack.takeIf { canGoBack },
             )
 
             Spacer(Modifier.height(16.dp))

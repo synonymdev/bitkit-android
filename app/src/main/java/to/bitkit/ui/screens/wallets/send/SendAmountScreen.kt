@@ -3,13 +3,11 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -69,6 +67,7 @@ import to.bitkit.viewmodels.SendUiState
 fun SendAmountScreen(
     uiState: SendUiState,
     walletUiState: MainUiState,
+    canGoBack: Boolean,
     currencyUiState: CurrencyUiState = LocalCurrencies.current,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -101,8 +100,10 @@ fun SendAmountScreen(
         displayUnit = currencyUiState.displayUnit,
         onInputChanged = { input = it },
         onEvent = onEvent,
+        canGoBack = canGoBack,
         onBack = onBack,
         onClickMax = { maxSats ->
+            // TODO port the RN sendMax logic if still needed
             if (uiState.payMethod == SendMethod.LIGHTNING && uiState.lnurl == null) {
                 app?.toast(
                     type = Toast.ToastType.WARNING,
@@ -112,6 +113,7 @@ fun SendAmountScreen(
             }
             overrideSats = maxSats
         },
+        onClickAmount = { currencyVM.togglePrimaryDisplay() },
     )
 }
 
@@ -127,8 +129,10 @@ fun SendAmountContent(
     currencyUiState: CurrencyUiState,
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
+    canGoBack: Boolean = true,
     onBack: () -> Unit,
     onClickMax: (Long) -> Unit = {},
+    onClickAmount: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -143,10 +147,13 @@ fun SendAmountContent(
             else -> R.string.wallet__send_amount
         }
 
-        SheetTopBar(stringResource(titleRes)) {
-            onEvent(SendEvent.AmountReset)
-            onBack()
-        }
+        SheetTopBar(
+            titleText = stringResource(titleRes),
+            onBack = {
+                onEvent(SendEvent.AmountReset)
+                onBack()
+            }.takeIf { canGoBack },
+        )
 
         when (walletUiState.nodeLifecycleState) {
             is NodeLifecycleState.Running -> {
@@ -160,6 +167,7 @@ fun SendAmountContent(
                     primaryDisplay = primaryDisplay,
                     onEvent = onEvent,
                     onClickMax = onClickMax,
+                    onClickAmount = onClickAmount,
                 )
             }
 
@@ -186,6 +194,7 @@ private fun SendAmountNodeRunning(
     onInputChanged: (String) -> Unit,
     onEvent: (SendEvent) -> Unit,
     onClickMax: (Long) -> Unit,
+    onClickAmount: () -> Unit,
 ) {
     BoxWithConstraints {
         val maxHeight = this.maxHeight
@@ -200,7 +209,7 @@ private fun SendAmountNodeRunning(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             NumberPadTextField(
                 input = input,
@@ -208,6 +217,7 @@ private fun SendAmountNodeRunning(
                 primaryDisplay = primaryDisplay,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickableAlpha(onClick = onClickAmount)
                     .testTag("SendNumberField")
             )
 
@@ -226,10 +236,7 @@ private fun SendAmountNodeRunning(
             ) {
                 Column(
                     modifier = Modifier
-                        .clickableAlpha {
-                            // TODO port the RN sendMax logic
-                            onClickMax(availableAmount)
-                        }
+                        .clickableAlpha { onClickMax(availableAmount) }
                         .testTag("AvailableAmount")
                 ) {
                     Text13Up(
@@ -284,12 +291,6 @@ private fun SendAmountNodeRunning(
                     .testTag("SendAmountNumberPad")
             )
 
-            Spacer(
-                modifier = Modifier
-                    .weight(1f)
-                    .sizeIn(minHeight = 16.dp, maxHeight = 41.dp)
-            )
-
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 enabled = uiState.isAmountInputValid,
@@ -330,23 +331,23 @@ private fun PaymentMethodButton(
     )
 }
 
-@Preview(showSystemUi = true, name = "Running - Lightning")
+@Preview(showSystemUi = true)
 @Composable
-private fun PreviewRunningLightning() {
+private fun PreviewLightningNoAmount() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
-                    amountInput = "100",
-                    isAmountInputValid = true,
+                    amountInput = "0",
+                    isAmountInputValid = false,
                     isUnified = false
                 ),
                 balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
                 walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
                 onBack = {},
                 onEvent = {},
-                input = "100",
+                input = "0",
                 displayUnit = BitcoinDisplayUnit.MODERN,
                 primaryDisplay = PrimaryDisplay.FIAT,
                 currencyUiState = CurrencyUiState(),
@@ -357,9 +358,9 @@ private fun PreviewRunningLightning() {
     }
 }
 
-@Preview(showSystemUi = true, name = "Running - Unified")
+@Preview(showSystemUi = true)
 @Composable
-private fun PreviewRunningUnified() {
+private fun PreviewUnified() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
@@ -384,9 +385,9 @@ private fun PreviewRunningUnified() {
     }
 }
 
-@Preview(showSystemUi = true, name = "Running - Onchain")
+@Preview(showSystemUi = true)
 @Composable
-private fun PreviewRunningOnchain() {
+private fun PreviewOnchain() {
     AppThemeSurface {
         BottomSheetPreview {
             SendAmountContent(
@@ -411,7 +412,7 @@ private fun PreviewRunningOnchain() {
     }
 }
 
-@Preview(showSystemUi = true, name = "Initializing")
+@Preview(showSystemUi = true)
 @Composable
 private fun PreviewInitializing() {
     AppThemeSurface {
@@ -419,7 +420,6 @@ private fun PreviewInitializing() {
             SendAmountContent(
                 uiState = SendUiState(
                     payMethod = SendMethod.LIGHTNING,
-                    amountInput = "100"
                 ),
                 walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Initializing),
                 balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
@@ -509,7 +509,7 @@ private fun PreviewLnurlPay() {
     }
 }
 
-@Preview(showSystemUi = true, name = "Running - Short screen", device = NEXUS_5)
+@Preview(showSystemUi = true, device = NEXUS_5)
 @Composable
 private fun PreviewSmallScreen() {
     AppThemeSurface {
@@ -519,7 +519,6 @@ private fun PreviewSmallScreen() {
                     payMethod = SendMethod.LIGHTNING,
                     amountInput = "100",
                     isAmountInputValid = true,
-                    isUnified = false
                 ),
                 balances = BalanceState(totalSats = 150u, totalOnchainSats = 50u, maxSendLightningSats = 100u),
                 walletUiState = MainUiState(nodeLifecycleState = NodeLifecycleState.Running),
