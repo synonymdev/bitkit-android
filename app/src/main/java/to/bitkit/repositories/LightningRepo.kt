@@ -175,7 +175,6 @@ class LightningRepo @Inject constructor(
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
-        shouldRetry: Boolean = true,
         eventHandler: NodeEventHandler? = null,
         customServer: ElectrumServer? = null,
         customRgsServerUrl: String? = null,
@@ -200,7 +199,7 @@ class LightningRepo @Inject constructor(
                     }
 
                     // Handle setup failures with retry logic
-                    if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(setupError)) {
+                    if (retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(setupError)) {
                         Logger.warn(
                             "Setup failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
                             setupError,
@@ -213,7 +212,6 @@ class LightningRepo @Inject constructor(
                         return@withContext start(
                             walletIndex = walletIndex,
                             timeout = timeout,
-                            shouldRetry = shouldRetry,
                             eventHandler = eventHandler,
                             customServer = customServer,
                             customRgsServerUrl = customRgsServerUrl,
@@ -265,7 +263,7 @@ class LightningRepo @Inject constructor(
                 it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
             }
 
-            if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(e)) {
+            if (retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(e)) {
                 Logger.warn(
                     "Start failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
                     e,
@@ -280,7 +278,6 @@ class LightningRepo @Inject constructor(
                 return@withContext start(
                     walletIndex = walletIndex,
                     timeout = timeout,
-                    shouldRetry = shouldRetry,
                     eventHandler = eventHandler,
                     customServer = customServer,
                     customRgsServerUrl = customRgsServerUrl,
@@ -430,7 +427,6 @@ class LightningRepo @Inject constructor(
         start(
             eventHandler = cachedEventHandler,
             customServer = newServer,
-            shouldRetry = true, // Enable retry for server changes
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -456,7 +452,6 @@ class LightningRepo @Inject constructor(
 
         start(
             eventHandler = cachedEventHandler,
-            shouldRetry = true, // Enable retry for server changes
             customRgsServerUrl = newRgsUrl,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
@@ -482,7 +477,6 @@ class LightningRepo @Inject constructor(
 
         start(
             eventHandler = cachedEventHandler,
-            shouldRetry = true, // Enable retry for recovery
         ).onSuccess {
             Logger.debug("Successfully started node with previous config")
         }.onFailure { e ->
