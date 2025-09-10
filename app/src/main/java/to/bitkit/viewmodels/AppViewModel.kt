@@ -274,7 +274,7 @@ class AppViewModel @Inject constructor(
     private fun checkGeoStatus() {
         viewModelScope.launch {
             try {
-                isGeoBlocked = coreService.checkGeoStatus()
+                isGeoBlocked = coreService.shouldBlockLightning()
             } catch (e: Throwable) {
                 Logger.error("Failed to check geo status: ${e.message}", e, context = TAG)
             }

@@ -424,7 +424,7 @@ class WalletRepo @Inject constructor(
         return@withContext try {
             if (!_walletState.value.receiveOnSpendingBalance) return@withContext Result.success(false)
 
-            if (coreService.checkGeoStatus() == true) return@withContext Result.success(false)
+            if (coreService.shouldBlockLightning()) return@withContext Result.success(false)
 
             val channels = lightningRepo.lightningState.value.channels
             val inboundBalanceSats = channels.sumOf { it.inboundCapacityMsat / 1000u }

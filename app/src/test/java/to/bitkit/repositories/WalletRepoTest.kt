@@ -372,7 +372,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `shouldRequestAdditionalLiquidity should return false when receiveOnSpendingBalance is false`() = test {
         // Given
-        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        whenever(coreService.shouldBlockLightning()).thenReturn(false)
         sut.toggleReceiveOnSpendingBalance() // Set to false (initial is true)
 
         // When
@@ -386,7 +386,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `shouldRequestAdditionalLiquidity should return false when geo status is true`() = test {
         // Given
-        whenever(coreService.checkGeoStatus()).thenReturn(true)
+        whenever(coreService.shouldBlockLightning()).thenReturn(true)
 
         // When
         val result = sut.shouldRequestAdditionalLiquidity()
@@ -399,7 +399,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `shouldRequestAdditionalLiquidity should return true when amount exceeds inbound capacity`() = test {
         // Given
-        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        whenever(coreService.shouldBlockLightning()).thenReturn(false)
         val testChannels = listOf(
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u // 500 sats
@@ -422,7 +422,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `shouldRequestAdditionalLiquidity should return false when amount is less than inbound capacity`() = test {
         // Given
-        whenever(coreService.checkGeoStatus()).thenReturn(false)
+        whenever(coreService.shouldBlockLightning()).thenReturn(false)
         val testChannels = listOf(
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u // 500 sats
@@ -445,7 +445,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `shouldRequestAdditionalLiquidity should return failure when exception occurs`() = test {
         // Given
-        whenever(coreService.checkGeoStatus()).thenThrow(RuntimeException("Test error"))
+        whenever(coreService.shouldBlockLightning()).thenThrow(RuntimeException("Test error"))
 
         // When
         val result = sut.shouldRequestAdditionalLiquidity()
