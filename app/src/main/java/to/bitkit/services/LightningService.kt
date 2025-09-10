@@ -64,6 +64,7 @@ import kotlin.time.Duration.Companion.seconds
 typealias NodeEventHandler = suspend (Event) -> Unit
 
 @Singleton
+@Suppress("TooManyFunctions", "LargeClass")
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
@@ -76,7 +77,7 @@ class LightningService @Inject constructor(
 
     private lateinit var trustedLnPeers: List<LnPeer>
 
-    @Suppress("ComplexCondition")
+    @Suppress("ComplexCondition", "ThrowsCount")
     suspend fun setup(
         walletIndex: Int,
         customServer: ElectrumServer? = null,
@@ -206,6 +207,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -263,6 +265,7 @@ class LightningService @Inject constructor(
         Logger.info("Lightning wallet wiped")
     }
 
+    @Suppress("ThrowsCount", "TooGenericExceptionCaught")
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -419,9 +422,7 @@ class LightningService @Inject constructor(
                 val error = LdkError(e)
                 Logger.error("Error initiating channel open", error)
 
-                // Check if this is a network error
-                val isNetworkError = e.message?.lowercase()?.let { msg ->
-                    isNetworkRelatedError(msg)} ?: false
+                val isNetworkError = isNetworkRelatedError(e.message)
 
                 if (isNetworkError) {
                     Result.failure(NetworkException("Network error opening channel: ${e.message}", e))
@@ -479,6 +480,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("ReturnCount")
     fun canSend(amountSats: ULong): Boolean {
         val channels = this.channels
         if (channels == null) {
@@ -532,6 +534,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -541,14 +544,15 @@ class LightningService @Inject constructor(
                 val feesMsat = node.bolt11Payment().estimateRoutingFees(invoice)
                 val feeSat = feesMsat / 1000u
                 Result.success(feeSat)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
             } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+                Result.failure(e)
             }
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -559,16 +563,17 @@ class LightningService @Inject constructor(
                 val feesMsat = node.bolt11Payment().estimateRoutingFeesUsingAmount(invoice, amountMsat)
                 val feeSat = feesMsat / 1000u
                 Result.success(feeSat)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
             } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+                Result.failure(e)
             }
         }
     }
     // endregion
 
     // region utxo selection
+    @Suppress("TooGenericExceptionCaught")
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -576,14 +581,15 @@ class LightningService @Inject constructor(
             return@background try {
                 val result = node.onchainPayment().listSpendableOutputs()
                 Result.success(result)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
             } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+                Result.failure(e)
             }
         }
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun selectUtxosWithAlgorithm(
         targetAmountSats: ULong,
         satsPerVByte: UInt,
@@ -601,10 +607,10 @@ class LightningService @Inject constructor(
                     utxos = utxos,
                 )
                 Result.success(result)
+            } catch (e: NodeException) {
+                Result.failure(LdkError(e))
             } catch (e: Exception) {
-                Result.failure(
-                    if (e is NodeException) LdkError(e) else e
-                )
+                Result.failure(e)
             }
         }
     }
@@ -721,6 +727,7 @@ class LightningService @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private fun logEvent(event: Event) {
         when (event) {
             is Event.PaymentSuccessful -> {
@@ -753,7 +760,8 @@ class LightningService @Inject constructor(
                 val paymentHash = event.paymentHash
                 val claimableAmountMsat = event.claimableAmountMsat
                 Logger.info(
-                    "🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
+                    "🫰 Payment claimable: paymentId: $paymentId " +
+                        "paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
                 )
             }
 
@@ -766,7 +774,9 @@ class LightningService @Inject constructor(
                 val counterpartyNodeId = event.counterpartyNodeId
                 val fundingTxo = event.fundingTxo
                 Logger.info(
-                    "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
+                    "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId " +
+                        "formerTemporaryChannelId: $formerTemporaryChannelId " +
+                        "counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
                 )
             }
 
@@ -775,7 +785,8 @@ class LightningService @Inject constructor(
                 val userChannelId = event.userChannelId
                 val counterpartyNodeId = event.counterpartyNodeId ?: "?"
                 Logger.info(
-                    "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"
+                    "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId " +
+                        "counterpartyNodeId: $counterpartyNodeId"
                 )
             }
 
@@ -785,7 +796,8 @@ class LightningService @Inject constructor(
                 val counterpartyNodeId = event.counterpartyNodeId ?: "?"
                 val reason = event.reason
                 Logger.info(
-                    "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"
+                    "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId" +
+                        " counterpartyNodeId: $counterpartyNodeId reason: $reason"
                 )
             }
         }
