@@ -538,13 +538,6 @@ class AppViewModel @Inject constructor(
             runCatching { decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
                 ?.invoice
-                ?.takeIf { invoice ->
-                    val canSend = lightningRepo.canSend(invoice.amountSatoshis.coerceAtLeast(1u))
-                    if (!canSend) {
-                        Logger.debug("Cannot pay unified invoice using LN, defaulting to onchain-only", context = TAG)
-                    }
-                    return@takeIf canSend
-                }
         }
         _sendUiState.update {
             it.copy(
@@ -583,9 +576,23 @@ class AppViewModel @Inject constructor(
         } else {
             setSendEffect(SendEffect.NavigateToAmount)
         }
+
+        lightningRepo.canSendAsync(invoice.amountSatoshis.coerceAtLeast(1u)).onSuccess { canSend ->
+            if (!canSend) {
+                Logger.debug("Cannot pay unified invoice using LN, defaulting to onchain-only", context = TAG)
+                _sendUiState.update {
+                    it.copy(
+                        isUnified = false,
+                        decodedInvoice = null,
+                        payMethod = SendMethod.ONCHAIN,
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun onScanLightning(invoice: LightningInvoice, scanResult: String) {
+        //TODO HANDLE NODE STILL RUNNING
         if (invoice.isExpired) {
             toast(
                 type = Toast.ToastType.ERROR,

@@ -786,6 +786,15 @@ class LightningRepo @Inject constructor(
     fun canSend(amountSats: ULong): Boolean =
         _lightningState.value.nodeLifecycleState.isRunning() && lightningService.canSend(amountSats)
 
+    suspend fun canSendAsync(amountSats: ULong): Result<Boolean> = executeWhenNodeRunning("canSendAsync") {
+        withTimeoutOrNull(3.seconds) {
+            while (_lightningState.value.channels.isEmpty()) {
+                delay(1.seconds)
+            }
+        }
+        Result.success(lightningService.canSend(amountSats))
+    }
+
     fun getSyncFlow(): Flow<Unit> = lightningService.syncFlow()
 
     fun getNodeId(): String? =
