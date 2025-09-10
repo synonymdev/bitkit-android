@@ -119,7 +119,7 @@ class CoreService @Inject constructor(
      * Returns true if geo blocked, false if allowed, null if unable to check
      */
     @Suppress("InstanceOfCheckForException", "TooGenericExceptionCaught")
-    suspend fun checkGeoStatus(): Boolean? {
+    private suspend fun isGeoBlocked(): Boolean? {
         return try {
             ServiceQueue.CORE.background {
                 Logger.verbose("Checking geo status…", context = "GeoCheck")
@@ -178,9 +178,9 @@ class CoreService @Inject constructor(
 
     suspend fun shouldBlockLightning(): Boolean {
         return try {
-            val geoStatus = checkGeoStatus()
+            val geoBlocked = isGeoBlocked()
 
-            when (geoStatus) {
+            when (geoBlocked) {
                 true -> {
                     // Geo blocked - check if user has external nodes
                     val hasExternal = hasExternalNode()
