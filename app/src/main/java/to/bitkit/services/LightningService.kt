@@ -182,24 +182,19 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
-        try {
-            val electrumServer = customServer ?: settingsStore.data.first().electrumServer
-            val serverUrl = electrumServer.toString()
-            Logger.info("Using onchain source Electrum url: $serverUrl")
-            setChainSourceElectrum(
-                serverUrl = serverUrl,
-                config = ElectrumSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
+        val electrumServer = customServer ?: settingsStore.data.first().electrumServer
+        val serverUrl = electrumServer.toString()
+        Logger.info("Using onchain source Electrum url: $serverUrl")
+        setChainSourceElectrum(
+            serverUrl = serverUrl,
+            config = ElectrumSyncConfig(
+                BackgroundSyncConfig(
+                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
-            )
-        } catch (e: NetworkException) {
-            Logger.error("Failed to configure chain source due to network", e)
-            throw e
-        }
+            ),
+        )
     }
 
     @Suppress("TooGenericExceptionCaught")
