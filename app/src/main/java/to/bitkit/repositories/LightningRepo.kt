@@ -365,7 +365,6 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
         syncState()
         if (_lightningState.value.isSyncingWallet) {
