@@ -60,6 +60,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -67,6 +68,8 @@ import kotlin.time.Duration.Companion.seconds
 private const val SYNC_TIMEOUT_MS = 10_000L
 private const val MAX_RETRY_ATTEMPTS = 5
 private const val INITIAL_RETRY_DELAY_MS = 1000L
+private const val MAX_DELAY_MS = 30_000L
+private const val JITTER_PERCENTAGE = 0.25
 
 @Singleton
 @Suppress("LongParameterList", "LargeClass", "TooManyFunctions")
@@ -204,7 +207,7 @@ class LightningRepo @Inject constructor(
                             context = TAG
                         )
 
-                        val retryDelay = calculateRetryDelay(retryAttempt)
+                        val retryDelay = calculateRetryDelayWithJitter(retryAttempt)
                         delay(retryDelay)
 
                         return@withContext start(
@@ -271,7 +274,7 @@ class LightningRepo @Inject constructor(
 
                 _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
 
-                val retryDelay = calculateRetryDelay(retryAttempt)
+                val retryDelay = calculateRetryDelayWithJitter(retryAttempt)
                 delay(retryDelay)
 
                 return@withContext start(
@@ -313,14 +316,14 @@ class LightningRepo @Inject constructor(
     /**
      * Calculates retry delay with exponential backoff and jitter
      */
-    private fun calculateRetryDelay(retryAttempt: Int): Long {
+    private fun calculateRetryDelayWithJitter(retryAttempt: Int): Long {
         val baseDelay = INITIAL_RETRY_DELAY_MS
         val exponentialDelay = baseDelay * 2.0.pow(retryAttempt.toDouble()).toLong()
-        val maxDelay = 30_000L // 30 seconds max
-        val delayWithCap = min(exponentialDelay, maxDelay)
+        val delayWithCap = min(exponentialDelay, MAX_DELAY_MS)
 
-        // Add jitter (±25% of the delay)
-        val jitter = (delayWithCap * 0.25 * (Math.random() - 0.5)).toLong()
+        val maxJitter = (delayWithCap * JITTER_PERCENTAGE).toLong()
+        val jitter = Random.nextLong(-maxJitter, maxJitter + 1)
+
         return delayWithCap + jitter
     }
 
