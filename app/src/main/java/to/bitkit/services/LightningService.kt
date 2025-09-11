@@ -197,7 +197,6 @@ class LightningService @Inject constructor(
         )
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
