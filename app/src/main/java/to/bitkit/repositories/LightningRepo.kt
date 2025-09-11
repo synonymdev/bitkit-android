@@ -327,21 +327,12 @@ class LightningRepo @Inject constructor(
     }
 
     /**Updates the shouldBlockLightning state and returns the current value*/
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun updateGeoBlockState(): Boolean {
-        return try {
-            val shouldBlock = coreService.shouldBlockLightning()
-            _lightningState.update {
-                it.copy(shouldBlockLightning = shouldBlock)
-            }
-            shouldBlock
-        } catch (e: NetworkException) {
-            Logger.warn("Failed to check geo block status due to network, assuming not blocked", e, context = TAG)
-            false
-        } catch (e: Exception) {
-            Logger.error("Failed to check geo block status", e, context = TAG)
-            false
+        val shouldBlock = coreService.shouldBlockLightning()
+        _lightningState.update {
+            it.copy(shouldBlockLightning = shouldBlock)
         }
+        return shouldBlock
     }
 
     fun setInitNodeLifecycleState() {
