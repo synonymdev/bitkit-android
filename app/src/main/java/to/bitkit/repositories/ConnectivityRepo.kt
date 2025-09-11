@@ -155,3 +155,5 @@ class ConnectivityRepo @Inject constructor(
 }
 
 enum class ConnectivityState { CONNECTED, CONNECTING, DISCONNECTED }
+
+fun ConnectivityState.connected() = this == ConnectivityState.CONNECTED

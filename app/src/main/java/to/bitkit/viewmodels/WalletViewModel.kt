@@ -32,6 +32,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel
@@ -170,13 +171,20 @@ class WalletViewModel @Inject constructor(
 
     fun onPullToRefresh() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
+            updateRefreshing(true)
             walletRepo.syncNodeAndWallet()
                 .onFailure { error ->
                     Logger.error("Failed to refresh state: ${error.message}", error)
                     ToastEventBus.send(error)
                 }
-            _uiState.update { it.copy(isRefreshing = false) }
+            updateRefreshing(false)
+        }
+    }
+
+    fun updateRefreshing(isRefreshing: Boolean, delay: Duration? = null) {
+        viewModelScope.launch {
+            delay?.let { delay(it) }
+            _uiState.update { it.copy(isRefreshing = isRefreshing) }
         }
     }
 
