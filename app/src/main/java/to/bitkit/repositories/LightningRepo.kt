@@ -24,6 +24,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -751,8 +752,9 @@ class LightningRepo @Inject constructor(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
+        channelConfig: ChannelConfig? = null,
     ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
-        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig)
         syncState()
         result
     }

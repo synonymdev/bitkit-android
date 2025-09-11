@@ -33,12 +33,12 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.LnPeer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.TransactionSpeed
-import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
+import to.bitkit.services.LspNotificationsService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -209,11 +209,8 @@ class LightningRepoTest : BaseUnitTest() {
         val testPeer = LnPeer("nodeId", "host", "9735")
         val testChannelId = "testChannelId"
         val channelAmountSats = 100000uL
-        whenever(lightningService.openChannel(peer = testPeer, channelAmountSats, null)).thenReturn(
-            Result.success(
-                testChannelId
-            )
-        )
+        whenever(lightningService.openChannel(testPeer, channelAmountSats, null, null))
+            .thenReturn(Result.success(testChannelId))
 
         val result = sut.openChannel(testPeer, channelAmountSats, null)
         assertTrue(result.isSuccess)

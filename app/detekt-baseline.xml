@@ -191,7 +191,7 @@
     <ID>LongParameterList:CoreService.kt$OnchainService$( mnemonicPhrase: String, derivationPathStr: String?, network: Network?, bip39Passphrase: String?, isChange: Boolean?, startIndex: UInt?, count: UInt?, )</ID>
     <ID>LongParameterList:DevSettingsViewModel.kt$DevSettingsViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val firebaseMessaging: FirebaseMessaging, private val lightningRepo: LightningRepo, private val walletRepo: WalletRepo, private val widgetsStore: WidgetsStore, private val currencyRepo: CurrencyRepo, private val logsRepo: LogsRepo, private val cacheStore: CacheStore, private val blocktankRepo: BlocktankRepo, )</ID>
     <ID>LongParameterList:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningRepo: LightningRepo, internal val blocktankRepo: BlocktankRepo, private val logsRepo: LogsRepo, private val addressChecker: AddressChecker, private val ldkNodeEventBus: LdkNodeEventBus, private val walletRepo: WalletRepo, )</ID>
-    <ID>LongParameterList:LightningRepo.kt$LightningRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningService: LightningService, private val ldkNodeEventBus: LdkNodeEventBus, private val settingsStore: SettingsStore, private val coreService: CoreService, private val blocktankNotificationsService: BlocktankNotificationsService, private val firebaseMessaging: FirebaseMessaging, private val keychain: Keychain, private val lnurlService: LnurlService, private val cacheStore: CacheStore, )</ID>
+    <ID>LongParameterList:LightningRepo.kt$LightningRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningService: LightningService, private val ldkNodeEventBus: LdkNodeEventBus, private val settingsStore: SettingsStore, private val coreService: CoreService, private val lspNotificationsService: LspNotificationsService, private val firebaseMessaging: FirebaseMessaging, private val keychain: Keychain, private val lnurlService: LnurlService, private val cacheStore: CacheStore, )</ID>
     <ID>LongParameterList:LightningRepo.kt$LightningRepo$( address: Address, sats: ULong, speed: TransactionSpeed? = null, utxosToSpend: List&lt;SpendableUtxo&gt;? = null, feeRates: FeeRates? = null, isTransfer: Boolean = false, channelId: String? = null, )</ID>
     <ID>LongParameterList:LightningRepo.kt$LightningRepo$( walletIndex: Int = 0, timeout: Duration? = null, shouldRetry: Boolean = true, eventHandler: NodeEventHandler? = null, customServer: ElectrumServer? = null, customRgsServerUrl: String? = null, )</ID>
     <ID>LongParameterList:Notifications.kt$( title: String?, text: String?, extras: Bundle? = null, bigText: String? = null, id: Int = Random.nextInt(), context: Context, )</ID>
@@ -330,7 +330,6 @@
     <ID>MagicNumber:QuickPaySettingsScreen.kt$20</ID>
     <ID>MagicNumber:QuickPaySettingsScreen.kt$5</ID>
     <ID>MagicNumber:QuickPaySettingsScreen.kt$50</ID>
-    <ID>MagicNumber:ReceiveAmountScreen.kt$500</ID>
     <ID>MagicNumber:ReceiveLiquidityScreen.kt$100.0</ID>
     <ID>MagicNumber:ReceiveQrScreen.kt$17.33f</ID>
     <ID>MagicNumber:ReceiveQrScreen.kt$32</ID>
@@ -481,7 +480,6 @@
     <ID>ModifierMissing:HighBalanceWarningSheet.kt$HighBalanceWarningContent</ID>
     <ID>ModifierMissing:HomeNav.kt$HomeNav</ID>
     <ID>ModifierMissing:InfoScreenContent.kt$InfoScreenContent</ID>
-    <ID>ModifierMissing:InfoTextField.kt$InfoTextField</ID>
     <ID>ModifierMissing:InitializingWalletView.kt$InitializingWalletView</ID>
     <ID>ModifierMissing:IntroScreen.kt$IntroScreen</ID>
     <ID>ModifierMissing:LocalCurrencySettingsScreen.kt$LocalCurrencySettingsContent</ID>
@@ -498,7 +496,6 @@
     <ID>ModifierMissing:QrScanningScreen.kt$QrScanningScreen</ID>
     <ID>ModifierMissing:QuickPayIntroScreen.kt$QuickPayIntroScreen</ID>
     <ID>ModifierMissing:QuickPaySettingsScreen.kt$QuickPaySettingsScreenContent</ID>
-    <ID>ModifierMissing:ReceiveAmountScreen.kt$ReceiveAmountScreen</ID>
     <ID>ModifierMissing:ReceiveSheet.kt$ReceiveSheet</ID>
     <ID>ModifierMissing:ReportIssueResultScreen.kt$ReportIssueResultScreen</ID>
     <ID>ModifierMissing:ReportIssueScreen.kt$ReportIssueContent</ID>
@@ -596,7 +593,6 @@
     <ID>ReturnCount:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$private fun findUpdatedChannel( currentChannel: ChannelDetails, allChannels: List&lt;ChannelDetails&gt;, ): ChannelDetails?</ID>
     <ID>SpreadOperator:RestoreWalletScreen.kt$(*Array(24) { "" })</ID>
     <ID>SwallowedException:Crypto.kt$Crypto$e: Exception</ID>
-    <ID>SwallowedException:FcmService.kt$FcmService$e: SerializationException</ID>
     <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ActivityListViewModel.kt$ActivityListViewModel$e: Exception</ID>
@@ -628,7 +624,6 @@
     <ID>TooGenericExceptionCaught:NewTransactionSheetDetails.kt$NewTransactionSheetDetails.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PriceService.kt$PriceService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:QrScanningScreen.kt$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ReceiveAmountScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SendCoinSelectionViewModel.kt$SendCoinSelectionViewModel$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ServiceQueue.kt$ServiceQueue$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SettingUpScreen.kt$e: Throwable</ID>

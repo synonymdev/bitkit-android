@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
+import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
@@ -389,6 +390,7 @@ class LightningService @Inject constructor(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
+        channelConfig: ChannelConfig? = null,
     ): Result<UserChannelId> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -401,7 +403,7 @@ class LightningService @Inject constructor(
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
                     pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
-                    channelConfig = null,
+                    channelConfig = channelConfig,
                 )
 
                 Logger.info("Channel open initiated, userChannelId: $userChannelId")
