@@ -177,37 +177,13 @@ class CoreService @Inject constructor(
     suspend fun hasExternalNode() = getConnectedPeers().any { connectedPeer -> connectedPeer !in getLspPeers() }
 
     suspend fun shouldBlockLightning(): Boolean {
-        return try {
-            val geoBlocked = isGeoBlocked()
+        if (hasExternalNode()) return false
 
-            when (geoBlocked) {
-                true -> {
-                    // Geo blocked - check if user has external nodes
-                    val hasExternal = hasExternalNode()
-                    val shouldBlock = !hasExternal
-                    Logger.info(
-                        "Geo blocked region, has external node: $hasExternal, blocking: $shouldBlock",
-                        context = "GeoCheck"
-                    )
-                    shouldBlock
-                }
-
-                false -> {
-                    // Geo allowed
-                    Logger.debug("Geo allowed region", context = "GeoCheck")
-                    false
-                }
-
-                null -> {
-                    // Unable to check (network error) - use safe default
-                    Logger.warn("Unable to check geo status, defaulting to not blocked", context = "GeoCheck")
-                    false // Safe default: don't block if we can't verify
-                }
+        return runCatching { isGeoBlocked() ?: false }
+            .onFailure {
+                Logger.error("Error in shouldBlockLightning, defaulting to not blocked", context = "GeoCheck")
             }
-        } catch (e: Exception) {
-            Logger.error("Error in shouldBlockLightning, defaulting to not blocked", e, context = "GeoCheck")
-            false // Safe default: don't block on any error
-        }
+            .getOrDefault(false)
     }
 }
 
