@@ -264,7 +264,7 @@ private fun SendAmountNodeRunning(
                         onClick = { onClickMax(max) },
                         modifier = Modifier
                             .height(28.dp)
-                            .testTag("max_amount_button")
+                            .testTag("SendAmountMax")
                     )
                 }
                 HorizontalSpacer(8.dp)

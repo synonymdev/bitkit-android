@@ -71,7 +71,9 @@ import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.models.BalanceState
 import to.bitkit.models.Suggestion
+import to.bitkit.models.Toast
 import to.bitkit.models.WidgetType
+import to.bitkit.repositories.connected
 import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AppStatus
@@ -116,6 +118,7 @@ import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.WalletViewModel
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun HomeScreen(
@@ -136,7 +139,7 @@ fun HomeScreen(
     val hasSeenWidgetsIntro: Boolean by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
-
+    val connectivity by appViewModel.isOnline.collectAsStateWithLifecycle()
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
     homeUiState.deleteWidgetAlert?.let { type ->
@@ -151,9 +154,19 @@ fun HomeScreen(
         drawerState = drawerState,
         latestActivities = latestActivities,
         onRefresh = {
-            walletViewModel.onPullToRefresh()
-            homeViewModel.refreshWidgets()
-            activityListViewModel.syncLdkNodePayments()
+            if (connectivity.connected()) {
+                walletViewModel.onPullToRefresh()
+                homeViewModel.refreshWidgets()
+                activityListViewModel.syncLdkNodePayments()
+            } else {
+                walletViewModel.updateRefreshing(true)
+                appViewModel.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.other__connection_issue),
+                    description = context.getString(R.string.other__connection_issue_explain),
+                )
+                walletViewModel.updateRefreshing(false, delay = 2.seconds)
+            }
         },
         onClickProfile = {
             if (!hasSeenProfileIntro) {

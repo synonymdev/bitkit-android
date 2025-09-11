@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
+import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Config
@@ -171,43 +172,32 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun Builder.configureGossipSource(customRgsServerUrl: String?) {
-        try {
-            val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
-            if (rgsServerUrl != null) {
-                Logger.info("Using gossip source rgs url: $rgsServerUrl")
-                setGossipSourceRgs(rgsServerUrl)
-            } else {
-                Logger.info("Using gossip source p2p")
-                setGossipSourceP2p()
-            }
-        } catch (e: NetworkException) {
-            Logger.warn("Failed to configure gossip source due to network, falling back to p2p", e)
+        val rgsServerUrl = customRgsServerUrl ?: settingsStore.data.first().rgsServerUrl
+        if (rgsServerUrl != null) {
+            Logger.info("Using gossip source rgs url: $rgsServerUrl")
+            setGossipSourceRgs(rgsServerUrl)
+        } else {
+            Logger.info("Using gossip source p2p")
             setGossipSourceP2p()
         }
     }
 
     private suspend fun Builder.configureChainSource(customServer: ElectrumServer? = null) {
-        try {
-            val electrumServer = customServer ?: settingsStore.data.first().electrumServer
-            val serverUrl = electrumServer.toString()
-            Logger.info("Using onchain source Electrum url: $serverUrl")
-            setChainSourceElectrum(
-                serverUrl = serverUrl,
-                config = ElectrumSyncConfig(
-                    BackgroundSyncConfig(
-                        onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
-                        feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
-                    ),
+        val electrumServer = customServer ?: settingsStore.data.first().electrumServer
+        val serverUrl = electrumServer.toString()
+        Logger.info("Using onchain source Electrum url: $serverUrl")
+        setChainSourceElectrum(
+            serverUrl = serverUrl,
+            config = ElectrumSyncConfig(
+                BackgroundSyncConfig(
+                    onchainWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
+                    feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
-            )
-        } catch (e: NetworkException) {
-            Logger.error("Failed to configure chain source due to network", e)
-            throw e
-        }
+            ),
+        )
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun start(timeout: Duration? = null, onEvent: NodeEventHandler? = null) {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -400,6 +390,7 @@ class LightningService @Inject constructor(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
+        channelConfig: ChannelConfig? = null,
     ): Result<UserChannelId> {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
@@ -412,7 +403,7 @@ class LightningService @Inject constructor(
                     address = peer.address,
                     channelAmountSats = channelAmountSats,
                     pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u },
-                    channelConfig = null,
+                    channelConfig = channelConfig,
                 )
 
                 Logger.info("Channel open initiated, userChannelId: $userChannelId")

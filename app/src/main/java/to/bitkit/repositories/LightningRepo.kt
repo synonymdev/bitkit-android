@@ -24,6 +24,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -66,7 +67,6 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 private const val SYNC_TIMEOUT_MS = 10_000L
-private const val MAX_RETRY_ATTEMPTS = 5
 private const val INITIAL_RETRY_DELAY_MS = 1000L
 private const val MAX_DELAY_MS = 30_000L
 private const val JITTER_PERCENTAGE = 0.25
@@ -200,9 +200,9 @@ class LightningRepo @Inject constructor(
                     }
 
                     // Handle setup failures with retry logic
-                    if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(setupError)) {
+                    if (shouldRetry && isRetryableError(setupError)) {
                         Logger.warn(
-                            "Setup failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
+                            "Setup failed (attempt ${retryAttempt + 1}), retrying...",
                             setupError,
                             context = TAG
                         )
@@ -265,9 +265,9 @@ class LightningRepo @Inject constructor(
                 it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e))
             }
 
-            if (shouldRetry && retryAttempt < MAX_RETRY_ATTEMPTS && isRetryableError(e)) {
+            if (shouldRetry && isRetryableError(e)) {
                 Logger.warn(
-                    "Start failed (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), retrying...",
+                    "Start failed (attempt ${retryAttempt + 1}), retrying...",
                     e,
                     context = TAG
                 )
@@ -287,7 +287,7 @@ class LightningRepo @Inject constructor(
                 )
             } else {
                 Logger.error(
-                    "Node start error (attempt ${retryAttempt + 1}/$MAX_RETRY_ATTEMPTS), giving up",
+                    "Node start error (attempt ${retryAttempt + 1}), giving up",
                     e,
                     context = TAG
                 )
@@ -752,8 +752,9 @@ class LightningRepo @Inject constructor(
         peer: LnPeer,
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
+        channelConfig: ChannelConfig? = null,
     ): Result<UserChannelId> = executeWhenNodeRunning("Open channel") {
-        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats)
+        val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig)
         syncState()
         result
     }

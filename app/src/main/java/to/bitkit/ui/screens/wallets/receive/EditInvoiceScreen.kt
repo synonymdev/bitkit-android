@@ -12,13 +12,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -38,7 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.tooling.preview.Devices.PIXEL_5
+import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,11 +51,13 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Keyboard
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.UnitButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -145,8 +145,14 @@ fun EditInvoiceScreen(
         tags = walletUiState.selectedTags,
         onBack = onBack,
         onTextChanged = onDescriptionUpdate,
-        numericKeyboardVisible = keyboardVisible,
-        onClickBalance = { keyboardVisible = true },
+        keyboardVisible = keyboardVisible,
+        onClickBalance = {
+            if (keyboardVisible) {
+                currencyVM.togglePrimaryDisplay()
+            } else {
+                keyboardVisible = true
+            }
+        },
         onInputChanged = onInputUpdated,
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = {
@@ -164,7 +170,7 @@ fun EditInvoiceContent(
     input: String,
     noteText: String,
     isSoftKeyboardVisible: Boolean,
-    numericKeyboardVisible: Boolean,
+    keyboardVisible: Boolean,
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
     tags: List<String>,
@@ -187,7 +193,7 @@ fun EditInvoiceContent(
         val maxHeight = this.maxHeight
 
         AnimatedVisibility(
-            visible = !numericKeyboardVisible && !isSoftKeyboardVisible,
+            visible = !keyboardVisible && !isSoftKeyboardVisible,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -210,16 +216,17 @@ fun EditInvoiceContent(
                 .navigationBarsPadding()
                 .testTag("edit_invoice_screen")
         ) {
-            SheetTopBar(stringResource(R.string.wallet__receive_specify)) {
-                onBack()
-            }
+            SheetTopBar(
+                titleText = stringResource(R.string.wallet__receive_specify),
+                onBack = onBack,
+            )
 
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .testTag("ReceiveAmount")
             ) {
-                Spacer(Modifier.height(32.dp))
+                VerticalSpacer(16.dp)
 
                 NumberPadTextField(
                     input = input,
@@ -233,7 +240,7 @@ fun EditInvoiceContent(
 
                 // Animated visibility for keyboard section
                 AnimatedVisibility(
-                    visible = numericKeyboardVisible,
+                    visible = keyboardVisible,
                     enter = slideInVertically(
                         initialOffsetY = { fullHeight -> fullHeight },
                         animationSpec = tween(durationMillis = 300)
@@ -246,7 +253,7 @@ fun EditInvoiceContent(
                     Column(
                         modifier = Modifier.testTag("ReceiveNumberPad")
                     ) {
-                        Spacer(modifier = Modifier.weight(1f))
+                        FillHeight(min = 12.dp)
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -276,34 +283,26 @@ fun EditInvoiceContent(
                                 .testTag("amount_keyboard")
                         )
 
-                        Spacer(
-                            modifier = Modifier
-                                .weight(1f)
-                                .sizeIn(minHeight = 16.dp, maxHeight = 41.dp)
-                        )
-
                         PrimaryButton(
                             text = stringResource(R.string.common__continue),
                             onClick = onContinueKeyboard,
                             modifier = Modifier.testTag("ReceiveNumberPadSubmit")
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                     }
                 }
 
                 // Animated visibility for note section
                 AnimatedVisibility(
-                    visible = !numericKeyboardVisible,
+                    visible = !keyboardVisible,
                     enter = fadeIn(animationSpec = tween(durationMillis = 300)),
                     exit = fadeOut(animationSpec = tween(durationMillis = 300))
                 ) {
                     Column {
-                        Spacer(modifier = Modifier.height(44.dp))
-
+                        VerticalSpacer(44.dp)
                         Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
-
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
 
                         TextField(
                             placeholder = {
@@ -325,10 +324,10 @@ fun EditInvoiceContent(
                                 .testTag("ReceiveNote")
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
+                        VerticalSpacer(16.dp)
                         Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        VerticalSpacer(8.dp)
+
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -359,7 +358,7 @@ fun EditInvoiceContent(
                             modifier = Modifier.testTag("TagsAdd")
                         )
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        FillHeight()
 
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),
@@ -367,7 +366,7 @@ fun EditInvoiceContent(
                             modifier = Modifier.testTag("ShowQrReceive")
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        VerticalSpacer(16.dp)
                     }
                 }
             }
@@ -387,7 +386,7 @@ private fun Preview() {
                 displayUnit = BitcoinDisplayUnit.MODERN,
                 onBack = {},
                 onTextChanged = {},
-                numericKeyboardVisible = false,
+                keyboardVisible = false,
                 onClickBalance = {},
                 onInputChanged = {},
                 onContinueGeneral = {},
@@ -404,7 +403,7 @@ private fun Preview() {
 
 @Preview(showSystemUi = true)
 @Composable
-private fun Preview2() {
+private fun PreviewWithTags() {
     AppThemeSurface {
         BottomSheetPreview {
             EditInvoiceContent(
@@ -414,7 +413,7 @@ private fun Preview2() {
                 displayUnit = BitcoinDisplayUnit.MODERN,
                 onBack = {},
                 onTextChanged = {},
-                numericKeyboardVisible = false,
+                keyboardVisible = false,
                 onClickBalance = {},
                 onInputChanged = {},
                 onContinueGeneral = {},
@@ -431,7 +430,7 @@ private fun Preview2() {
 
 @Preview(showSystemUi = true)
 @Composable
-private fun Preview3() {
+private fun PreviewWithKeyboard() {
     AppThemeSurface {
         BottomSheetPreview {
             EditInvoiceContent(
@@ -441,7 +440,7 @@ private fun Preview3() {
                 displayUnit = BitcoinDisplayUnit.MODERN,
                 onBack = {},
                 onTextChanged = {},
-                numericKeyboardVisible = true,
+                keyboardVisible = true,
                 onClickBalance = {},
                 onInputChanged = {},
                 onContinueGeneral = {},
@@ -456,9 +455,9 @@ private fun Preview3() {
     }
 }
 
-@Preview(showSystemUi = true, device = PIXEL_5)
+@Preview(showSystemUi = true, device = NEXUS_5)
 @Composable
-private fun Preview4() {
+private fun PreviewSmallScreen() {
     AppThemeSurface {
         BottomSheetPreview {
             EditInvoiceContent(
@@ -468,7 +467,7 @@ private fun Preview4() {
                 displayUnit = BitcoinDisplayUnit.MODERN,
                 onBack = {},
                 onTextChanged = {},
-                numericKeyboardVisible = true,
+                keyboardVisible = true,
                 onClickBalance = {},
                 onInputChanged = {},
                 onContinueGeneral = {},
