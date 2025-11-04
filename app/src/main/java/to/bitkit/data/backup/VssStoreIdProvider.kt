@@ -12,13 +12,10 @@ import javax.inject.Singleton
 class VssStoreIdProvider @Inject constructor(
     private val keychain: Keychain,
 ) {
-    @Volatile
-    private var cachedStoreIds: MutableMap<Int, String> = mutableMapOf()
+    private val cachedStoreIds: MutableMap<Int, String> = mutableMapOf()
 
     fun getVssStoreId(walletIndex: Int = 0): String {
-        cachedStoreIds[walletIndex]?.let { return it }
-
-        return synchronized(this) {
+        synchronized(this) {
             cachedStoreIds[walletIndex]?.let { return it }
 
             val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound
@@ -32,7 +29,7 @@ class VssStoreIdProvider @Inject constructor(
 
             Logger.info("VSS store id: '$storeId' for walletIndex: $walletIndex", context = TAG)
             cachedStoreIds[walletIndex] = storeId
-            storeId
+            return storeId
         }
     }
 
