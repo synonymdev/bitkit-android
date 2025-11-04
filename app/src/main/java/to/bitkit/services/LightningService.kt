@@ -104,7 +104,7 @@ class LightningService @Inject constructor(
 
         Logger.debug("Building node…")
 
-        val vssStoreId = vssStoreIdProvider.getVssStoreId()
+        val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
 
         ServiceQueue.LDK.background {
             node = try {
