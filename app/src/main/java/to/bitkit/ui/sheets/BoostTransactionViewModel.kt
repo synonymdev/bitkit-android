@@ -17,6 +17,7 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.BoostType
 import to.bitkit.ext.boostType
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
@@ -203,6 +204,8 @@ class BoostTransactionViewModel @Inject constructor(
             destinationAddress = walletRepo.getOnchainAddress(),
         ).fold(
             onSuccess = { newTxId ->
+                // For CPFP, immediately update parent with child txId
+                Logger.debug("CPFP successful. Appending child txId $newTxId to parent's boostTxIds", context = TAG)
                 handleBoostSuccess(newTxId, isRBF = false)
             },
             onFailure = { error ->
@@ -283,7 +286,7 @@ class BoostTransactionViewModel @Inject constructor(
     /**
      * Updates activity based on boost type:
      * - RBF: Updates current activity with boost data, then replaces with new transaction
-     * - CPFP: Simply updates the current activity
+     * - CPFP: Updates parent activity by appending child txId to boostTxIds
      */
     private suspend fun updateActivity(newTxId: Txid, isRBF: Boolean): Result<Unit> {
         Logger.debug("Updating activity for txId: $newTxId. isRBF: $isRBF", context = TAG)
@@ -294,24 +297,25 @@ class BoostTransactionViewModel @Inject constructor(
         return if (isRBF) {
             handleRBFUpdate(newTxId, currentActivity)
         } else {
-            handleCPFPUpdate(currentActivity)
+            handleCPFPUpdate(currentActivity, newTxId)
         }
     }
 
     /**
-     * Handles CPFP (Child Pays For Parent) update by simply updating the current activity
+     * Handles CPFP (Child Pays For Parent) update by appending child txId to parent's boostTxIds
      */
-    private suspend fun handleCPFPUpdate(currentActivity: OnchainActivity): Result<Unit> {
+    private suspend fun handleCPFPUpdate(currentActivity: OnchainActivity, childTxId: Txid): Result<Unit> {
         val updatedActivity = Activity.Onchain(
             v1 = currentActivity.copy(
                 isBoosted = true,
-                updatedAt = nowTimestamp().toEpochMilli().toULong()
+                boostTxIds = currentActivity.boostTxIds + childTxId,
+                updatedAt = nowMillis().toULong(),
             )
         )
 
         return activityRepo.updateActivity(
             id = updatedActivity.v1.id,
-            activity = updatedActivity
+            activity = updatedActivity,
         )
     }
 
@@ -328,13 +332,13 @@ class BoostTransactionViewModel @Inject constructor(
                 isBoosted = true,
                 feeRate = _uiState.value.feeRate,
                 fee = _uiState.value.totalFeeSats,
-                updatedAt = nowTimestamp().toEpochMilli().toULong()
+                updatedAt = nowMillis().toULong(),
             )
         )
 
         activityRepo.updateActivity(
             id = updatedCurrentActivity.v1.id,
-            activity = updatedCurrentActivity
+            activity = updatedCurrentActivity,
         )
 
         // Then find and replace with the new activity
@@ -379,7 +383,7 @@ class BoostTransactionViewModel @Inject constructor(
             v1 = newOnChainActivity.v1.copy(
                 isBoosted = true,
                 feeRate = _uiState.value.feeRate,
-                updatedAt = nowTimestamp().toEpochMilli().toULong()
+                updatedAt = nowMillis().toULong(),
             )
         )
 
@@ -412,13 +416,25 @@ class BoostTransactionViewModel @Inject constructor(
 
     /**
      * Caches activity data for pending boost operation
+     * - For RBF: stores parent chain (existing boostTxIds + current txId)
+     * - For CPFP: stores empty list (child tx is added to parent's boostTxIds during sync)
      */
     private suspend fun cachePendingBoostActivity(newTxId: Txid, activityToDelete: String?) {
+        val currentActivity = activity?.v1
+        val boostTxIds = if (activityToDelete != null && currentActivity != null) {
+            // RBF: Track full parent chain (existing boostTxIds + current txId being replaced)
+            currentActivity.boostTxIds + currentActivity.txId
+        } else {
+            // CPFP: No parent tracking needed
+            emptyList()
+        }
+
         activityRepo.addActivityToPendingBoost(
             PendingBoostActivity(
                 txId = newTxId,
-                updatedAt = nowTimestamp().toEpochMilli().toULong(),
-                activityToDelete = activityToDelete
+                updatedAt = nowMillis().toULong(),
+                activityToDelete = activityToDelete,
+                boostTxIds = boostTxIds,
             )
         )
     }

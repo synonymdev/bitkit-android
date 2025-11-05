@@ -6,5 +6,6 @@ import kotlinx.serialization.Serializable
 data class PendingBoostActivity(
     val txId: String,
     val updatedAt: ULong,
-    val activityToDelete: String?
+    val activityToDelete: String?,
+    val boostTxIds: List<String> = emptyList(),
 )

@@ -428,22 +428,25 @@ class ActivityRepo @Inject constructor(
                     val updatedActivity = Activity.Onchain(
                         v1 = newOnChainActivity.v1.copy(
                             isBoosted = true,
-                            updatedAt = pendingBoostActivity.updatedAt
+                            boostTxIds = pendingBoostActivity.boostTxIds,
+                            updatedAt = pendingBoostActivity.updatedAt,
                         )
                     )
 
                     if (pendingBoostActivity.activityToDelete != null) {
+                        // RBF: Replace old activity with new one, applying parent chain boostTxIds
                         replaceActivity(
                             id = updatedActivity.v1.id,
                             activity = updatedActivity,
-                            activityIdToDelete = pendingBoostActivity.activityToDelete
+                            activityIdToDelete = pendingBoostActivity.activityToDelete,
                         ).onSuccess {
                             cacheStore.removeActivityFromPendingBoost(pendingBoostActivity)
                         }
                     } else {
+                        // CPFP: Update existing activity (though CPFP is handled immediately now)
                         updateActivity(
                             id = updatedActivity.v1.id,
-                            activity = updatedActivity
+                            activity = updatedActivity,
                         ).onSuccess {
                             cacheStore.removeActivityFromPendingBoost(pendingBoostActivity)
                         }

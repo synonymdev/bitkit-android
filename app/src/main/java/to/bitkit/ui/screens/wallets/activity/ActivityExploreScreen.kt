@@ -271,13 +271,9 @@ private fun ColumnScope.OnchainDetails(
                 .size(16.dp)
                 .align(Alignment.CenterHorizontally)
         )
-    } // TODO use real boosted parents from bitkit-core/ldk-node when available
-    val boostedParents = listOfNotNull(
-        "todo_first_parent_txid".takeIf { onchain.isBoosted() && !onchain.v1.confirmed },
-        "todo_second_parent_txid".takeIf { onchain.isBoosted() && onchain.v1.confirmed },
-    )
+    }
 
-    boostedParents.forEachIndexed { index, parent ->
+    onchain.v1.boostTxIds.forEachIndexed { index, parent ->
         val isRbf = onchain.boostType() == BoostType.RBF
         Section(
             title = stringResource(
