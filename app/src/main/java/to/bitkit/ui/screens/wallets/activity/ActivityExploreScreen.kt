@@ -116,13 +116,6 @@ fun ActivityExploreScreen(
                 val intent = Intent(Intent.ACTION_VIEW, url.toUri())
                 context.startActivity(intent)
             },
-            onClickParent = { id ->
-                app.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = "TODO",
-                    description = "Navigate to Activity Detail for: $id",
-                )
-            },
         )
     }
 }
@@ -133,7 +126,6 @@ private fun ActivityExploreContent(
     txDetails: TxDetails? = null,
     onCopy: (String) -> Unit = {},
     onClickExplore: (String) -> Unit = {},
-    onClickParent: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -164,7 +156,6 @@ private fun ActivityExploreContent(
                     onchain = item,
                     onCopy = onCopy,
                     txDetails = txDetails,
-                    onClickParent = onClickParent,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 PrimaryButton(
@@ -226,7 +217,6 @@ private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
     onCopy: (String) -> Unit,
     txDetails: TxDetails?,
-    onClickParent: (String) -> Unit,
 ) {
     val txId = onchain.v1.txId
     Section(
@@ -285,9 +275,11 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
             modifier = Modifier
-                .clickableAlpha {
-                    onClickParent(parent)
-                }
+                .clickableAlpha(
+                    onClick = copyToClipboard(parent) {
+                        onCopy(it)
+                    }
+                )
                 .testTag(if (isRbf) "RBFBoosted" else "CPFPBoosted")
         )
     }
