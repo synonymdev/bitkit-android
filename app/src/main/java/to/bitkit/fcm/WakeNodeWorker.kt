@@ -132,10 +132,6 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.ChannelReady -> onChannelReady(event, showDetails, openBitkitMessage)
             is Event.ChannelClosed -> onChannelClosed(event)
 
-            is Event.PaymentSuccessful -> Unit
-            is Event.PaymentClaimable -> Unit
-            is Event.PaymentForwarded -> Unit
-
             is Event.PaymentFailed -> {
                 self.bestAttemptContent?.title = "Payment failed"
                 self.bestAttemptContent?.body = "⚡ ${event.reason}"
@@ -143,6 +139,27 @@ class WakeNodeWorker @AssistedInject constructor(
                 if (self.notificationType == wakeToTimeout) {
                     self.deliver()
                 }
+            }
+
+            is Event.OnchainTransactionReceived -> {
+                // TODO handle like onPaymentReceived but for onchain
+            }
+
+            is Event.OnchainTransactionConfirmed -> Unit
+
+            is Event.PaymentSuccessful -> Unit
+            is Event.PaymentClaimable -> Unit
+            is Event.PaymentForwarded -> Unit
+
+            is Event.SyncProgress -> Unit
+            is Event.SyncCompleted -> Unit
+            is Event.BalanceChanged -> Unit
+
+            is Event.OnchainTransactionEvicted,
+            is Event.OnchainTransactionReorged,
+            is Event.OnchainTransactionReplaced,
+                -> {
+                // TODO handle activity removed from mempool UI & toast
             }
         }
     }

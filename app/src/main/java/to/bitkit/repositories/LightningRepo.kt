@@ -368,7 +368,7 @@ class LightningRepo @Inject constructor(
             }
 
             val channelName = channel.inboundScidAlias?.toString()
-                ?: channel.channelId.take(CHANNEL_ID_PREVIEW_LENGTH) + "…"
+                ?: (channel.channelId.take(CHANNEL_ID_PREVIEW_LENGTH) + "…")
 
             val closedAt = (System.currentTimeMillis() / 1000L).toULong()
 
@@ -656,14 +656,13 @@ class LightningRepo @Inject constructor(
                 isMaxAmount = isMaxAmount
             )
 
-            val addressString = address.toString()
             val preActivityMetadata = PreActivityMetadata(
                 paymentId = txId,
                 createdAt = nowTimestamp().toEpochMilli().toULong(),
                 tags = tags,
                 paymentHash = null,
                 txId = txId,
-                address = addressString,
+                address = address,
                 isReceive = false,
                 feeRate = satsPerVByte.toULong(),
                 isTransfer = isTransfer,

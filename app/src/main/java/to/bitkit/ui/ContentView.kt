@@ -205,7 +205,7 @@ fun ContentView(
 
                     val pendingTransaction = NewTransactionSheetDetails.load(context)
                     if (pendingTransaction != null) {
-                        appViewModel.showNewTransactionSheet(details = pendingTransaction, event = null)
+                        appViewModel.showNewTransactionSheet(details = pendingTransaction)
                         NewTransactionSheetDetails.clear(context)
                     }
 

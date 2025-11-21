@@ -74,10 +74,10 @@ fun MoneyMSB(
 @Composable
 fun MoneyCaptionB(
     sats: Long,
+    modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     symbol: Boolean = false,
     symbolColor: Color = Colors.White64,
-    modifier: Modifier = Modifier,
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {

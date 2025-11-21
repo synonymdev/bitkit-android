@@ -49,6 +49,7 @@ import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.io.path.Path
@@ -680,86 +681,14 @@ class LightningService @Inject constructor(
                 return
             }
             val event = node.nextEventAsync()
-
+            Logger.debug("LDK-node event fired: ${jsonLogOf(event)}")
             try {
                 node.eventHandled()
-                Logger.debug("LDK eventHandled: $event")
+                Logger.verbose("LDK-node eventHandled: $event")
             } catch (e: NodeException) {
-                Logger.error("LDK eventHandled error", LdkError(e))
+                Logger.verbose("LDK eventHandled error: $event", LdkError(e))
             }
-
-            logEvent(event)
             onEvent?.invoke(event)
-        }
-    }
-
-    private fun logEvent(event: Event) {
-        when (event) {
-            is Event.PaymentSuccessful -> {
-                val paymentId = event.paymentId ?: "?"
-                val paymentHash = event.paymentHash
-                val feePaidMsat = event.feePaidMsat ?: 0
-                Logger.info(
-                    "✅ Payment successful: paymentId: $paymentId paymentHash: $paymentHash feePaidMsat: $feePaidMsat"
-                )
-            }
-
-            is Event.PaymentFailed -> {
-                val paymentId = event.paymentId ?: "?"
-                val paymentHash = event.paymentHash
-                val reason = event.reason
-                Logger.info("❌ Payment failed: paymentId: $paymentId paymentHash: $paymentHash reason: $reason")
-            }
-
-            is Event.PaymentReceived -> {
-                val paymentId = event.paymentId ?: "?"
-                val paymentHash = event.paymentHash
-                val amountMsat = event.amountMsat
-                Logger.info(
-                    "🤑 Payment received: paymentId: $paymentId paymentHash: $paymentHash amountMsat: $amountMsat"
-                )
-            }
-
-            is Event.PaymentClaimable -> {
-                val paymentId = event.paymentId
-                val paymentHash = event.paymentHash
-                val claimableAmountMsat = event.claimableAmountMsat
-                Logger.info(
-                    "🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"
-                )
-            }
-
-            is Event.PaymentForwarded -> Unit
-
-            is Event.ChannelPending -> {
-                val channelId = event.channelId
-                val userChannelId = event.userChannelId
-                val formerTemporaryChannelId = event.formerTemporaryChannelId
-                val counterpartyNodeId = event.counterpartyNodeId
-                val fundingTxo = event.fundingTxo
-                Logger.info(
-                    "⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"
-                )
-            }
-
-            is Event.ChannelReady -> {
-                val channelId = event.channelId
-                val userChannelId = event.userChannelId
-                val counterpartyNodeId = event.counterpartyNodeId ?: "?"
-                Logger.info(
-                    "👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"
-                )
-            }
-
-            is Event.ChannelClosed -> {
-                val channelId = event.channelId
-                val userChannelId = event.userChannelId
-                val counterpartyNodeId = event.counterpartyNodeId ?: "?"
-                val reason = event.reason?.toString() ?: ""
-                Logger.info(
-                    "⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"
-                )
-            }
         }
     }
     // endregion

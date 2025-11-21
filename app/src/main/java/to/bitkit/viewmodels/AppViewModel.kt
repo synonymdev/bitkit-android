@@ -226,7 +226,7 @@ class AppViewModel @Inject constructor(
 
                 launch(bgDispatcher) { walletRepo.syncNodeAndWallet() }
                 runCatching {
-                    when (event) { // TODO Create individual sheet for each type of event
+                    when (event) {
                         is Event.PaymentReceived -> {
                             showNewTransactionSheet(
                                 NewTransactionSheetDetails(
@@ -235,7 +235,7 @@ class AppViewModel @Inject constructor(
                                     paymentHashOrTxId = event.paymentHash,
                                     sats = (event.amountMsat / 1000u).toLong(),
                                 ),
-                                event = event
+                                event,
                             )
                         }
 
@@ -250,7 +250,7 @@ class AppViewModel @Inject constructor(
                                         direction = NewTransactionSheetDirection.RECEIVED,
                                         sats = amount,
                                     ),
-                                    event = event
+                                    event,
                                 )
                                 activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
                             } else {
@@ -267,7 +267,7 @@ class AppViewModel @Inject constructor(
 
                         is Event.PaymentSuccessful -> {
                             val paymentHash = event.paymentHash
-                            // TODO Temporary solution while LDK node don't returns the sent value in the event
+                            // TODO Temporary solution while LDK node doesn't return the sent value in the event
                             activityRepo.findActivityByPaymentId(
                                 paymentHashOrTxId = paymentHash,
                                 type = ActivityFilter.LIGHTNING,
@@ -283,13 +283,37 @@ class AppViewModel @Inject constructor(
                                     ),
                                 )
                             }.onFailure { e ->
-                                Logger.warn("Failed displaying sheet for event: $Event", e)
+                                Logger.warn("Failed displaying sheet for event: $event", e)
                             }
                         }
 
                         is Event.PaymentClaimable -> Unit
                         is Event.PaymentFailed -> Unit
                         is Event.PaymentForwarded -> Unit
+
+                        is Event.OnchainTransactionReceived -> {
+                            showNewTransactionSheet(
+                                NewTransactionSheetDetails(
+                                    type = NewTransactionSheetType.ONCHAIN,
+                                    direction = NewTransactionSheetDirection.RECEIVED,
+                                    paymentHashOrTxId = event.txid,
+                                    sats = event.details.amountSats.toLong(),
+                                ),
+                                event,
+                            )
+                        }
+
+                        is Event.OnchainTransactionConfirmed -> Unit
+                        is Event.SyncProgress -> Unit
+                        is Event.SyncCompleted -> Unit
+                        is Event.BalanceChanged -> Unit
+
+                        is Event.OnchainTransactionEvicted,
+                        is Event.OnchainTransactionReorged,
+                        is Event.OnchainTransactionReplaced,
+                            -> {
+                            // TODO handle activity removed from mempool UI & toast
+                        }
                     }
                 }.onFailure { e ->
                     Logger.error("LDK event handler error", e, context = TAG)
@@ -1324,9 +1348,7 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region TxSheet
-    var isNewTransactionSheetEnabled = true
-        private set
-
+    private var _isNewTransactionSheetEnabled = true
     private val _showNewTransaction = MutableStateFlow(false)
     val showNewTransaction: StateFlow<Boolean> = _showNewTransaction.asStateFlow()
 
@@ -1334,8 +1356,6 @@ class AppViewModel @Inject constructor(
         NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
             direction = NewTransactionSheetDirection.RECEIVED,
-            paymentHashOrTxId = null,
-            sats = 0
         )
     )
 
@@ -1345,25 +1365,23 @@ class AppViewModel @Inject constructor(
         NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
             direction = NewTransactionSheetDirection.SENT,
-            paymentHashOrTxId = null,
-            sats = 0
         )
     )
 
     val successSendUiState = _successSendUiState.asStateFlow()
 
     fun setNewTransactionSheetEnabled(enabled: Boolean) {
-        isNewTransactionSheetEnabled = enabled
+        _isNewTransactionSheetEnabled = enabled
     }
 
     fun showNewTransactionSheet(
         details: NewTransactionSheetDetails,
-        event: Event?,
+        event: Event? = null,
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
-        if (!isNewTransactionSheetEnabled) {
-            Logger.debug("NewTransactionSheet display blocked by isNewTransactionSheetEnabled=false", context = TAG)
+        if (!_isNewTransactionSheetEnabled) {
+            Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
         }
 
@@ -1385,13 +1403,11 @@ class AppViewModel @Inject constructor(
 
         hideSheet()
 
+        _showNewTransaction.update { true }
         _newTransaction.update { details }
-        _showNewTransaction.value = true
     }
 
-    fun hideNewTransactionSheet() {
-        _showNewTransaction.value = false
-    }
+    fun hideNewTransactionSheet() = _showNewTransaction.update { false }
     // endregion
 
     // region Sheets
