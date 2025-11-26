@@ -29,6 +29,7 @@ import com.synonym.bitkitcore.deleteActivityById
 import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
 import com.synonym.bitkitcore.getActivityById
+import com.synonym.bitkitcore.getActivityByTxId
 import com.synonym.bitkitcore.getAllClosedChannels
 import com.synonym.bitkitcore.getAllUniqueTags
 import com.synonym.bitkitcore.getCjitEntries
@@ -246,6 +247,10 @@ class ActivityService(
         return ServiceQueue.CORE.background {
             getActivityById(id)
         }
+    }
+
+    suspend fun getOnchainActivityByTxId(txId: String): OnchainActivity? = ServiceQueue.CORE.background {
+        getActivityByTxId(txId = txId)
     }
 
     suspend fun get(

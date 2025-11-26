@@ -1129,4 +1129,9 @@
     <string name="widgets__weather__current_fee">Current average fee</string>
     <string name="widgets__weather__next_block">Next block inclusion</string>
     <string name="widgets__weather__error">Couldn\'t get current fee weather</string>
+    <string name="notification_stop_app">Stop App</string>
+    <string name="notification_running_in_background">Bitkit is running in background so you can receive Lightning payments</string>
+    <string name="notification_received_title">Payment Received</string>
+    <string name="notification_received_body_hidden">Open Bitkit to see details</string>
+    <string name="notification_received_body_amount">Received %s</string>
 </resources>

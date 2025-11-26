@@ -141,26 +141,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 }
             }
 
-            is Event.OnchainTransactionReceived -> {
-                // TODO handle like onPaymentReceived but for onchain
-            }
-
-            is Event.OnchainTransactionConfirmed -> Unit
-
-            is Event.PaymentSuccessful -> Unit
-            is Event.PaymentClaimable -> Unit
-            is Event.PaymentForwarded -> Unit
-
-            is Event.SyncProgress -> Unit
-            is Event.SyncCompleted -> Unit
-            is Event.BalanceChanged -> Unit
-
-            is Event.OnchainTransactionEvicted,
-            is Event.OnchainTransactionReorged,
-            is Event.OnchainTransactionReplaced,
-                -> {
-                // TODO handle activity removed from mempool UI & toast
-            }
+            else -> Unit
         }
     }
 

@@ -38,9 +38,7 @@ class CurrentActivity : ActivityLifecycleCallbacks {
     var value: Activity? = null
         private set
 
-    override fun onActivityCreated(activity: Activity, bundle: Bundle?) {
-        this.value = activity
-    }
+    override fun onActivityCreated(activity: Activity, bundle: Bundle?) = Unit
 
     override fun onActivityStarted(activity: Activity) {
         this.value = activity
@@ -51,8 +49,15 @@ class CurrentActivity : ActivityLifecycleCallbacks {
     }
 
     override fun onActivityPaused(activity: Activity) = Unit
-    override fun onActivityStopped(activity: Activity) = Unit
+
+    override fun onActivityStopped(activity: Activity) {
+        if (this.value == activity) this.value = null
+    }
+
     override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
-    override fun onActivityDestroyed(activity: Activity) = Unit
+
+    override fun onActivityDestroyed(activity: Activity) {
+        if (this.value == activity) this.value = null
+    }
 }
 // endregion

@@ -292,15 +292,22 @@ class AppViewModel @Inject constructor(
                         is Event.PaymentForwarded -> Unit
 
                         is Event.OnchainTransactionReceived -> {
-                            showNewTransactionSheet(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.ONCHAIN,
-                                    direction = NewTransactionSheetDirection.RECEIVED,
-                                    paymentHashOrTxId = event.txid,
-                                    sats = event.details.amountSats.toLong(),
-                                ),
-                                event,
-                            )
+                            val sats = event.details.amountSats
+                            launch(bgDispatcher) {
+                                delay(500)
+                                val shouldShow = activityRepo.shouldShowPaymentReceived(event.txid, sats.toULong())
+                                if (!shouldShow) return@launch
+
+                                showNewTransactionSheet(
+                                    NewTransactionSheetDetails(
+                                        type = NewTransactionSheetType.ONCHAIN,
+                                        direction = NewTransactionSheetDirection.RECEIVED,
+                                        paymentHashOrTxId = event.txid,
+                                        sats = sats,
+                                    ),
+                                    event,
+                                )
+                            }
                         }
 
                         is Event.OnchainTransactionConfirmed -> Unit
@@ -308,12 +315,9 @@ class AppViewModel @Inject constructor(
                         is Event.SyncCompleted -> Unit
                         is Event.BalanceChanged -> Unit
 
-                        is Event.OnchainTransactionEvicted,
-                        is Event.OnchainTransactionReorged,
-                        is Event.OnchainTransactionReplaced,
-                            -> {
-                            // TODO handle activity removed from mempool UI & toast
-                        }
+                        is Event.OnchainTransactionEvicted -> Unit
+                        is Event.OnchainTransactionReorged -> Unit
+                        is Event.OnchainTransactionReplaced -> Unit
                     }
                 }.onFailure { e ->
                     Logger.error("LDK event handler error", e, context = TAG)

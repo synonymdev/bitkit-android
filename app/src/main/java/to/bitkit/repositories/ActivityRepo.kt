@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
@@ -189,6 +190,42 @@ class ActivityRepo @Inject constructor(
             )
             null
         }
+    }
+
+    private suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? {
+        return coreService.activity.getOnchainActivityByTxId(txid)
+    }
+
+    /**
+     * Determines whether to show the payment received UI for an onchain transaction.
+     * Returns false for:
+     * - Zero value transactions
+     * - Channel closure transactions (transfers to savings)
+     * - RBF replacement transactions with the same value as the original
+     */
+    suspend fun shouldShowPaymentReceived(txid: String, value: ULong): Boolean = withContext(bgDispatcher) {
+        if (value == 0uL) return@withContext false
+
+        if (findClosedChannelForTransaction(txid) != null) {
+            Logger.debug("Skipping payment received UI for channel closure tx: $txid", context = TAG)
+            return@withContext false
+        }
+
+        val onchainActivity = getOnchainActivityByTxId(txid)
+        if (onchainActivity != null && onchainActivity.boostTxIds.isNotEmpty()) {
+            for (replacedTxid in onchainActivity.boostTxIds) {
+                val replacedActivity = getOnchainActivityByTxId(replacedTxid)
+                if (replacedActivity != null && replacedActivity.value == value) {
+                    Logger.info(
+                        "Skipping payment received UI for RBF replacement $txid with same value as $replacedTxid",
+                        context = TAG
+                    )
+                    return@withContext false
+                }
+            }
+        }
+
+        return@withContext true
     }
 
     /**
