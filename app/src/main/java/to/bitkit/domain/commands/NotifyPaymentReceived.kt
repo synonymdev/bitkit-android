@@ -34,12 +34,13 @@ sealed interface NotifyPaymentReceived {
 
                     is Event.OnchainTransactionReceived -> {
                         val amountSats = event.details.amountSats
-                        if (amountSats <= 0) null
-                        else Onchain(
+                        Onchain(
                             sats = amountSats.toULong(),
                             paymentId = event.txid,
                             includeNotification = includeNotification,
-                        )
+                        ).takeIf {
+                            amountSats > 0
+                        }
                     }
 
                     else -> null

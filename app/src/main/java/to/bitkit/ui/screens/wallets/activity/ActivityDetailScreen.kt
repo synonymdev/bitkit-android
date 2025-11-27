@@ -189,6 +189,7 @@ fun ActivityDetailScreen(
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun ActivityDetailContent(
     item: Activity,

@@ -119,7 +119,7 @@ fun SendRecipientScreen(
             Image(
                 painter = painterResource(R.drawable.coin_stack_logo),
                 contentDescription = null,
-                contentScale = ContentScale.Companion.FillWidth,
+                contentScale = ContentScale.FillWidth,
                 modifier = Modifier.fillMaxWidth()
             )
         }

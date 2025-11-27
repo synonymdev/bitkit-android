@@ -25,9 +25,9 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.doesExist
-import to.bitkit.ext.isBoosted
-import to.bitkit.ext.isFinished
+import to.bitkit.ext.isBoosting
 import to.bitkit.ext.isTransfer
+import to.bitkit.ext.paymentState
 import to.bitkit.ext.txType
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -39,15 +39,13 @@ fun ActivityIcon(
     modifier: Modifier = Modifier,
 ) {
     val isLightning = activity is Activity.Lightning
-    val status: PaymentState? = when (activity) {
-        is Activity.Lightning -> activity.v1.status
-        is Activity.Onchain -> null
-    }
-    val txType: PaymentType = activity.txType()
+    val isBoosting = activity.isBoosting()
+    val status = activity.paymentState()
+    val txType = activity.txType()
     val arrowIcon = painterResource(if (txType == PaymentType.SENT) R.drawable.ic_sent else R.drawable.ic_received)
 
     when {
-        activity.isBoosted() && !activity.isFinished() && activity.doesExist() -> {
+        isBoosting -> {
             CircularIcon(
                 icon = painterResource(R.drawable.ic_timer_alt),
                 iconColor = Colors.Yellow,
@@ -57,57 +55,71 @@ fun ActivityIcon(
             )
         }
 
-        isLightning -> {
-            when (status) {
-                PaymentState.FAILED -> {
-                    CircularIcon(
-                        icon = painterResource(R.drawable.ic_x),
-                        iconColor = Colors.Purple,
-                        backgroundColor = Colors.Purple16,
-                        size = size,
-                        modifier = modifier,
-                    )
-                }
+        isLightning -> ActivityIconLightning(status, size, arrowIcon, modifier)
+        else -> ActivityIconOnchain(activity, arrowIcon, size, modifier)
+    }
+}
 
-                PaymentState.PENDING -> {
-                    CircularIcon(
-                        icon = painterResource(R.drawable.ic_hourglass_simple),
-                        iconColor = Colors.Purple,
-                        backgroundColor = Colors.Purple16,
-                        size = size,
-                        modifier = modifier,
-                    )
-                }
+@Composable
+private fun ActivityIconOnchain(
+    activity: Activity,
+    arrowIcon: Painter,
+    size: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val isTransfer = activity.isTransfer()
+    val isTransferFromSpending = isTransfer && activity.txType() == PaymentType.RECEIVED
+    val transferIconColor = if (isTransferFromSpending) Colors.Purple else Colors.Brand
+    val transferBackgroundColor = if (isTransferFromSpending) Colors.Purple16 else Colors.Brand16
 
-                else -> {
-                    CircularIcon(
-                        icon = arrowIcon,
-                        iconColor = Colors.Purple,
-                        backgroundColor = Colors.Purple16,
-                        size = size,
-                        modifier = modifier,
-                    )
-                }
-            }
+    CircularIcon(
+        icon = when {
+            !activity.doesExist() -> painterResource(R.drawable.ic_x)
+            isTransfer -> painterResource(R.drawable.ic_transfer)
+            else -> arrowIcon
+        },
+        iconColor = if (isTransfer) transferIconColor else Colors.Brand,
+        backgroundColor = if (isTransfer) transferBackgroundColor else Colors.Brand16,
+        size = size,
+        modifier = modifier.testTag(if (isTransfer) "TransferIcon" else "ActivityIcon"),
+    )
+}
+
+@Composable
+private fun ActivityIconLightning(
+    status: PaymentState?,
+    size: Dp,
+    arrowIcon: Painter,
+    modifier: Modifier = Modifier,
+) {
+    when (status) {
+        PaymentState.FAILED -> {
+            CircularIcon(
+                icon = painterResource(R.drawable.ic_x),
+                iconColor = Colors.Purple,
+                backgroundColor = Colors.Purple16,
+                size = size,
+                modifier = modifier,
+            )
         }
 
-        // onchain
-        else -> {
-            val isTransfer = activity.isTransfer()
-            val isTransferFromSpending = isTransfer && activity.txType() == PaymentType.RECEIVED
-            val transferIconColor = if (isTransferFromSpending) Colors.Purple else Colors.Brand
-            val transferBackgroundColor = if (isTransferFromSpending) Colors.Purple16 else Colors.Brand16
-
+        PaymentState.PENDING -> {
             CircularIcon(
-                icon = when {
-                    !activity.doesExist() -> painterResource(R.drawable.ic_x)
-                    isTransfer -> painterResource(R.drawable.ic_transfer)
-                    else -> arrowIcon
-                },
-                iconColor = if (isTransfer) transferIconColor else Colors.Brand,
-                backgroundColor = if (isTransfer) transferBackgroundColor else Colors.Brand16,
+                icon = painterResource(R.drawable.ic_hourglass_simple),
+                iconColor = Colors.Purple,
+                backgroundColor = Colors.Purple16,
                 size = size,
-                modifier = modifier.testTag(if (isTransfer) "TransferIcon" else "ActivityIcon"),
+                modifier = modifier,
+            )
+        }
+
+        else -> {
+            CircularIcon(
+                icon = arrowIcon,
+                iconColor = Colors.Purple,
+                backgroundColor = Colors.Purple16,
+                size = size,
+                modifier = modifier,
             )
         }
     }
@@ -122,7 +134,7 @@ fun CircularIcon(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        contentAlignment = Alignment.Companion.Center,
+        contentAlignment = Alignment.Center,
         modifier = modifier
             .size(size)
             .background(backgroundColor, CircleShape)

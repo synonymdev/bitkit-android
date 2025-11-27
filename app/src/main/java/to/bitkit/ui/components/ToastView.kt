@@ -26,16 +26,18 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush.Companion.verticalGradient
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.Toast
+import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -44,21 +46,8 @@ fun ToastView(
     toast: Toast,
     onDismiss: () -> Unit,
 ) {
-    val tintColor = when (toast.type) {
-        Toast.ToastType.SUCCESS -> Colors.Green
-        Toast.ToastType.INFO -> Colors.Blue
-        Toast.ToastType.LIGHTNING -> Colors.Purple
-        Toast.ToastType.WARNING -> Colors.Brand
-        Toast.ToastType.ERROR -> Colors.Red
-    }
-
-    val gradientColor = when (toast.type) {
-        Toast.ToastType.SUCCESS -> Color(0XFF1D2F1C)
-        Toast.ToastType.INFO -> Color(0XFF032E56)
-        Toast.ToastType.LIGHTNING -> Color(0XFF2B1637)
-        Toast.ToastType.WARNING -> Color(0XFF3C1001)
-        Toast.ToastType.ERROR -> Color(0XFF491F25)
-    }
+    val tintColor = toast.tintColor()
+    val gradientColor = toast.gradientColor()
 
     Box(
         contentAlignment = Alignment.CenterStart,
@@ -140,7 +129,7 @@ fun ToastOverlay(
 @Composable
 private fun ToastViewPreview() {
     AppThemeSurface {
-        Column(
+        ScreenColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ToastView(
@@ -188,4 +177,25 @@ private fun ToastViewPreview() {
             )
         }
     }
+}
+
+@Suppress("MagicNumber")
+@ReadOnlyComposable
+@Composable
+private fun Toast.gradientColor(): Color = when (type) {
+    Toast.ToastType.SUCCESS -> Color(0XFF1D2F1C)
+    Toast.ToastType.INFO -> Color(0XFF032E56)
+    Toast.ToastType.LIGHTNING -> Color(0XFF2B1637)
+    Toast.ToastType.WARNING -> Color(0XFF3C1001)
+    Toast.ToastType.ERROR -> Color(0XFF491F25)
+}
+
+@ReadOnlyComposable
+@Composable
+private fun Toast.tintColor(): Color = when (type) {
+    Toast.ToastType.SUCCESS -> Colors.Green
+    Toast.ToastType.INFO -> Colors.Blue
+    Toast.ToastType.LIGHTNING -> Colors.Purple
+    Toast.ToastType.WARNING -> Colors.Brand
+    Toast.ToastType.ERROR -> Colors.Red
 }

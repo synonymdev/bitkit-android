@@ -223,6 +223,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun observeLdkNodeEvents() {
         viewModelScope.launch {
             ldkNodeEventBus.events.collect { event ->
@@ -231,83 +232,70 @@ class AppViewModel @Inject constructor(
                 launch(bgDispatcher) { walletRepo.syncNodeAndWallet() }
                 runCatching {
                     when (event) {
-                        is Event.PaymentReceived -> {
-                            NotifyPaymentReceived.Command.from(event)?.let { handlePaymentReceived(it, event) }
-                        }
-
-                        is Event.ChannelReady -> notifyChannelReady(event)
-
-                        is Event.ChannelPending -> Unit
-                        is Event.ChannelClosed -> Unit
-
-                        is Event.PaymentSuccessful -> notifyPaymentSentOnLightning(event)
-
-                        is Event.PaymentClaimable -> Unit
-                        is Event.PaymentFailed -> {
-                            toast(
-                                type = Toast.ToastType.ERROR,
-                                title = context.getString(R.string.wallet__toast_payment_failed_title),
-                                description = context.getString(R.string.wallet__toast_payment_failed_description),
-                                testTag = "PaymentFailedToast",
-                            )
-                        }
-                        is Event.PaymentForwarded -> Unit
-
-                        is Event.OnchainTransactionReceived -> {
-                            NotifyPaymentReceived.Command.from(event)?.let { handlePaymentReceived(it, event) }
-                        }
-
-                        is Event.OnchainTransactionConfirmed -> Unit
-                        is Event.SyncProgress -> Unit
-                        is Event.SyncCompleted -> Unit
                         is Event.BalanceChanged -> Unit
-
-                        is Event.OnchainTransactionEvicted -> {
-                            viewModelScope.launch(bgDispatcher) {
-                                if (!activityRepo.wasTransactionReplaced(event.txid)) {
-                                    toast(
-                                        type = Toast.ToastType.WARNING,
-                                        title = context.getString(R.string.wallet__toast_transaction_removed_title),
-                                        description = context.getString(R.string.wallet__toast_transaction_removed_description),
-                                        testTag = "TransactionRemovedToast",
-                                    )
-                                }
-                            }
-                        }
-
-                        is Event.OnchainTransactionReorged -> {
-                            toast(
-                                type = Toast.ToastType.WARNING,
-                                title = context.getString(R.string.wallet__toast_transaction_unconfirmed_title),
-                                description = context.getString(R.string.wallet__toast_transaction_unconfirmed_description),
-                                testTag = "TransactionUnconfirmedToast",
-                            )
-                        }
-
-                        is Event.OnchainTransactionReplaced -> {
-                            viewModelScope.launch(bgDispatcher) {
-                                if (activityRepo.isReceivedTransaction(event.txid)) {
-                                    toast(
-                                        type = Toast.ToastType.INFO,
-                                        title = context.getString(R.string.wallet__toast_received_transaction_replaced_title),
-                                        description = context.getString(R.string.wallet__toast_received_transaction_replaced_description),
-                                        testTag = "ReceivedTransactionReplacedToast",
-                                    )
-                                } else {
-                                    toast(
-                                        type = Toast.ToastType.INFO,
-                                        title = context.getString(R.string.wallet__toast_transaction_replaced_title),
-                                        description = context.getString(R.string.wallet__toast_transaction_replaced_description),
-                                        testTag = "TransactionReplacedToast",
-                                    )
-                                }
-                            }
-                        }
+                        is Event.ChannelClosed -> Unit
+                        is Event.ChannelPending -> Unit
+                        is Event.ChannelReady -> notifyChannelReady(event)
+                        is Event.OnchainTransactionConfirmed -> Unit
+                        is Event.OnchainTransactionEvicted -> notifyTransactionRemoved(event)
+                        is Event.OnchainTransactionReceived -> notifyPaymentReceived(event)
+                        is Event.OnchainTransactionReorged -> notifyTransactionUnconfirmed()
+                        is Event.OnchainTransactionReplaced -> notifyTransactionReplaced(event)
+                        is Event.PaymentClaimable -> Unit
+                        is Event.PaymentFailed -> notifyPaymentFailed()
+                        is Event.PaymentForwarded -> Unit
+                        is Event.PaymentReceived -> notifyPaymentReceived(event)
+                        is Event.PaymentSuccessful -> notifyPaymentSentOnLightning(event)
+                        is Event.SyncCompleted -> Unit
+                        is Event.SyncProgress -> Unit
                     }
                 }.onFailure { e ->
                     Logger.error("LDK event handler error", e, context = TAG)
                 }
             }
+        }
+    }
+
+    private fun notifyPaymentFailed() = toast(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.wallet__toast_payment_failed_title),
+        description = context.getString(R.string.wallet__toast_payment_failed_description),
+        testTag = "PaymentFailedToast",
+    )
+
+    private fun notifyTransactionUnconfirmed() = toast(
+        type = Toast.ToastType.WARNING,
+        title = context.getString(R.string.wallet__toast_transaction_unconfirmed_title),
+        description = context.getString(R.string.wallet__toast_transaction_unconfirmed_description),
+        testTag = "TransactionUnconfirmedToast",
+    )
+
+    private fun notifyTransactionRemoved(event: Event.OnchainTransactionEvicted) = viewModelScope.launch {
+        if (!activityRepo.wasTransactionReplaced(event.txid)) {
+            toast(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.wallet__toast_transaction_removed_title),
+                description = context.getString(R.string.wallet__toast_transaction_removed_description),
+                testTag = "TransactionRemovedToast",
+            )
+        }
+    }
+
+    private fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) = viewModelScope.launch {
+        if (activityRepo.isReceivedTransaction(event.txid)) {
+            toast(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.wallet__toast_received_transaction_replaced_title),
+                description = context.getString(R.string.wallet__toast_received_transaction_replaced_description),
+                testTag = "ReceivedTransactionReplacedToast",
+            )
+        } else {
+            toast(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.wallet__toast_transaction_replaced_title),
+                description = context.getString(R.string.wallet__toast_transaction_replaced_description),
+                testTag = "TransactionReplacedToast",
+            )
         }
     }
 
@@ -356,14 +344,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun handlePaymentReceived(
-        receivedEvent: NotifyPaymentReceived.Command,
-        originalEvent: Event,
-    ) {
+    private fun notifyPaymentReceived(event: Event) {
+        val command = NotifyPaymentReceived.Command.from(event) ?: return
         viewModelScope.launch(bgDispatcher) {
-            notifyPaymentReceivedHandler(receivedEvent).onSuccess { result ->
+            notifyPaymentReceivedHandler(command).onSuccess { result ->
                 if (result is NotifyPaymentReceived.Result.ShowSheet) {
-                    showNewTransactionSheet(result.details, originalEvent)
+                    showNewTransactionSheet(result.details, event)
                 }
             }
         }

@@ -27,7 +27,7 @@ fun EmptyActivityRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        verticalAlignment = Alignment.Companion.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 16.dp)

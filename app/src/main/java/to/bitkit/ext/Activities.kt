@@ -48,6 +48,8 @@ fun Activity.isFinished() = when (this) {
     is Activity.Lightning -> v1.status != PaymentState.PENDING
 }
 
+fun Activity.isBoosting(): Boolean = isBoosted() && !isFinished() && doesExist()
+
 fun Activity.isSent() = when (this) {
     is Activity.Lightning -> v1.txType == PaymentType.SENT
     is Activity.Onchain -> v1.txType == PaymentType.SENT
@@ -61,6 +63,11 @@ fun Activity.matchesPaymentId(paymentHashOrTxId: String): Boolean = when (this) 
 fun Activity.isTransfer() = this is Activity.Onchain && this.v1.isTransfer
 
 fun Activity.doesExist() = this is Activity.Onchain && this.v1.doesExist
+
+fun Activity.paymentState(): PaymentState? = when (this) {
+    is Activity.Lightning -> this.v1.status
+    is Activity.Onchain -> null
+}
 
 fun Activity.Onchain.boostType() = when (this.v1.txType) {
     PaymentType.SENT -> BoostType.RBF
