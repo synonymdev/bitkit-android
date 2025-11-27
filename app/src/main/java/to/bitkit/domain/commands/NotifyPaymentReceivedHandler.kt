@@ -19,6 +19,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,7 +35,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         command: NotifyPaymentReceived.Command,
     ): Result<NotifyPaymentReceived.Result> = withContext(ioDispatcher) {
         runCatching {
-            delay(DELAY_MS)
+            delay(DELAY_FOR_ACTIVITY_SYNC_MS)
 
             val shouldShow = when (command) {
                 is NotifyPaymentReceived.Command.Lightning -> true
@@ -62,6 +63,8 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             } else {
                 NotifyPaymentReceived.Result.ShowSheet(details)
             }
+        }.onFailure { e ->
+            Logger.error("Failed to process payment notification", e, context = TAG)
         }
     }
 
@@ -93,6 +96,6 @@ class NotifyPaymentReceivedHandler @Inject constructor(
 
     companion object {
         const val TAG = "NotifyPaymentReceivedHandler"
-        private const val DELAY_MS = 500L
+        private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
     }
 }

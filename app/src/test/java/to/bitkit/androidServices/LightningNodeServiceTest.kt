@@ -11,7 +11,6 @@ import dagger.hilt.android.testing.BindValue
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -27,7 +26,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
@@ -46,7 +44,6 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.test.BaseUnitTest
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltAndroidTest
 @Config(application = HiltTestApplication::class)
 @RunWith(RobolectricTestRunner::class)
@@ -98,10 +95,9 @@ class LightningNodeServiceTest : BaseUnitTest() {
                 title = context.getString(R.string.notification_received_title),
                 body = "Received ₿ 100 ($0.10)",
             )
-            wheneverBlocking { notifyPaymentReceivedHandler.invoke(any()) }
-                .thenReturn(
-                    Result.success(NotifyPaymentReceived.Result.ShowNotification(defaultDetails, defaultNotification))
-                )
+            whenever(notifyPaymentReceivedHandler.invoke(any())).thenReturn(
+                Result.success(NotifyPaymentReceived.Result.ShowNotification(defaultDetails, defaultNotification))
+            )
 
             // Grant permissions for notifications
             val app = context as Application

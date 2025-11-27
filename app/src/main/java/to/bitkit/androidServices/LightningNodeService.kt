@@ -76,15 +76,13 @@ class LightningNodeService : Service() {
     }
 
     private suspend fun handleBackgroundEvent(event: Event) {
-        if (App.currentActivity?.value != null) return
-
         val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
 
         notifyPaymentReceivedHandler(command).onSuccess { result ->
-            if (result is NotifyPaymentReceived.Result.ShowNotification) {
-                if (App.currentActivity?.value != null) return@onSuccess
-                showPaymentNotification(result.details, result.notification)
-            }
+            if (result !is NotifyPaymentReceived.Result.ShowNotification) return@onSuccess
+            if (App.currentActivity?.value != null) return@onSuccess
+
+            showPaymentNotification(result.details, result.notification)
         }
     }
 
