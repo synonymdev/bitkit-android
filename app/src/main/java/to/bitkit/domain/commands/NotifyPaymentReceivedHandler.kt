@@ -39,12 +39,13 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             val shouldShow = when (command) {
                 is NotifyPaymentReceived.Command.Lightning -> true
                 is NotifyPaymentReceived.Command.Onchain -> {
-                    activityRepo.shouldShowPaymentReceived(command.paymentId, command.sats.toULong())
+                    activityRepo.shouldShowPaymentReceived(command.paymentId, command.sats)
                 }
             }
 
             if (!shouldShow) return@runCatching NotifyPaymentReceived.Result.Skip
 
+            val satsLong = command.sats.toLong()
             val details = NewTransactionSheetDetails(
                 type = when (command) {
                     is NotifyPaymentReceived.Command.Lightning -> NewTransactionSheetType.LIGHTNING
@@ -52,11 +53,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
                 },
                 direction = NewTransactionSheetDirection.RECEIVED,
                 paymentHashOrTxId = command.paymentId,
-                sats = command.sats,
+                sats = satsLong,
             )
 
             if (command.includeNotification) {
-                val notification = buildNotificationContent(command.sats)
+                val notification = buildNotificationContent(satsLong)
                 NotifyPaymentReceived.Result.ShowNotification(details, notification)
             } else {
                 NotifyPaymentReceived.Result.ShowSheet(details)

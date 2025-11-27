@@ -229,6 +229,25 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
+     * Checks if a transaction is inbound (received) by looking up the payment direction.
+     */
+    suspend fun isReceivedTransaction(txid: String): Boolean = withContext(bgDispatcher) {
+        lightningRepo.getPayments().getOrNull()?.let { payments ->
+            payments.firstOrNull { payment ->
+                (payment.kind as? PaymentKind.Onchain)?.txid == txid
+            }
+        }?.direction == PaymentDirection.INBOUND
+    }
+
+    /**
+     * Checks if a transaction was replaced (RBF) by checking if the activity exists but doesExist=false.
+     */
+    suspend fun wasTransactionReplaced(txid: String): Boolean = withContext(bgDispatcher) {
+        val onchainActivity = getOnchainActivityByTxId(txid) ?: return@withContext false
+        return@withContext !onchainActivity.doesExist
+    }
+
+    /**
      * Gets a specific activity by payment hash or txID with retry logic
      */
     suspend fun findActivityByPaymentId(

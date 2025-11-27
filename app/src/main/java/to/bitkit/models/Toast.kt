@@ -6,6 +6,7 @@ data class Toast(
     val description: String? = null,
     val autoHide: Boolean,
     val visibilityTime: Long = VISIBILITY_TIME_DEFAULT,
+    val testTag: String? = null,
 ) {
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
 

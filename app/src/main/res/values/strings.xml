@@ -952,6 +952,14 @@
     <string name="wallet__toast_payment_success_description">Your instant payment was sent successfully.</string>
     <string name="wallet__toast_payment_failed_title">Payment Failed</string>
     <string name="wallet__toast_payment_failed_description">Your instant payment failed. Please try again.</string>
+    <string name="wallet__toast_received_transaction_replaced_title">Received Transaction Replaced</string>
+    <string name="wallet__toast_received_transaction_replaced_description">Your received transaction was replaced by a fee bump</string>
+    <string name="wallet__toast_transaction_removed_title">Transaction Removed</string>
+    <string name="wallet__toast_transaction_removed_description">Transaction was removed from mempool</string>
+    <string name="wallet__toast_transaction_replaced_title">Transaction Replaced</string>
+    <string name="wallet__toast_transaction_replaced_description">Your transaction was replaced by a fee bump</string>
+    <string name="wallet__toast_transaction_unconfirmed_title">Transaction Unconfirmed</string>
+    <string name="wallet__toast_transaction_unconfirmed_description">Transaction became unconfirmed due to blockchain reorganization</string>
     <string name="wallet__selection_title">Coin Selection</string>
     <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_total_required">Total required</string>

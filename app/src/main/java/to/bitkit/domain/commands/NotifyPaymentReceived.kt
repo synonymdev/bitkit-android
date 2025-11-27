@@ -7,18 +7,18 @@ import to.bitkit.models.NotificationState
 sealed interface NotifyPaymentReceived {
 
     sealed interface Command : NotifyPaymentReceived {
-        val sats: Long
+        val sats: ULong
         val paymentId: String
         val includeNotification: Boolean
 
         data class Lightning(
-            override val sats: Long,
+            override val sats: ULong,
             override val paymentId: String,
             override val includeNotification: Boolean = false,
         ) : Command
 
         data class Onchain(
-            override val sats: Long,
+            override val sats: ULong,
             override val paymentId: String,
             override val includeNotification: Boolean = false,
         ) : Command
@@ -27,16 +27,20 @@ sealed interface NotifyPaymentReceived {
             fun from(event: Event, includeNotification: Boolean = false): Command? =
                 when (event) {
                     is Event.PaymentReceived -> Lightning(
-                        sats = (event.amountMsat / 1000u).toLong(),
+                        sats = event.amountMsat / 1000u,
                         paymentId = event.paymentHash,
                         includeNotification = includeNotification,
                     )
 
-                    is Event.OnchainTransactionReceived -> Onchain(
-                        sats = event.details.amountSats,
-                        paymentId = event.txid,
-                        includeNotification = includeNotification,
-                    )
+                    is Event.OnchainTransactionReceived -> {
+                        val amountSats = event.details.amountSats
+                        if (amountSats <= 0) null
+                        else Onchain(
+                            sats = amountSats.toULong(),
+                            paymentId = event.txid,
+                            includeNotification = includeNotification,
+                        )
+                    }
 
                     else -> null
                 }

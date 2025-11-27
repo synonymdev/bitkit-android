@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush.Companion.verticalGradient
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -68,6 +69,7 @@ fun ToastView(
             .background(verticalGradient(listOf(gradientColor, Color.Black), startY = 0f), RoundedCornerShape(8.dp))
             .border(1.dp, tintColor, RoundedCornerShape(8.dp))
             .padding(16.dp)
+            .then(toast.testTag?.let { Modifier.testTag(it) } ?: Modifier),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
