@@ -13,13 +13,11 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import dagger.hilt.android.testing.HiltTestApplication
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -29,6 +27,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.wheneverBlocking
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
@@ -36,18 +35,16 @@ import org.robolectric.annotation.Config
 import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.R
-import to.bitkit.data.SettingsData
-import to.bitkit.data.SettingsStore
-import to.bitkit.models.ConvertedAmount
+import to.bitkit.domain.commands.NotifyPaymentReceived
+import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.repositories.ActivityRepo
-import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NotificationState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.services.CoreService
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.test.BaseUnitTest
-import java.math.BigDecimal
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltAndroidTest
@@ -75,19 +72,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
 
     @BindValue
     @JvmField
-    val settingsStore: SettingsStore = mock()
-
-    @BindValue
-    @JvmField
-    val coreService: CoreService = mock()
-
-    @BindValue
-    @JvmField
-    val activityRepo: ActivityRepo = mock()
-
-    @BindValue
-    @JvmField
-    val currencyRepo: CurrencyRepo = mock()
+    val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler = mock()
 
     private val eventsFlow = MutableSharedFlow<Event>()
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -97,28 +82,26 @@ class LightningNodeServiceTest : BaseUnitTest() {
         runBlocking {
             hiltRule.inject()
             whenever(ldkNodeEventBus.events).thenReturn(eventsFlow)
-            whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = true)))
             whenever(lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(
                 Result.success(Unit)
             )
             whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
 
-            // Mock CurrencyRepo to return a ConvertedAmount
-            whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
-                Result.success(
-                    ConvertedAmount(
-                        value = BigDecimal("0.10"),
-                        formatted = "0.10",
-                        symbol = "$",
-                        currency = "USD",
-                        flag = "🇺🇸",
-                        sats = 100L
-                    )
-                )
+            // Mock NotifyPaymentReceivedHandler to return ShowNotification result
+            val defaultDetails = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "test_hash",
+                sats = 100L,
             )
-
-            // Mock ActivityRepo for onchain
-            whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(true)
+            val defaultNotification = NotificationState(
+                title = context.getString(R.string.notification_received_title),
+                body = "Received ₿ 100 ($0.10)",
+            )
+            wheneverBlocking { notifyPaymentReceivedHandler.invoke(any()) }
+                .thenReturn(
+                    Result.success(NotifyPaymentReceived.Result.ShowNotification(defaultDetails, defaultNotification))
+                )
 
             // Grant permissions for notifications
             val app = context as Application
@@ -196,7 +179,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
     }
 
     @Test
-    fun `notification body contains formatted amount with fiat`() = test {
+    fun `notification uses content from use case result`() = test {
         val controller = Robolectric.buildService(LightningNodeService::class.java)
         controller.create().startCommand(0, 0)
 
@@ -219,8 +202,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
         assertNotNull("Payment notification should be present", paymentNotification)
 
         val body = paymentNotification?.extras?.getString(Notification.EXTRA_TEXT)
-        assertNotNull("Notification body should not be null", body)
-        assertTrue("Notification body should contain fiat amount", body!!.contains("$"))
-        assertTrue("Notification body should contain bitcoin symbol", body.contains("₿"))
+        assertEquals("Received ₿ 100 (\$0.10)", body)
     }
 }

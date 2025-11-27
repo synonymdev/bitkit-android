@@ -11,22 +11,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
-import to.bitkit.data.SettingsData
-import to.bitkit.data.SettingsStore
-import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.domain.commands.NotifyPaymentReceived
+import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.NewTransactionSheetDetails
-import to.bitkit.models.NewTransactionSheetDirection
-import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.PrimaryDisplay
-import to.bitkit.models.formatToModernDisplay
-import to.bitkit.repositories.ActivityRepo
-import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.models.NotificationState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
@@ -34,7 +26,6 @@ import to.bitkit.ui.MainActivity
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import javax.inject.Inject
-import kotlin.time.Duration.Companion.seconds
 
 @AndroidEntryPoint
 class LightningNodeService : Service() {
@@ -51,13 +42,7 @@ class LightningNodeService : Service() {
     lateinit var ldkNodeEventBus: LdkNodeEventBus
 
     @Inject
-    lateinit var settingsStore: SettingsStore
-
-    @Inject
-    lateinit var activityRepo: ActivityRepo
-
-    @Inject
-    lateinit var currencyRepo: CurrencyRepo
+    lateinit var notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler
 
     override fun onCreate() {
         super.onCreate()
@@ -91,62 +76,25 @@ class LightningNodeService : Service() {
     }
 
     private suspend fun handleBackgroundEvent(event: Event) {
-        delay(0.5.seconds) // Small delay to allow lifecycle callbacks to settle after app backgrounding
         if (App.currentActivity?.value != null) return
 
-        when (event) {
-            is Event.PaymentReceived -> {
-                val sats = event.amountMsat / 1000u
-                showPaymentNotification(sats.toLong(), event.paymentHash, isOnchain = false)
+        val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
+
+        notifyPaymentReceivedHandler(command).onSuccess { result ->
+            if (result is NotifyPaymentReceived.Result.ShowNotification) {
+                if (App.currentActivity?.value != null) return@onSuccess
+                showPaymentNotification(result.details, result.notification)
             }
-
-            is Event.OnchainTransactionReceived -> {
-                val sats = event.details.amountSats
-                val shouldShow = activityRepo.shouldShowPaymentReceived(event.txid, sats.toULong())
-                if (!shouldShow) return
-
-                showPaymentNotification(sats, event.txid, isOnchain = true)
-            }
-
-            else -> Unit
         }
     }
 
-    private suspend fun showPaymentNotification(sats: Long, paymentHashOrTxId: String?, isOnchain: Boolean) {
+    private fun showPaymentNotification(
+        details: NewTransactionSheetDetails,
+        notification: NotificationState,
+    ) {
         if (App.currentActivity?.value != null) return
-
-        val settings = settingsStore.data.first()
-        val type = if (isOnchain) NewTransactionSheetType.ONCHAIN else NewTransactionSheetType.LIGHTNING
-        val direction = NewTransactionSheetDirection.RECEIVED
-
-        NewTransactionSheetDetails.save(
-            this,
-            NewTransactionSheetDetails(type, direction, paymentHashOrTxId, sats)
-        )
-
-        val title = getString(R.string.notification_received_title)
-        val body = if (settings.showNotificationDetails) {
-            formatNotificationAmount(sats, settings)
-        } else {
-            getString(R.string.notification_received_body_hidden)
-        }
-
-        pushNotification(title, body, context = this)
-    }
-
-    private fun formatNotificationAmount(sats: Long, settings: SettingsData): String {
-        val converted = currencyRepo.convertSatsToFiat(sats).getOrNull()
-
-        val amountText = converted?.let {
-            val btcDisplay = it.bitcoinDisplay(settings.displayUnit)
-            if (settings.primaryDisplay == PrimaryDisplay.BITCOIN) {
-                "${btcDisplay.symbol} ${btcDisplay.value} (${it.symbol}${it.formatted})"
-            } else {
-                "${it.symbol}${it.formatted} (${btcDisplay.symbol} ${btcDisplay.value})"
-            }
-        } ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
-
-        return getString(R.string.notification_received_body_amount, amountText)
+        NewTransactionSheetDetails.save(this, details)
+        pushNotification(notification.title, notification.body, context = this)
     }
 
     private fun createNotification(

@@ -56,6 +56,8 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.commands.NotifyPaymentReceived
+import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.amountOnClose
@@ -105,8 +107,10 @@ import javax.inject.Inject
 @Suppress("LongParameterList")
 @HiltViewModel
 class AppViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    connectivityRepo: ConnectivityRepo,
+    healthRepo: HealthRepo,
+    @param:ApplicationContext private val context: Context,
+    @param:BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val lightningRepo: LightningRepo,
     private val walletRepo: WalletRepo,
@@ -117,9 +121,8 @@ class AppViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val blocktankRepo: BlocktankRepo,
-    private val connectivityRepo: ConnectivityRepo,
-    private val healthRepo: HealthRepo,
     private val appUpdaterService: AppUpdaterService,
+    private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -228,15 +231,7 @@ class AppViewModel @Inject constructor(
                 runCatching {
                     when (event) {
                         is Event.PaymentReceived -> {
-                            showNewTransactionSheet(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.RECEIVED,
-                                    paymentHashOrTxId = event.paymentHash,
-                                    sats = (event.amountMsat / 1000u).toLong(),
-                                ),
-                                event,
-                            )
+                            NotifyPaymentReceived.Command.from(event)?.let { handlePaymentReceived(it, event) }
                         }
 
                         is Event.ChannelReady -> {
@@ -292,22 +287,7 @@ class AppViewModel @Inject constructor(
                         is Event.PaymentForwarded -> Unit
 
                         is Event.OnchainTransactionReceived -> {
-                            val sats = event.details.amountSats
-                            launch(bgDispatcher) {
-                                delay(500)
-                                val shouldShow = activityRepo.shouldShowPaymentReceived(event.txid, sats.toULong())
-                                if (!shouldShow) return@launch
-
-                                showNewTransactionSheet(
-                                    NewTransactionSheetDetails(
-                                        type = NewTransactionSheetType.ONCHAIN,
-                                        direction = NewTransactionSheetDirection.RECEIVED,
-                                        paymentHashOrTxId = event.txid,
-                                        sats = sats,
-                                    ),
-                                    event,
-                                )
-                            }
+                            NotifyPaymentReceived.Command.from(event)?.let { handlePaymentReceived(it, event) }
                         }
 
                         is Event.OnchainTransactionConfirmed -> Unit
@@ -321,6 +301,19 @@ class AppViewModel @Inject constructor(
                     }
                 }.onFailure { e ->
                     Logger.error("LDK event handler error", e, context = TAG)
+                }
+            }
+        }
+    }
+
+    private fun handlePaymentReceived(
+        receivedEvent: NotifyPaymentReceived.Command,
+        originalEvent: Event,
+    ) {
+        viewModelScope.launch(bgDispatcher) {
+            notifyPaymentReceivedHandler(receivedEvent).onSuccess { result ->
+                if (result is NotifyPaymentReceived.Result.ShowSheet) {
+                    showNewTransactionSheet(result.details, originalEvent)
                 }
             }
         }

@@ -50,6 +50,7 @@ class WakeNodeWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
     private val self = this
 
+    // TODO extract as global model and turn into data class.
     class VisibleNotification(var title: String = "", var body: String = "")
 
     private var bestAttemptContent: VisibleNotification? = VisibleNotification()
