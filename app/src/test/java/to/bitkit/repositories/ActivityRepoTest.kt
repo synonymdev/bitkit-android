@@ -27,7 +27,6 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.AddressChecker
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -41,7 +40,6 @@ class ActivityRepoTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val cacheStore = mock<CacheStore>()
-    private val addressChecker = mock<AddressChecker>()
     private val clock = mock<Clock>()
 
     private lateinit var sut: ActivityRepo
@@ -135,7 +133,6 @@ class ActivityRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
-            addressChecker = addressChecker,
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
@@ -315,24 +312,17 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `replaceActivity updates and marks old activity as removed from mempool`() = test {
+    fun `replaceActivity updates activity and copies tags`() = test {
         val activityId = "activity123"
         val activityToDeleteId = "activity456"
         val tagsMock = listOf("tag1", "tag2")
         val cacheData = AppCacheData(deletedActivities = emptyList())
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
 
-        // Mock the activity to be marked as removed (must be Onchain)
-        val onchainActivityToDelete = createOnchainActivity(id = activityToDeleteId, txId = "tx123")
-
         // Mock update for the new activity
         wheneverBlocking { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
         // Mock getActivity to return the new activity (for addTagsToActivity check)
         wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(testActivity)
-        // Mock getActivity to return the onchain activity to be marked as removed
-        wheneverBlocking { coreService.activity.getActivity(activityToDeleteId) }.thenReturn(onchainActivityToDelete)
-        // Mock update for the old activity (with doesExist=false)
-        wheneverBlocking { coreService.activity.update(eq(activityToDeleteId), any()) }.thenReturn(Unit)
         // Mock tags retrieval from the old activity
         wheneverBlocking { coreService.activity.tags(activityToDeleteId) }.thenReturn(tagsMock)
         // Mock tags retrieval from the new activity (should be empty so all tags are considered new)
@@ -345,19 +335,10 @@ class ActivityRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         // Verify the new activity is updated
         verify(coreService.activity).update(activityId, testActivity)
-        // Verify the old activity is retrieved
-        verify(coreService.activity).getActivity(activityToDeleteId)
         // Verify tags are retrieved from the old activity
         verify(coreService.activity).tags(activityToDeleteId)
         // Verify tags are added to the new activity
         verify(coreService.activity).appendTags(activityId, tagsMock)
-        // Verify the old activity is updated (marked as removed from mempool with doesExist=false)
-        verify(coreService.activity).update(
-            eq(activityToDeleteId),
-            argThat { activity ->
-                activity is Activity.Onchain && !activity.v1.doesExist
-            }
-        )
         // Verify delete is NOT called
         verify(coreService.activity, never()).delete(any())
         // Verify addActivityToDeletedList is NOT called
@@ -574,50 +555,6 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `markActivityAsRemovedFromMempool successfully marks onchain activity as removed`() = test {
-        val activityId = "activity456"
-        val onchainActivity = createOnchainActivity(
-            id = activityId,
-            txId = "tx123",
-            doesExist = true // Initially exists
-        )
-
-        val cacheData = AppCacheData(activitiesPendingDelete = listOf(activityId))
-        setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking {
-            coreService.activity.get(
-                filter = anyOrNull(),
-                txType = anyOrNull(),
-                tags = anyOrNull(),
-                search = anyOrNull(),
-                minDate = anyOrNull(),
-                maxDate = anyOrNull(),
-                limit = anyOrNull(),
-                sortDirection = anyOrNull()
-            )
-        }.thenReturn(emptyList())
-        wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(onchainActivity)
-        wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
-        wheneverBlocking { cacheStore.removeActivityFromPendingDelete(activityId) }.thenReturn(Unit)
-
-        val result = sut.syncActivities()
-
-        assertTrue(result.isSuccess)
-        // Verify the activity was marked as removed (doesExist = false)
-        verify(coreService.activity).update(
-            eq(activityId),
-            argThat { activity ->
-                activity is Activity.Onchain &&
-                    !activity.v1.doesExist &&
-                    activity.v1.id == activityId &&
-                    activity.v1.txId == "tx123"
-            }
-        )
-        // Verify it was removed from pending delete after successful marking
-        verify(cacheStore).removeActivityFromPendingDelete(activityId)
-    }
-
-    @Test
     fun `boostPendingActivities adds parentTxId to boostTxIds when parentTxId is provided`() = test {
         val txId = "tx123"
         val parentTxId = "parentTx456"
@@ -785,16 +722,6 @@ class ActivityRepoTest : BaseUnitTest() {
             updatedAt = 1000uL
         )
 
-        val onchainActivityToDelete = createOnchainActivity(
-            id = activityToDeleteId,
-            txId = "oldTx123",
-            value = 500uL,
-            fee = 50uL,
-            feeRate = 5uL,
-            address = "bc1old",
-            timestamp = 1234560000uL
-        )
-
         val pendingBoost = PendingBoostActivity(
             txId = txId,
             updatedAt = updatedAt,
@@ -816,26 +743,22 @@ class ActivityRepoTest : BaseUnitTest() {
                 sortDirection = anyOrNull()
             )
         }.thenReturn(listOf(existingActivity))
+        val tagsToCopy = listOf("tag1", "tag2")
         wheneverBlocking { coreService.activity.update(eq(activityId), any()) }.thenReturn(Unit)
         wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(existingActivity)
-        wheneverBlocking { coreService.activity.getActivity(activityToDeleteId) }.thenReturn(onchainActivityToDelete)
-        wheneverBlocking { coreService.activity.update(eq(activityToDeleteId), any()) }.thenReturn(Unit)
-        wheneverBlocking { coreService.activity.tags(activityToDeleteId) }.thenReturn(emptyList())
+        wheneverBlocking { coreService.activity.tags(activityToDeleteId) }.thenReturn(tagsToCopy)
         wheneverBlocking { coreService.activity.tags(activityId) }.thenReturn(emptyList())
+        wheneverBlocking { coreService.activity.appendTags(activityId, tagsToCopy) }.thenReturn(Result.success(Unit))
         wheneverBlocking { cacheStore.removeActivityFromPendingBoost(pendingBoost) }.thenReturn(Unit)
 
         val result = sut.syncActivities()
 
         assertTrue(result.isSuccess)
-        // Verify replaceActivity was called (indirectly by checking both activities were updated)
+        // Verify replaceActivity was called (indirectly by checking the new activity was updated)
         verify(coreService.activity).update(eq(activityId), any())
-        // Verify the old activity was marked as removed (doesExist = false)
-        verify(coreService.activity).update(
-            eq(activityToDeleteId),
-            argThat { activity ->
-                activity is Activity.Onchain && !activity.v1.doesExist
-            }
-        )
+        // Verify tags were copied from old activity to new activity
+        verify(coreService.activity).tags(activityToDeleteId)
+        verify(coreService.activity).appendTags(activityId, tagsToCopy)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
     }
 
@@ -881,60 +804,5 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity, never()).update(eq(activityId), any())
         // Verify pending boost was removed (skipped)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
-    }
-
-    @Test
-    fun `markActivityAsRemovedFromMempool fails when activity not found`() = test {
-        val activityId = "activity456"
-        val cacheData = AppCacheData(activitiesPendingDelete = listOf(activityId))
-        setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(null)
-
-        val result = sut.syncActivities()
-
-        assertTrue(result.isSuccess)
-        // Verify update was NOT called (activity not found)
-        verify(coreService.activity, never()).update(eq(activityId), any())
-        // Verify it was NOT removed from pending delete (operation failed, will retry next sync)
-        verify(cacheStore, never()).removeActivityFromPendingDelete(activityId)
-    }
-
-    @Test
-    fun `markActivityAsRemovedFromMempool fails when activity is not Onchain`() = test {
-        val activityId = "activity456"
-        val lightningActivity = testActivity
-        val cacheData = AppCacheData(activitiesPendingDelete = listOf(activityId))
-        setupSyncActivitiesMocks(cacheData)
-        wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(lightningActivity)
-
-        val result = sut.syncActivities()
-
-        assertTrue(result.isSuccess)
-        // Verify update was NOT called (Lightning activities can't be marked as removed)
-        verify(coreService.activity, never()).update(eq(activityId), any())
-        // Verify it was NOT removed from pending delete (operation failed, will retry next sync)
-        verify(cacheStore, never()).removeActivityFromPendingDelete(activityId)
-    }
-
-    @Test
-    fun `replaceActivity caches to pending delete when markActivityAsRemovedFromMempool fails`() = test {
-        val activityId = "activity123"
-        val activityToDeleteId = "activity456"
-        val cacheData = AppCacheData(deletedActivities = emptyList())
-        whenever(cacheStore.data).thenReturn(flowOf(cacheData))
-
-        // Activity to delete doesn't exist (will cause markActivityAsRemovedFromMempool to fail)
-        wheneverBlocking { coreService.activity.update(activityId, testActivity) }.thenReturn(Unit)
-        wheneverBlocking { coreService.activity.getActivity(activityId) }.thenReturn(testActivity)
-        wheneverBlocking { coreService.activity.getActivity(activityToDeleteId) }.thenReturn(null)
-        wheneverBlocking { coreService.activity.tags(activityToDeleteId) }.thenReturn(emptyList())
-        wheneverBlocking { coreService.activity.tags(activityId) }.thenReturn(emptyList())
-        wheneverBlocking { cacheStore.addActivityToPendingDelete(activityToDeleteId) }.thenReturn(Unit)
-
-        val result = sut.replaceActivity(activityId, activityToDeleteId, testActivity)
-
-        assertTrue(result.isSuccess)
-        // Verify it was added to pending delete when marking failed
-        verify(cacheStore).addActivityToPendingDelete(activityToDeleteId)
     }
 }

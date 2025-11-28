@@ -26,6 +26,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.di.BgDispatcher
@@ -36,7 +37,6 @@ import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.services.CoreService
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,7 +50,6 @@ class ActivityRepo @Inject constructor(
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
-    private val addressChecker: AddressChecker,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val clock: Clock,
@@ -82,8 +81,6 @@ class ActivityRepo @Inject constructor(
             }
 
             isSyncingLdkNodePayments.update { true }
-
-            deletePendingActivities()
 
             lightningRepo.getPayments().mapCatching { payments ->
                 Logger.debug("Got payments with success, syncing activities", context = TAG)
@@ -167,65 +164,11 @@ class ActivityRepo @Inject constructor(
     }
 
     private suspend fun findClosedChannelForTransaction(txid: String): String? {
-        return try {
-            val closedChannelsResult = getClosedChannels(SortDirection.DESC)
-            val closedChannels = closedChannelsResult.getOrNull() ?: return null
-            if (closedChannels.isEmpty()) return null
-
-            val txDetails = addressChecker.getTransaction(txid)
-
-            txDetails.vin.firstNotNullOfOrNull { input ->
-                val inputTxid = input.txid ?: return@firstNotNullOfOrNull null
-                val inputVout = input.vout ?: return@firstNotNullOfOrNull null
-
-                closedChannels.firstOrNull { channel ->
-                    channel.fundingTxoTxid == inputTxid && channel.fundingTxoIndex == inputVout.toUInt()
-                }?.channelId
-            }
-        } catch (e: Exception) {
-            Logger.warn(
-                "Failed to check if transaction $txid spends closed channel funding UTXO",
-                e,
-                context = TAG
-            )
-            null
-        }
+        return coreService.activity.findClosedChannelForTransaction(txid, null)
     }
 
-    private suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? {
+    suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? {
         return coreService.activity.getOnchainActivityByTxId(txid)
-    }
-
-    /**
-     * Determines whether to show the payment received UI for an onchain transaction.
-     * Returns false for:
-     * - Zero value transactions
-     * - Channel closure transactions (transfers to savings)
-     * - RBF replacement transactions with the same value as the original
-     */
-    suspend fun shouldShowPaymentReceived(txid: String, value: ULong): Boolean = withContext(bgDispatcher) {
-        if (value == 0uL) return@withContext false
-
-        if (findClosedChannelForTransaction(txid) != null) {
-            Logger.debug("Skipping payment received UI for channel closure tx: $txid", context = TAG)
-            return@withContext false
-        }
-
-        val onchainActivity = getOnchainActivityByTxId(txid)
-        if (onchainActivity != null && onchainActivity.boostTxIds.isNotEmpty()) {
-            for (replacedTxid in onchainActivity.boostTxIds) {
-                val replacedActivity = getOnchainActivityByTxId(replacedTxid)
-                if (replacedActivity != null && replacedActivity.value == value) {
-                    Logger.info(
-                        "Skipping payment received UI for RBF replacement $txid with same value as $replacedTxid",
-                        context = TAG
-                    )
-                    return@withContext false
-                }
-            }
-        }
-
-        return@withContext true
     }
 
     /**
@@ -245,6 +188,58 @@ class ActivityRepo @Inject constructor(
     suspend fun wasTransactionReplaced(txid: String): Boolean = withContext(bgDispatcher) {
         val onchainActivity = getOnchainActivityByTxId(txid) ?: return@withContext false
         return@withContext !onchainActivity.doesExist
+    }
+
+    suspend fun handleOnchainTransactionReceived(
+        txid: String,
+        details: TransactionDetails,
+    ) {
+        coreService.activity.handleOnchainTransactionReceived(txid, details)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun handleOnchainTransactionConfirmed(
+        txid: String,
+        details: TransactionDetails,
+    ) {
+        coreService.activity.handleOnchainTransactionConfirmed(txid, details)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
+        coreService.activity.handleOnchainTransactionReplaced(txid, conflicts)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun handleOnchainTransactionReorged(txid: String) {
+        coreService.activity.handleOnchainTransactionReorged(txid)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun handleOnchainTransactionEvicted(txid: String) {
+        coreService.activity.handleOnchainTransactionEvicted(txid)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun handlePaymentEvent(paymentHash: String) {
+        coreService.activity.handlePaymentEvent(paymentHash)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun shouldShowReceivedSheet(txid: String, value: ULong): Boolean {
+        return coreService.activity.shouldShowReceivedSheet(txid, value)
+    }
+
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
+        return coreService.activity.getBoostTxDoesExist(boostTxIds)
+    }
+
+    suspend fun isCpfpChildTransaction(txId: String): Boolean {
+        return coreService.activity.isCpfpChildTransaction(txId)
+    }
+
+    suspend fun getTxIdsInBoostTxIds(): Set<String> {
+        return coreService.activity.getTxIdsInBoostTxIds()
     }
 
     /**
@@ -392,22 +387,13 @@ class ActivityRepo @Inject constructor(
         ).fold(
             onSuccess = {
                 Logger.debug(
-                    "Activity $id updated with success. new data: $activity. " +
-                        "Marking activity $activityIdToDelete as removed from mempool",
+                    "Activity $id updated with success. new data: $activity",
                     context = TAG
                 )
 
                 val tags = coreService.activity.tags(activityIdToDelete)
                 addTagsToActivity(activityId = id, tags = tags)
 
-                markActivityAsRemovedFromMempool(activityIdToDelete).onFailure { e ->
-                    Logger.warn(
-                        "Failed to mark $activityIdToDelete as removed from mempool, caching to retry on next sync",
-                        e = e,
-                        context = TAG
-                    )
-                    cacheStore.addActivityToPendingDelete(activityId = activityIdToDelete)
-                }
                 Result.success(Unit)
             },
             onFailure = { e ->
@@ -420,16 +406,6 @@ class ActivityRepo @Inject constructor(
                 Result.failure(e)
             }
         )
-    }
-
-    private suspend fun deletePendingActivities() = withContext(bgDispatcher) {
-        cacheStore.data.first().activitiesPendingDelete.map { activityId ->
-            async {
-                markActivityAsRemovedFromMempool(activityId).onSuccess {
-                    cacheStore.removeActivityFromPendingDelete(activityId)
-                }
-            }
-        }.awaitAll()
     }
 
     private suspend fun boostPendingActivities() = withContext(bgDispatcher) {
@@ -482,32 +458,6 @@ class ActivityRepo @Inject constructor(
                 }
             }
         }.awaitAll()
-    }
-
-    /**
-     * Marks an activity as removed from mempool (sets doesExist = false).
-     * Used for RBFed transactions that are replaced.
-     */
-    private suspend fun markActivityAsRemovedFromMempool(activityId: String): Result<Unit> = withContext(bgDispatcher) {
-        return@withContext runCatching {
-            val existingActivity = getActivity(activityId).getOrNull()
-                ?: return@withContext Result.failure(Exception("Activity $activityId not found"))
-
-            if (existingActivity is Activity.Onchain) {
-                val updatedActivity = Activity.Onchain(
-                    v1 = existingActivity.v1.copy(
-                        doesExist = false,
-                        updatedAt = nowTimestamp().toEpochMilli().toULong()
-                    )
-                )
-                updateActivity(id = activityId, activity = updatedActivity, forceUpdate = true).getOrThrow()
-                notifyActivitiesChanged()
-            } else {
-                return@withContext Result.failure(Exception("Activity $activityId is not an onchain activity"))
-            }
-        }.onFailure { e ->
-            Logger.error("markActivityAsRemovedFromMempool error for ID: $activityId", e, context = TAG)
-        }
     }
 
     /**

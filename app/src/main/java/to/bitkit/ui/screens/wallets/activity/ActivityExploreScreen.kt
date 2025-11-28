@@ -19,6 +19,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,9 +38,8 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.R
-import to.bitkit.ext.BoostType
-import to.bitkit.ext.boostType
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isBoosted
 import to.bitkit.ext.isSent
@@ -61,7 +63,6 @@ import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
-import to.bitkit.utils.TxDetails
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -80,10 +81,14 @@ fun ActivityExploreScreen(
     val context = LocalContext.current
 
     val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
+    var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     LaunchedEffect(item) {
         if (item is Activity.Onchain) {
             detailViewModel.fetchTransactionDetails(item.v1.txId)
+            if (item.v1.boostTxIds.isNotEmpty()) {
+                boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+            }
         } else {
             detailViewModel.clearTransactionDetails()
         }
@@ -104,6 +109,7 @@ fun ActivityExploreScreen(
         ActivityExploreContent(
             item = item,
             txDetails = txDetails,
+            boostTxDoesExist = boostTxDoesExist,
             onCopy = { text ->
                 app.toast(
                     type = Toast.ToastType.SUCCESS,
@@ -123,7 +129,8 @@ fun ActivityExploreScreen(
 @Composable
 private fun ActivityExploreContent(
     item: Activity,
-    txDetails: TxDetails? = null,
+    txDetails: TransactionDetails? = null,
+    boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
     onClickExplore: (String) -> Unit = {},
 ) {
@@ -156,6 +163,7 @@ private fun ActivityExploreContent(
                     onchain = item,
                     onCopy = onCopy,
                     txDetails = txDetails,
+                    boostTxDoesExist = boostTxDoesExist,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 PrimaryButton(
@@ -216,7 +224,8 @@ private fun LightningDetails(
 private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
     onCopy: (String) -> Unit,
-    txDetails: TxDetails?,
+    txDetails: TransactionDetails?,
+    boostTxDoesExist: Map<String, Boolean> = emptyMap(),
 ) {
     val txId = onchain.v1.txId
     Section(
@@ -232,22 +241,22 @@ private fun ColumnScope.OnchainDetails(
     )
     if (txDetails != null) {
         Section(
-            title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to txDetails.vin.size)),
+            title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to txDetails.inputs.size)),
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    txDetails.vin.forEach { input ->
+                    txDetails.inputs.forEach { input ->
                         val text = "${input.txid}:${input.vout}"
-                        BodySSB(text = text)
+                        BodySSB(text = text, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
                 }
             },
         )
         Section(
-            title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to txDetails.vout.size)),
+            title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to txDetails.outputs.size)),
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    txDetails.vout.forEach { output ->
-                        val address = output.scriptpubkey_address.orEmpty()
+                    txDetails.outputs.forEach { output ->
+                        val address = output.scriptpubkeyAddress ?: ""
                         BodySSB(text = address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
                 }
@@ -268,8 +277,9 @@ private fun ColumnScope.OnchainDetails(
     // For RBF (SENT): shows parent transaction IDs that this replacement replaced
     val boostTxIds = onchain.v1.boostTxIds
     if (boostTxIds.isNotEmpty()) {
-        val isRbf = onchain.boostType() == BoostType.RBF
         boostTxIds.forEachIndexed { index, boostedTxId ->
+            val boostTxDoesExistValue = boostTxDoesExist[boostedTxId] ?: true
+            val isRbf = !boostTxDoesExistValue
             Section(
                 title = stringResource(
                     if (isRbf) R.string.wallet__activity_boosted_rbf else R.string.wallet__activity_boosted_cpfp

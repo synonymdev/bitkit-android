@@ -35,6 +35,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -715,6 +716,18 @@ class LightningRepo @Inject constructor(
         val payments = lightningService.payments
             ?: return@executeWhenNodeRunning Result.failure(Exception("It wasn't possible get the payments"))
         Result.success(payments)
+    }
+
+    suspend fun getTransactionDetails(txid: Txid): Result<TransactionDetails?> = executeWhenNodeRunning(
+        "Get transaction details by txid"
+    ) {
+        Result.success(lightningService.getTransactionDetails(txid))
+    }
+
+    suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("Get address balance") {
+        runCatching {
+            lightningService.getAddressBalance(address)
+        }
     }
 
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> = executeWhenNodeRunning("List spendable outputs") {

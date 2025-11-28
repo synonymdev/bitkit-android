@@ -231,30 +231,113 @@ class AppViewModel @Inject constructor(
             ldkNodeEventBus.events.collect { event ->
                 if (!walletRepo.walletExists()) return@collect
 
-                launch(bgDispatcher) { walletRepo.syncNodeAndWallet() }
                 runCatching {
                     when (event) {
-                        is Event.BalanceChanged -> Unit
+                        is Event.BalanceChanged -> handleBalanceChanged()
+                        is Event.SyncCompleted -> handleSyncCompleted()
                         is Event.ChannelClosed -> Unit
                         is Event.ChannelPending -> Unit
                         is Event.ChannelReady -> notifyChannelReady(event)
-                        is Event.OnchainTransactionConfirmed -> Unit
-                        is Event.OnchainTransactionEvicted -> notifyTransactionRemoved(event)
-                        is Event.OnchainTransactionReceived -> notifyPaymentReceived(event)
-                        is Event.OnchainTransactionReorged -> notifyTransactionUnconfirmed()
-                        is Event.OnchainTransactionReplaced -> notifyTransactionReplaced(event)
+                        is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
+                        is Event.OnchainTransactionEvicted -> handleOnchainTransactionEvicted(event)
+                        is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(event)
+                        is Event.OnchainTransactionReorged -> handleOnchainTransactionReorged(event)
+                        is Event.OnchainTransactionReplaced -> handleOnchainTransactionReplaced(event)
                         is Event.PaymentClaimable -> Unit
-                        is Event.PaymentFailed -> notifyPaymentFailed()
+                        is Event.PaymentFailed -> handlePaymentFailed(event)
                         is Event.PaymentForwarded -> Unit
-                        is Event.PaymentReceived -> notifyPaymentReceived(event)
-                        is Event.PaymentSuccessful -> notifyPaymentSentOnLightning(event)
-                        is Event.SyncCompleted -> Unit
+                        is Event.PaymentReceived -> handlePaymentReceived(event)
+                        is Event.PaymentSuccessful -> handlePaymentSuccessful(event)
                         is Event.SyncProgress -> Unit
                     }
                 }.onFailure { e ->
                     Logger.error("LDK event handler error", e, context = TAG)
                 }
             }
+        }
+    }
+
+    private fun handleBalanceChanged() {
+        viewModelScope.launch(bgDispatcher) {
+            walletRepo.syncBalances()
+        }
+    }
+
+    private fun handleSyncCompleted() {
+        viewModelScope.launch(bgDispatcher) {
+            walletRepo.syncNodeAndWallet()
+        }
+    }
+
+    private fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
+        }
+    }
+
+    private fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.handleOnchainTransactionEvicted(event.txid)
+        }
+        notifyTransactionRemoved(event)
+    }
+
+    private fun handleOnchainTransactionReceived(event: Event.OnchainTransactionReceived) {
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.handleOnchainTransactionReceived(event.txid, event.details)
+        }
+        if (event.details.amountSats > 0) {
+            val sats = event.details.amountSats.toULong()
+            viewModelScope.launch {
+                delay(DELAY_FOR_ACTIVITY_SYNC_MS)
+                val shouldShow = activityRepo.shouldShowReceivedSheet(event.txid, sats)
+                if (shouldShow) {
+                    notifyPaymentReceived(event)
+                }
+            }
+        }
+    }
+
+    private fun handleOnchainTransactionReorged(event: Event.OnchainTransactionReorged) {
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.handleOnchainTransactionReorged(event.txid)
+        }
+        notifyTransactionUnconfirmed()
+    }
+
+    private fun handleOnchainTransactionReplaced(event: Event.OnchainTransactionReplaced) {
+        viewModelScope.launch(bgDispatcher) {
+            activityRepo.handleOnchainTransactionReplaced(event.txid, event.conflicts)
+        }
+        notifyTransactionReplaced(event)
+    }
+
+    private fun handlePaymentFailed(event: Event.PaymentFailed) {
+        event.paymentHash?.let { paymentHash ->
+            viewModelScope.launch(bgDispatcher) {
+                activityRepo.handlePaymentEvent(paymentHash)
+            }
+        }
+        notifyPaymentFailed()
+    }
+
+    private fun handlePaymentReceived(event: Event.PaymentReceived) {
+        event.paymentHash?.let { paymentHash ->
+            viewModelScope.launch(bgDispatcher) {
+                activityRepo.handlePaymentEvent(paymentHash)
+            }
+        }
+        notifyPaymentReceived(event)
+    }
+
+    private fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
+        event.paymentHash?.let { paymentHash ->
+            viewModelScope.launch(bgDispatcher) {
+                activityRepo.handlePaymentEvent(paymentHash)
+            }
+        }
+        viewModelScope.launch {
+            notifyPaymentSentOnLightning(event)
         }
     }
 
@@ -1879,6 +1962,9 @@ class AppViewModel @Inject constructor(
 
         /**How long user needs to stay on the home screen before he see this prompt*/
         private const val CHECK_DELAY_MILLIS = 2000L
+
+        /** Delay to allow activity sync before checking if received sheet should be shown */
+        private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
     }
 }
 

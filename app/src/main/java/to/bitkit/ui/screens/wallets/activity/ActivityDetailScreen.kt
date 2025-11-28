@@ -44,7 +44,6 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.canBeBoosted
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isBoosted
 import to.bitkit.ext.isSent
@@ -103,9 +102,29 @@ fun ActivityDetailScreen(
     val tags by detailViewModel.tags.collectAsStateWithLifecycle()
     val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
     var showAddTagSheet by remember { mutableStateOf(false) }
+    var isCpfpChild by remember { mutableStateOf(false) }
+    var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     LaunchedEffect(item) {
         detailViewModel.setActivity(item)
+        if (item is Activity.Onchain) {
+            isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
+            if (item.v1.boostTxIds.isNotEmpty()) {
+                boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+            } else {
+                boostTxDoesExist = emptyMap()
+            }
+        } else {
+            isCpfpChild = false
+            boostTxDoesExist = emptyMap()
+        }
+    }
+
+    // Update boostTxDoesExist when boostTxIds change
+    LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
+        if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
+            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+        }
     }
 
     val context = LocalContext.current
@@ -117,7 +136,13 @@ fun ActivityDetailScreen(
             modifier = Modifier.background(Colors.Black)
         ) {
             AppTopBar(
-                titleText = stringResource(item.getScreenTitleRes()),
+                titleText = stringResource(
+                    if (isCpfpChild) {
+                        R.string.wallet__activity_boost_fee
+                    } else {
+                        item.getScreenTitleRes()
+                    }
+                ),
                 onBackClick = onBackClick,
                 actions = { CloseNavIcon(onClick = onCloseClick) },
             )
@@ -130,6 +155,8 @@ fun ActivityDetailScreen(
                 onExploreClick = onExploreClick,
                 onChannelClick = onChannelClick,
                 detailViewModel = detailViewModel,
+                isCpfpChild = isCpfpChild,
+                boostTxDoesExist = boostTxDoesExist,
                 onCopy = { text ->
                     app.toast(
                         type = Toast.ToastType.SUCCESS,
@@ -200,6 +227,8 @@ private fun ActivityDetailContent(
     onExploreClick: (String) -> Unit,
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
+    isCpfpChild: Boolean = false,
+    boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit,
 ) {
     val isLightning = item is Activity.Lightning
@@ -273,7 +302,11 @@ private fun ActivityDetailContent(
                 useSwipeToHide = false,
                 modifier = Modifier.weight(1f)
             )
-            ActivityIcon(activity = item, size = 48.dp) // TODO Display the user avatar when selfSend
+            ActivityIcon(
+                activity = item,
+                size = 48.dp,
+                isCpfpChild = isCpfpChild
+            ) // TODO Display the user avatar when selfSend
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -505,9 +538,28 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                val hasCompletedBoost = when (item) {
+                    is Activity.Lightning -> false
+                    is Activity.Onchain -> {
+                        val activity = item.v1
+                        if (activity.isBoosted && activity.boostTxIds.isNotEmpty()) {
+                            val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
+                            if (hasCPFP) {
+                                true
+                            } else if (activity.txType == PaymentType.SENT) {
+                                activity.boostTxIds.any { boostTxDoesExist[it] == false }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                }
+                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, boostTxDoesExist)
                 PrimaryButton(
                     text = stringResource(
-                        if (item.isBoosted()) {
+                        if (hasCompletedBoost) {
                             R.string.wallet__activity_boosted
                         } else {
                             R.string.wallet__activity_boost
@@ -515,7 +567,7 @@ private fun ActivityDetailContent(
                     ),
                     size = ButtonSize.Small,
                     onClick = onClickBoost,
-                    enabled = item.canBeBoosted(),
+                    enabled = shouldEnable,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_timer_alt),
@@ -528,8 +580,8 @@ private fun ActivityDetailContent(
                         .weight(1f)
                         .testTag(
                             when {
-                                item.isBoosted() -> "BoostedButton"
-                                item.canBeBoosted() -> "BoostButton"
+                                hasCompletedBoost -> "BoostedButton"
+                                shouldEnable -> "BoostButton"
                                 else -> "BoostDisabled"
                             }
                         )
@@ -810,4 +862,47 @@ private fun PreviewSheetSmallScreen() {
             )
         }
     }
+}
+
+@Composable
+private fun shouldEnableBoostButton(
+    item: Activity,
+    isCpfpChild: Boolean,
+    boostTxDoesExist: Map<String, Boolean>
+): Boolean {
+    if (item !is Activity.Onchain) return false
+
+    val activity = item.v1
+
+    // Check all disable conditions
+    val shouldDisable = isCpfpChild ||
+        !activity.doesExist ||
+        activity.confirmed == true ||
+        (activity.isBoosted && isBoostCompleted(activity, boostTxDoesExist))
+
+    if (shouldDisable) return false
+
+    // Enable if not a transfer and has value
+    return !activity.isTransfer && activity.value > 0uL
+}
+
+@Composable
+private fun isBoostCompleted(
+    activity: OnchainActivity,
+    boostTxDoesExist: Map<String, Boolean>
+): Boolean {
+    // If boostTxIds is empty, boost is in progress (RBF case)
+    if (activity.boostTxIds.isEmpty()) return true
+
+    // Check if CPFP boost is completed
+    val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
+    if (hasCPFP) return true
+
+    // For sent transactions, check if RBF boost is completed
+    if (activity.txType == PaymentType.SENT) {
+        val hasRBF = activity.boostTxIds.any { boostTxDoesExist[it] == false }
+        if (hasRBF) return true
+    }
+
+    return false
 }

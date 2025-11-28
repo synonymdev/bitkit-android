@@ -29,7 +29,6 @@ import to.bitkit.models.toDerivationPath
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
@@ -43,7 +42,6 @@ class WalletRepo @Inject constructor(
     private val keychain: Keychain,
     private val coreService: CoreService,
     private val settingsStore: SettingsStore,
-    private val addressChecker: AddressChecker,
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
@@ -83,9 +81,8 @@ class WalletRepo @Inject constructor(
 
     suspend fun checkAddressUsage(address: String): Result<Boolean> = withContext(bgDispatcher) {
         return@withContext try {
-            val addressInfo = addressChecker.getAddressInfo(address)
-            val hasTransactions = addressInfo.chain_stats.tx_count > 0 || addressInfo.mempool_stats.tx_count > 0
-            Result.success(hasTransactions)
+            val result = coreService.isAddressUsed(address)
+            Result.success(result)
         } catch (e: Exception) {
             Logger.error("checkAddressUsage error", e, context = TAG)
             Result.failure(e)

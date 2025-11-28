@@ -22,7 +22,6 @@ import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.isTransfer
 import to.bitkit.repositories.ActivityRepo
-import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -30,7 +29,6 @@ import javax.inject.Inject
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val ldkNodeEventBus: LdkNodeEventBus,
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
     private val _filteredActivities = MutableStateFlow<List<Activity>?>(null)
@@ -68,7 +66,6 @@ class ActivityListViewModel @Inject constructor(
     init {
         observeActivities()
         observeFilters()
-        observerNodeEvents()
         resync()
     }
 
@@ -93,18 +90,12 @@ class ActivityListViewModel @Inject constructor(
         }.collect { _filteredActivities.value = it }
     }
 
-    private fun observerNodeEvents() = viewModelScope.launch {
-        ldkNodeEventBus.events.collect {
-            // TODO: resync only on specific events for better performance
-            resync()
-        }
-    }
-
     private suspend fun refreshActivityState() {
         val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
-        _latestActivities.value = all.take(SIZE_LATEST)
-        _lightningActivities.value = all.filter { it is Activity.Lightning }
-        _onchainActivities.value = all.filter { it is Activity.Onchain }
+        val filtered = filterOutReplacedSentTransactions(all)
+        _latestActivities.update { filtered.take(SIZE_LATEST) }
+        _lightningActivities.update { filtered.filter { it is Activity.Lightning } }
+        _onchainActivities.update { filtered.filter { it is Activity.Onchain } }
     }
 
     private suspend fun fetchFilteredActivities(filters: ActivityFilters): List<Activity>? {
@@ -126,9 +117,28 @@ class ActivityListViewModel @Inject constructor(
             return null
         }
 
-        return when (filters.tab) {
+        val filteredByTab = when (filters.tab) {
             ActivityTab.OTHER -> activities.filter { it.isTransfer() }
             else -> activities
+        }
+
+        return filterOutReplacedSentTransactions(filteredByTab)
+    }
+
+    private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
+        val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
+
+        return activities.filter { activity ->
+            if (activity is Activity.Onchain) {
+                val onchain = activity.v1
+                if (!onchain.doesExist &&
+                    onchain.txType == PaymentType.SENT &&
+                    txIdsInBoostTxIds.contains(onchain.txId)
+                ) {
+                    return@filter false
+                }
+            }
+            true
         }
     }
 
@@ -154,6 +164,10 @@ class ActivityListViewModel @Inject constructor(
 
     fun removeAllActivities() = viewModelScope.launch(bgDispatcher) {
         activityRepo.removeAllActivities()
+    }
+
+    suspend fun isCpfpChildTransaction(txId: String): Boolean {
+        return activityRepo.isCpfpChildTransaction(txId)
     }
 
     private fun <T> Flow<T>.stateInScope(

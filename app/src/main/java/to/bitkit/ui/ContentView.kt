@@ -320,11 +320,6 @@ fun ContentView(
         val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
         val currencies by currencyViewModel.uiState.collectAsState()
 
-        LaunchedEffect(balance) {
-            // Anytime we receive a balance update, we should sync the payments to activity list
-            activityListViewModel.resync()
-        }
-
         // Keep backups in sync
         LaunchedEffect(backupsViewModel) { backupsViewModel.observeAndSyncBackups() }
 

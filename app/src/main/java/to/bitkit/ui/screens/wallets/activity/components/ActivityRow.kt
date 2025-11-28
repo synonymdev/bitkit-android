@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -35,6 +39,7 @@ import to.bitkit.ext.txType
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
@@ -74,6 +79,17 @@ fun ActivityRow(
     }
     val isTransfer = item.isTransfer()
 
+    val activityListViewModel = activityListViewModel
+    var isCpfpChild by remember { mutableStateOf(false) }
+
+    LaunchedEffect(item) {
+        if (item is Activity.Onchain && activityListViewModel != null) {
+            isCpfpChild = activityListViewModel.isCpfpChildTransaction(item.v1.txId)
+        } else {
+            isCpfpChild = false
+        }
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -83,7 +99,7 @@ fun ActivityRow(
             .padding(16.dp)
             .testTag(testTag)
     ) {
-        ActivityIcon(activity = item, size = 40.dp)
+        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild)
         Spacer(modifier = Modifier.width(16.dp))
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -93,13 +109,16 @@ fun ActivityRow(
                 txType = txType,
                 isLightning = isLightning,
                 status = status,
-                isTransfer = isTransfer
+                isTransfer = isTransfer,
+                isCpfpChild = isCpfpChild
             )
             val subtitleText = when (item) {
                 is Activity.Lightning -> item.v1.message.ifEmpty { formattedTime(timestamp) }
                 is Activity.Onchain -> {
                     when {
                         !item.v1.doesExist -> stringResource(R.string.wallet__activity_removed)
+
+                        isCpfpChild -> stringResource(R.string.wallet__activity_boost_fee_description)
 
                         isTransfer && isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_spending_done)
@@ -147,9 +166,11 @@ private fun TransactionStatusText(
     isLightning: Boolean,
     status: PaymentState?,
     isTransfer: Boolean,
+    isCpfpChild: Boolean = false,
 ) {
     when {
         isTransfer -> BodyMSB(text = stringResource(R.string.wallet__activity_transfer))
+        isCpfpChild -> BodyMSB(text = stringResource(R.string.wallet__activity_boost_fee))
         isLightning -> {
             when (txType) {
                 PaymentType.SENT -> when (status) {

@@ -4,9 +4,12 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +23,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.R
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.amountOnClose
@@ -35,9 +39,7 @@ import to.bitkit.repositories.LogsRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
-import to.bitkit.utils.TxDetails
 import javax.inject.Inject
 
 @Suppress("LongParameterList")
@@ -48,7 +50,6 @@ class LightningConnectionsViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     internal val blocktankRepo: BlocktankRepo,
     private val logsRepo: LogsRepo,
-    private val addressChecker: AddressChecker,
     private val ldkNodeEventBus: LdkNodeEventBus,
     private val walletRepo: WalletRepo,
     private val activityRepo: ActivityRepo,
@@ -60,8 +61,11 @@ class LightningConnectionsViewModel @Inject constructor(
     private val _selectedChannel = MutableStateFlow<ChannelUi?>(null)
     val selectedChannel = _selectedChannel.asStateFlow()
 
-    private val _txDetails = MutableStateFlow<TxDetails?>(null)
+    private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
+
+    private val _txTime = MutableStateFlow<ULong?>(null)
+    val txTime = _txTime.asStateFlow()
 
     private val _closeConnectionUiState = MutableStateFlow(CloseConnectionUiState())
     val closeConnectionUiState = _closeConnectionUiState.asStateFlow()
@@ -388,18 +392,53 @@ class LightningConnectionsViewModel @Inject constructor(
 
     fun fetchTransactionDetails(txid: String) {
         viewModelScope.launch(bgDispatcher) {
-            try {
-                // TODO replace with bitkit-core method when available
-                _txDetails.value = addressChecker.getTransaction(txid)
-                Logger.debug("fetchTransactionDetails success for: '$txid'")
-            } catch (e: Exception) {
-                Logger.warn("fetchTransactionDetails error for: '$txid'", e)
-                _txDetails.value = null
+            runCatching {
+                val transactionDetails = lightningRepo.getTransactionDetails(txid).getOrNull()
+                _txDetails.update { transactionDetails }
+                if (transactionDetails != null) {
+                    Logger.debug("fetchTransactionDetails success for: '$txid'", context = TAG)
+                } else {
+                    Logger.warn("Transaction details not found for: '$txid'", context = TAG)
+                }
+            }.onFailure { e ->
+                Logger.warn("fetchTransactionDetails error for: '$txid'", e, context = TAG)
+                _txDetails.update { null }
             }
         }
     }
 
-    fun clearTransactionDetails() = _txDetails.update { null }
+    fun clearTransactionDetails() {
+        _txDetails.update { null }
+        _txTime.update { null }
+    }
+
+    fun fetchActivityTimestamp(channelId: String) {
+        viewModelScope.launch(bgDispatcher) {
+            runCatching {
+                val activities = activityRepo.getActivities(
+                    filter = ActivityFilter.ONCHAIN,
+                    txType = PaymentType.SENT,
+                    tags = null,
+                    search = null,
+                    minDate = null,
+                    maxDate = null,
+                    limit = null,
+                    sortDirection = null
+                ).getOrNull() ?: emptyList()
+
+                val transferActivity = activities.firstOrNull { activity ->
+                    activity is Activity.Onchain &&
+                        activity.v1.isTransfer &&
+                        activity.v1.channelId == channelId
+                } as? Activity.Onchain
+
+                _txTime.update { transferActivity?.v1?.confirmTimestamp ?: transferActivity?.v1?.timestamp }
+            }.onFailure { e ->
+                Logger.warn("fetchActivityTimestamp error for channelId: '$channelId'", e, context = TAG)
+                _txTime.update { null }
+            }
+        }
+    }
 
     fun clearCloseConnectionState() {
         _closeConnectionUiState.update { CloseConnectionUiState() }

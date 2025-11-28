@@ -31,7 +31,6 @@ import to.bitkit.services.LdkNodeEventBus
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -45,7 +44,6 @@ class ExternalNodeViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val transferRepo: to.bitkit.repositories.TransferRepo,
     private val preActivityMetadataRepo: to.bitkit.repositories.PreActivityMetadataRepo,
-    private val addressChecker: AddressChecker,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -171,8 +169,9 @@ class ExternalNodeViewModel @Inject constructor(
                 channelAmountSats = _uiState.value.amount.sats.toULong(),
             ).mapCatching { result ->
                 awaitChannelPendingEvent(result.userChannelId).mapCatching { event ->
-                    val txId = event.fundingTxo.txid
-                    val address = addressChecker.getOutputAddress(event.fundingTxo).getOrDefault("")
+                    val (txId, vout) = event.fundingTxo
+                    val transactionDetails = lightningRepo.getTransactionDetails(txId).getOrNull()
+                    val address = transactionDetails?.outputs?.getOrNull(vout.toInt())?.scriptpubkeyAddress ?: ""
                     val feeRate = _uiState.value.customFeeRate ?: 0u
 
                     preActivityMetadataRepo.savePreActivityMetadata(

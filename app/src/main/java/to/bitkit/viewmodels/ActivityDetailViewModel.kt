@@ -11,25 +11,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
-import to.bitkit.utils.AddressChecker
+import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
-import to.bitkit.utils.TxDetails
 import javax.inject.Inject
 
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    private val addressChecker: AddressChecker,
     private val activityRepo: ActivityRepo,
     private val settingsStore: SettingsStore,
     private val blocktankRepo: BlocktankRepo,
+    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
-    private val _txDetails = MutableStateFlow<TxDetails?>(null)
+    private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
 
     private val _tags = MutableStateFlow<List<String>>(emptyList())
@@ -88,18 +88,18 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun fetchTransactionDetails(txid: String) {
         viewModelScope.launch(bgDispatcher) {
-            try {
-                // TODO replace with bitkit-core method when available
-                _txDetails.value = addressChecker.getTransaction(txid)
-            } catch (e: Throwable) {
+            runCatching {
+                val transactionDetails = lightningRepo.getTransactionDetails(txid).getOrNull()
+                _txDetails.update { transactionDetails }
+            }.onFailure { e ->
                 Logger.error("fetchTransactionDetails error", e, context = TAG)
-                _txDetails.value = null
+                _txDetails.update { null }
             }
         }
     }
 
     fun clearTransactionDetails() {
-        _txDetails.value = null
+        _txDetails.update { null }
     }
 
     fun onClickBoost() {
@@ -108,6 +108,14 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun onDismissBoostSheet() {
         _boostSheetVisible.update { false }
+    }
+
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
+        return activityRepo.getBoostTxDoesExist(boostTxIds)
+    }
+
+    suspend fun isCpfpChildTransaction(txId: String): Boolean {
+        return activityRepo.isCpfpChildTransaction(txId)
     }
 
     suspend fun findOrderForTransfer(

@@ -9,7 +9,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.AddressChecker
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -19,7 +18,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val settingsStore = mock<SettingsStore>()
-    private val addressChecker = mock<AddressChecker>()
+    private val lightningRepo = mock<LightningRepo>()
 
     private lateinit var sut: ActivityDetailViewModel
 
@@ -32,7 +31,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             activityRepo = activityRepo,
             blocktankRepo = blocktankRepo,
             settingsStore = settingsStore,
-            addressChecker = addressChecker,
+            lightningRepo = lightningRepo,
         )
     }
 

@@ -83,22 +83,6 @@ class CacheStore @Inject constructor(
         }
     }
 
-    suspend fun addActivityToPendingDelete(activityId: String) {
-        if (activityId.isBlank()) return
-        if (activityId in store.data.first().activitiesPendingDelete) return
-        store.updateData {
-            it.copy(activitiesPendingDelete = it.activitiesPendingDelete + activityId)
-        }
-    }
-
-    suspend fun removeActivityFromPendingDelete(activityId: String) {
-        if (activityId.isBlank()) return
-        if (activityId !in store.data.first().activitiesPendingDelete) return
-        store.updateData {
-            it.copy(activitiesPendingDelete = it.activitiesPendingDelete - activityId)
-        }
-    }
-
     suspend fun addActivityToPendingBoost(pendingBoostActivity: PendingBoostActivity) {
         if (pendingBoostActivity in store.data.first().pendingBoostActivities) return
         store.updateData {
@@ -137,7 +121,6 @@ data class AppCacheData(
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
-    val activitiesPendingDelete: List<String> = listOf(),
     val lastLightningPaymentId: String? = null,
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
 )

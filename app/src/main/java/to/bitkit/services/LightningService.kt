@@ -694,6 +694,33 @@ class LightningService @Inject constructor(
     }
     // endregion
 
+    // region transaction details
+    suspend fun getTransactionDetails(txid: Txid): org.lightningdevkit.ldknode.TransactionDetails? {
+        val node = this.node ?: return null
+        return ServiceQueue.LDK.background {
+            try {
+                node.getTransactionDetails(txid)
+            } catch (e: Exception) {
+                Logger.error("Error getting transaction details by txid: $txid", e, context = TAG)
+                null
+            }
+        }
+    }
+
+    suspend fun getAddressBalance(address: String): ULong {
+        val node = this.node ?: throw ServiceError.NodeNotSetup
+        return ServiceQueue.LDK.background {
+            try {
+                node.getAddressBalance(addressStr = address)
+            } catch (e: Exception) {
+                Logger.error("Error getting address balance for address: $address", e, context = TAG)
+                throw e
+            }
+        }
+    }
+
+    // endregion
+
     // region state
     val nodeId: String? get() = node?.nodeId()
     val balances: BalanceDetails? get() = node?.listBalances()

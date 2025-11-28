@@ -39,7 +39,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
                 is NotifyPaymentReceived.Command.Lightning -> true
                 is NotifyPaymentReceived.Command.Onchain -> {
                     delay(DELAY_FOR_ACTIVITY_SYNC_MS)
-                    activityRepo.shouldShowPaymentReceived(command.paymentHashOrTxId, command.sats)
+                    activityRepo.shouldShowReceivedSheet(command.paymentHashOrTxId, command.sats)
                 }
             }
 

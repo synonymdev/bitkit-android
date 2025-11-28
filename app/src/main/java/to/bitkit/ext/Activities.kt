@@ -33,11 +33,6 @@ fun Activity.totalValue() = when (this) {
     }
 }
 
-fun Activity.canBeBoosted() = when (this) {
-    is Activity.Onchain -> !v1.confirmed && v1.doesExist && !v1.isBoosted && !v1.isTransfer && v1.value > 0uL
-    else -> false
-}
-
 fun Activity.isBoosted() = when (this) {
     is Activity.Onchain -> v1.isBoosted
     else -> false

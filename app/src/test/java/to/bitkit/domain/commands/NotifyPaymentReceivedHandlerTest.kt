@@ -97,8 +97,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onchain payment returns ShowSheet when shouldShowPaymentReceived returns true`() = test {
-        whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(true)
+    fun `onchain payment returns ShowSheet when shouldShowReceivedSheet returns true`() = test {
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentHashOrTxId = "txid456")
 
         val result = sut(command)
@@ -114,8 +114,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onchain payment returns Skip when shouldShowPaymentReceived is false`() = test {
-        whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(false)
+    fun `onchain payment returns Skip when shouldShowReceivedSheet is false`() = test {
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentHashOrTxId = "txid456")
 
         val result = sut(command)
@@ -126,21 +126,21 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onchain payment calls shouldShowPaymentReceived with correct parameters`() = test {
-        whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(true)
+    fun `onchain payment calls shouldShowReceivedSheet with correct parameters`() = test {
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val command = NotifyPaymentReceived.Command.Onchain(sats = 7500uL, paymentHashOrTxId = "txid789")
 
         sut(command)
 
-        verify(activityRepo).shouldShowPaymentReceived("txid789", 7500uL)
+        verify(activityRepo).shouldShowReceivedSheet("txid789", 7500uL)
     }
 
     @Test
-    fun `lightning payment does not call shouldShowPaymentReceived`() = test {
+    fun `lightning payment does not call shouldShowReceivedSheet`() = test {
         val command = NotifyPaymentReceived.Command.Lightning(sats = 1000uL, paymentHashOrTxId = "hash123")
 
         sut(command)
 
-        verify(activityRepo, never()).shouldShowPaymentReceived(any(), any())
+        verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
     }
 }

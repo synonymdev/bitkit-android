@@ -38,6 +38,7 @@ import com.synonym.bitkitcore.getOrders
 import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
+import com.synonym.bitkitcore.isAddressUsed
 import com.synonym.bitkitcore.openChannel
 import com.synonym.bitkitcore.refreshActiveCjitEntries
 import com.synonym.bitkitcore.refreshActiveOrders
@@ -57,22 +58,22 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
 import to.bitkit.models.toCoreNetwork
-import to.bitkit.utils.AddressChecker
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
-import to.bitkit.utils.TxDetails
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -84,7 +85,6 @@ class CoreService @Inject constructor(
     private val lightningService: LightningService,
     private val httpClient: HttpClient,
     private val cacheStore: CacheStore,
-    private val addressChecker: AddressChecker,
 ) {
     private var walletIndex: Int = 0
 
@@ -92,7 +92,6 @@ class CoreService @Inject constructor(
         ActivityService(
             coreService = this,
             cacheStore = cacheStore,
-            addressChecker = addressChecker,
             lightningService = lightningService
         )
     }
@@ -190,6 +189,12 @@ class CoreService @Inject constructor(
         }
     }
 
+    suspend fun isAddressUsed(address: String): Boolean {
+        return ServiceQueue.CORE.background {
+            com.synonym.bitkitcore.isAddressUsed(address = address)
+        }
+    }
+
     companion object {
         private const val TAG = "CoreService"
     }
@@ -203,7 +208,6 @@ private const val CHUNK_SIZE = 50
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,
-    private val addressChecker: AddressChecker,
     private val lightningService: LightningService,
 ) {
     suspend fun removeAll() {
@@ -376,6 +380,27 @@ class ActivityService(
      * @param forceUpdate If true, it will also update activities previously marked as deleted.
      * @param channelIdsByTxId Map of transaction IDs to channel IDs for identifying transfer activities.
      */
+    suspend fun handlePaymentEvent(paymentHash: String) {
+        ServiceQueue.CORE.background {
+            val payments = lightningService.payments ?: run {
+                Logger.warn("No payments available for hash $paymentHash", context = TAG)
+                return@background
+            }
+
+            val payment = payments.firstOrNull { it.id == paymentHash }
+            if (payment != null) {
+                // Lightning payments don't need channel IDs, only onchain payments do
+                val channelIdsByTxId = emptyMap<String, String>()
+                processSinglePayment(payment, forceUpdate = false, channelIdsByTxId = channelIdsByTxId)
+            } else {
+                Logger.info("Payment not found for hash $paymentHash - syncing all payments", context = TAG)
+                // For full sync, we need channel IDs for onchain payments
+                // This will be handled by ActivityRepo.syncLdkNodePayments which calls findChannelsForPayments
+                syncLdkNodePaymentsToActivities(payments, channelIdsByTxId = emptyMap())
+            }
+        }
+    }
+
     suspend fun syncLdkNodePaymentsToActivities(
         payments: List<PaymentDetails>,
         forceUpdate: Boolean = false,
@@ -488,10 +513,15 @@ class ActivityService(
      * Check pre-activity metadata for addresses in the transaction
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
-    private suspend fun findAddressInPreActivityMetadata(txDetails: TxDetails): String? {
-        for (output in txDetails.vout) {
-            val address = output.scriptpubkey_address ?: continue
-            val metadata = coreService.activity.getPreActivityMetadata(searchKey = address, searchByAddress = true)
+    private suspend fun findAddressInPreActivityMetadata(
+        details: TransactionDetails
+    ): String? {
+        for (output in details.outputs) {
+            val address = output.scriptpubkeyAddress ?: continue
+            val metadata = coreService.activity.getPreActivityMetadata(
+                searchKey = address,
+                searchByAddress = true
+            )
             if (metadata != null && metadata.isReceive) {
                 return address
             }
@@ -503,22 +533,20 @@ class ActivityService(
         kind: PaymentKind.Onchain,
         existingActivity: Activity?,
         payment: PaymentDetails,
+        transactionDetails: TransactionDetails? = null,
     ): String? {
         if (existingActivity != null || payment.direction != PaymentDirection.INBOUND) {
             return null
         }
 
-        return try {
-            val txDetails = addressChecker.getTransaction(kind.txid)
-            findAddressInPreActivityMetadata(txDetails)
-        } catch (e: Exception) {
-            Logger.verbose(
-                "Failed to get transaction details for address lookup: ${kind.txid}",
-                e,
-                context = TAG
-            )
-            null
+        // Get transaction details if not provided
+        val details = transactionDetails ?: lightningService.getTransactionDetails(kind.txid)
+        if (details == null) {
+            Logger.verbose("Transaction details not available for txid: ${kind.txid}", context = TAG)
+            return null
         }
+
+        return findAddressInPreActivityMetadata(details)
     }
 
     private data class ConfirmationData(
@@ -550,12 +578,8 @@ class ActivityService(
     private suspend fun buildUpdatedOnchainActivity(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
-        txid: String,
         channelId: String? = null,
     ): OnchainActivity {
-        val wasRemoved = !existingActivity.v1.doesExist
-        val shouldRestore = wasRemoved && confirmationData.isConfirmed
-
         var preservedIsTransfer = existingActivity.v1.isTransfer
         var preservedChannelId = existingActivity.v1.channelId
 
@@ -564,18 +588,16 @@ class ActivityService(
             preservedIsTransfer = true
         }
 
+        val finalDoesExist = if (confirmationData.isConfirmed) true else existingActivity.v1.doesExist
+
         val updatedOnChain = existingActivity.v1.copy(
             confirmed = confirmationData.isConfirmed,
             confirmTimestamp = confirmationData.confirmedTimestamp,
-            doesExist = if (shouldRestore) true else existingActivity.v1.doesExist,
+            doesExist = finalDoesExist,
             updatedAt = confirmationData.timestamp,
             isTransfer = preservedIsTransfer,
             channelId = preservedChannelId,
         )
-
-        if (wasRemoved && confirmationData.isConfirmed) {
-            markReplacementTransactionsAsRemoved(originalTxId = txid)
-        }
 
         return updatedOnChain
     }
@@ -616,6 +638,7 @@ class ActivityService(
         payment: PaymentDetails,
         forceUpdate: Boolean,
         channelId: String? = null,
+        transactionDetails: TransactionDetails? = null,
     ) {
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
@@ -628,14 +651,36 @@ class ActivityService(
             return
         }
 
-        val resolvedAddress = resolveAddressForInboundPayment(kind, existingActivity, payment)
+        // Extract existing activity data
+        val existingOnchain = if (existingActivity is Activity.Onchain) {
+            existingActivity.v1
+        } else {
+            null
+        }
+
+        var resolvedChannelId = channelId
+        var isTransfer = existingOnchain?.isTransfer ?: false
+
+        // Check if this transaction is a channel transfer
+        if (resolvedChannelId == null || !isTransfer) {
+            val foundChannelId = findChannelForTransaction(
+                txid = kind.txid,
+                direction = payment.direction,
+                transactionDetails = transactionDetails
+            )
+            if (foundChannelId != null) {
+                resolvedChannelId = foundChannelId
+                isTransfer = true
+            }
+        }
+
+        val resolvedAddress = resolveAddressForInboundPayment(kind, existingActivity, payment, transactionDetails)
 
         val onChain = if (existingActivity is Activity.Onchain) {
             buildUpdatedOnchainActivity(
                 existingActivity = existingActivity,
                 confirmationData = confirmationData,
-                txid = kind.txid,
-                channelId = channelId,
+                channelId = resolvedChannelId,
             )
         } else {
             buildNewOnchainActivity(
@@ -643,7 +688,7 @@ class ActivityService(
                 kind = kind,
                 confirmationData = confirmationData,
                 resolvedAddress = resolvedAddress,
-                channelId = channelId,
+                channelId = resolvedChannelId,
             )
         }
 
@@ -656,54 +701,6 @@ class ActivityService(
             updateActivity(payment.id, Activity.Onchain(onChain))
         } else {
             upsertActivity(Activity.Onchain(onChain))
-        }
-    }
-
-    /**
-     * Marks replacement transactions (with originalTxId in boostTxIds) as doesExist = false when original confirms.
-     * This is called when a removed RBFed transaction gets confirmed.
-     */
-    private suspend fun markReplacementTransactionsAsRemoved(originalTxId: String) {
-        try {
-            val allActivities = getActivities(
-                filter = ActivityFilter.ONCHAIN,
-                txType = null,
-                tags = null,
-                search = null,
-                minDate = null,
-                maxDate = null,
-                limit = null,
-                sortDirection = null
-            )
-
-            for (activity in allActivities) {
-                if (activity !is Activity.Onchain) continue
-
-                val onchainActivity = activity.v1
-                val isReplacement = onchainActivity.boostTxIds.contains(originalTxId) &&
-                    onchainActivity.doesExist &&
-                    !onchainActivity.confirmed
-
-                if (isReplacement) {
-                    Logger.debug(
-                        "Marking replacement transaction ${onchainActivity.txId} as doesExist = false " +
-                            "(original $originalTxId confirmed)",
-                        context = TAG
-                    )
-
-                    val updatedActivity = onchainActivity.copy(
-                        doesExist = false,
-                        updatedAt = System.currentTimeMillis().toULong() / 1000u
-                    )
-                    updateActivity(activityId = onchainActivity.id, activity = Activity.Onchain(updatedActivity))
-                }
-            }
-        } catch (e: Exception) {
-            Logger.error(
-                "Error marking replacement transactions as removed for originalTxId: $originalTxId",
-                e,
-                context = TAG
-            )
         }
     }
 
@@ -803,6 +800,394 @@ class ActivityService(
                 }
             }
         }
+    }
+
+    suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                val payments = lightningService.payments ?: run {
+                    Logger.warn("No payments available for transaction $txid", context = TAG)
+                    return@background
+                }
+
+                val payment = payments.firstOrNull { payment ->
+                    (payment.kind as? PaymentKind.Onchain)?.txid == txid
+                } ?: run {
+                    Logger.warn("Payment not found for transaction $txid", context = TAG)
+                    return@background
+                }
+
+                processOnchainPayment(
+                    kind = payment.kind as PaymentKind.Onchain,
+                    payment = payment,
+                    forceUpdate = false,
+                    channelId = null,
+                    transactionDetails = details,
+                )
+            }.onFailure { e ->
+                Logger.error("Error handling onchain transaction received for $txid", e, context = TAG)
+            }
+        }
+    }
+
+    suspend fun handleOnchainTransactionConfirmed(txid: String, details: TransactionDetails) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                val payments = lightningService.payments ?: run {
+                    Logger.warn("No payments available for transaction $txid", context = TAG)
+                    return@background
+                }
+
+                val payment = payments.firstOrNull { payment ->
+                    (payment.kind as? PaymentKind.Onchain)?.txid == txid
+                } ?: run {
+                    Logger.warn("Payment not found for transaction $txid", context = TAG)
+                    return@background
+                }
+
+                processOnchainPayment(
+                    kind = payment.kind as PaymentKind.Onchain,
+                    payment = payment,
+                    forceUpdate = false,
+                    channelId = null,
+                    transactionDetails = details,
+                )
+            }.onFailure { e ->
+                Logger.error("Error handling onchain transaction confirmed for $txid", e, context = TAG)
+            }
+        }
+    }
+
+    suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                val replacedActivity = getOnchainActivityByTxId(txid)
+                markReplacedActivity(txid, replacedActivity, conflicts)
+
+                for (conflictTxid in conflicts) {
+                    val replacementActivity = getOrCreateReplacementActivity(conflictTxid)
+                    if (replacementActivity != null && !replacementActivity.boostTxIds.contains(txid)) {
+                        updateReplacementActivity(txid, conflictTxid, replacementActivity, replacedActivity)
+                    }
+                }
+            }.onFailure { e ->
+                Logger.error("Error handling onchain transaction replaced for $txid", e, context = TAG)
+            }
+        }
+    }
+
+    private suspend fun markReplacedActivity(
+        txid: String,
+        replacedActivity: OnchainActivity?,
+        conflicts: List<String>,
+    ) {
+        if (replacedActivity != null) {
+            Logger.info(
+                "Transaction $txid replaced by ${conflicts.size} conflict(s): " +
+                    conflicts.joinToString(", "),
+                context = TAG
+            )
+
+            val updatedActivity = replacedActivity.copy(
+                doesExist = false,
+                isBoosted = false,
+                updatedAt = System.currentTimeMillis().toULong() / 1000u
+            )
+            updateActivity(replacedActivity.id, Activity.Onchain(updatedActivity))
+            Logger.info("Marked transaction $txid as replaced", context = TAG)
+        } else {
+            Logger.info(
+                "Activity not found for replaced transaction $txid - " +
+                    "will be created when transaction is processed",
+                context = TAG
+            )
+        }
+    }
+
+    private suspend fun getOrCreateReplacementActivity(conflictTxid: String): OnchainActivity? {
+        var replacementActivity = getOnchainActivityByTxId(conflictTxid)
+
+        if (replacementActivity == null) {
+            val payments = lightningService.payments
+            val replacementPayment = payments?.firstOrNull { payment ->
+                (payment.kind as? PaymentKind.Onchain)?.txid == conflictTxid
+            }
+
+            if (replacementPayment != null) {
+                Logger.info(
+                    "Processing replacement transaction $conflictTxid that was already in payments list",
+                    context = TAG
+                )
+                val processResult = runCatching {
+                    processOnchainPayment(
+                        kind = replacementPayment.kind as PaymentKind.Onchain,
+                        payment = replacementPayment,
+                        forceUpdate = false,
+                        channelId = null,
+                    )
+                    getOnchainActivityByTxId(conflictTxid)
+                }
+                processResult.onFailure { e ->
+                    Logger.error(
+                        "Failed to process replacement transaction $conflictTxid",
+                        e,
+                        context = TAG
+                    )
+                }
+                replacementActivity = processResult.getOrNull()
+            }
+        }
+
+        return replacementActivity
+    }
+
+    private suspend fun updateReplacementActivity(
+        txid: String,
+        conflictTxid: String,
+        replacementActivity: OnchainActivity,
+        replacedActivity: OnchainActivity?,
+    ) {
+        val updatedActivity = replacementActivity.copy(
+            boostTxIds = replacementActivity.boostTxIds + txid,
+            isBoosted = true,
+            updatedAt = System.currentTimeMillis().toULong() / 1000u
+        )
+        updateActivity(replacementActivity.id, Activity.Onchain(updatedActivity))
+
+        if (replacedActivity != null) {
+            copyTagsFromReplacedActivity(txid, conflictTxid, replacedActivity.id, replacementActivity.id)
+        }
+
+        Logger.info("Updated replacement transaction $conflictTxid with boostTxId $txid", context = TAG)
+    }
+
+    private suspend fun copyTagsFromReplacedActivity(
+        txid: String,
+        conflictTxid: String,
+        replacedActivityId: String,
+        replacementActivityId: String,
+    ) {
+        runCatching {
+            val replacedTags = tags(replacedActivityId)
+            if (replacedTags.isNotEmpty()) {
+                appendTags(replacementActivityId, replacedTags)
+            }
+        }.onFailure { e ->
+            Logger.error(
+                "Failed to copy tags from replaced transaction $txid " +
+                    "to replacement transaction $conflictTxid",
+                e,
+                context = TAG
+            )
+        }
+    }
+
+    suspend fun handleOnchainTransactionReorged(txid: String) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                val onchain = getOnchainActivityByTxId(txid) ?: run {
+                    Logger.warn("Activity not found for reorged transaction $txid", context = TAG)
+                    return@background
+                }
+
+                val updatedActivity = onchain.copy(
+                    confirmed = false,
+                    confirmTimestamp = null,
+                    updatedAt = System.currentTimeMillis().toULong() / 1000u
+                )
+
+                updateActivity(onchain.id, Activity.Onchain(updatedActivity))
+            }.onFailure { e ->
+                Logger.error("Error handling onchain transaction reorged for $txid", e, context = TAG)
+            }
+        }
+    }
+
+    suspend fun handleOnchainTransactionEvicted(txid: String) {
+        ServiceQueue.CORE.background {
+            runCatching {
+                val onchain = getOnchainActivityByTxId(txid) ?: run {
+                    Logger.warn("Activity not found for evicted transaction $txid", context = TAG)
+                    return@background
+                }
+
+                val updatedActivity = onchain.copy(
+                    doesExist = false,
+                    updatedAt = System.currentTimeMillis().toULong() / 1000u
+                )
+
+                updateActivity(onchain.id, Activity.Onchain(updatedActivity))
+            }.onFailure { e ->
+                Logger.error("Error handling onchain transaction evicted for $txid", e, context = TAG)
+            }
+        }
+    }
+
+    suspend fun shouldShowReceivedSheet(txid: String, value: ULong): Boolean {
+        return ServiceQueue.CORE.background {
+            if (value == 0uL) {
+                return@background false
+            }
+
+            if (findClosedChannelForTransaction(txid, null) != null) {
+                return@background false
+            }
+
+            runCatching {
+                val onchain = getOnchainActivityByTxId(txid) ?: return@background true
+
+                if (onchain.boostTxIds.isEmpty()) {
+                    return@background true
+                }
+
+                for (replacedTxid in onchain.boostTxIds) {
+                    val replaced = getOnchainActivityByTxId(replacedTxid)
+                    if (replaced != null && replaced.value == value) {
+                        Logger.info(
+                            "Skipping received sheet for replacement transaction $txid " +
+                                "with same value as replaced transaction $replacedTxid",
+                            context = TAG
+                        )
+                        return@background false
+                    }
+                }
+            }.onFailure { e ->
+                Logger.error("Failed to check existing activities for replacement", e, context = TAG)
+            }
+
+            return@background true
+        }
+    }
+
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
+        return ServiceQueue.CORE.background {
+            val doesExistMap = mutableMapOf<String, Boolean>()
+            for (boostTxId in boostTxIds) {
+                val boostActivity = getOnchainActivityByTxId(boostTxId)
+                if (boostActivity != null) {
+                    doesExistMap[boostTxId] = boostActivity.doesExist
+                }
+            }
+            return@background doesExistMap
+        }
+    }
+
+    suspend fun isCpfpChildTransaction(txId: String): Boolean {
+        return ServiceQueue.CORE.background {
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
+            if (!txIdsInBoostTxIds.contains(txId)) {
+                return@background false
+            }
+
+            val activity = getOnchainActivityByTxId(txId) ?: return@background false
+            return@background activity.doesExist
+        }
+    }
+
+    suspend fun getTxIdsInBoostTxIds(): Set<String> {
+        return ServiceQueue.CORE.background {
+            val allOnchainActivities = get(
+                filter = ActivityFilter.ONCHAIN,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null
+            )
+
+            allOnchainActivities
+                .filterIsInstance<Activity.Onchain>()
+                .flatMap { it.v1.boostTxIds }
+                .toSet()
+        }
+    }
+
+    private suspend fun findChannelForTransaction(
+        txid: String,
+        direction: PaymentDirection,
+        transactionDetails: TransactionDetails? = null,
+    ): String? {
+        return when (direction) {
+            PaymentDirection.INBOUND -> {
+                // Check if this transaction is a channel close by checking if it spends
+                // a closed channel's funding UTXO
+                findClosedChannelForTransaction(txid, transactionDetails)
+            }
+            PaymentDirection.OUTBOUND -> {
+                // Check if this transaction is a channel open by checking if it's
+                // the funding transaction for an open channel
+                findOpenChannelForTransaction(txid)
+            }
+        }
+    }
+
+    private suspend fun findOpenChannelForTransaction(txid: String): String? {
+        val channels = lightningService.channels ?: return null
+        if (channels.isEmpty()) return null
+
+        // First, check if the transaction matches any channel's funding transaction directly
+        val directMatch = channels.firstOrNull { channel ->
+            channel.fundingTxo?.txid == txid
+        }
+        if (directMatch != null) {
+            return directMatch.channelId
+        }
+
+        // If no direct match, check Blocktank orders for payment transactions
+        return findChannelFromBlocktankOrders(txid, channels)
+    }
+
+    private suspend fun findChannelFromBlocktankOrders(
+        txid: String,
+        channels: List<ChannelDetails>,
+    ): String? {
+        return runCatching {
+            val blocktank = coreService.blocktank ?: return null
+            val orders = blocktank.orders(orderIds = null, filter = null, refresh = false)
+            val matchingOrder = orders.firstOrNull { order ->
+                order.payment?.onchain?.transactions?.any { transaction -> transaction.txId == txid } == true
+            } ?: return null
+
+            val orderChannel = matchingOrder.channel ?: return null
+            channels.firstOrNull { channel ->
+                channel.fundingTxo?.txid == orderChannel.fundingTx.id
+            }?.channelId
+        }.onFailure { e ->
+            Logger.warn("Failed to fetch Blocktank orders: $e", context = TAG)
+        }.getOrNull()
+    }
+
+    suspend fun findClosedChannelForTransaction(txid: String, transactionDetails: TransactionDetails? = null): String? {
+        return runCatching {
+            val closedChannelsList = closedChannels(SortDirection.DESC)
+            if (closedChannelsList.isEmpty()) {
+                return null
+            }
+
+            // Use provided transaction details if available, otherwise try node
+            val details = transactionDetails ?: lightningService.getTransactionDetails(txid) ?: run {
+                Logger.warn("Transaction details not available for $txid", context = TAG)
+                return null
+            }
+
+            for (input in details.inputs) {
+                val inputTxid = input.txid
+                val inputVout = input.vout.toInt()
+
+                val matchingChannel = closedChannelsList.firstOrNull { channel ->
+                    channel.fundingTxoTxid == inputTxid && channel.fundingTxoIndex == inputVout.toUInt()
+                }
+
+                if (matchingChannel != null) {
+                    return matchingChannel.channelId
+                }
+            }
+            null
+        }.onFailure { e ->
+            Logger.warn("Failed to check if transaction $txid spends closed channel funding UTXO", e, context = TAG)
+        }.getOrNull()
     }
 
     companion object {

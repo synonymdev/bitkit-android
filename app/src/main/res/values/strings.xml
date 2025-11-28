@@ -995,6 +995,8 @@
     <string name="wallet__activity_received">Received</string>
     <string name="wallet__activity_pending">Pending</string>
     <string name="wallet__activity_failed">Failed</string>
+    <string name="wallet__activity_boost_fee">Boost Fee</string>
+    <string name="wallet__activity_boost_fee_description">Boosted incoming transaction</string>
     <string name="wallet__activity_transfer">Transfer</string>
     <string name="wallet__activity_transfer_savings_pending">From Spending (±{duration})</string>
     <string name="wallet__activity_transfer_savings_done">From Spending</string>
