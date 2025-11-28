@@ -27,7 +27,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -40,6 +42,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.R
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WalletState
@@ -66,6 +72,7 @@ import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("ViewModelForwarding")
 @Composable
@@ -85,6 +92,7 @@ fun EditInvoiceScreen(
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+    val latestWalletState = rememberUpdatedState(walletUiState)
 
     LaunchedEffect(Unit) {
         editInvoiceVM.editInvoiceEffect.collect { effect ->
@@ -116,7 +124,17 @@ fun EditInvoiceScreen(
                 }
 
                 EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> {
+                    val previousBolt11 = latestWalletState.value.bolt11
                     updateInvoice(receiveSats)
+                    val updated = withTimeoutOrNull(5.seconds) {
+                        snapshotFlow { latestWalletState.value.bolt11 }
+                            .distinctUntilChanged()
+                            .filter { it.isNotEmpty() && it != previousBolt11 }
+                            .first()
+                    }
+                    if (updated == null) {
+                        Logger.warn("Timed out waiting for invoice update", context = "EditInvoiceScreen")
+                    }
                     onBack()
                 }
             }
