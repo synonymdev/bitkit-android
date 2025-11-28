@@ -61,8 +61,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning payment returns ShowSheet by default`() = test {
-        val command = NotifyPaymentReceived.Command.Lightning(sats = 1000uL, paymentId = "hash123")
+    fun `lightning payment returns ShowSheet`() = test {
+        val command = NotifyPaymentReceived.Command.Lightning(sats = 1000uL, paymentHashOrTxId = "hash123")
 
         val result = sut(command)
 
@@ -80,7 +80,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     fun `lightning payment returns ShowNotification when includeNotification is true`() = test {
         val command = NotifyPaymentReceived.Command.Lightning(
             sats = 1000uL,
-            paymentId = "hash123",
+            paymentHashOrTxId = "hash123",
             includeNotification = true,
         )
 
@@ -99,7 +99,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     @Test
     fun `onchain payment returns ShowSheet when shouldShowPaymentReceived returns true`() = test {
         whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(true)
-        val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentId = "txid456")
+        val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentHashOrTxId = "txid456")
 
         val result = sut(command)
 
@@ -116,7 +116,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     @Test
     fun `onchain payment returns Skip when shouldShowPaymentReceived is false`() = test {
         whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(false)
-        val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentId = "txid456")
+        val command = NotifyPaymentReceived.Command.Onchain(sats = 5000uL, paymentHashOrTxId = "txid456")
 
         val result = sut(command)
 
@@ -128,7 +128,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     @Test
     fun `onchain payment calls shouldShowPaymentReceived with correct parameters`() = test {
         whenever(activityRepo.shouldShowPaymentReceived(any(), any())).thenReturn(true)
-        val command = NotifyPaymentReceived.Command.Onchain(sats = 7500uL, paymentId = "txid789")
+        val command = NotifyPaymentReceived.Command.Onchain(sats = 7500uL, paymentHashOrTxId = "txid789")
 
         sut(command)
 
@@ -137,7 +137,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Test
     fun `lightning payment does not call shouldShowPaymentReceived`() = test {
-        val command = NotifyPaymentReceived.Command.Lightning(sats = 1000uL, paymentId = "hash123")
+        val command = NotifyPaymentReceived.Command.Lightning(sats = 1000uL, paymentHashOrTxId = "hash123")
 
         sut(command)
 

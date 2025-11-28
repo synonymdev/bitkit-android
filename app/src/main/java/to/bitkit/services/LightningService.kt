@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
@@ -674,11 +675,11 @@ class LightningService @Inject constructor(
     // region events
     private var shouldListenForEvents = true
 
-    suspend fun listenForEvents(onEvent: NodeEventHandler? = null) {
+    suspend fun listenForEvents(onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
         while (shouldListenForEvents) {
-            val node = this.node ?: let {
+            val node = this@LightningService.node ?: let {
                 Logger.error(ServiceError.NodeNotStarted.message.orEmpty())
-                return
+                return@withContext
             }
             val event = node.nextEventAsync()
             Logger.debug("LDK-node event fired: ${jsonLogOf(event)}")

@@ -53,6 +53,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
+import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -124,6 +125,7 @@ class AppViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val appUpdaterService: AppUpdaterService,
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
+    private val cacheStore: CacheStore,
 ) : ViewModel() {
     val healthState = healthRepo.healthState
 
@@ -332,7 +334,6 @@ class AppViewModel @Inject constructor(
                     direction = NewTransactionSheetDirection.RECEIVED,
                     sats = amount,
                 ),
-                event,
             )
             activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
         } else {
@@ -346,10 +347,21 @@ class AppViewModel @Inject constructor(
 
     private fun notifyPaymentReceived(event: Event) {
         val command = NotifyPaymentReceived.Command.from(event) ?: return
+
         viewModelScope.launch(bgDispatcher) {
+            // Skip lightning payment events replayed by ldk-node on startup
+            if (command is NotifyPaymentReceived.Command.Lightning) {
+                val cachedId = cacheStore.data.first().lastLightningPaymentId
+                if (command.paymentHashOrTxId == cachedId) {
+                    Logger.debug("Skipping replayed Lightning payment: ${command.paymentHashOrTxId}", context = TAG)
+                    return@launch
+                }
+                cacheStore.setLastLightningPayment(command.paymentHashOrTxId)
+            }
+
             notifyPaymentReceivedHandler(command).onSuccess { result ->
                 if (result is NotifyPaymentReceived.Result.ShowSheet) {
-                    showNewTransactionSheet(result.details, event)
+                    showNewTransactionSheet(result.details)
                 }
             }
         }
@@ -1409,29 +1421,12 @@ class AppViewModel @Inject constructor(
 
     fun showNewTransactionSheet(
         details: NewTransactionSheetDetails,
-        event: Event? = null,
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
         if (!_isNewTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
-        }
-
-        if (event is Event.PaymentReceived) {
-            val activity = activityRepo.findActivityByPaymentId(
-                paymentHashOrTxId = event.paymentHash,
-                type = ActivityFilter.ALL,
-                txType = PaymentType.RECEIVED,
-                retry = false,
-            ).getOrNull()
-
-            // TODO check if this is still needed now that we're disabling the sheet during restore
-            // TODO Temporary fix while ldk-node bug is not fixed https://github.com/synonymdev/bitkit-android/pull/297
-            if (activity != null) {
-                Logger.warn("Activity ${activity.rawId()} already exists, skipping sheet", context = TAG)
-                return@launch
-            }
         }
 
         hideSheet()

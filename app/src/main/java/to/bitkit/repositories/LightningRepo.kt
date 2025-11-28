@@ -87,7 +87,7 @@ class LightningRepo @Inject constructor(
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
-    private var cachedEventHandler: NodeEventHandler? = null
+    private var _eventHandler: NodeEventHandler? = null
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
@@ -193,6 +193,8 @@ class LightningRepo @Inject constructor(
         try {
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
 
+            this@LightningRepo._eventHandler = eventHandler
+
             // Setup if not already setup
             if (lightningService.node == null) {
                 val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl)
@@ -211,21 +213,12 @@ class LightningRepo @Inject constructor(
             if (getStatus()?.isRunning == true) {
                 Logger.info("LDK node already running", context = TAG)
                 _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                lightningService.listenForEvents(onEvent = { event ->
-                    handleLdkEvent(event)
-                    eventHandler?.invoke(event)
-                })
+                lightningService.listenForEvents(::onEvent)
                 return@withContext Result.success(Unit)
             }
 
             // Start the node service
-            lightningService.start(timeout) { event ->
-                handleLdkEvent(event)
-                eventHandler?.invoke(event)
-                ldkNodeEventBus.emit(event)
-            }
-
-            this@LightningRepo.cachedEventHandler = eventHandler
+            lightningService.start(timeout, ::onEvent)
 
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
 
@@ -264,6 +257,12 @@ class LightningRepo @Inject constructor(
                 Result.failure(e)
             }
         }
+    }
+
+    private suspend fun onEvent(event: Event) {
+        handleLdkEvent(event)
+        _eventHandler?.invoke(event)
+        ldkNodeEventBus.emit(event)
     }
 
     fun setRecoveryMode(enabled: Boolean) {
@@ -330,11 +329,13 @@ class LightningRepo @Inject constructor(
                     refreshChannelCache()
                 }
             }
+
             is Event.ChannelReady -> {
                 scope.launch {
                     refreshChannelCache()
                 }
             }
+
             is Event.ChannelClosed -> {
                 val channelId = event.channelId
                 val reason = event.reason?.toString() ?: ""
@@ -342,6 +343,7 @@ class LightningRepo @Inject constructor(
                     registerClosedChannel(channelId, reason)
                 }
             }
+
             else -> {
                 // Other events don't need special handling
             }
@@ -436,7 +438,7 @@ class LightningRepo @Inject constructor(
         start(
             shouldRetry = false,
             customServerUrl = newServerUrl,
-            eventHandler = cachedEventHandler,
+            eventHandler = _eventHandler,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -463,7 +465,7 @@ class LightningRepo @Inject constructor(
         start(
             shouldRetry = false,
             customRgsServerUrl = newRgsUrl,
-            eventHandler = cachedEventHandler,
+            eventHandler = _eventHandler,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -488,7 +490,7 @@ class LightningRepo @Inject constructor(
 
         start(
             shouldRetry = false,
-            eventHandler = cachedEventHandler,
+            eventHandler = _eventHandler,
         ).onSuccess {
             Logger.debug("Successfully started node with previous config")
         }.onFailure { e ->

@@ -33,25 +33,21 @@ fun GiftSheet(
 
     val onSuccessState = rememberUpdatedState { details: NewTransactionSheetDetails ->
         appViewModel.hideSheet()
-        appViewModel.showNewTransactionSheet(details = details, event = null)
+        appViewModel.showNewTransactionSheet(details)
     }
 
     LaunchedEffect(Unit) {
         viewModel.successEvent.collect { details ->
-            onSuccessState.value(details)
+            onSuccessState.value.invoke(details)
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.navigationEvent.collect { route ->
             when (route) {
-                is GiftRoute.Success -> {
-                    appViewModel.hideSheet()
-                }
-                else -> {
-                    navController.navigate(route) {
-                        popUpTo(GiftRoute.Loading) { inclusive = false }
-                    }
+                is GiftRoute.Success -> appViewModel.hideSheet()
+                else -> navController.navigate(route) {
+                    popUpTo(GiftRoute.Loading) { inclusive = false }
                 }
             }
         }

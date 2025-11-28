@@ -113,6 +113,10 @@ class CacheStore @Inject constructor(
         }
     }
 
+    suspend fun setLastLightningPayment(paymentId: String) {
+        store.updateData { it.copy(lastLightningPaymentId = paymentId) }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -134,5 +138,6 @@ data class AppCacheData(
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
     val activitiesPendingDelete: List<String> = listOf(),
+    val lastLightningPaymentId: String? = null,
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
 )

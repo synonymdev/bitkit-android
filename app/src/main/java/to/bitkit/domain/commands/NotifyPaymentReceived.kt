@@ -8,18 +8,18 @@ sealed interface NotifyPaymentReceived {
 
     sealed interface Command : NotifyPaymentReceived {
         val sats: ULong
-        val paymentId: String
+        val paymentHashOrTxId: String
         val includeNotification: Boolean
 
         data class Lightning(
             override val sats: ULong,
-            override val paymentId: String,
+            override val paymentHashOrTxId: String,
             override val includeNotification: Boolean = false,
         ) : Command
 
         data class Onchain(
             override val sats: ULong,
-            override val paymentId: String,
+            override val paymentHashOrTxId: String,
             override val includeNotification: Boolean = false,
         ) : Command
 
@@ -28,7 +28,7 @@ sealed interface NotifyPaymentReceived {
                 when (event) {
                     is Event.PaymentReceived -> Lightning(
                         sats = event.amountMsat / 1000u,
-                        paymentId = event.paymentHash,
+                        paymentHashOrTxId = event.paymentHash,
                         includeNotification = includeNotification,
                     )
 
@@ -36,7 +36,7 @@ sealed interface NotifyPaymentReceived {
                         val amountSats = event.details.amountSats
                         Onchain(
                             sats = amountSats.toULong(),
-                            paymentId = event.txid,
+                            paymentHashOrTxId = event.txid,
                             includeNotification = includeNotification,
                         ).takeIf {
                             amountSats > 0
