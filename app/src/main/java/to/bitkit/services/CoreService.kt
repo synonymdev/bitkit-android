@@ -645,10 +645,9 @@ class ActivityService(
         }
 
         var resolvedChannelId = channelId
-        var isTransfer = existingOnchain?.isTransfer ?: false
 
         // Check if this transaction is a channel transfer
-        if (resolvedChannelId == null || !isTransfer) {
+        if (resolvedChannelId == null) {
             val foundChannelId = findChannelForTransaction(
                 txid = kind.txid,
                 direction = payment.direction,
@@ -656,7 +655,6 @@ class ActivityService(
             )
             if (foundChannelId != null) {
                 resolvedChannelId = foundChannelId
-                isTransfer = true
             }
         }
 
