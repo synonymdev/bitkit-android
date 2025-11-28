@@ -20,6 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +46,6 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.isBoosted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -109,10 +109,10 @@ fun ActivityDetailScreen(
         detailViewModel.setActivity(item)
         if (item is Activity.Onchain) {
             isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
-            if (item.v1.boostTxIds.isNotEmpty()) {
-                boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+            boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
+                detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
             } else {
-                boostTxDoesExist = emptyMap()
+                emptyMap()
             }
         } else {
             isCpfpChild = false
@@ -864,20 +864,19 @@ private fun PreviewSheetSmallScreen() {
     }
 }
 
+@ReadOnlyComposable
 @Composable
 private fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
-    boostTxDoesExist: Map<String, Boolean>
+    boostTxDoesExist: Map<String, Boolean>,
 ): Boolean {
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1
 
     // Check all disable conditions
-    val shouldDisable = isCpfpChild ||
-        !activity.doesExist ||
-        activity.confirmed == true ||
+    val shouldDisable = isCpfpChild || !activity.doesExist || activity.confirmed ||
         (activity.isBoosted && isBoostCompleted(activity, boostTxDoesExist))
 
     if (shouldDisable) return false
@@ -886,10 +885,11 @@ private fun shouldEnableBoostButton(
     return !activity.isTransfer && activity.value > 0uL
 }
 
+@ReadOnlyComposable
 @Composable
 private fun isBoostCompleted(
     activity: OnchainActivity,
-    boostTxDoesExist: Map<String, Boolean>
+    boostTxDoesExist: Map<String, Boolean>,
 ): Boolean {
     // If boostTxIds is empty, boost is in progress (RBF case)
     if (activity.boostTxIds.isEmpty()) return true

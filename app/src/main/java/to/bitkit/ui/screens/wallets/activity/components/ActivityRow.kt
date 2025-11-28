@@ -83,10 +83,10 @@ fun ActivityRow(
     var isCpfpChild by remember { mutableStateOf(false) }
 
     LaunchedEffect(item) {
-        if (item is Activity.Onchain && activityListViewModel != null) {
-            isCpfpChild = activityListViewModel.isCpfpChildTransaction(item.v1.txId)
+        isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
+            activityListViewModel.isCpfpChildTransaction(item.v1.txId)
         } else {
-            isCpfpChild = false
+            false
         }
     }
 

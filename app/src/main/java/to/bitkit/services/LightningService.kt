@@ -33,6 +33,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
@@ -695,7 +696,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region transaction details
-    suspend fun getTransactionDetails(txid: Txid): org.lightningdevkit.ldknode.TransactionDetails? {
+    suspend fun getTransactionDetails(txid: Txid): TransactionDetails? {
         val node = this.node ?: return null
         return ServiceQueue.LDK.background {
             try {

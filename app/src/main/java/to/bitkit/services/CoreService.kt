@@ -38,7 +38,6 @@ import com.synonym.bitkitcore.getOrders
 import com.synonym.bitkitcore.getTags
 import com.synonym.bitkitcore.initDb
 import com.synonym.bitkitcore.insertActivity
-import com.synonym.bitkitcore.isAddressUsed
 import com.synonym.bitkitcore.openChannel
 import com.synonym.bitkitcore.refreshActiveCjitEntries
 import com.synonym.bitkitcore.refreshActiveOrders
@@ -366,20 +365,6 @@ class ActivityService(
         getAllClosedChannels(sortDirection)
     }
 
-    /**
-     * Maps all `PaymentDetails` from LDK Node to bitkit-core [Activity] records.
-     *
-     * Payments are parallelly processed in chunks, handling both on-chain and Lightning payments
-     * to create new activity records or updating existing ones based on the payment's status and details.
-     *
-     * It's designed to be idempotent, meaning it can be called multiple times with the same payment
-     * list without creating duplicate entries. It checks the `updatedAt` timestamp to avoid overwriting
-     * newer local data with older data from LDK.
-     *
-     * @param payments The list of `PaymentDetails` from the LDK node to be processed.
-     * @param forceUpdate If true, it will also update activities previously marked as deleted.
-     * @param channelIdsByTxId Map of transaction IDs to channel IDs for identifying transfer activities.
-     */
     suspend fun handlePaymentEvent(paymentHash: String) {
         ServiceQueue.CORE.background {
             val payments = lightningService.payments ?: run {
@@ -555,7 +540,7 @@ class ActivityService(
         val timestamp: ULong,
     )
 
-    private suspend fun getConfirmationStatus(
+    private fun getConfirmationStatus(
         kind: PaymentKind.Onchain,
         timestamp: ULong,
     ): ConfirmationData {
@@ -575,7 +560,7 @@ class ActivityService(
         return ConfirmationData(isConfirmed, confirmedTimestamp, timestamp)
     }
 
-    private suspend fun buildUpdatedOnchainActivity(
+    private fun buildUpdatedOnchainActivity(
         existingActivity: Activity.Onchain,
         confirmationData: ConfirmationData,
         channelId: String? = null,
@@ -602,7 +587,7 @@ class ActivityService(
         return updatedOnChain
     }
 
-    private suspend fun buildNewOnchainActivity(
+    private fun buildNewOnchainActivity(
         payment: PaymentDetails,
         kind: PaymentKind.Onchain,
         confirmationData: ConfirmationData,
@@ -876,7 +861,7 @@ class ActivityService(
         }
     }
 
-    private suspend fun markReplacedActivity(
+    private fun markReplacedActivity(
         txid: String,
         replacedActivity: OnchainActivity?,
         conflicts: List<String>,
@@ -1144,7 +1129,7 @@ class ActivityService(
         channels: List<ChannelDetails>,
     ): String? {
         return runCatching {
-            val blocktank = coreService.blocktank ?: return null
+            val blocktank = coreService.blocktank
             val orders = blocktank.orders(orderIds = null, filter = null, refresh = false)
             val matchingOrder = orders.firstOrNull { order ->
                 order.payment?.onchain?.transactions?.any { transaction -> transaction.txId == txid } == true
