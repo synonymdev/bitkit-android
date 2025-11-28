@@ -42,7 +42,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class LightningConnectionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,

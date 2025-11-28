@@ -204,6 +204,7 @@ class CoreService @Inject constructor(
 // region Activity
 private const val CHUNK_SIZE = 50
 
+@Suppress("LargeClass")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
     private val cacheStore: CacheStore,

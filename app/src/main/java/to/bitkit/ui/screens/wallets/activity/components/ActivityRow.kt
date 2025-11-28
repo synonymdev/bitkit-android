@@ -160,6 +160,7 @@ fun ActivityRow(
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun TransactionStatusText(
     txType: PaymentType,

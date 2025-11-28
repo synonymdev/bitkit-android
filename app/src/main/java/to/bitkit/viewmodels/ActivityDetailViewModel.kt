@@ -21,6 +21,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,

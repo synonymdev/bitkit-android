@@ -26,6 +26,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class ActivityListViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
