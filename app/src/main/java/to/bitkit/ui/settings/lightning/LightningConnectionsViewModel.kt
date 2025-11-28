@@ -413,30 +413,25 @@ class LightningConnectionsViewModel @Inject constructor(
     }
 
     fun fetchActivityTimestamp(channelId: String) {
-        viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                val activities = activityRepo.getActivities(
-                    filter = ActivityFilter.ONCHAIN,
-                    txType = PaymentType.SENT,
-                    tags = null,
-                    search = null,
-                    minDate = null,
-                    maxDate = null,
-                    limit = null,
-                    sortDirection = null
-                ).getOrNull() ?: emptyList()
+        viewModelScope.launch {
+            val activities = activityRepo.getActivities(
+                filter = ActivityFilter.ONCHAIN,
+                txType = PaymentType.SENT,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null
+            ).getOrNull() ?: emptyList()
 
-                val transferActivity = activities.firstOrNull { activity ->
-                    activity is Activity.Onchain &&
-                        activity.v1.isTransfer &&
-                        activity.v1.channelId == channelId
-                } as? Activity.Onchain
+            val transferActivity = activities.firstOrNull { activity ->
+                activity is Activity.Onchain &&
+                    activity.v1.isTransfer &&
+                    activity.v1.channelId == channelId
+            } as? Activity.Onchain
 
-                _txTime.update { transferActivity?.v1?.confirmTimestamp ?: transferActivity?.v1?.timestamp }
-            }.onFailure { e ->
-                Logger.warn("fetchActivityTimestamp error for channelId: '$channelId'", e, context = TAG)
-                _txTime.update { null }
-            }
+            _txTime.update { transferActivity?.v1?.confirmTimestamp ?: transferActivity?.v1?.timestamp }
         }
     }
 

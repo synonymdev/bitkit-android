@@ -18,7 +18,6 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.models.AddressModel
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -166,12 +165,8 @@ class AddressViewerViewModel @Inject constructor(
         }
     }
 
-    suspend fun getBalanceForAddress(address: String): Result<Long> = withContext(bgDispatcher) {
-        return@withContext lightningRepo.getAddressBalance(address).map { it.toLong() }
-            .onFailure { e ->
-                Logger.error("Error getting balance for address $address", e)
-            }
-    }
+    suspend fun getBalanceForAddress(address: String): Result<Long> =
+        lightningRepo.getAddressBalance(address).map { it.toLong() }
 }
 
 data class UiState(
