@@ -637,13 +637,6 @@ class ActivityService(
             return
         }
 
-        // Extract existing activity data
-        val existingOnchain = if (existingActivity is Activity.Onchain) {
-            existingActivity.v1
-        } else {
-            null
-        }
-
         var resolvedChannelId = channelId
 
         // Check if this transaction is a channel transfer
