@@ -365,7 +365,7 @@ private fun PrimaryButtonPreview() {
                 PrimaryButton(
                     text = null,
                     onClick = {},
-                    fullWidth = false,
+                    fullWidth = true,
                     size = ButtonSize.Large,
                     icon = {
                         Icon(
@@ -378,7 +378,7 @@ private fun PrimaryButtonPreview() {
                 PrimaryButton(
                     text = null,
                     onClick = {},
-                    fullWidth = false,
+                    fullWidth = true,
                     size = ButtonSize.Small,
                     enabled = false,
                     icon = {
@@ -459,7 +459,7 @@ private fun SecondaryButtonPreview() {
                 SecondaryButton(
                     text = null,
                     onClick = {},
-                    fullWidth = false,
+                    fullWidth = true,
                     size = ButtonSize.Large,
                     icon = {
                         Icon(
@@ -472,7 +472,7 @@ private fun SecondaryButtonPreview() {
                 SecondaryButton(
                     text = null,
                     onClick = {},
-                    fullWidth = false,
+                    fullWidth = true,
                     size = ButtonSize.Small,
                     enabled = false,
                     icon = {
