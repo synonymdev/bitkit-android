@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.shared.util.innerShadow
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -91,6 +92,11 @@ fun PrimaryButton(
                 } else {
                     Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
                 }
+            )
+            .innerShadow(
+                color = Colors.White.copy(alpha = if (isPressed) 0.1f else 0.05f),
+                blurRadius = 4.dp,
+                shape = shape
             )
             .then(if (enabled) Modifier else Modifier.alpha(0.32f))
             .clickable(
