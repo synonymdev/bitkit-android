@@ -87,9 +87,9 @@ fun PrimaryButton(
             )
             .then(
                 if (isPressed) {
-                    Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
+                    Modifier.gradientBackground(startColor = Colors.Gray3, endColor = Colors.Gray4)
                 } else {
-                    Modifier.gradientBackground(startColor = Colors.Gray5, endColor = Colors.Black)
+                    Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
                 }
             )
             .then(if (enabled) Modifier else Modifier.alpha(0.32f))
