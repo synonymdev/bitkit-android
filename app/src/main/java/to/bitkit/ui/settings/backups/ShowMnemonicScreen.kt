@@ -168,7 +168,6 @@ private fun ShowMnemonicContent(
                             text = stringResource(R.string.security__mnemonic_reveal),
                             fullWidth = false,
                             onClick = onRevealClick,
-                            color = Colors.Black50,
                             modifier = Modifier
                                 .alpha(buttonAlpha)
                                 .testTag("TapToReveal")

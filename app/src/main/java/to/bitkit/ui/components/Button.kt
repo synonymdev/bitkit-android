@@ -1,6 +1,10 @@
 package to.bitkit.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,22 +17,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import to.bitkit.ui.theme.AppButtonDefaults
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -57,41 +65,72 @@ fun PrimaryButton(
     size: ButtonSize = ButtonSize.Large,
     enabled: Boolean = true,
     fullWidth: Boolean = true,
-    color: Color = Colors.White16,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    Button(
-        onClick = onClick,
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.primaryColors.copy(containerColor = color),
-        contentPadding = contentPadding,
+    val shape = MaterialTheme.shapes.extraLarge
+
+    Surface(
+        shape = shape,
+        color = Color.Transparent,
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
             .then(modifier)
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(size.height / 2)
+            .shadow(
+                elevation = 4.dp,
+                shape = shape,
+                ambientColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f),
+                spotColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f)
             )
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) {
-                    Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
-                        icon()
-                    }
+            .then(
+                if (isPressed) {
+                    Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
+                } else {
+                    Modifier.gradientBackground(startColor = Colors.Gray5, endColor = Colors.Black)
                 }
-                text?.let {
-                    Text(
-                        text = text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            )
+            .then(if (enabled) Modifier else Modifier.alpha(0.32f))
+            .clickable(
+                onClick = onClick,
+                enabled = enabled && !isLoading,
+                interactionSource = interactionSource,
+                indication = null
+            )
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+                .padding(contentPadding)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Colors.White32,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(size.height / 2)
+                )
+            } else {
+                CompositionLocalProvider(LocalContentColor provides Colors.White) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (icon != null) {
+                            Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
+                                icon()
+                            }
+                        }
+                        text?.let {
+                            Text(
+                                text = text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -109,41 +148,69 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isPressed) Colors.White10 else Colors.White01,
+        label = "secondaryButtonBackground"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (enabled) Colors.Gray4 else Color.Transparent,
+        label = "secondaryButtonBorder"
+    )
+
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    val border = BorderStroke(2.dp, if (enabled) Colors.White16 else Color.Transparent)
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.secondaryColors,
-        contentPadding = contentPadding,
-        border = border,
+    val shape = MaterialTheme.shapes.extraLarge
+
+    Surface(
+        shape = shape,
+        color = backgroundColor,
+        border = BorderStroke(2.dp, borderColor),
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
             .then(modifier)
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(size.height / 2)
+            .clickable(
+                onClick = onClick,
+                enabled = enabled && !isLoading,
+                interactionSource = interactionSource,
+                indication = null
             )
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) {
-                    Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
-                        icon()
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+                .padding(contentPadding)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Colors.White32,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(size.height / 2)
+                )
+            } else {
+                CompositionLocalProvider(
+                    LocalContentColor provides if (enabled) Colors.White80 else Colors.White32
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (icon != null) {
+                            Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
+                                icon()
+                            }
+                        }
+                        text?.let {
+                            Text(
+                                text = text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                }
-                text?.let {
-                    Text(
-                        text = text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
             }
         }
@@ -161,35 +228,67 @@ fun TertiaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val textColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> Colors.White32
+            isPressed -> Colors.White
+            else -> Colors.White80
+        },
+        label = "tertiaryButtonText"
+    )
+
     val contentPadding = PaddingValues(horizontal = size.horizontalPadding.takeIf { text != null } ?: 0.dp)
-    TextButton(
-        onClick = onClick,
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.tertiaryColors,
-        contentPadding = contentPadding,
+    val shape = MaterialTheme.shapes.extraLarge
+
+    Surface(
+        shape = shape,
+        color = Color.Transparent,
         modifier = Modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
             .then(modifier)
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                color = Colors.White32,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(size.height / 2)
+            .clickable(
+                onClick = onClick,
+                enabled = enabled && !isLoading,
+                interactionSource = interactionSource,
+                indication = null
             )
-        } else {
-            if (icon != null) {
-                Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
-                    icon()
-                }
-            }
-            text?.let {
-                Text(
-                    text = text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+                .padding(contentPadding)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Colors.White32,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(size.height / 2)
                 )
+            } else {
+                CompositionLocalProvider(LocalContentColor provides textColor) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (icon != null) {
+                            Box(modifier = if (enabled) Modifier else Modifier.alpha(0.5f)) {
+                                icon()
+                            }
+                        }
+                        text?.let {
+                            Text(
+                                text = text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -241,11 +340,10 @@ private fun PrimaryButtonPreview() {
                 onClick = {},
             )
             PrimaryButton(
-                text = "Primary Small Color Not Full",
+                text = "Primary Small Not Full",
                 size = ButtonSize.Small,
                 onClick = {},
                 fullWidth = false,
-                color = Colors.Brand,
             )
             PrimaryButton(
                 text = "Primary Small Loading",

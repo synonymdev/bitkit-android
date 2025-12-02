@@ -157,10 +157,10 @@ private fun ConfirmMnemonicContent(
                 shuffledWords.forEachIndexed { index, word ->
                     PrimaryButton(
                         text = word,
-                        color = if (pressedStates.getOrNull(index) == true) Colors.White32 else Colors.White16,
                         fullWidth = false,
                         size = ButtonSize.Small,
                         onClick = { onWordPress(word, index) },
+                        enabled = pressedStates.getOrNull(index) != true,
                         modifier = Modifier.testTag("Word-$word")
                     )
                 }

@@ -265,7 +265,6 @@ private fun ReceiveQrSlide(
                 size = ButtonSize.Small,
                 onClick = onClickEditInvoice,
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -288,7 +287,6 @@ private fun ReceiveQrSlide(
                         coroutineScope.launch { qrButtonTooltipState.show() }
                     },
                     fullWidth = false,
-                    color = Colors.White10,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
@@ -309,7 +307,6 @@ private fun ReceiveQrSlide(
                     } ?: shareText(context, uri)
                 },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -412,7 +409,6 @@ private fun CopyAddressCard(
                         coroutineScope.launch { tooltipState.show() }
                     },
                     fullWidth = false,
-                    color = Colors.White10,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_copy),
@@ -428,7 +424,6 @@ private fun CopyAddressCard(
                 size = ButtonSize.Small,
                 onClick = { shareText(context, address) },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),

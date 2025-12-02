@@ -165,13 +165,11 @@ private fun AddressViewerContent(
                     text = stringResource(R.string.settings__addr__addr_change),
                     size = ButtonSize.Small,
                     onClick = { onSwitchAddressType(false) },
-                    color = if (uiState.showReceiveAddresses) Colors.White16 else Colors.Brand,
                     modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
                     text = stringResource(R.string.settings__addr__addr_receiving),
                     size = ButtonSize.Small,
-                    color = if (uiState.showReceiveAddresses) Colors.Brand else Colors.White16,
                     onClick = { onSwitchAddressType(true) },
                     modifier = Modifier.weight(1f)
                 )
