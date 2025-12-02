@@ -38,7 +38,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -95,7 +94,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -137,7 +135,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -162,7 +159,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -200,7 +196,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = {},
                     onClickDelete = {},
@@ -232,7 +227,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -258,7 +252,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -291,7 +284,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -314,7 +306,6 @@ class BlocksPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},

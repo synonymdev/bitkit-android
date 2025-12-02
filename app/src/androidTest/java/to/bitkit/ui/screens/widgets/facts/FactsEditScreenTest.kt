@@ -31,7 +31,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickShowSource = { sourceClicked = true },
                     onClickReset = { resetClicked = true },
@@ -93,7 +92,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowSource = {},
                     onClickReset = { resetClicked = true },
@@ -118,7 +116,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowSource = {},
                     onClickReset = {},
@@ -139,7 +136,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowSource = {},
                     onClickReset = {},
@@ -178,7 +174,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowSource = {},
                     onClickReset = {},
@@ -200,7 +195,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowSource = {},
                     onClickReset = {},
@@ -228,7 +222,6 @@ class FactsEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickShowSource = { sourceClicked = true },
                     onClickReset = { resetClicked = true },

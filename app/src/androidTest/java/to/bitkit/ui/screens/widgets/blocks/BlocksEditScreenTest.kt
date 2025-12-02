@@ -45,7 +45,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickShowBlock = { blockClicked = true },
                     onClickShowTime = { timeClicked = true },
@@ -111,7 +110,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = {},
                     onClickShowTime = {},
@@ -143,7 +141,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = {},
                     onClickShowTime = {},
@@ -177,7 +174,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = {},
                     onClickShowTime = {},
@@ -220,7 +216,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = { blockClicked = true },
                     onClickShowTime = { timeClicked = true },
@@ -277,7 +272,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = {},
                     onClickShowTime = {},
@@ -305,7 +299,6 @@ class BlocksEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlocksEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowBlock = {},
                     onClickShowTime = {},

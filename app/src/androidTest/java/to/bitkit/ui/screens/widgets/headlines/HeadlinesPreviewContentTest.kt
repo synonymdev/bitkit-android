@@ -39,7 +39,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -96,7 +95,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -134,7 +132,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -159,7 +156,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -197,7 +193,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = {},
                     onClickDelete = {},
@@ -223,7 +218,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},

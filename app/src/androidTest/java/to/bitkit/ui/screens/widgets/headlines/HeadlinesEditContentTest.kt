@@ -42,7 +42,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickTime = { timeClicked = true },
                     onClickReset = { resetClicked = true },
@@ -118,7 +117,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = { resetClicked = true },
@@ -150,7 +148,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -177,7 +174,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -199,7 +195,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -246,7 +241,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -272,7 +266,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -305,7 +298,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickTime = { timeClicked = true },
                     onClickReset = { resetClicked = true },
