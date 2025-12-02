@@ -2,6 +2,7 @@ package to.bitkit.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -80,25 +81,37 @@ fun PrimaryButton(
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
             .then(modifier)
-            .shadow(
-                elevation = 4.dp,
-                shape = shape,
-                ambientColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f),
-                spotColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f)
-            )
             .then(
-                if (isPressed) {
-                    Modifier.gradientBackground(startColor = Colors.Gray3, endColor = Colors.Gray4)
+                if (enabled) {
+                    Modifier.shadow(
+                        elevation = 4.dp,
+                        shape = shape,
+                        ambientColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f),
+                        spotColor = Colors.White.copy(alpha = if (isPressed) 0.4f else 0.25f)
+                    )
                 } else {
-                    Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
+                    Modifier
                 }
             )
-            .innerShadow(
-                color = Colors.White.copy(alpha = if (isPressed) 0.1f else 0.05f),
-                blurRadius = 4.dp,
-                shape = shape
+            .then(
+                when {
+                    !enabled -> Modifier.background(color = Colors.White06, shape = shape)
+                    isPressed -> Modifier.gradientBackground(startColor = Colors.Gray3, endColor = Colors.Gray4)
+                    else -> Modifier.gradientBackground(startColor = Colors.Gray4, endColor = Colors.Gray5)
+                }
             )
             .then(if (enabled) Modifier else Modifier.alpha(0.32f))
+            .then(
+                if (enabled) {
+                    Modifier.innerShadow(
+                        color = Colors.White.copy(alpha = if (isPressed) 0.1f else 0.05f),
+                        blurRadius = 4.dp,
+                        shape = shape
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .clickable(
                 onClick = onClick,
                 enabled = enabled && !isLoading,
