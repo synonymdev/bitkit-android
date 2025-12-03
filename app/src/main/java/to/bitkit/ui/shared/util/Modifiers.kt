@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.theme.Colors
@@ -101,41 +100,39 @@ fun Modifier.innerShadow(
     color: Color,
     blurRadius: Dp = 4.dp,
     shape: Shape,
-): Modifier = composed {
-    val density = LocalDensity.current
-    val blurRadiusPx = with(density) { blurRadius.toPx() }
+): Modifier = this.drawWithContent {
+    // Draw content first (gradient, etc)
+    drawContent()
 
-    this.drawWithContent {
-        // Draw content first (gradient, etc)
-        drawContent()
+    // Convert blur radius to pixels using DrawScope's density
+    val blurRadiusPx = blurRadius.toPx()
 
-        // Get shape outline for clipping
-        val outline = shape.createOutline(size, layoutDirection, density)
+    // Get shape outline for clipping
+    val outline = shape.createOutline(size, layoutDirection, this)
 
-        // Convert outline to path
-        val path = when (outline) {
-            is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
-            is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
-            is Outline.Generic -> outline.path
-        }
+    // Convert outline to path
+    val path = when (outline) {
+        is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
+        is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
+        is Outline.Generic -> outline.path
+    }
 
-        // Clip to shape and draw top edge highlight with soft gradient
-        clipPath(path) {
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        color,
-                        color.copy(alpha = color.alpha * 0.7f),
-                        color.copy(alpha = color.alpha * 0.3f),
-                        Color.Transparent
-                    ),
-                    startY = 0f,
-                    endY = blurRadiusPx * 2.5f
+    // Clip to shape and draw top edge highlight with soft gradient
+    clipPath(path) {
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    color,
+                    color.copy(alpha = color.alpha * 0.7f),
+                    color.copy(alpha = color.alpha * 0.3f),
+                    Color.Transparent
                 ),
-                topLeft = Offset(0f, 0f),
-                size = Size(size.width, blurRadiusPx * 2.5f)
-            )
-        }
+                startY = 0f,
+                endY = blurRadiusPx * 2.5f
+            ),
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, blurRadiusPx * 2.5f)
+        )
     }
 }
 
