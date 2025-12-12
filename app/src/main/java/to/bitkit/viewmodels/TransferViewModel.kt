@@ -29,7 +29,6 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.env.Env
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed

@@ -932,6 +932,7 @@
     <string name="wallet__send_output_to_small_description">Please increase your send amount to proceed.</string>
     <string name="wallet__send_coin_selection_output_to_small_description">Please remove UTXOs or increase your send amount to proceed.</string>
     <string name="wallet__send_fee_error_min">Unable to decrease the fee any further.</string>
+    <string name="wallet__send_fee_error_max">Unable to increase the fee any further. Otherwise, it will exceed half the current input balance.</string>
     <string name="wallet__send_fee_custom">Set Custom Fee</string>
     <string name="wallet__send_fee_total">₿ {feeSats} for this transaction</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} for this transaction ({fiatSymbol}{fiatFormatted})</string>
@@ -1024,6 +1025,8 @@
     <string name="wallet__activity_error_get">Transaction Retrieval Failed</string>
     <string name="wallet__activity_error_get_description">Bitkit was not able to fetch the transaction data.</string>
     <string name="wallet__activity_error_tx_not_found">The transaction was not found.</string>
+    <string name="wallet__activity_error_not_found">Activity not found</string>
+    <string name="wallet__activity_error_load_failed">Failed to load activity</string>
     <string name="wallet__activity_confirming">Confirming</string>
     <string name="wallet__activity_confirmed">Confirmed</string>
     <string name="wallet__activity_removed">Removed from Mempool</string>

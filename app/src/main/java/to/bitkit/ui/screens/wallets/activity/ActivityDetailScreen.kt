@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
@@ -75,7 +77,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
-import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -89,128 +90,185 @@ fun ActivityDetailScreen(
     onCloseClick: () -> Unit,
     onChannelClick: ((String) -> Unit)? = null,
 ) {
-    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.rawId() == route.id }
-    if (item == null) {
-        Logger.error("Activity not found")
-        return
+    val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Load activity on composition
+    LaunchedEffect(route.id) {
+        detailViewModel.loadActivity(route.id)
     }
 
-    val app = appViewModel ?: return
-    val copyToastTitle = stringResource(R.string.common__copied)
-
-    val tags by detailViewModel.tags.collectAsStateWithLifecycle()
-    val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
-    var showAddTagSheet by remember { mutableStateOf(false) }
-    var isCpfpChild by remember { mutableStateOf(false) }
-    var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-
-    LaunchedEffect(item) {
-        detailViewModel.setActivity(item)
-        if (item is Activity.Onchain) {
-            isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
-            boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
-                detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
-            } else {
-                emptyMap()
-            }
-        } else {
-            isCpfpChild = false
-            boostTxDoesExist = emptyMap()
+    // Clear state on disposal
+    DisposableEffect(Unit) {
+        onDispose {
+            detailViewModel.clearActivityState()
         }
     }
-
-    // Update boostTxDoesExist when boostTxIds change
-    LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
-        if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
-            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
-        }
-    }
-
-    val context = LocalContext.current
 
     Box(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.background(Colors.Black)
-        ) {
-            AppTopBar(
-                titleText = stringResource(
-                    if (isCpfpChild) {
-                        R.string.wallet__activity_boost_fee
-                    } else {
-                        item.getScreenTitleRes()
-                    }
-                ),
-                onBackClick = onBackClick,
-                actions = { DrawerNavIcon() },
-            )
-            ActivityDetailContent(
-                item = item,
-                tags = tags,
-                onRemoveTag = { detailViewModel.removeTag(it) },
-                onAddTagClick = { showAddTagSheet = true },
-                onClickBoost = detailViewModel::onClickBoost,
-                onExploreClick = onExploreClick,
-                onChannelClick = onChannelClick,
-                detailViewModel = detailViewModel,
-                isCpfpChild = isCpfpChild,
-                boostTxDoesExist = boostTxDoesExist,
-                onCopy = { text ->
-                    app.toast(
-                        type = Toast.ToastType.SUCCESS,
-                        title = copyToastTitle,
-                        description = text.ellipsisMiddle(40)
+        when (val loadState = uiState.activityLoadState) {
+            is ActivityDetailViewModel.ActivityLoadState.Initial,
+            is ActivityDetailViewModel.ActivityLoadState.Loading,
+            -> {
+                Column(modifier = Modifier.background(Colors.Black)) {
+                    AppTopBar(
+                        titleText = stringResource(R.string.wallet__activity),
+                        onBackClick = onBackClick,
+                        actions = { DrawerNavIcon() },
                     )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
-            )
-            if (showAddTagSheet) {
-                ActivityAddTagSheet(
-                    listViewModel = listViewModel,
-                    activityViewModel = detailViewModel,
-                    onDismiss = { showAddTagSheet = false },
-                )
             }
-        }
 
-        if (boostSheetVisible) {
-            (item as? Activity.Onchain)?.let {
-                BoostTransactionSheet(
-                    onDismiss = detailViewModel::onDismissBoostSheet,
-                    item = it,
-                    onSuccess = {
-                        app.toast(
-                            type = Toast.ToastType.SUCCESS,
-                            title = context.getString(R.string.wallet__boost_success_title),
-                            description = context.getString(R.string.wallet__boost_success_msg)
+            is ActivityDetailViewModel.ActivityLoadState.Error -> {
+                Column(modifier = Modifier.background(Colors.Black)) {
+                    AppTopBar(
+                        titleText = stringResource(R.string.wallet__activity),
+                        onBackClick = onBackClick,
+                        actions = { DrawerNavIcon() },
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        BodySSB(
+                            text = loadState.message,
+                            modifier = Modifier.padding(bottom = 16.dp)
                         )
-                        listViewModel.resync()
-                        onCloseClick()
-                    },
-                    onFailure = {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.wallet__boost_error_title),
-                            description = context.getString(R.string.wallet__boost_error_msg)
-                        )
-                        detailViewModel.onDismissBoostSheet()
-                    },
-                    onMaxFee = {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.wallet__send_fee_error),
-                            description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance" // TODO CREATE STRING RESOURCE
-                        )
-                    },
-                    onMinFee = {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.wallet__send_fee_error),
-                            description = context.getString(R.string.wallet__send_fee_error_min)
+                        PrimaryButton(
+                            text = stringResource(R.string.common__back),
+                            onClick = onBackClick
                         )
                     }
-                )
+                }
+            }
+
+            is ActivityDetailViewModel.ActivityLoadState.Success -> {
+                val item = loadState.activity
+                val app = appViewModel ?: return@Box
+                val copyToastTitle = stringResource(R.string.common__copied)
+
+                val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+                val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
+                var showAddTagSheet by remember { mutableStateOf(false) }
+                var isCpfpChild by remember { mutableStateOf(false) }
+                var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+                LaunchedEffect(item) {
+                    if (item is Activity.Onchain) {
+                        isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
+                        boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
+                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                        } else {
+                            emptyMap()
+                        }
+                    } else {
+                        isCpfpChild = false
+                        boostTxDoesExist = emptyMap()
+                    }
+                }
+
+                // Update boostTxDoesExist when boostTxIds change
+                LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
+                    if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
+                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                    }
+                }
+
+                val context = LocalContext.current
+
+                Column(
+                    modifier = Modifier.background(Colors.Black)
+                ) {
+                    AppTopBar(
+                        titleText = stringResource(
+                            if (isCpfpChild) {
+                                R.string.wallet__activity_boost_fee
+                            } else {
+                                item.getScreenTitleRes()
+                            }
+                        ),
+                        onBackClick = onBackClick,
+                        actions = { DrawerNavIcon() },
+                    )
+                    ActivityDetailContent(
+                        item = item,
+                        tags = tags,
+                        onRemoveTag = { detailViewModel.removeTag(it) },
+                        onAddTagClick = { showAddTagSheet = true },
+                        onClickBoost = detailViewModel::onClickBoost,
+                        onExploreClick = onExploreClick,
+                        onChannelClick = onChannelClick,
+                        detailViewModel = detailViewModel,
+                        isCpfpChild = isCpfpChild,
+                        boostTxDoesExist = boostTxDoesExist,
+                        onCopy = { text ->
+                            app.toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = copyToastTitle,
+                                description = text.ellipsisMiddle(40)
+                            )
+                        }
+                    )
+                    if (showAddTagSheet) {
+                        ActivityAddTagSheet(
+                            listViewModel = listViewModel,
+                            activityViewModel = detailViewModel,
+                            onDismiss = { showAddTagSheet = false },
+                        )
+                    }
+                }
+
+                if (boostSheetVisible) {
+                    (item as? Activity.Onchain)?.let {
+                        BoostTransactionSheet(
+                            onDismiss = detailViewModel::onDismissBoostSheet,
+                            item = it,
+                            onSuccess = {
+                                app.toast(
+                                    type = Toast.ToastType.SUCCESS,
+                                    title = context.getString(R.string.wallet__boost_success_title),
+                                    description = context.getString(R.string.wallet__boost_success_msg)
+                                )
+                                listViewModel.resync()
+                                onCloseClick()
+                            },
+                            onFailure = {
+                                app.toast(
+                                    type = Toast.ToastType.ERROR,
+                                    title = context.getString(R.string.wallet__boost_error_title),
+                                    description = context.getString(R.string.wallet__boost_error_msg)
+                                )
+                                detailViewModel.onDismissBoostSheet()
+                            },
+                            onMaxFee = {
+                                app.toast(
+                                    type = Toast.ToastType.ERROR,
+                                    title = context.getString(R.string.wallet__send_fee_error),
+                                    description = context.getString(R.string.wallet__send_fee_error_max)
+                                )
+                            },
+                            onMinFee = {
+                                app.toast(
+                                    type = Toast.ToastType.ERROR,
+                                    title = context.getString(R.string.wallet__send_fee_error),
+                                    description = context.getString(R.string.wallet__send_fee_error_min)
+                                )
+                            }
+                        )
+                    }
+                }
             }
         }
     }

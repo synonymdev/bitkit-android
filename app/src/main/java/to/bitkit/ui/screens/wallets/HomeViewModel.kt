@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -217,14 +216,13 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun createBannersFlow() {
         transferRepo.activeTransfers
-            .distinctUntilChanged()
             .collect { transfers ->
                 val banners = listOfNotNull(
                     ActivityBannerType.SPENDING.takeIf {
-                        transfers.any { it.type == TransferType.TO_SPENDING || it.type == TransferType.MANUAL_SETUP }
+                        transfers.any { it.type.isToSpending() }
                     },
                     ActivityBannerType.SAVINGS.takeIf {
-                        transfers.any { it.type == TransferType.COOP_CLOSE || it.type == TransferType.FORCE_CLOSE }
+                        transfers.any { it.type.isToSavings() }
                     },
                 )
                 _uiState.update { it.copy(banners = banners) }

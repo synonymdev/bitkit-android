@@ -166,12 +166,13 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
+                val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
                 ToastOverlay(
-                    toast = appViewModel.currentToast,
+                    toast = currentToast,
                     hazeState = hazeState,
-                    onDismiss = {
-                        appViewModel.hideToast()
-                    }
+                    onDismiss = { appViewModel.hideToast() },
+                    onDragStart = { appViewModel.pauseToast() },
+                    onDragEnd = { appViewModel.resumeToast() }
                 )
 
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()

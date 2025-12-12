@@ -1089,7 +1089,6 @@ private fun NavGraphBuilder.activityItem(
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(
-            listViewModel = activityListViewModel,
             route = it.toRoute(),
             onBackClick = { navController.popBackStack() },
         )

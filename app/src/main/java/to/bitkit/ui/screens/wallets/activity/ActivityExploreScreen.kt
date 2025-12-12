@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.activity
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -41,9 +42,7 @@ import com.synonym.bitkitcore.PaymentType
 import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.R
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.isBoosted
 import to.bitkit.ext.isSent
-import to.bitkit.ext.rawId
 import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
@@ -64,64 +63,122 @@ import to.bitkit.ui.utils.getBlockExplorerUrl
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.ui.utils.localizedPlural
 import to.bitkit.viewmodels.ActivityDetailViewModel
-import to.bitkit.viewmodels.ActivityListViewModel
 
 @Composable
 fun ActivityExploreScreen(
-    listViewModel: ActivityListViewModel,
     detailViewModel: ActivityDetailViewModel = hiltViewModel(),
     route: Routes.ActivityExplore,
     onBackClick: () -> Unit,
 ) {
-    val activities by listViewModel.filteredActivities.collectAsStateWithLifecycle()
-    val item = activities?.find { it.rawId() == route.id } ?: return
+    val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
 
-    val app = appViewModel ?: return
-    val context = LocalContext.current
-
-    val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
-    var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-
-    LaunchedEffect(item) {
-        if (item is Activity.Onchain) {
-            detailViewModel.fetchTransactionDetails(item.v1.txId)
-            if (item.v1.boostTxIds.isNotEmpty()) {
-                boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
-            }
-        } else {
-            detailViewModel.clearTransactionDetails()
-        }
+    // Load activity on composition
+    LaunchedEffect(route.id) {
+        detailViewModel.loadActivity(route.id)
     }
 
+    // Clear state on disposal
     DisposableEffect(Unit) {
         onDispose {
-            detailViewModel.clearTransactionDetails()
+            detailViewModel.clearActivityState()
         }
     }
 
     ScreenColumn {
-        AppTopBar(
-            titleText = stringResource(item.getScreenTitleRes()),
-            onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
-        )
-        ActivityExploreContent(
-            item = item,
-            txDetails = txDetails,
-            boostTxDoesExist = boostTxDoesExist,
-            onCopy = { text ->
-                app.toast(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.common__copied),
-                    description = text.ellipsisMiddle(40),
+        when (val loadState = uiState.activityLoadState) {
+            is ActivityDetailViewModel.ActivityLoadState.Initial,
+            is ActivityDetailViewModel.ActivityLoadState.Loading,
+            -> {
+                AppTopBar(
+                    titleText = stringResource(R.string.wallet__activity),
+                    onBackClick = onBackClick,
+                    actions = { DrawerNavIcon() },
                 )
-            },
-            onClickExplore = { txid ->
-                val url = getBlockExplorerUrl(txid)
-                val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                context.startActivity(intent)
-            },
-        )
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            is ActivityDetailViewModel.ActivityLoadState.Error -> {
+                AppTopBar(
+                    titleText = stringResource(R.string.wallet__activity),
+                    onBackClick = onBackClick,
+                    actions = { DrawerNavIcon() },
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    BodySSB(
+                        text = loadState.message,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.common__back),
+                        onClick = onBackClick
+                    )
+                }
+            }
+
+            is ActivityDetailViewModel.ActivityLoadState.Success -> {
+                val item = loadState.activity
+                val app = appViewModel ?: return@ScreenColumn
+                val context = LocalContext.current
+
+                val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
+                var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+                LaunchedEffect(item) {
+                    if (item is Activity.Onchain) {
+                        detailViewModel.fetchTransactionDetails(item.v1.txId)
+                        if (item.v1.boostTxIds.isNotEmpty()) {
+                            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                        }
+                    } else {
+                        detailViewModel.clearTransactionDetails()
+                    }
+                }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        detailViewModel.clearTransactionDetails()
+                    }
+                }
+
+                AppTopBar(
+                    titleText = stringResource(item.getScreenTitleRes()),
+                    onBackClick = onBackClick,
+                    actions = { DrawerNavIcon() },
+                )
+
+                val toastMessage = stringResource(R.string.common__copied)
+                ActivityExploreContent(
+                    item = item,
+                    txDetails = txDetails,
+                    boostTxDoesExist = boostTxDoesExist,
+                    onCopy = { text ->
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = toastMessage,
+                            description = text.ellipsisMiddle(40),
+                        )
+                    },
+                    onClickExplore = { txid ->
+                        val url = getBlockExplorerUrl(txid)
+                        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                        context.startActivity(intent)
+                    },
+                )
+            }
+        }
     }
 }
 

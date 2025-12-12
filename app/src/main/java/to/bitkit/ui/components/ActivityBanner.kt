@@ -37,6 +37,7 @@ import to.bitkit.R
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.outerGlow
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val GLOW_ANIMATION_MILLIS = 1200
@@ -174,18 +175,20 @@ fun ActivityBanner(
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        items(items = ActivityBannerType.entries) { item ->
-            ActivityBanner(
-                gradientColor = item.color,
-                title = stringResource(R.string.activity_banner__transfer_in_progress),
-                icon = item.icon,
-                onClick = {},
-                modifier = Modifier.fillMaxWidth()
-            )
+    AppThemeSurface {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(items = ActivityBannerType.entries) { item ->
+                ActivityBanner(
+                    gradientColor = item.color,
+                    title = stringResource(R.string.activity_banner__transfer_in_progress),
+                    icon = item.icon,
+                    onClick = {},
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
