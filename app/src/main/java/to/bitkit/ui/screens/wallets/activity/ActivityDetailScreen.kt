@@ -606,7 +606,9 @@ private fun ActivityDetailContent(
                             if (hasCPFP) {
                                 true
                             } else if (activity.txType == PaymentType.SENT) {
-                                activity.boostTxIds.any { boostTxDoesExist[it] == false }
+                                val anyBoostTxEvicted =  activity.boostTxIds.any { boostTxDoesExist[it] == false }
+                                val thisActivityWasEvicted = !activity.doesExist
+                                anyBoostTxEvicted || thisActivityWasEvicted
                             } else {
                                 false
                             }
