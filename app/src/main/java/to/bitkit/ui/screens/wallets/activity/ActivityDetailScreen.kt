@@ -601,17 +601,20 @@ private fun ActivityDetailContent(
                     is Activity.Lightning -> false
                     is Activity.Onchain -> {
                         val activity = item.v1
+                        val isActivityEvicted = !activity.doesExist
+
                         if (activity.isBoosted && activity.boostTxIds.isNotEmpty()) {
                             val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
                             if (hasCPFP) {
                                 true
                             } else if (activity.txType == PaymentType.SENT) {
                                 val isAnyBoostTxEvicted = activity.boostTxIds.any { boostTxDoesExist[it] == false }
-                                val isActivityEvicted = !activity.doesExist
-                                isAnyBoostTxEvicted || isActivityEvicted
+                                isAnyBoostTxEvicted
                             } else {
                                 false
                             }
+                        } else if (activity.isBoosted && isActivityEvicted) {
+                            true
                         } else {
                             false
                         }
