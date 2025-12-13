@@ -312,7 +312,6 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainTransactionReplaced(event: Event.OnchainTransactionReplaced) {
         activityRepo.handleOnchainTransactionReplaced(event.txid, event.conflicts)
-        notifyTransactionReplaced(event)
     }
 
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
@@ -396,25 +395,6 @@ class AppViewModel @Inject constructor(
         description = context.getString(R.string.wallet__toast_transaction_unconfirmed_description),
         testTag = "TransactionUnconfirmedToast",
     )
-
-    private suspend fun notifyTransactionReplaced(event: Event.OnchainTransactionReplaced) {
-        val isReceive = activityRepo.isReceivedTransaction(event.txid)
-        toast(
-            type = Toast.ToastType.INFO,
-            title = when (isReceive) {
-                true -> R.string.wallet__toast_received_transaction_replaced_title
-                else -> R.string.wallet__toast_transaction_replaced_title
-            }.let { context.getString(it) },
-            description = when (isReceive) {
-                true -> R.string.wallet__toast_received_transaction_replaced_description
-                else -> R.string.wallet__toast_transaction_replaced_description
-            }.let { context.getString(it) },
-            testTag = when (isReceive) {
-                true -> "ReceivedTransactionReplacedToast"
-                else -> "TransactionReplacedToast"
-            },
-        )
-    }
 
     private fun notifyPaymentFailed() = toast(
         type = Toast.ToastType.ERROR,
