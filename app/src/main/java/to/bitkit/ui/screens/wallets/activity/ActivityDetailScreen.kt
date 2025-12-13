@@ -603,19 +603,32 @@ private fun ActivityDetailContent(
                         val activity = item.v1
                         val isActivityEvicted = !activity.doesExist
 
-                        if (activity.isBoosted && activity.boostTxIds.isNotEmpty()) {
-                            val hasCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
-                            if (hasCPFP) {
+                        // Not boosted → no completed boost
+                        if (!activity.isBoosted) {
+                            false
+                        }
+                        // Boosted but evicted from mempool → show as boosted
+                        else if (isActivityEvicted) {
+                            true
+                        }
+                        // Boosted with CPFP transactions
+                        else if (activity.boostTxIds.isNotEmpty()) {
+                            val hasActiveCPFP = activity.boostTxIds.any { boostTxDoesExist[it] == true }
+                            val hasEvictedBoostTx = activity.boostTxIds.any { boostTxDoesExist[it] == false }
+
+                            // CPFP exists → boost completed
+                            if (hasActiveCPFP) {
                                 true
-                            } else if (activity.txType == PaymentType.SENT) {
-                                val isAnyBoostTxEvicted = activity.boostTxIds.any { boostTxDoesExist[it] == false }
-                                isAnyBoostTxEvicted
+                            }
+                            // SENT tx with evicted boost → show as already boosted
+                            else if (activity.txType == PaymentType.SENT && hasEvictedBoostTx) {
+                                true
                             } else {
                                 false
                             }
-                        } else if (activity.isBoosted && isActivityEvicted) {
-                            true
-                        } else {
+                        }
+                        // Boosted but no boost tx IDs tracked yet
+                        else {
                             false
                         }
                     }
