@@ -854,7 +854,6 @@ class ActivityService(
 
             val updatedActivity = replacedActivity.copy(
                 doesExist = false,
-                isBoosted = false,
                 updatedAt = System.currentTimeMillis().toULong() / 1000u
             )
             updateActivity(replacedActivity.id, Activity.Onchain(updatedActivity))
