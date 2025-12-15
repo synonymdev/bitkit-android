@@ -52,8 +52,6 @@ class WakeNodeWorker @AssistedInject constructor(
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
 ) : CoroutineWorker(appContext, workerParams) {
-    private val self = this
-
     private var bestAttemptContent: NotificationDetails? = null
 
     private var notificationType: BlocktankNotificationType? = null
@@ -83,7 +81,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 lightningRepo.connectToTrustedPeers()
 
                 // Once node is started, handle the manual channel opening if needed
-                if (self.notificationType == orderPaymentConfirmed) {
+                if (notificationType == orderPaymentConfirmed) {
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
                     if (orderId == null) {
@@ -94,11 +92,11 @@ class WakeNodeWorker @AssistedInject constructor(
                             coreService.blocktank.open(orderId = orderId)
                         } catch (e: Exception) {
                             Logger.error("failed to open channel", e)
-                            self.bestAttemptContent = NotificationDetails(
+                            bestAttemptContent = NotificationDetails(
                                 title = appContext.getString(R.string.notification_channel_open_failed_title),
                                 body = e.message ?: appContext.getString(R.string.notification_unknown_error),
                             )
-                            self.deliver()
+                            deliver()
                         }
                     }
                 }
@@ -108,12 +106,12 @@ class WakeNodeWorker @AssistedInject constructor(
         } catch (e: Exception) {
             val reason = e.message ?: appContext.getString(R.string.notification_unknown_error)
 
-            self.bestAttemptContent = NotificationDetails(
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_lightning_error_title),
                 body = reason,
             )
             Logger.error("Lightning error", e)
-            self.deliver()
+            deliver()
 
             return Result.failure(workDataOf("Reason" to reason))
         }
@@ -130,7 +128,7 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentReceived -> onPaymentReceived(event, showDetails, hiddenBody)
 
             is Event.ChannelPending -> {
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification_channel_opened_title),
                     body = appContext.getString(R.string.notification_channel_pending_body),
                 )
@@ -141,13 +139,13 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.ChannelClosed -> onChannelClosed(event)
 
             is Event.PaymentFailed -> {
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification_payment_failed_title),
                     body = "⚡ ${event.reason}",
                 )
 
-                if (self.notificationType == wakeToTimeout) {
-                    self.deliver()
+                if (notificationType == wakeToTimeout) {
+                    deliver()
                 }
             }
 
@@ -156,7 +154,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun onChannelClosed(event: Event.ChannelClosed) {
-        self.bestAttemptContent = when (self.notificationType) {
+        bestAttemptContent = when (notificationType) {
             mutualClose -> NotificationDetails(
                 title = appContext.getString(R.string.notification_channel_closed_title),
                 body = appContext.getString(R.string.notification_channel_closed_mutual_body),
@@ -173,7 +171,7 @@ class WakeNodeWorker @AssistedInject constructor(
             )
         }
 
-        self.deliver()
+        deliver()
     }
 
     private suspend fun onPaymentReceived(
@@ -196,8 +194,8 @@ class WakeNodeWorker @AssistedInject constructor(
             title = appContext.getString(R.string.notification_received_title),
             body = content,
         )
-        if (self.notificationType == incomingHtlc) {
-            self.deliver()
+        if (notificationType == incomingHtlc) {
+            deliver()
         }
     }
 
@@ -207,8 +205,8 @@ class WakeNodeWorker @AssistedInject constructor(
         hiddenBody: String,
     ) {
         val viaNewChannel = appContext.getString(R.string.notification_via_new_channel_body)
-        if (self.notificationType == cjitPaymentArrived) {
-            self.bestAttemptContent = NotificationDetails(
+        if (notificationType == cjitPaymentArrived) {
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_received_title),
                 body = viaNewChannel,
             )
@@ -216,7 +214,7 @@ class WakeNodeWorker @AssistedInject constructor(
             lightningRepo.getChannels()?.find { it.channelId == event.channelId }?.let { channel ->
                 val sats = channel.amountOnClose
                 val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = content,
                     body = viaNewChannel,
                 )
@@ -233,13 +231,13 @@ class WakeNodeWorker @AssistedInject constructor(
                     activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
                 }
             }
-        } else if (self.notificationType == orderPaymentConfirmed) {
-            self.bestAttemptContent = NotificationDetails(
+        } else if (notificationType == orderPaymentConfirmed) {
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_channel_opened_title),
                 body = appContext.getString(R.string.notification_channel_ready_body),
             )
         }
-        self.deliver()
+        deliver()
     }
 
     private suspend fun deliver() {
