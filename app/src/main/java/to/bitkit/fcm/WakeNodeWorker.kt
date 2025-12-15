@@ -85,13 +85,13 @@ class WakeNodeWorker @AssistedInject constructor(
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
                     if (orderId == null) {
-                        Logger.error("Missing orderId")
+                        Logger.error("Missing orderId", context = TAG)
                     } else {
                         try {
-                            Logger.info("Open channel request for order $orderId")
+                            Logger.info("Open channel request for order $orderId", context = TAG)
                             coreService.blocktank.open(orderId = orderId)
                         } catch (e: Exception) {
-                            Logger.error("failed to open channel", e)
+                            Logger.error("failed to open channel", e, context = TAG)
                             bestAttemptContent = NotificationDetails(
                                 title = appContext.getString(R.string.notification_channel_open_failed_title),
                                 body = e.message ?: appContext.getString(R.string.notification_unknown_error),
@@ -110,7 +110,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 title = appContext.getString(R.string.notification_lightning_error_title),
                 body = reason,
             )
-            Logger.error("Lightning error", e)
+            Logger.error("Lightning error", e, context = TAG)
             deliver()
 
             return Result.failure(workDataOf("Reason" to reason))
@@ -245,7 +245,7 @@ class WakeNodeWorker @AssistedInject constructor(
 
         bestAttemptContent?.run {
             appContext.pushNotification(title, body)
-            Logger.info("Delivered notification")
+            Logger.info("Delivered notification", context = TAG)
         }
 
         deliverSignal.complete(Unit)
