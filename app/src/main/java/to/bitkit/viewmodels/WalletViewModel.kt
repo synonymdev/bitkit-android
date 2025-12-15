@@ -31,6 +31,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
+import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
@@ -168,8 +169,8 @@ class WalletViewModel @Inject constructor(
     fun refreshState() = viewModelScope.launch {
         walletRepo.syncNodeAndWallet()
             .onFailure { error ->
-                if (error is CancellationException) return@onFailure
                 Logger.error("Failed to refresh state: ${error.message}", error)
+                if (error is CancellationException || error.isTxSyncTimeout()) return@onFailure
                 ToastEventBus.send(error)
             }
     }
