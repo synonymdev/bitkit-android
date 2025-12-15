@@ -128,3 +128,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
     }
 }
 // endregion
+
+/** Check if the throwable is a TxSyncTimeout exception. */
+fun Throwable.isTxSyncTimeout(): Boolean =
+    this is NodeException.TxSyncTimeout || cause is NodeException.TxSyncTimeout
