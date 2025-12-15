@@ -239,7 +239,14 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
-        lightningRepo.stop()
+        // Only stop node if app is not in foreground
+        // LightningNodeService will keep node running in background when notifications are enabled
+        if (App.currentActivity?.value == null) {
+            Logger.debug("App in background, stopping node after notification delivery", context = TAG)
+            lightningRepo.stop()
+        } else {
+            Logger.debug("App in foreground, keeping node running", context = TAG)
+        }
 
         bestAttemptContent?.run {
             appContext.pushNotification(title, body)
