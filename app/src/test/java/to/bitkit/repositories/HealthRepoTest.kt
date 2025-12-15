@@ -4,8 +4,6 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.IBtOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -19,13 +17,17 @@ import to.bitkit.models.HealthState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
+@OptIn(ExperimentalTime::class)
 class HealthRepoTest : BaseUnitTest() {
-    private val connectivityRepo: ConnectivityRepo = mock()
-    private val lightningRepo: LightningRepo = mock()
-    private val blocktankRepo: BlocktankRepo = mock()
-    private val cacheStore: CacheStore = mock()
+    private val connectivityRepo = mock<ConnectivityRepo>()
+    private val lightningRepo = mock<LightningRepo>()
+    private val blocktankRepo = mock<BlocktankRepo>()
+    private val cacheStore = mock<CacheStore>()
     private val clock: Clock = mock()
 
     private lateinit var sut: HealthRepo

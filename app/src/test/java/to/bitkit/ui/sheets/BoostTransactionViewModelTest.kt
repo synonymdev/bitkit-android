@@ -15,6 +15,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.ext.create
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
@@ -40,25 +41,15 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     private val testTotalFee = 1000UL
     private val testValue = 50000UL
 
-    private val mockOnchainActivity = OnchainActivity(
+    private val mockOnchainActivity = OnchainActivity.create(
         id = "test_id",
         txType = PaymentType.SENT,
         txId = mockTxId,
         value = testValue,
         fee = 500UL,
-        feeRate = 10UL,
         address = mockAddress,
-        confirmed = false,
         timestamp = 1234567890UL,
-        isBoosted = false,
-        boostTxIds = emptyList(),
-        isTransfer = false,
-        doesExist = true,
-        confirmTimestamp = null,
-        channelId = null,
-        transferTxId = null,
-        createdAt = null,
-        updatedAt = null
+        feeRate = 10UL,
     )
 
     private val mockActivitySent = Activity.Onchain(v1 = mockOnchainActivity)

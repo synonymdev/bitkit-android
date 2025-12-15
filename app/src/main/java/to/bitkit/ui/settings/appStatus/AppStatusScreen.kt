@@ -24,10 +24,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import kotlinx.datetime.Clock
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.ext.toLocalizedTimestamp
@@ -42,10 +41,12 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import kotlin.time.Clock.System.now
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
 
 @Composable
 fun AppStatusScreen(
@@ -246,6 +247,7 @@ private data class StatusUi(
     val state: HealthState,
 )
 
+@OptIn(ExperimentalTime::class)
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -259,7 +261,7 @@ private fun Preview() {
                     channels = HealthState.PENDING,
                     backups = HealthState.READY,
                 ),
-                backupSubtitle = Clock.System.now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
+                backupSubtitle = now().minus(3.minutes).toEpochMilliseconds().toLocalizedTimestamp(),
                 nodeSubtitle = NodeLifecycleState.Running.uiText,
             ),
         )

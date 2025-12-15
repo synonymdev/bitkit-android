@@ -10,9 +10,11 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.mockingDetails
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
@@ -20,6 +22,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ActivityDetailViewModelTest : BaseUnitTest() {
+    private lateinit var sut: ActivityDetailViewModel
 
     private val context = mock<Context>()
     private val activityRepo = mock<ActivityRepo>()
@@ -27,14 +30,15 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
 
-    private lateinit var sut: ActivityDetailViewModel
+    companion object Fixtures {
+        const val ACTIVITY_ID = "test-activity-1"
+        const val ORDER_ID = "test-order-id"
+    }
 
     @Before
     fun setUp() {
-        whenever(context.getString(R.string.wallet__activity_error_not_found))
-            .thenReturn("Activity not found")
-        whenever(context.getString(R.string.wallet__activity_error_load_failed))
-            .thenReturn("Failed to load activity")
+        whenever(context.getString(R.string.wallet__activity_error_not_found)).thenReturn("Activity not found")
+        whenever(context.getString(R.string.wallet__activity_error_load_failed)).thenReturn("Failed to load activity")
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(System.currentTimeMillis()))
 
@@ -57,41 +61,27 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
     @Test
     fun `findOrderForTransfer finds order by channelId`() = test {
-        val orderId = "test-order-id"
-        val mockOrder = mock<IBtOrder> {
-            on { id } doReturn orderId
-        }
+        val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
 
-        whenever(blocktankRepo.blocktankState).thenReturn(
-            MutableStateFlow(BlocktankState(orders = listOf(mockOrder)))
-        )
+        val result = sut.findOrderForTransfer(ORDER_ID, null)
 
-        val result = sut.findOrderForTransfer(orderId, null)
-
-        assertEquals(mockOrder, result)
+        assertEquals(order, result)
     }
 
     @Test
     fun `findOrderForTransfer finds order by channelId matching order id`() = test {
-        val orderId = "order-123"
-        val mockOrder = mock<IBtOrder> {
-            on { id } doReturn orderId
-        }
+        val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
 
-        whenever(blocktankRepo.blocktankState).thenReturn(
-            MutableStateFlow(BlocktankState(orders = listOf(mockOrder)))
-        )
+        val result = sut.findOrderForTransfer(ORDER_ID, null)
 
-        val result = sut.findOrderForTransfer(orderId, null)
-
-        assertEquals(mockOrder, result)
+        assertEquals(order, result)
     }
 
     @Test
     fun `findOrderForTransfer returns null when order not found`() = test {
-        whenever(blocktankRepo.blocktankState).thenReturn(
-            MutableStateFlow(BlocktankState(orders = emptyList()))
-        )
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = emptyList())))
 
         val result = sut.findOrderForTransfer("non-existent-id", null)
 
@@ -100,97 +90,83 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
     @Test
     fun `loadActivity starts observation of activity changes`() = test {
-        val activityId = "test-activity-1"
-        val initialActivity = createTestActivity(activityId, confirmed = false)
-        val updatedActivity = createTestActivity(activityId, confirmed = true)
+        val initialActivity = createTestActivity(ACTIVITY_ID, confirmed = false)
+        val updatedActivity = createTestActivity(ACTIVITY_ID, confirmed = true)
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.success(initialActivity))
-        whenever(activityRepo.getActivityTags(activityId))
-            .thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(initialActivity))
+        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
 
         // Load activity
-        sut.loadActivity(activityId)
+        sut.loadActivity(ACTIVITY_ID)
 
         // Verify initial state loaded
         val initialState = sut.uiState.value.activityLoadState
         assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(initialActivity, (initialState as ActivityDetailViewModel.ActivityLoadState.Success).activity)
+        assertEquals(initialActivity, initialState.activity)
 
         // Simulate activity update
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.success(updatedActivity))
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(updatedActivity))
         activitiesChangedFlow.value = System.currentTimeMillis()
 
         // Verify ViewModel reflects updated activity
         val updatedState = sut.uiState.value.activityLoadState
         assertTrue(updatedState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(updatedActivity, (updatedState as ActivityDetailViewModel.ActivityLoadState.Success).activity)
+        assertEquals(updatedActivity, updatedState.activity)
     }
 
     @Test
     fun `clearActivityState stops observation`() = test {
-        val activityId = "test-activity-1"
-        val activity = createTestActivity(activityId)
+        val activity = createTestActivity(ACTIVITY_ID)
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.success(activity))
-        whenever(activityRepo.getActivityTags(activityId))
-            .thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(activity))
+        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
 
         // Load activity
-        sut.loadActivity(activityId)
+        sut.loadActivity(ACTIVITY_ID)
 
         // Clear state
         sut.clearActivityState()
 
         // Trigger activity change
-        val callCountBefore = org.mockito.kotlin.mockingDetails(activityRepo).invocations.size
+        val callCountBefore = mockingDetails(activityRepo).invocations.size
         activitiesChangedFlow.value = System.currentTimeMillis()
 
         // Verify no reload after clear (getActivity not called again)
-        val callCountAfter = org.mockito.kotlin.mockingDetails(activityRepo).invocations.size
+        val callCountAfter = mockingDetails(activityRepo).invocations.size
         assertEquals(callCountBefore, callCountAfter)
     }
 
     @Test
     fun `reloadActivity keeps last state on failure`() = test {
-        val activityId = "test-activity-1"
-        val activity = createTestActivity(activityId)
+        val activity = createTestActivity(ACTIVITY_ID)
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.success(activity))
-        whenever(activityRepo.getActivityTags(activityId))
-            .thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(activity))
+        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
 
         // Load activity
-        sut.loadActivity(activityId)
+        sut.loadActivity(ACTIVITY_ID)
 
         // Simulate reload failure
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.failure(Exception("Network error")))
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Network error")))
         activitiesChangedFlow.value = System.currentTimeMillis()
 
         // Verify last known state is preserved
         val state = sut.uiState.value.activityLoadState
         assertTrue(state is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(activity, (state as ActivityDetailViewModel.ActivityLoadState.Success).activity)
+        assertEquals(activity, state.activity)
     }
 
     @Test
     fun `loadActivity handles error gracefully`() = test {
-        val activityId = "test-activity-1"
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Database error")))
 
-        whenever(activityRepo.getActivity(activityId))
-            .thenReturn(Result.failure(Exception("Database error")))
-
-        sut.loadActivity(activityId)
+        sut.loadActivity(ACTIVITY_ID)
 
         val state = sut.uiState.value.activityLoadState
         assertTrue(state is ActivityDetailViewModel.ActivityLoadState.Error)
@@ -201,7 +177,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         confirmed: Boolean = false,
     ): Activity.Onchain {
         return Activity.Onchain(
-            v1 = OnchainActivity(
+            v1 = OnchainActivity.create(
                 id = id,
                 txType = PaymentType.RECEIVED,
                 txId = "tx-$id",
@@ -211,15 +187,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
                 address = "bc1...",
                 confirmed = confirmed,
                 timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                isBoosted = false,
-                boostTxIds = emptyList(),
-                isTransfer = false,
-                doesExist = true,
                 confirmTimestamp = if (confirmed) (System.currentTimeMillis() / 1000).toULong() else null,
-                channelId = null,
-                transferTxId = null,
-                createdAt = null,
-                updatedAt = null,
             )
         )
     }

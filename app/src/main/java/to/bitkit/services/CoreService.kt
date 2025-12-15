@@ -69,6 +69,7 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
 import to.bitkit.env.Env
 import to.bitkit.ext.amountSats
+import to.bitkit.ext.create
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -473,18 +474,17 @@ class ActivityService(
                 status = state
             )
         } else {
-            LightningActivity(
+            LightningActivity.create(
                 id = payment.id,
                 txType = payment.direction.toPaymentType(),
                 status = state,
                 value = payment.amountSats ?: 0u,
-                fee = (payment.feePaidMsat ?: 0u) / 1000u,
                 invoice = kind.bolt11 ?: "Loading...",
-                message = kind.description.orEmpty(),
                 timestamp = payment.latestUpdateTimestamp,
+                fee = (payment.feePaidMsat ?: 0u) / 1000u,
+                message = kind.description.orEmpty(),
                 preimage = kind.preimage,
-                createdAt = payment.latestUpdateTimestamp,
-                updatedAt = payment.latestUpdateTimestamp,
+                seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
             )
         }
 
@@ -597,25 +597,19 @@ class ActivityService(
     ): OnchainActivity {
         val isTransfer = channelId != null
 
-        return OnchainActivity(
+        return OnchainActivity.create(
             id = payment.id,
             txType = payment.direction.toPaymentType(),
             txId = kind.txid,
             value = payment.amountSats ?: 0u,
             fee = (payment.feePaidMsat ?: 0u) / 1000u,
-            feeRate = 1u,
             address = resolvedAddress ?: "Loading...",
-            confirmed = confirmationData.isConfirmed,
             timestamp = confirmationData.timestamp,
-            isBoosted = false,
-            boostTxIds = emptyList(),
+            confirmed = confirmationData.isConfirmed,
             isTransfer = isTransfer,
-            doesExist = true,
             confirmTimestamp = confirmationData.confirmedTimestamp,
             channelId = channelId,
-            transferTxId = null,
-            createdAt = confirmationData.timestamp,
-            updatedAt = confirmationData.timestamp,
+            seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
         )
     }
 
@@ -726,42 +720,35 @@ class ActivityService(
                 if (isLightning) {
                     id = "test-lightning-$i"
                     activity = Activity.Lightning(
-                        LightningActivity(
+                        LightningActivity.create(
                             id = id,
                             txType = txType,
                             status = status,
                             value = value,
-                            fee = (1..1_000).random().toULong(),
                             invoice = "lnbc$value",
-                            message = possibleMessages.random(),
                             timestamp = txTimestamp,
+                            fee = (1..1_000).random().toULong(),
+                            message = possibleMessages.random(),
                             preimage = if (Random.nextBoolean()) "preimage$i" else null,
-                            createdAt = txTimestamp,
-                            updatedAt = txTimestamp
                         )
                     )
                 } else {
                     id = "test-onchain-$i"
                     activity = Activity.Onchain(
-                        OnchainActivity(
+                        OnchainActivity.create(
                             id = id,
                             txType = txType,
                             txId = "a".repeat(64), // Mock txid
                             value = value,
                             fee = (100..10_000).random().toULong(),
-                            feeRate = (1..100).random().toULong(),
                             address = "bc1...$i",
-                            confirmed = Random.nextBoolean(),
                             timestamp = txTimestamp,
+                            confirmed = Random.nextBoolean(),
+                            feeRate = (1..100).random().toULong(),
                             isBoosted = Random.nextBoolean(),
-                            boostTxIds = emptyList(),
                             isTransfer = Random.nextBoolean(),
-                            doesExist = true,
                             confirmTimestamp = if (Random.nextBoolean()) txTimestamp + 3600.toULong() else null,
                             channelId = if (Random.nextBoolean()) "channel$i" else null,
-                            transferTxId = null,
-                            createdAt = txTimestamp,
-                            updatedAt = txTimestamp,
                         )
                     )
                 }

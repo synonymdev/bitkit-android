@@ -40,7 +40,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.settingsViewModel
-import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
@@ -65,6 +65,7 @@ fun SettingsScreen(
         onSupportClick = { navController.navigate(Routes.Support) },
         onAboutClick = { navController.navigateToAboutSettings() },
         onDevClick = { navController.navigateToDevSettings() },
+        onBackClick = { navController.popBackStack() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
             enableDevModeTapCount = enableDevModeTapCount + 1
@@ -100,11 +101,12 @@ fun SettingsScreenContent(
     onAboutClick: () -> Unit,
     onDevClick: () -> Unit,
     onCogTap: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.settings__settings),
-            onBackClick = null,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
         Column(
@@ -186,6 +188,7 @@ private fun Preview() {
             onAboutClick = {},
             onDevClick = {},
             onCogTap = {},
+            onBackClick = {},
         )
     }
 }

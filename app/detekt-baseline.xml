@@ -6,78 +6,14 @@
     <ID>ComplexCondition:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$currentState.host.isBlank() || port == null || port &lt;= 0 || protocol == null</ID>
     <ID>ComplexCondition:MapWebViewClient.kt$MapWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
     <ID>ComplexCondition:ShopWebViewClient.kt$ShopWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
-    <ID>ComposableParamOrder:ActivityDetailScreen.kt$ActivityDetailScreen</ID>
-    <ID>ComposableParamOrder:ActivityExploreScreen.kt$ActivityExploreScreen</ID>
-    <ID>ComposableParamOrder:ActivityIcon.kt$ActivityIcon</ID>
-    <ID>ComposableParamOrder:ActivityIcon.kt$CircularIcon</ID>
-    <ID>ComposableParamOrder:AppStatus.kt$AppStatus</ID>
-    <ID>ComposableParamOrder:AuthCheckView.kt$AuthCheckView</ID>
-    <ID>ComposableParamOrder:AuthCheckView.kt$AuthCheckViewContent</ID>
-    <ID>ComposableParamOrder:AuthCheckView.kt$PinPad</ID>
-    <ID>ComposableParamOrder:BalanceHeaderView.kt$BalanceHeader</ID>
-    <ID>ComposableParamOrder:BlockCard.kt$BlockCard</ID>
-    <ID>ComposableParamOrder:BoostTransactionSheet.kt$BoostTransactionSheet</ID>
-    <ID>ComposableParamOrder:BoostTransactionSheet.kt$QuantityButton</ID>
-    <ID>ComposableParamOrder:CalculatorCard.kt$CalculatorCard</ID>
-    <ID>ComposableParamOrder:CalculatorCard.kt$CalculatorCardContent</ID>
-    <ID>ComposableParamOrder:CalculatorPreviewScreen.kt$CalculatorPreviewScreen</ID>
-    <ID>ComposableParamOrder:FactsCard.kt$FactsCard</ID>
-    <ID>ComposableParamOrder:HeadlineCard.kt$HeadlineCard</ID>
-    <ID>ComposableParamOrder:HomeScreen.kt$Content</ID>
-    <ID>ComposableParamOrder:InfoScreenContent.kt$InfoScreenContent</ID>
-    <ID>ComposableParamOrder:Money.kt$MoneyCaptionB</ID>
-    <ID>ComposableParamOrder:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
-    <ID>ComposableParamOrder:PriceCard.kt$PriceCard</ID>
-    <ID>ComposableParamOrder:ReceiveConfirmScreen.kt$ReceiveConfirmScreen</ID>
-    <ID>ComposableParamOrder:ReportIssueScreen.kt$ReportIssueScreen</ID>
-    <ID>ComposableParamOrder:RestoreWalletScreen.kt$MnemonicInputField</ID>
-    <ID>ComposableParamOrder:SheetHost.kt$SheetHost</ID>
-    <ID>ComposableParamOrder:SpendingAmountScreen.kt$SpendingAmountScreen</ID>
-    <ID>ComposableParamOrder:SuggestionCard.kt$SuggestionCard</ID>
-    <ID>ComposableParamOrder:SwipeToConfirm.kt$SwipeToConfirm</ID>
-    <ID>ComposableParamOrder:TextInput.kt$TextInput</ID>
-    <ID>ComposableParamOrder:WeatherCard.kt$WeatherCard</ID>
-    <ID>ComposableParamOrder:WidgetsSettingsScreen.kt$WidgetsSettingsContent</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalActivityListViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalAppViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalBackupsViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalBalances</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalBlocktankViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalCurrencies</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalCurrencyViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalSettingsViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalTransferViewModel</ID>
-    <ID>CompositionLocalAllowlist:Locals.kt$LocalWalletViewModel</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressInfo$val chain_stats: AddressStats</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressInfo$val mempool_stats: AddressStats</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val funded_txo_count: Int</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val funded_txo_sum: Int</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val spent_txo_count: Int</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val spent_txo_sum: Int</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$AddressStats$val tx_count: Int</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxInput$val is_coinbase: Boolean? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxInput$val scriptsig_asm: String? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_address: String? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_asm: String? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxOutput$val scriptpubkey_type: String? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_hash: String? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_height: Int? = null</ID>
-    <ID>ConstructorParameterNaming:AddressChecker.kt$TxStatus$val block_time: Long? = null</ID>
-    <ID>CyclomaticComplexMethod:ActivityDetailScreen.kt$@Composable private fun ActivityDetailContent( item: Activity, tags: List&lt;String&gt;, onRemoveTag: (String) -&gt; Unit, onAddTagClick: () -&gt; Unit, onClickBoost: () -&gt; Unit, onExploreClick: (String) -&gt; Unit, onCopy: (String) -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:ActivityListGrouped.kt$private fun groupActivityItems(activityItems: List&lt;Activity&gt;): List&lt;Any&gt;</ID>
     <ID>CyclomaticComplexMethod:ActivityRow.kt$@Composable fun ActivityRow( item: Activity, onClick: (String) -&gt; Unit, testTag: String, )</ID>
-    <ID>CyclomaticComplexMethod:ActivityRow.kt$@Composable private fun TransactionStatusText( txType: PaymentType, isLightning: Boolean, status: PaymentState?, isTransfer: Boolean, )</ID>
-    <ID>CyclomaticComplexMethod:AppStatusScreen.kt$@Composable private fun Content( uiState: AppStatusUiState = AppStatusUiState(), onBack: () -&gt; Unit = {}, onClose: () -&gt; Unit = {}, onInternetClick: () -&gt; Unit = {}, onElectrumClick: () -&gt; Unit = {}, onNodeClick: () -&gt; Unit = {}, onChannelsClick: () -&gt; Unit = {}, onBackupClick: () -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:AppViewModel.kt$AppViewModel$private fun observeSendEvents()</ID>
     <ID>CyclomaticComplexMethod:AppViewModel.kt$AppViewModel$private suspend fun handleSanityChecks(amountSats: ULong)</ID>
     <ID>CyclomaticComplexMethod:BlocktankRegtestScreen.kt$@Composable fun BlocktankRegtestScreen( navController: NavController, viewModel: BlocktankRegtestViewModel = hiltViewModel(), )</ID>
-    <ID>CyclomaticComplexMethod:ChannelDetailScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun Content( channel: ChannelUi, blocktankOrders: List&lt;IBtOrder&gt; = emptyList(), cjitEntries: List&lt;IcJitEntry&gt; = emptyList(), txDetails: TxDetails? = null, isRefreshing: Boolean = false, onBack: () -&gt; Unit = {}, onClose: () -&gt; Unit = {}, onRefresh: () -&gt; Unit = {}, onCopyText: (String) -&gt; Unit = {}, onOpenUrl: (String) -&gt; Unit = {}, onSupport: (Any) -&gt; Unit = {}, onCloseConnection: () -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:ConfirmMnemonicScreen.kt$@Composable fun ConfirmMnemonicScreen( uiState: BackupContract.UiState, onContinue: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
-    <ID>CyclomaticComplexMethod:ContentView.kt$@Composable fun ContentView( appViewModel: AppViewModel, walletViewModel: WalletViewModel, blocktankViewModel: BlocktankViewModel, currencyViewModel: CurrencyViewModel, activityListViewModel: ActivityListViewModel, transferViewModel: TransferViewModel, settingsViewModel: SettingsViewModel, backupsViewModel: BackupsViewModel, )</ID>
-    <ID>CyclomaticComplexMethod:CoreService.kt$ActivityService$private suspend fun processOnchainPayment( kind: PaymentKind.Onchain, payment: PaymentDetails, forceUpdate: Boolean, )</ID>
     <ID>CyclomaticComplexMethod:HealthRepo.kt$HealthRepo$private fun collectState()</ID>
     <ID>CyclomaticComplexMethod:HomeScreen.kt$@Composable fun HomeScreen( mainUiState: MainUiState, drawerState: DrawerState, rootNavController: NavController, walletNavController: NavHostController, settingsViewModel: SettingsViewModel, walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, homeViewModel: HomeViewModel = hiltViewModel(), )</ID>
-    <ID>CyclomaticComplexMethod:LightningService.kt$LightningService$private fun logEvent(event: Event)</ID>
     <ID>CyclomaticComplexMethod:SendSheet.kt$@Composable fun SendSheet( appViewModel: AppViewModel, walletViewModel: WalletViewModel, startDestination: SendRoute = SendRoute.Recipient, )</ID>
     <ID>CyclomaticComplexMethod:SettingsButtonRow.kt$@Composable fun SettingsButtonRow( title: String, modifier: Modifier = Modifier, subtitle: String? = null, value: SettingsButtonValue = SettingsButtonValue.None, description: String? = null, iconRes: Int? = null, iconTint: Color = Color.Unspecified, iconSize: Dp = 32.dp, maxLinesSubtitle: Int = Int.MAX_VALUE, enabled: Boolean = true, loading: Boolean = false, onClick: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:Slider.kt$@Composable fun StepSlider( value: Int, steps: List&lt;Int&gt;, onValueChange: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
@@ -99,93 +35,44 @@
     <ID>ForbiddenComment:ActivityDetailScreen.kt$/* TODO: Implement assign functionality */</ID>
     <ID>ForbiddenComment:ActivityRow.kt$// TODO: calculate confirmsIn text</ID>
     <ID>ForbiddenComment:BoostTransactionViewModel.kt$BoostTransactionUiState$// TODO: Implement dynamic time estimation</ID>
-    <ID>ForbiddenComment:ChannelStatusView.kt$// TODO: handle closed channels marking &amp; detection</ID>
     <ID>ForbiddenComment:ContentView.kt$// TODO: display as sheet</ID>
     <ID>ForbiddenComment:Env.kt$Env$// TODO: remove this to load from BT API instead</ID>
     <ID>ForbiddenComment:ExternalNodeViewModel.kt$ExternalNodeViewModel$// TODO: pass customFeeRate to ldk-node when supported</ID>
     <ID>ForbiddenComment:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$// TODO: sort channels to get consistent index; node.listChannels returns a list in random order</ID>
-    <ID>ForbiddenComment:LightningNodeService.kt$LightningNodeService$// TODO: Get from resources</ID>
+    <ID>ForbiddenComment:LightningService.kt$LightningService$// TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values</ID>
     <ID>ForbiddenComment:Notifications.kt$// TODO: review if needed:</ID>
     <ID>ForbiddenComment:SuccessScreen.kt$// TODO: verify backup</ID>
     <ID>FunctionOnlyReturningConstant:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun isReady(): Boolean</ID>
     <ID>ImplicitDefaultLocale:BlocksService.kt$BlocksService$String.format("%.2f", blockInfo.difficulty / 1_000_000_000_000.0)</ID>
     <ID>ImplicitDefaultLocale:PriceService.kt$PriceService$String.format("%.2f", price)</ID>
     <ID>InstanceOfCheckForException:LightningService.kt$LightningService$e is NodeException</ID>
-    <ID>LambdaParameterEventTrailing:CalculatorCard.kt$onFiatChange</ID>
-    <ID>LambdaParameterEventTrailing:QrScanningScreen.kt$onSubmitDebug</ID>
-    <ID>LambdaParameterEventTrailing:ReceiveQrScreen.kt$onClickEditInvoice</ID>
-    <ID>LambdaParameterEventTrailing:SettingsButtonRow.kt$onClick</ID>
-    <ID>LambdaParameterEventTrailing:SuggestionCard.kt$onClick</ID>
-    <ID>LambdaParameterEventTrailing:ToastView.kt$onDismiss</ID>
-    <ID>LambdaParameterInRestartableEffect:AuthCheckView.kt$validatePin</ID>
-    <ID>LambdaParameterInRestartableEffect:BiometricPrompt.kt$onSuccess</ID>
-    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onFailure</ID>
-    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onMaxFee</ID>
-    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onMinFee</ID>
-    <ID>LambdaParameterInRestartableEffect:BoostTransactionSheet.kt$onSuccess</ID>
-    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$navigateReceiveConfirm</ID>
-    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$onBack</ID>
-    <ID>LambdaParameterInRestartableEffect:EditInvoiceScreen.kt$updateInvoice</ID>
-    <ID>LambdaParameterInRestartableEffect:InitializingWalletView.kt$onComplete</ID>
-    <ID>LambdaParameterInRestartableEffect:LnurlChannelScreen.kt$onConnected</ID>
-    <ID>LambdaParameterInRestartableEffect:PinConfirmScreen.kt$onPinConfirmed</ID>
-    <ID>LambdaParameterInRestartableEffect:PricePreviewScreen.kt$onClose</ID>
-    <ID>LambdaParameterInRestartableEffect:QrCodeImage.kt$onBitmapGenerated</ID>
-    <ID>LambdaParameterInRestartableEffect:QrScanningScreen.kt$onBack</ID>
-    <ID>LambdaParameterInRestartableEffect:QrScanningScreen.kt$onScanSuccess</ID>
-    <ID>LambdaParameterInRestartableEffect:ReportIssueScreen.kt$navigateResultScreen</ID>
-    <ID>LambdaParameterInRestartableEffect:SendCoinSelectionScreen.kt$onRender</ID>
-    <ID>LambdaParameterInRestartableEffect:SendConfirmScreen.kt$onNavigateToPin</ID>
-    <ID>LambdaParameterInRestartableEffect:SendPinCheckScreen.kt$onSuccess</ID>
-    <ID>LambdaParameterInRestartableEffect:SendQuickPayScreen.kt$onPaymentComplete</ID>
-    <ID>LambdaParameterInRestartableEffect:SendQuickPayScreen.kt$onShowError</ID>
-    <ID>LambdaParameterInRestartableEffect:SheetHost.kt$onDismiss</ID>
-    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$onOrderCreated</ID>
-    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$toast</ID>
-    <ID>LambdaParameterInRestartableEffect:SpendingAmountScreen.kt$toastException</ID>
     <ID>LargeClass:AppViewModel.kt$AppViewModel : ViewModel</ID>
     <ID>LargeClass:LightningRepo.kt$LightningRepo</ID>
-    <ID>LongMethod:AppViewModel.kt$AppViewModel$private fun observeLdkNodeEvents()</ID>
     <ID>LongMethod:AppViewModel.kt$AppViewModel$private suspend fun proceedWithPayment()</ID>
+    <ID>LongMethod:ContentView.kt$@Suppress("LongParameterList") private fun NavGraphBuilder.home( walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, settingsViewModel: SettingsViewModel, navController: NavHostController, drawerState: DrawerState, )</ID>
     <ID>LongMethod:ContentView.kt$private fun NavGraphBuilder.widgets( navController: NavHostController, settingsViewModel: SettingsViewModel, currencyViewModel: CurrencyViewModel, )</ID>
     <ID>LongMethod:CoreService.kt$ActivityService$suspend fun generateRandomTestData(count: Int = 100)</ID>
-    <ID>LongMethod:LightningService.kt$LightningService$private fun logEvent(event: Event)</ID>
     <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>LongParameterList:BiometricPrompt.kt$( activity: Context, title: String, cancelButtonText: String, onAuthSucceed: () -&gt; Unit, onAuthFailed: (() -&gt; Unit), onAuthError: ((errorCode: Int, errString: CharSequence) -&gt; Unit), )</ID>
     <ID>LongParameterList:BiometricPrompt.kt$( activity: Context, title: String, cancelButtonText: String, onAuthSucceeded: () -&gt; Unit, onAuthFailed: (() -&gt; Unit), onAuthError: ((errorCode: Int, errString: CharSequence) -&gt; Unit), onUnsupported: () -&gt; Unit, )</ID>
     <ID>LongParameterList:CoreService.kt$ActivityService$( filter: ActivityFilter? = null, txType: PaymentType? = null, tags: List&lt;String&gt;? = null, search: String? = null, minDate: ULong? = null, maxDate: ULong? = null, limit: UInt? = null, sortDirection: SortDirection? = null, )</ID>
     <ID>LongParameterList:CoreService.kt$BlocktankService$( channelSizeSat: ULong, invoiceSat: ULong, invoiceDescription: String, nodeId: String, channelExpiryWeeks: UInt, options: CreateCjitOptions, )</ID>
     <ID>LongParameterList:CoreService.kt$OnchainService$( mnemonicPhrase: String, derivationPathStr: String?, network: Network?, bip39Passphrase: String?, isChange: Boolean?, startIndex: UInt?, count: UInt?, )</ID>
-    <ID>LongParameterList:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$( @ApplicationContext private val context: Context, @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningRepo: LightningRepo, internal val blocktankRepo: BlocktankRepo, private val logsRepo: LogsRepo, private val addressChecker: AddressChecker, private val ldkNodeEventBus: LdkNodeEventBus, private val walletRepo: WalletRepo, )</ID>
-    <ID>LongParameterList:LightningRepo.kt$LightningRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val lightningService: LightningService, private val ldkNodeEventBus: LdkNodeEventBus, private val settingsStore: SettingsStore, private val coreService: CoreService, private val lspNotificationsService: LspNotificationsService, private val firebaseMessaging: FirebaseMessaging, private val keychain: Keychain, private val lnurlService: LnurlService, private val cacheStore: CacheStore, )</ID>
-    <ID>LongParameterList:Notifications.kt$( title: String?, text: String?, extras: Bundle? = null, bigText: String? = null, id: Int = Random.nextInt(), context: Context, )</ID>
     <ID>LongParameterList:WidgetsRepo.kt$WidgetsRepo$( @BgDispatcher private val bgDispatcher: CoroutineDispatcher, private val newsService: NewsService, private val factsService: FactsService, private val blocksService: BlocksService, private val weatherService: WeatherService, private val priceService: PriceService, private val widgetsStore: WidgetsStore, private val settingsStore: SettingsStore, )</ID>
     <ID>LoopWithTooManyJumpStatements:MonetaryVisualTransformation.kt$MonetaryVisualTransformation.&lt;no name provided&gt;$for</ID>
-    <ID>LoopWithTooManyJumpStatements:TransferViewModel.kt$TransferViewModel$while</ID>
     <ID>MagicNumber:ActivityDetailScreen.kt$40</ID>
     <ID>MagicNumber:ActivityExploreScreen.kt$40</ID>
     <ID>MagicNumber:ActivityListViewModel.kt$ActivityListViewModel$300</ID>
     <ID>MagicNumber:AddressViewerScreen.kt$1500000L</ID>
     <ID>MagicNumber:AddressViewerScreen.kt$250000L</ID>
-    <ID>MagicNumber:AddressViewerScreen.kt$50000L</ID>
     <ID>MagicNumber:AddressViewerViewModel.kt$AddressViewerViewModel$300</ID>
     <ID>MagicNumber:AppStatus.kt$0.4f</ID>
-    <ID>MagicNumber:AppViewModel.kt$AppViewModel$1000</ID>
-    <ID>MagicNumber:AppViewModel.kt$AppViewModel$250</ID>
-    <ID>MagicNumber:AppViewModel.kt$AppViewModel$500</ID>
     <ID>MagicNumber:ArticleModel.kt$24</ID>
     <ID>MagicNumber:ArticleModel.kt$30</ID>
     <ID>MagicNumber:ArticleModel.kt$60</ID>
-    <ID>MagicNumber:AutoReadClipboardHandler.kt$1000</ID>
     <ID>MagicNumber:BackupNavSheetViewModel.kt$BackupNavSheetViewModel$200</ID>
-    <ID>MagicNumber:BackupsViewModel.kt$BackupsViewModel$500</ID>
-    <ID>MagicNumber:BiometricsView.kt$5</ID>
-    <ID>MagicNumber:ChangePinConfirmScreen.kt$500</ID>
     <ID>MagicNumber:ChannelDetailScreen.kt$1.5f</ID>
-    <ID>MagicNumber:ChannelOrdersScreen.kt$10</ID>
     <ID>MagicNumber:ConfirmMnemonicScreen.kt$300</ID>
-    <ID>MagicNumber:ContentView.kt$100</ID>
-    <ID>MagicNumber:ContentView.kt$500</ID>
     <ID>MagicNumber:CoreService.kt$ActivityService$64</ID>
     <ID>MagicNumber:Crypto.kt$Crypto$16</ID>
     <ID>MagicNumber:Crypto.kt$Crypto$32</ID>
@@ -195,60 +82,33 @@
     <ID>MagicNumber:ElectrumServer.kt$60001</ID>
     <ID>MagicNumber:ElectrumServer.kt$60002</ID>
     <ID>MagicNumber:HomeScreen.kt$0.8f</ID>
-    <ID>MagicNumber:HomeScreen.kt$3</ID>
     <ID>MagicNumber:HttpModule.kt$HttpModule$30_000</ID>
     <ID>MagicNumber:HttpModule.kt$HttpModule$60_000</ID>
-    <ID>MagicNumber:InitializingWalletView.kt$500</ID>
     <ID>MagicNumber:InitializingWalletView.kt$99.9</ID>
-    <ID>MagicNumber:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$500</ID>
-    <ID>MagicNumber:NewsService.kt$NewsService$10</ID>
-    <ID>MagicNumber:OnboardingSlidesScreen.kt$3</ID>
-    <ID>MagicNumber:OnboardingSlidesScreen.kt$4</ID>
-    <ID>MagicNumber:OnboardingSlidesScreen.kt$5</ID>
-    <ID>MagicNumber:PinConfirmScreen.kt$500</ID>
     <ID>MagicNumber:PinPromptScreen.kt$0.8f</ID>
-    <ID>MagicNumber:PriceCard.kt$1000</ID>
-    <ID>MagicNumber:PriceCard.kt$3.0</ID>
-    <ID>MagicNumber:PriceCard.kt$4.0</ID>
-    <ID>MagicNumber:PricePreviewScreen.kt$3.0</ID>
-    <ID>MagicNumber:PricePreviewScreen.kt$4.0</ID>
     <ID>MagicNumber:ProgressSteps.kt$12f</ID>
-    <ID>MagicNumber:QrScanningScreen.kt$100</ID>
-    <ID>MagicNumber:ReceiveQrScreen.kt$17.33f</ID>
     <ID>MagicNumber:ReceiveQrScreen.kt$32</ID>
     <ID>MagicNumber:RestoreWalletScreen.kt$12</ID>
     <ID>MagicNumber:SavingsConfirmScreen.kt$300</ID>
-    <ID>MagicNumber:SavingsProgressScreen.kt$2500</ID>
-    <ID>MagicNumber:SavingsProgressScreen.kt$5000</ID>
     <ID>MagicNumber:SendConfirmScreen.kt$1_234</ID>
     <ID>MagicNumber:SendConfirmScreen.kt$300</ID>
     <ID>MagicNumber:SendConfirmScreen.kt$43</ID>
     <ID>MagicNumber:SendConfirmScreen.kt$654_321</ID>
-    <ID>MagicNumber:SettingUpScreen.kt$5000</ID>
-    <ID>MagicNumber:SettingsViewModel.kt$SettingsViewModel$5000</ID>
-    <ID>MagicNumber:ShareSheet.kt$100</ID>
     <ID>MagicNumber:ShowMnemonicScreen.kt$12</ID>
     <ID>MagicNumber:ShowMnemonicScreen.kt$24</ID>
     <ID>MagicNumber:ShowMnemonicScreen.kt$300</ID>
-    <ID>MagicNumber:Slider.kt$10</ID>
     <ID>MagicNumber:Slider.kt$20</ID>
-    <ID>MagicNumber:Slider.kt$5</ID>
-    <ID>MagicNumber:Slider.kt$50</ID>
     <ID>MagicNumber:SpendingConfirmScreen.kt$300</ID>
-    <ID>MagicNumber:String.kt$3</ID>
     <ID>MagicNumber:SwipeToConfirm.kt$1500</ID>
-    <ID>MagicNumber:SwipeToConfirm.kt$500</ID>
     <ID>MatchingDeclarationName:AddressType.kt$AddressTypeInfo</ID>
     <ID>MatchingDeclarationName:Button.kt$ButtonSize</ID>
     <ID>MatchingDeclarationName:CoinSelectPreferenceScreen.kt$CoinSelectPreferenceTestTags</ID>
     <ID>MatchingDeclarationName:LightningChannel.kt$ChannelStatusUi</ID>
-    <ID>MatchingDeclarationName:LightningConnectionsScreen.kt$LightningConnectionsTestTags</ID>
     <ID>MatchingDeclarationName:ReceiveConfirmScreen.kt$CjitEntryDetails</ID>
     <ID>MatchingDeclarationName:ReportIssueScreen.kt$ReportIssueTestTags</ID>
     <ID>MatchingDeclarationName:ResetAndRestoreScreen.kt$ResetAndRestoreTestTags</ID>
     <ID>MatchingDeclarationName:SavingsProgressScreen.kt$SavingsProgressState</ID>
     <ID>MatchingDeclarationName:SettingsButtonRow.kt$SettingsButtonValue</ID>
-    <ID>MaxLineLength:ActivityDetailScreen.kt$description = "Unable to increase the fee any further. Otherwise, it will exceed half the current input balance"</ID>
     <ID>MaxLineLength:BlocksEditScreen.kt$enabled = blocksPreferences.run { showBlock || showTime || showDate || showTransactions || showSize || showSource }</ID>
     <ID>MaxLineLength:BlocktankRegtestScreen.kt$"Initiating channel close with fundingTxId: $fundingTxId, vout: $vout, forceCloseAfter: $forceCloseAfter"</ID>
     <ID>MaxLineLength:BlocktankRepo.kt$BlocktankRepo$"Buying channel with lspBalanceSat: $receivingBalanceSats, channelExpiryWeeks: $channelExpiryWeeks, options: $options"</ID>
@@ -262,10 +122,6 @@
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"</ID>
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"</ID>
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"</ID>
-    <ID>MaxLineLength:LightningService.kt$LightningService$"⏳ Channel pending: channelId: $channelId userChannelId: $userChannelId formerTemporaryChannelId: $formerTemporaryChannelId counterpartyNodeId: $counterpartyNodeId fundingTxo: $fundingTxo"</ID>
-    <ID>MaxLineLength:LightningService.kt$LightningService$"⛔ Channel closed: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId reason: $reason"</ID>
-    <ID>MaxLineLength:LightningService.kt$LightningService$"👐 Channel ready: channelId: $channelId userChannelId: $userChannelId counterpartyNodeId: $counterpartyNodeId"</ID>
-    <ID>MaxLineLength:LightningService.kt$LightningService$"🫰 Payment claimable: paymentId: $paymentId paymentHash: $paymentHash claimableAmountMsat: $claimableAmountMsat"</ID>
     <ID>MaxLineLength:ReceiveLiquidityScreen.kt$if (isAdditional) R.string.wallet__receive_liquidity__label_additional else R.string.wallet__receive_liquidity__label</ID>
     <ID>MaxLineLength:ReceiveLiquidityScreen.kt$if (isAdditional) R.string.wallet__receive_liquidity__nav_title_additional else R.string.wallet__receive_liquidity__nav_title</ID>
     <ID>MaxLineLength:ReceiveLiquidityScreen.kt$if (isAdditional) R.string.wallet__receive_liquidity__text_additional else R.string.wallet__receive_liquidity__text</ID>
@@ -273,7 +129,6 @@
     <ID>MaxLineLength:SendAddressScreen.kt$addressInput = "bitcoin:bc17tq4mtkq86vte7a26e0za560kgflwqsvxznmer5?lightning=LNBC1PQUVNP8KHGPLNF6REGS3VY5F40AJFUN4S2JUDQQNP4TK9MP6LWWLWTC3XX3UUEVYZ4EVQU3X4NQDX348QPP5WJC9DWNTAFN7FZEZFVDC3MHV67SX2LD2MG602E3LEZDMFT29JLWQSP54QKM4G8A2KD5RGEKACA3CH4XV4M2MQDN62F8S2CCRES9QYYSGQCQPCXQRRSSRZJQWQKZS03MNNHSTKR9DN2XQRC8VW5X6CEWAL8C6RW6QQ3T02T3R"</ID>
     <ID>MaxLineLength:SettingsScreen.kt$if (newValue) R.string.settings__dev_enabled_message else R.string.settings__dev_disabled_message</ID>
     <ID>MaxLineLength:WeatherService.kt$WeatherService$val avgFeeUsd = currencyRepo.convertSatsToFiat(avgFeeSats.toLong(), currency = USD_CURRENCY).getOrNull() ?: return FeeCondition.AVERAGE</ID>
-    <ID>MaximumLineLength:ActivityDetailScreen.kt$ </ID>
     <ID>MaximumLineLength:BlocksEditScreen.kt$ </ID>
     <ID>MaximumLineLength:BlocktankRegtestScreen.kt$ </ID>
     <ID>MaximumLineLength:BlocktankRepo.kt$BlocktankRepo$ </ID>
@@ -283,7 +138,6 @@
     <ID>MaximumLineLength:LightningBalance.kt$ </ID>
     <ID>MaximumLineLength:LightningConnectionsScreen.kt$ </ID>
     <ID>MaximumLineLength:LightningRepo.kt$LightningRepo$ </ID>
-    <ID>MaximumLineLength:LightningService.kt$LightningService$ </ID>
     <ID>MaximumLineLength:ReceiveLiquidityScreen.kt$ </ID>
     <ID>MaximumLineLength:SecuritySettingsScreen.kt$ </ID>
     <ID>MaximumLineLength:SendAddressScreen.kt$ </ID>
@@ -293,130 +147,19 @@
     <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees * required to include them in a block would be greater than the value of the transaction itself. * */ val dustLimit = 546u</ID>
     <ID>MayBeConst:Env.kt$Env.TransactionDefaults$/** Total recommended tx base fee in sats */ val recommendedBaseFee = 256u</ID>
     <ID>MemberNameEqualsClassName:Keychain.kt$Keychain$private val keychain = context.keychainDataStore</ID>
-    <ID>ModifierComposed:AllActivityScreen.kt$swipeToChangeTab</ID>
-    <ID>ModifierComposed:Modifiers.kt$clickableAlpha</ID>
-    <ID>ModifierComposed:SheetHeight.kt$sheetHeight</ID>
-    <ID>ModifierMissing:AboutScreen.kt$AboutScreen</ID>
-    <ID>ModifierMissing:ActivityAddTagSheet.kt$ActivityAddTagSheet</ID>
-    <ID>ModifierMissing:ActivityDetailScreen.kt$ActivityDetailScreen</ID>
-    <ID>ModifierMissing:ActivityListSimple.kt$ActivityListSimple</ID>
-    <ID>ModifierMissing:ActivityRow.kt$ActivityRow</ID>
-    <ID>ModifierMissing:AddWidgetsScreen.kt$AddWidgetsScreen</ID>
-    <ID>ModifierMissing:BackupSheet.kt$BackupSheet</ID>
-    <ID>ModifierMissing:BiometricsView.kt$BiometricsView</ID>
-    <ID>ModifierMissing:BlocksEditScreen.kt$BlocksEditContent</ID>
-    <ID>ModifierMissing:BlocksPreviewScreen.kt$BlocksPreviewContent</ID>
-    <ID>ModifierMissing:BlocktankRegtestScreen.kt$BlocktankRegtestScreen</ID>
-    <ID>ModifierMissing:BuyIntroScreen.kt$BuyIntroContent</ID>
-    <ID>ModifierMissing:CalculatorPreviewScreen.kt$CalculatorPreviewContent</ID>
-    <ID>ModifierMissing:CameraPermissionView.kt$DeniedContent</ID>
-    <ID>ModifierMissing:ChannelStatusView.kt$ChannelStatusView</ID>
-    <ID>ModifierMissing:CreateProfileScreen.kt$CreateProfileScreen</ID>
-    <ID>ModifierMissing:CreateWalletWithPassphraseScreen.kt$CreateWalletWithPassphraseScreen</ID>
-    <ID>ModifierMissing:DefaultUnitSettingsScreen.kt$DefaultUnitSettingsScreenContent</ID>
-    <ID>ModifierMissing:DevSettingsScreen.kt$DevSettingsScreen</ID>
-    <ID>ModifierMissing:FactsEditScreen.kt$FactsEditContent</ID>
-    <ID>ModifierMissing:FactsPreviewScreen.kt$FactsPreviewContent</ID>
-    <ID>ModifierMissing:FundingAdvancedScreen.kt$FundingAdvancedScreen</ID>
-    <ID>ModifierMissing:FundingScreen.kt$FundingScreen</ID>
-    <ID>ModifierMissing:HeadlinesEditScreen.kt$HeadlinesEditContent</ID>
-    <ID>ModifierMissing:HeadlinesPreviewScreen.kt$HeadlinesPreviewContent</ID>
-    <ID>ModifierMissing:HomeNav.kt$HomeNav</ID>
-    <ID>ModifierMissing:InfoScreenContent.kt$InfoScreenContent</ID>
-    <ID>ModifierMissing:InitializingWalletView.kt$InitializingWalletView</ID>
-    <ID>ModifierMissing:IntroScreen.kt$IntroScreen</ID>
-    <ID>ModifierMissing:LocalCurrencySettingsScreen.kt$LocalCurrencySettingsContent</ID>
-    <ID>ModifierMissing:LogsScreen.kt$LogDetailScreen</ID>
-    <ID>ModifierMissing:LogsScreen.kt$LogsScreen</ID>
-    <ID>ModifierMissing:Money.kt$MoneyDisplay</ID>
-    <ID>ModifierMissing:OnboardingSlidesScreen.kt$OnboardingSlidesScreen</ID>
-    <ID>ModifierMissing:PinChooseScreen.kt$PinChooseScreen</ID>
-    <ID>ModifierMissing:PinSheet.kt$PinSheet</ID>
-    <ID>ModifierMissing:PriceEditScreen.kt$PriceEditContent</ID>
-    <ID>ModifierMissing:PricePreviewScreen.kt$PricePreviewContent</ID>
-    <ID>ModifierMissing:ProfileIntroScreen.kt$ProfileIntroScreen</ID>
-    <ID>ModifierMissing:QrScanningScreen.kt$QrScanningScreen</ID>
-    <ID>ModifierMissing:QuickPaySettingsScreen.kt$QuickPaySettingsScreenContent</ID>
-    <ID>ModifierMissing:ReceiveSheet.kt$ReceiveSheet</ID>
-    <ID>ModifierMissing:ReportIssueResultScreen.kt$ReportIssueResultScreen</ID>
-    <ID>ModifierMissing:ReportIssueScreen.kt$ReportIssueContent</ID>
-    <ID>ModifierMissing:RestoreWalletScreen.kt$MnemonicInputField</ID>
-    <ID>ModifierMissing:SavingsAdvancedScreen.kt$ChannelItem</ID>
-    <ID>ModifierMissing:SavingsAvailabilityScreen.kt$SavingsAvailabilityScreen</ID>
-    <ID>ModifierMissing:SavingsIntroScreen.kt$SavingsIntroScreen</ID>
-    <ID>ModifierMissing:SavingsWalletScreen.kt$SavingsWalletScreen</ID>
-    <ID>ModifierMissing:SendSheet.kt$SendSheet</ID>
-    <ID>ModifierMissing:SettingsScreen.kt$SettingsScreenContent</ID>
-    <ID>ModifierMissing:SheetHost.kt$SheetHost</ID>
-    <ID>ModifierMissing:ShopDiscoverScreen.kt$ShopDiscoverScreen</ID>
-    <ID>ModifierMissing:ShopIntroScreen.kt$ShopIntroScreen</ID>
-    <ID>ModifierMissing:ShopWebViewScreen.kt$ShopWebViewScreen</ID>
-    <ID>ModifierMissing:Spacers.kt$FillHeight</ID>
-    <ID>ModifierMissing:Spacers.kt$FillWidth</ID>
-    <ID>ModifierMissing:Spacers.kt$HorizontalSpacer</ID>
-    <ID>ModifierMissing:Spacers.kt$VerticalSpacer</ID>
-    <ID>ModifierMissing:SpendingIntroScreen.kt$SpendingIntroScreen</ID>
-    <ID>ModifierMissing:SpendingWalletScreen.kt$SpendingWalletScreen</ID>
-    <ID>ModifierMissing:SplashScreen.kt$SplashScreen</ID>
-    <ID>ModifierMissing:TermsOfUseScreen.kt$TermsOfUseScreen</ID>
-    <ID>ModifierMissing:ToastView.kt$ToastView</ID>
-    <ID>ModifierMissing:TransferIntroScreen.kt$TransferIntroScreen</ID>
-    <ID>ModifierMissing:WarningMultipleDevicesScreen.kt$WarningMultipleDevicesScreen</ID>
-    <ID>ModifierMissing:WeatherEditScreen.kt$WeatherEditContent</ID>
-    <ID>ModifierMissing:WeatherPreviewScreen.kt$WeatherPreviewContent</ID>
-    <ID>ModifierMissing:WidgetsIntroScreen.kt$WidgetsIntroScreen</ID>
-    <ID>ModifierNotUsedAtRoot:SettingsTextButtonRow.kt$modifier = modifier.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)</ID>
-    <ID>ModifierWithoutDefault:ReceiveQrScreen.kt$modifier</ID>
-    <ID>ModifierWithoutDefault:SyncNodeView.kt$modifier</ID>
-    <ID>ModifierWithoutDefault:WalletBalanceView.kt$modifier</ID>
-    <ID>MultipleEmitters:ActivityExploreScreen.kt$LightningDetails</ID>
-    <ID>MultipleEmitters:DrawerMenu.kt$DrawerMenu</ID>
-    <ID>MultipleEmitters:SendConfirmScreen.kt$LnurlCommentSection</ID>
-    <ID>MultipleEmitters:SendConfirmScreen.kt$TagsSection</ID>
-    <ID>MutableStateAutoboxing:DragDropColumn.kt$mutableStateOf(0f)</ID>
-    <ID>MutableStateParam:ReceiveQrScreen.kt$cjitActive</ID>
-    <ID>MutableStateParam:ReceiveQrScreen.kt$cjitInvoice</ID>
     <ID>NestedBlockDepth:Context.kt$fun Context.copyAssetToStorage(asset: String, dest: String)</ID>
     <ID>NestedBlockDepth:LogsRepo.kt$LogsRepo$private fun createZipBase64(logFiles: List&lt;LogFile&gt;): String</ID>
     <ID>NestedBlockDepth:MonetaryVisualTransformation.kt$MonetaryVisualTransformation$private fun createOffsetMapping(original: String, transformed: String): OffsetMapping</ID>
     <ID>NestedBlockDepth:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun postMessage(message: String)</ID>
+    <ID>NoUnusedImports:ActivityDetailScreen.kt$to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen.kt</ID>
     <ID>NoWildcardImports:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
-    <ID>ParameterNaming:AddTagScreen.kt$onInputUpdated</ID>
-    <ID>ParameterNaming:AddTagScreen.kt$onTagConfirmed</ID>
-    <ID>ParameterNaming:AddTagScreen.kt$onTagSelected</ID>
-    <ID>ParameterNaming:AddWidgetsScreen.kt$onWidgetSelected</ID>
-    <ID>ParameterNaming:AddressViewerScreen.kt$onAddressSelected</ID>
-    <ID>ParameterNaming:AddressViewerScreen.kt$onSearchTextChanged</ID>
-    <ID>ParameterNaming:BiometricPrompt.kt$onFailed</ID>
-    <ID>ParameterNaming:BiometricPrompt.kt$onUnsupported</ID>
-    <ID>ParameterNaming:EditInvoiceScreen.kt$onTextChanged</ID>
-    <ID>ParameterNaming:ExternalConnectionScreen.kt$onNodeConnected</ID>
-    <ID>ParameterNaming:FundingScreen.kt$onAdvanced</ID>
-    <ID>ParameterNaming:LnurlChannelScreen.kt$onConnected</ID>
-    <ID>ParameterNaming:LocationBlockScreen.kt$onBackPressed</ID>
-    <ID>ParameterNaming:PinChooseScreen.kt$onPinChosen</ID>
-    <ID>ParameterNaming:PinConfirmScreen.kt$onPinConfirmed</ID>
-    <ID>ParameterNaming:QrCodeImage.kt$onBitmapGenerated</ID>
-    <ID>ParameterNaming:ReceiveAmountScreen.kt$onCjitCreated</ID>
-    <ID>ParameterNaming:SpendingAdvancedScreen.kt$onOrderCreated</ID>
-    <ID>ParameterNaming:SpendingAmountScreen.kt$onOrderCreated</ID>
-    <ID>ParameterNaming:TransactionSpeedSettingsScreen.kt$onSpeedSelected</ID>
-    <ID>PreviewPublic:CameraPermissionView.kt$PreviewDenied</ID>
-    <ID>PreviewPublic:CameraPermissionView.kt$PreviewInSheet</ID>
-    <ID>PreviewPublic:CameraPermissionView.kt$PreviewRequired</ID>
-    <ID>PreviewPublic:EmptyWalletView.kt$EmptyStateViewPreview</ID>
-    <ID>PreviewPublic:HighlightLabel.kt$FlexibleLogoPreview</ID>
-    <ID>PreviewPublic:HighlightLabel.kt$LongTextLogoPreview</ID>
-    <ID>PreviewPublic:SplashScreen.kt$SplashScreenPreview</ID>
     <ID>PrintStackTrace:ShareSheet.kt$e</ID>
     <ID>ReturnCount:AppViewModel.kt$AppViewModel$private suspend fun handleSanityChecks(amountSats: ULong)</ID>
     <ID>ReturnCount:FcmService.kt$FcmService$private fun decryptPayload(response: EncryptedNotification)</ID>
     <ID>ReturnCount:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$private fun findUpdatedChannel( currentChannel: ChannelDetails, allChannels: List&lt;ChannelDetails&gt;, ): ChannelDetails?</ID>
     <ID>SwallowedException:Crypto.kt$Crypto$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:ActivityDetailViewModel.kt$ActivityDetailViewModel$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:ActivityRepo.kt$ActivityRepo$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:AddressChecker.kt$AddressChecker$e: Exception</ID>
     <ID>TooGenericExceptionCaught:AppViewModel.kt$AppViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ArticleModel.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BackupNavSheetViewModel.kt$BackupNavSheetViewModel$e: Throwable</ID>
@@ -426,19 +169,16 @@
     <ID>TooGenericExceptionCaught:BlocktankRepo.kt$BlocktankRepo$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:BoostTransactionViewModel.kt$BoostTransactionViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ChannelOrdersScreen.kt$e: Throwable</ID>
-    <ID>TooGenericExceptionCaught:ContentView.kt$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:CoreService.kt$ActivityService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CoreService.kt$CoreService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:Crypto.kt$Crypto$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CurrencyRepo.kt$CurrencyRepo$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CurrencyService.kt$CurrencyService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ElectrumConfigViewModel.kt$ElectrumConfigViewModel$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LightningRepo.kt$LightningRepo$e: Throwable</ID>
     <ID>TooGenericExceptionCaught:LightningService.kt$LightningService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LogsRepo.kt$LogsRepo$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LogsViewModel.kt$LogsViewModel$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:NewTransactionSheetDetails.kt$NewTransactionSheetDetails.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PriceService.kt$PriceService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:QrScanningScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SendCoinSelectionViewModel.kt$SendCoinSelectionViewModel$e: Throwable</ID>
@@ -467,7 +207,6 @@
     <ID>TooManyFunctions:LightningRepo.kt$LightningRepo</ID>
     <ID>TooManyFunctions:LightningService.kt$LightningService : BaseCoroutineScope</ID>
     <ID>TooManyFunctions:SettingsViewModel.kt$SettingsViewModel : ViewModel</ID>
-    <ID>TooManyFunctions:TagMetadataDao.kt$TagMetadataDao</ID>
     <ID>TooManyFunctions:Text.kt$to.bitkit.ui.components.Text.kt</ID>
     <ID>TooManyFunctions:TransferViewModel.kt$TransferViewModel : ViewModel</ID>
     <ID>TooManyFunctions:WalletRepo.kt$WalletRepo</ID>
@@ -476,7 +215,6 @@
     <ID>TooManyFunctions:WidgetsStore.kt$WidgetsStore</ID>
     <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexMenu = 11f</ID>
     <ID>TopLevelPropertyNaming:DrawerMenu.kt$private const val zIndexScrim = 10f</ID>
-    <ID>UnusedPrivateProperty:CurrencyRepoTest.kt$CurrencyRepoTest$private val toastEventBus: ToastEventBus = mock()</ID>
     <ID>WildcardImport:LightningChannel.kt$import androidx.compose.foundation.layout.*</ID>
   </CurrentIssues>
 </SmellBaseline>

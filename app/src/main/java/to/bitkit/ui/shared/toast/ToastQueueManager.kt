@@ -49,8 +49,7 @@ class ToastQueueManager(private val scope: CoroutineScope) {
             }
             newQueue
         }
-        // If no toast is currently displayed, show this one immediately
-        showNextToastIfAvailable()
+        dismissCurrentToast()
     }
 
     /**

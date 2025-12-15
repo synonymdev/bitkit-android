@@ -2,7 +2,6 @@ package to.bitkit.viewmodels
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.datetime.Clock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
@@ -29,17 +28,22 @@ import to.bitkit.ui.components.KEY_000
 import to.bitkit.ui.components.KEY_DECIMAL
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPadType
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.ExperimentalTime
 
 @Suppress("LargeClass")
+@OptIn(ExperimentalTime::class)
 class AmountInputViewModelTest : BaseUnitTest() {
     private lateinit var viewModel: AmountInputViewModel
-    private val currencyService: CurrencyService = mock()
-    private val settingsStore: SettingsStore = mock()
-    private val cacheStore: CacheStore = mock()
-    private val clock: Clock = mock()
     private lateinit var currencyRepo: CurrencyRepo
 
+    private val currencyService = mock<CurrencyService>()
+    private val settingsStore = mock<SettingsStore>()
+    private val cacheStore = mock<CacheStore>()
+    private val clock = mock<Clock>()
+
+    @Suppress("SpellCheckingInspection")
     private val testRates = listOf(
         FxRate(
             symbol = "BTCUSD",
@@ -65,7 +69,7 @@ class AmountInputViewModelTest : BaseUnitTest() {
             settingsStore = settingsStore,
             cacheStore = cacheStore,
             enablePolling = false,
-            clock = clock
+            clock = clock,
         )
 
         viewModel = AmountInputViewModel(currencyRepo)

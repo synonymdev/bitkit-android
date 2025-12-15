@@ -26,11 +26,12 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun ShopIntroScreen(
     onContinue: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
             titleText = "",
-            onBackClick = null,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
 
@@ -66,7 +67,8 @@ fun ShopIntroScreen(
 private fun Preview() {
     AppThemeSurface {
         ShopIntroScreen(
-            onContinue = {}
+            onContinue = {},
+            onBackClick = {},
         )
     }
 }

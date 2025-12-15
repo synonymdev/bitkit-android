@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
@@ -86,14 +85,14 @@ fun BottomSheetPreview(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val density = LocalDensity.current
     BottomSheet(
         onDismissRequest = {},
         sheetState = remember {
             SheetState(
                 skipPartiallyExpanded = true,
-                density = density,
                 initialValue = SheetValue.Expanded,
+                positionalThreshold = { 0f },
+                velocityThreshold = { 0f },
             )
         },
         modifier = modifier,

@@ -26,11 +26,12 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun ProfileIntroScreen(
     onContinue: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.slashtags__profile),
-            onBackClick = null,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
 
@@ -68,7 +69,8 @@ fun ProfileIntroScreen(
 private fun Preview() {
     AppThemeSurface {
         ProfileIntroScreen(
-            onContinue = {}
+            onContinue = {},
+            onBackClick = {}
         )
     }
 }

@@ -1,6 +1,7 @@
 *.iml
 .gradle
 .idea
+!.idea/codeStyles/
 .kotlin
 .DS_Store
 /build
@@ -10,9 +11,8 @@
 local.properties
 # AI
 .ai
-.cursor
 *.local.*
-CLAUDE.md
+!*.local.template*
 # Secrets
 google-services.json
 .env

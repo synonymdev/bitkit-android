@@ -4,10 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -25,6 +23,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -47,7 +46,6 @@ fun BackupIntroScreen(
             .testTag("BackupIntroView")
     ) {
         SheetTopBar(stringResource(R.string.security__backup_wallet))
-
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -60,30 +58,28 @@ fun BackupIntroScreen(
                     .weight(1f)
                     .testTag("BackupIntroViewImage")
             )
-
             Display(
                 text = stringResource(R.string.security__backup_title).withAccent(accentColor = Colors.Blue),
                 color = Colors.White,
                 modifier = Modifier
                     .testTag("BackupIntroViewTitle")
             )
-            Spacer(Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             BodyM(
-                text = if (hasFunds) {
-                    stringResource(R.string.security__backup_funds)
-                } else {
-                    stringResource(R.string.security__backup_funds_no)
+                text = when (hasFunds) {
+                    true -> stringResource(R.string.security__backup_funds)
+                    else -> stringResource(R.string.security__backup_funds_no)
                 },
                 color = Colors.White64,
                 modifier = Modifier
                     .testTag("BackupIntroViewDescription")
             )
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("BackupIntroViewButtons"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .testTag("BackupIntroViewButtons")
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__later),
@@ -91,19 +87,18 @@ fun BackupIntroScreen(
                     onClick = onClose,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("BackupIntroViewCancel"),
+                        .testTag("BackupIntroViewCancel")
                 )
-
                 PrimaryButton(
                     text = stringResource(R.string.security__backup_button),
                     fullWidth = false,
                     onClick = onConfirm,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("BackupIntroViewContinue"),
+                        .testTag("BackupIntroViewContinue")
                 )
             }
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

@@ -46,8 +46,8 @@ import to.bitkit.R
 import to.bitkit.ui.Routes
 import to.bitkit.ui.navigateIfNotCurrent
 import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
-import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.InterFontFamily
@@ -138,11 +138,8 @@ private fun Menu(
             label = stringResource(R.string.wallet__drawer__wallet),
             iconRes = R.drawable.ic_coins,
             onClick = {
-                val isOnHome = rootNavController.currentBackStackEntry
-                    ?.destination?.hasRoute<Routes.Home>() ?: false
-                if (!isOnHome) {
-                    rootNavController.navigateToHome()
-                }
+                val isInHome = rootNavController.currentBackStackEntry?.destination?.hasRoute<Routes.Home>() ?: false
+                if (!isInHome) rootNavController.navigateToHome()
                 scope.launch { drawerState.close() }
             },
             modifier = Modifier.testTag("DrawerWallet")

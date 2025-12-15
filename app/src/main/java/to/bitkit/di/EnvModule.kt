@@ -6,9 +6,10 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -19,6 +20,7 @@ object EnvModule {
         return Env.network
     }
 
+    @OptIn(ExperimentalTime::class)
     @Provides
     fun provideClock(): Clock {
         return Clock.System

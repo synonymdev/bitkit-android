@@ -1,6 +1,8 @@
 package to.bitkit.ext
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 
@@ -70,3 +72,75 @@ fun Activity.Onchain.boostType() = when (this.v1.txType) {
 }
 
 enum class BoostType { RBF, CPFP }
+
+@Suppress("LongParameterList")
+fun LightningActivity.Companion.create(
+    id: String,
+    txType: PaymentType,
+    status: PaymentState,
+    value: ULong,
+    invoice: String,
+    timestamp: ULong,
+    fee: ULong = 0u,
+    message: String = "",
+    preimage: String? = null,
+    createdAt: ULong? = timestamp,
+    updatedAt: ULong? = createdAt,
+    seenAt: ULong? = null,
+) = LightningActivity(
+    id = id,
+    txType = txType,
+    status = status,
+    value = value,
+    fee = fee,
+    invoice = invoice,
+    message = message,
+    timestamp = timestamp,
+    preimage = preimage,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    seenAt = seenAt,
+)
+
+@Suppress("LongParameterList")
+fun OnchainActivity.Companion.create(
+    id: String,
+    txType: PaymentType,
+    txId: String,
+    value: ULong,
+    fee: ULong,
+    address: String,
+    timestamp: ULong,
+    confirmed: Boolean = false,
+    feeRate: ULong = 1u,
+    isBoosted: Boolean = false,
+    boostTxIds: List<String> = emptyList(),
+    isTransfer: Boolean = false,
+    doesExist: Boolean = true,
+    confirmTimestamp: ULong? = null,
+    channelId: String? = null,
+    transferTxId: String? = null,
+    createdAt: ULong? = timestamp,
+    updatedAt: ULong? = createdAt,
+    seenAt: ULong? = null,
+) = OnchainActivity(
+    id = id,
+    txType = txType,
+    txId = txId,
+    value = value,
+    fee = fee,
+    feeRate = feeRate,
+    address = address,
+    confirmed = confirmed,
+    timestamp = timestamp,
+    isBoosted = isBoosted,
+    boostTxIds = boostTxIds,
+    isTransfer = isTransfer,
+    doesExist = doesExist,
+    confirmTimestamp = confirmTimestamp,
+    channelId = channelId,
+    transferTxId = transferTxId,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    seenAt = seenAt,
+)

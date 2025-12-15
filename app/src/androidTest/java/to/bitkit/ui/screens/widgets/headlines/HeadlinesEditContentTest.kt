@@ -31,7 +31,6 @@ class HeadlinesEditContentTest {
     @Test
     fun testHeadlinesEditScreenWithDefaultPreferences() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var timeClicked = false
         var resetClicked = false
@@ -42,7 +41,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickTime = { timeClicked = true },
                     onClickReset = { resetClicked = true },
@@ -118,7 +116,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = { resetClicked = true },
@@ -150,7 +147,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -177,7 +173,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -199,7 +194,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -246,7 +240,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -272,7 +265,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickTime = {},
                     onClickReset = {},
@@ -290,7 +282,6 @@ class HeadlinesEditContentTest {
     @Test
     fun testAllCallbacksTriggered() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var timeClicked = false
         var resetClicked = false
@@ -305,7 +296,6 @@ class HeadlinesEditContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickTime = { timeClicked = true },
                     onClickReset = { resetClicked = true },

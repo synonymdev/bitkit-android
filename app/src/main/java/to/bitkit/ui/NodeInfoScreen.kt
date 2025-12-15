@@ -30,7 +30,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -62,12 +61,14 @@ import to.bitkit.ui.components.settings.SettingsTextButtonRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.MainUiState
+import kotlin.time.Clock.System.now
+import kotlin.time.ExperimentalTime
 
 @Composable
 fun NodeInfoScreen(
@@ -463,11 +464,12 @@ private fun Preview() {
     }
 }
 
+@OptIn(ExperimentalTime::class)
 @Preview(showSystemUi = true)
 @Composable
 private fun PreviewDevMode() {
     AppThemeSurface {
-        val syncTime = Clock.System.now().epochSeconds.toULong()
+        val syncTime = now().epochSeconds.toULong()
         Content(
             isDevModeEnabled = true,
             uiState = MainUiState(

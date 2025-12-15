@@ -211,6 +211,8 @@ class BoostTransactionViewModel @Inject constructor(
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
         updateActivity(newTxId = newTxId, isRBF = isRBF).fold(
             onSuccess = {
+                lightningRepo.sync()
+                activityRepo.syncActivities()
                 _uiState.update { it.copy(boosting = false) }
                 setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
             },

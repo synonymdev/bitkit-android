@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.activity.compose.BackHandler
@@ -47,11 +49,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import to.bitkit.R
 import to.bitkit.ext.CalendarConstants
@@ -73,8 +74,8 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -83,7 +84,10 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.time.Clock.System.now
 import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 // Animation
 private const val SWIPE_THRESHOLD_DP = 100
@@ -145,7 +149,7 @@ private fun Content(
                 Instant.fromEpochMilliseconds(it)
                     .toLocalDateTime(TimeZone.currentSystemDefault())
                     .date
-            } ?: Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            } ?: now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         )
     }
 
@@ -476,7 +480,7 @@ private fun CalendarGrid(
     }
 
     val today = remember {
-        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        now().toLocalDateTime(TimeZone.currentSystemDefault()).date
     }
 
     Column(
@@ -532,7 +536,7 @@ private fun CalendarDayView(
         modifier = modifier
             .aspectRatio(DAY_ASPECT_RATIO)
             .clickableAlpha(onClick = onClick)
-            .testTag(if (isToday) "Today" else "Day-${date.dayOfMonth}")
+            .testTag(if (isToday) "Today" else "Day-${date.day}")
     ) {
         // Background for range selection
         if (isSelected) {
@@ -616,7 +620,7 @@ private fun CalendarDayView(
 
         // Day number
         BodyMSB(
-            text = date.dayOfMonth.toString(),
+            text = date.day.toString(),
             color = if (isStartDate || isEndDate) Colors.Brand else Color.White
         )
     }
@@ -625,7 +629,7 @@ private fun CalendarDayView(
 private fun LocalDate.toFormattedString(): String {
     val formatter = SimpleDateFormat(DatePattern.DATE_FORMAT, Locale.getDefault())
     val calendar = Calendar.getInstance()
-    calendar.set(year, monthNumber - CalendarConstants.MONTH_INDEX_OFFSET, dayOfMonth)
+    calendar.set(year, month.number - CalendarConstants.MONTH_INDEX_OFFSET, day)
     return formatter.format(calendar.time)
 }
 
@@ -645,10 +649,10 @@ private fun PreviewWithSelection() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
-                initialStartDate = Clock.System.now()
+                initialStartDate = now()
                     .minus(CalendarConstants.DAYS_IN_WEEK.days)
                     .toEpochMilliseconds(),
-                initialEndDate = Clock.System.now().toEpochMilliseconds(),
+                initialEndDate = now().toEpochMilliseconds(),
             )
         }
     }

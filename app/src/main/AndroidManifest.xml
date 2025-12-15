@@ -20,6 +20,11 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Required for E2E tests connecting to local Electrum server (Android 16+) -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="31" />
 
     <application
         android:name=".App"
@@ -33,7 +38,7 @@
             android:name=".androidServices.LightningNodeService"
             android:foregroundServiceType="dataSync"
             android:enabled="true"
-            android:exported="false"/>
+            android:exported="false" />
 
         <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
@@ -59,27 +64,33 @@
             <!-- Universal Links -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data
                     android:scheme="https"
                     android:host="www.bitkit.to"
                     android:pathPattern="/treasure-hunt" />
             </intent-filter>
 
-            <!-- Deeplinks -->
+            <!-- Deep Links -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="bitkit" />
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
-                <data android:scheme="BITCOIN"
+                <data
+                    android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />
                 <data android:scheme="lightning" />
-                <data android:scheme="LIGHTNING"
+                <data
+                    android:scheme="LIGHTNING"
                     tools:ignore="AppLinkUrlError" />
                 <data android:scheme="lnurl" />
                 <data android:scheme="lnurlw" />
@@ -90,16 +101,20 @@
             <!-- NFC -->
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="bitkit" />
                 <data android:scheme="slash" />
                 <data android:scheme="slashauth" />
                 <data android:scheme="bitcoin" />
-                <data android:scheme="BITCOIN"
+                <data
+                    android:scheme="BITCOIN"
                     tools:ignore="AppLinkUrlError" />
                 <data android:scheme="lightning" />
-                <data android:scheme="LIGHTNING"
+                <data
+                    android:scheme="LIGHTNING"
                     tools:ignore="AppLinkUrlError" />
                 <data android:scheme="lnurl" />
                 <data android:scheme="lnurlw" />

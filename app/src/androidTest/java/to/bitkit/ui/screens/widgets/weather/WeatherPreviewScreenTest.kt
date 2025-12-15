@@ -30,7 +30,6 @@ class WeatherPreviewContentTest {
     @Test
     fun testWeatherPreviewWithEnabledWidget() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -40,7 +39,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -87,7 +85,6 @@ class WeatherPreviewContentTest {
     @Test
     fun testWeatherPreviewWithDisabledWidget() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -97,7 +94,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -137,7 +133,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -162,7 +157,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -194,13 +188,11 @@ class WeatherPreviewContentTest {
     @Test
     fun testNavigationCallbacks() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
 
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = {},
                     onClickDelete = {},
@@ -230,7 +222,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -256,7 +247,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -287,7 +277,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -310,7 +299,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -333,7 +321,6 @@ class WeatherPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},

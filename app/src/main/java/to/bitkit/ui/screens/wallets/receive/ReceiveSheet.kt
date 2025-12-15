@@ -11,7 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
@@ -25,7 +25,6 @@ import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.MainUiState
 import to.bitkit.viewmodels.SettingsViewModel
-import to.bitkit.viewmodels.WalletViewModelEffects
 
 @Composable
 fun ReceiveSheet(
@@ -63,16 +62,6 @@ fun ReceiveSheet(
             composableWithDefaultTransitions<ReceiveRoute.QR> {
                 LaunchedEffect(cjitInvoice.value) {
                     showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
-                }
-
-                LaunchedEffect(Unit) {
-                    wallet.walletEffect.collect { effect ->
-                        when (effect) {
-                            WalletViewModelEffects.NavigateGeoBlockScreen -> {
-                                navController.navigate(ReceiveRoute.GeoBlock)
-                            }
-                        }
-                    }
                 }
 
                 ReceiveQrScreen(

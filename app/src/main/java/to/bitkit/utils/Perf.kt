@@ -4,17 +4,16 @@ import java.time.Instant
 import kotlin.system.measureTimeMillis
 
 internal inline fun <T> measured(
-    functionName: String,
+    label: String,
     block: () -> T,
 ): T {
     var result: T
 
-    val elapsed = measureTimeMillis {
+    val elapsedMs = measureTimeMillis {
         result = block()
-    }.let { it / 1000.0 }
+    }
 
-    val threadName = Thread.currentThread().name
-    Logger.performance("$functionName took $elapsed seconds on $threadName")
+    Logger.debug("$label took ${elapsedMs}ms")
 
     return result
 }

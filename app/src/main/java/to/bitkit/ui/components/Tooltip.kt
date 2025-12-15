@@ -4,14 +4,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider
 import androidx.compose.material3.TooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupPositionProvider
 import to.bitkit.ui.theme.Colors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -20,16 +23,20 @@ fun Tooltip(
     text: String,
     tooltipState: TooltipState,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    positionProvider: PopupPositionProvider = rememberTooltipPositionProvider(TooltipAnchorPosition.Above, 4.dp),
+    focusable: Boolean = false,
+    content: @Composable () -> Unit,
 ) {
     TooltipBox(
         modifier = modifier,
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = positionProvider,
         tooltip = {
             PlainTooltip(
-                caretSize = DpSize(
-                    width = 16.dp,
-                    height = 12.dp
+                caretShape = TooltipDefaults.caretShape(
+                    DpSize(
+                        width = 16.dp,
+                        height = 12.dp
+                    )
                 ),
                 containerColor = Colors.Black92,
                 contentColor = Colors.White,
@@ -48,7 +55,7 @@ fun Tooltip(
             }
         },
         state = tooltipState,
-        focusable = false,
-        content = content
+        focusable = focusable,
+        content = content,
     )
 }

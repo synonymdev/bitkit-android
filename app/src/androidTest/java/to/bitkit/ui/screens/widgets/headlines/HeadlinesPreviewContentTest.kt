@@ -29,7 +29,6 @@ class HeadlinesPreviewContentTest {
     @Test
     fun testHeadlinesPreviewWithImplementedHeadlines() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -39,7 +38,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -86,7 +84,6 @@ class HeadlinesPreviewContentTest {
     @Test
     fun testHeadlinesPreviewWithoutImplementedHeadlines() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -96,7 +93,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -134,7 +130,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -159,7 +154,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -191,13 +185,11 @@ class HeadlinesPreviewContentTest {
     @Test
     fun testNavigationCallbacks() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
 
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = {},
                     onClickDelete = {},
@@ -223,7 +215,6 @@ class HeadlinesPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 HeadlinesPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},

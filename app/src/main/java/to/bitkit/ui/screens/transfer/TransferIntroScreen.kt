@@ -33,6 +33,7 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun TransferIntroScreen(
     onContinueClick: () -> Unit = {},
+    onBackClick: () -> Unit,
 ) {
     Box(
         contentAlignment = Alignment.TopCenter,
@@ -51,7 +52,7 @@ fun TransferIntroScreen(
         )
         AppTopBar(
             titleText = null,
-            onBackClick = null,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
         Column(
@@ -79,6 +80,6 @@ fun TransferIntroScreen(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        TransferIntroScreen()
+        TransferIntroScreen(onBackClick = {})
     }
 }

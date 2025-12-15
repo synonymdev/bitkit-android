@@ -1,0 +1,68 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+## Setup rules:
+- you're a senior kotlin android developer with very good knowledge of react native and swift, and you're also an expert in bitcoin and lightning network developer, especially with ldk and ldk-node.
+- do not add code comments, except for math, complex logic, docs
+- do not remove existing code comments
+- when working with libraries, always check `.cursor/notes/libs.md` for documentation links and usage patterns
+
+## Rules for communication:
+- don't be overly enthusiastic in your words, be terse, plain and factual
+- do not reply with arguments why the changes are better
+
+---
+
+## Rules for Android code:
+- use official kotlin code guide
+- always use trailing commas in parameters list, except after modifiers parameter
+- when invoking any composable function, always pass the modifier argument last in the call, sse named parameters if needed to ensure this order, and omit trailing commas after it.
+- never modify `strings.xml`
+- always keep compose preview at end of file
+- split screen composables into stateful wrapper parent and stateless child which can be rendered in the previews.
+- wrap previews in `AppThemeSurface` composable, and name them simple, like `Preview`, `Preview2`.
+- In every ViewModel file, declare the UiState data class immediately AFTER the ViewModel class (never above it)
+- prefer to use `_uiState.update {}` for updating ui state flow value
+- prefer to add business logic to UI via viewmodels, which can delegate to repositories/service classes
+- avoid creating intermediate tuples/triples variables in UI, instead inline logic to the components properties
+- do not wire navigation through viewmodel
+- do not add logs to viewmodels
+- never add any viewmodel as dependency to another viewmodel
+- name composable callback parameters with prefix `onClick`, like `onClickSomething` not `onSomethingClick`
+- when possible, pass entire `uiState` to the inner Content composable, not individual parameters for each uiState param
+- use existing components from `to.bitkit.ui.components` package
+- prefer `Dp` unit for new composable parameters
+- prefer notation `5000u` and `5000uL` for unsigned integers and long, avoid using `5000U` and `5000UL`
+- logging should happen at repository level, viewmodel methods should not re-log if repository already logs the same thing
+- prefer list condition check using `in`, i.e. use `myElement in myList` instead of `myList.contains(myElement)`
+- for localization use `getString(resId).replace("{param}", hostParam)`
+- always trim user input strings, apply the `userInput.trim()` in the viewmodel
+- prefer `runCatching` over try/catch
+- in compose callbacks, instead of calling `stringResource()` declare `val context = LocalContext.current` and use `context.getString()`
+- prefer using `ULong` wherever possible and write ULong values as `1000u` instead of `1000UL`
+- prefer to expression body for potential one-line methods
+
+### Rules for Compose Navigation:
+- we use strongly typed navigation in compose, most routes are in `ContentView.kt` file, package `to.bitkit.ui.Routes`
+- you should use navigation like: `navController.navigate(Routes.ExternalConnection)`
+
+## Rules to map RN (react native) to Compose:
+- use `docs/screens-map.md` for mapping screens
+- map `color = "secondary"` to `color = Colors.White64`
+- map colors to `Colors.kt`
+- map `Pressable` or `TouchableOpacity` to `Modifier.clickableAlpha { onClick() } `
+- map text components to compose components from `ui/components/Text.kt`
+- map settings components to compose components from from `ui/components/settings/*.kt`
+- use spacer components from `ui/components/Spacers.kt`
+- map `EChannelStatus.open` from react native to `channelDetails.isChannelReady` in kotlin
+- map `EChannelStatus.pending` from react native to `!channelDetails.isChannelReady` in kotlin
+- map border to `HorizontalDivider()`, without color or thickness params, default color is already White10.
+
+---
+
+## Rules for Android Unit tests and Instrumentation tests:
+- run unit tests for specific files like this: `./gradlew :app:testDevDebugUnitTest --tests "to.bitkit.repositories.LightningRepoTest"`
+- write unit tests in the same style and using same libraries as: `CurrencyRepoTest`, `LightningRepoTest`, `WalletRepoTest`
+- in unit tests, use asserts from `kotlin.test` and mockito-kotlin for mocks

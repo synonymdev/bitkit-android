@@ -3,7 +3,6 @@ package to.bitkit.repositories
 import app.cash.turbine.test
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
-import kotlinx.datetime.Clock
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -18,24 +17,26 @@ import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.services.CurrencyService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.ui.shared.toast.ToastEventBus
 import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class CurrencyRepoTest : BaseUnitTest() {
-    private val currencyService: CurrencyService = mock()
-    private val settingsStore: SettingsStore = mock()
-    private val cacheStore: CacheStore = mock()
-    private val toastEventBus: ToastEventBus = mock()
-    private val clock: Clock = mock()
+    private val currencyService = mock<CurrencyService>()
+    private val settingsStore = mock<SettingsStore>()
+    private val cacheStore = mock<CacheStore>()
+    private val clock = mock<Clock>()
 
     private lateinit var sut: CurrencyRepo
 
+    @Suppress("SpellCheckingInspection")
     private val testRates = listOf(
         FxRate(
             symbol = "BTCUSD",
@@ -149,9 +150,9 @@ class CurrencyRepoTest : BaseUnitTest() {
             awaitItem() // Wait for state to be initialized
 
             assertEquals(testRates[1], rate)
-            assertEquals(45000.0, rate?.rate)
-            assertEquals("€", rate?.currencySymbol)
-            assertEquals("🇪🇺", rate?.currencyFlag)
+            assertEquals(45_000.0, rate.rate)
+            assertEquals("€", rate.currencySymbol)
+            assertEquals("🇪🇺", rate.currencyFlag)
             cancelAndIgnoreRemainingEvents()
         }
     }

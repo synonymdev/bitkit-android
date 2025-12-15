@@ -6,8 +6,10 @@ import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.decode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -33,8 +35,11 @@ import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.errLogOf
+import to.bitkit.utils.measured
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 @Suppress("LongParameterList")
 @Singleton
@@ -48,6 +53,7 @@ class WalletRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val deriveBalanceStateUseCase: DeriveBalanceStateUseCase,
     private val wipeWalletUseCase: WipeWalletUseCase,
+    private val transferRepo: TransferRepo,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -56,6 +62,8 @@ class WalletRepo @Inject constructor(
 
     private val _balanceState = MutableStateFlow(BalanceState())
     val balanceState = _balanceState.asStateFlow()
+
+    private var eventSyncJob: Job? = null
 
     init {
         repoScope.launch {
@@ -160,30 +168,58 @@ class WalletRepo @Inject constructor(
         preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
     }
 
-    suspend fun syncNodeAndWallet(): Result<Unit> = withContext(bgDispatcher) {
-        val startHeight = lightningRepo.lightningState.value.block()?.height
-        Logger.verbose("syncNodeAndWallet started at block height=$startHeight", context = TAG)
-        syncBalances()
-        lightningRepo.sync().onSuccess {
-            syncBalances()
-            val endHeight = lightningRepo.lightningState.value.block()?.height
-            Logger.verbose("syncNodeAndWallet completed at block height=$endHeight", context = TAG)
-            return@withContext Result.success(Unit)
-        }.onFailure { e ->
-            if (e is TimeoutCancellationException) {
-                syncBalances()
-            }
-            return@withContext Result.failure(e)
+    suspend fun syncNodeAndWallet(source: SyncSource = SyncSource.AUTO): Result<Unit> = withContext(bgDispatcher) {
+        if (!lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+            Logger.debug("syncNodeAndWallet skipped: node not running", context = TAG)
+            return@withContext Result.failure(Exception("Node not running"))
         }
+
+        val sourceLabel = source.name.lowercase()
+        val startHeight = lightningRepo.lightningState.value.block()?.height
+        Logger.debug("Sync $sourceLabel started at block height=$startHeight", context = TAG)
+
+        val result = measured("Sync $sourceLabel") {
+            syncBalances()
+            lightningRepo.sync().onSuccess {
+                syncBalances()
+            }.onFailure { e ->
+                if (e is TimeoutCancellationException) {
+                    syncBalances()
+                }
+            }
+        }
+
+        val endHeight = lightningRepo.lightningState.value.block()?.height
+        Logger.debug("Sync $sourceLabel completed at block height=$endHeight", context = TAG)
+
+        result
     }
 
     suspend fun syncBalances() {
         deriveBalanceStateUseCase().onSuccess { balanceState ->
             runCatching { cacheStore.cacheBalance(balanceState) }
             _balanceState.update { balanceState }
-        }.onFailure {
-            Logger.warn("Could not sync balances", context = TAG)
+        }.onFailure { e ->
+            if (e !is CancellationException) {
+                Logger.warn("Could not sync balances ${errLogOf(e)}", context = TAG)
+            }
         }
+    }
+
+    /** Debounce syncs for [Event.SyncCompleted]. Rapid consecutive events are coalesced. */
+    fun debounceSyncByEvent() {
+        eventSyncJob?.cancel()
+        eventSyncJob = repoScope.launch {
+            delay(EVENT_SYNC_DEBOUNCE_MS)
+            syncNodeAndWallet()
+            transferRepo.syncTransferStates()
+        }
+    }
+
+    /** Cancels any pending sync for [Event.SyncCompleted]. Called when manual pull-to-refresh takes priority. */
+    fun cancelSyncByEvent() {
+        eventSyncJob?.cancel()
+        eventSyncJob = null
     }
 
     suspend fun refreshBip21ForEvent(event: Event) = withContext(bgDispatcher) {
@@ -570,6 +606,7 @@ class WalletRepo @Inject constructor(
 
     private companion object {
         const val TAG = "WalletRepo"
+        const val EVENT_SYNC_DEBOUNCE_MS = 500L
     }
 }
 
@@ -583,3 +620,5 @@ data class WalletState(
     val receiveOnSpendingBalance: Boolean = true,
     val walletExists: Boolean = false,
 )
+
+enum class SyncSource { AUTO, MANUAL }

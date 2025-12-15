@@ -11,7 +11,7 @@ import org.junit.Rule
 abstract class BaseUnitTest(
     testDispatcher: TestDispatcher = UnconfinedTestDispatcher()
 ) {
-    @get:Rule
+    @get:Rule(order = 0)
     val coroutinesTestRule = MainDispatcherRule(testDispatcher)
 
     protected val testDispatcher get() = coroutinesTestRule.testDispatcher

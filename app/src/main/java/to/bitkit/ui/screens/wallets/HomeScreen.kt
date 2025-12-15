@@ -54,7 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
@@ -106,7 +106,7 @@ import to.bitkit.ui.screens.widgets.facts.FactsCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
-import to.bitkit.ui.shared.util.clickableAlpha
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
@@ -359,7 +359,7 @@ private fun Content(
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Savings) }
+                                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySavings")
                         )
@@ -370,7 +370,7 @@ private fun Content(
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(HomeRoutes.Spending) }
+                                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySpending")
                         )

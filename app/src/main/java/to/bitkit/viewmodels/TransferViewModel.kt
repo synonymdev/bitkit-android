@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -43,13 +42,16 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.roundToLong
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
 @Suppress("LongParameterList")
+@OptIn(ExperimentalTime::class)
 @HiltViewModel
 class TransferViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -208,7 +210,7 @@ class TransferViewModel @Inject constructor(
                         lspOrderId = order.id,
                     )
                     launch { walletRepo.syncBalances() }
-                    watchOrder(order.id)
+                    launch { watchOrder(order.id) }
                 }
                 .onFailure { error ->
                     ToastEventBus.send(error)
@@ -216,47 +218,67 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private fun watchOrder(orderId: String, frequencyMs: Long = 2_500) {
-        var isSettled = false
-        var error: Throwable? = null
+    private suspend fun watchOrder(orderId: String): Result<Boolean> {
+        Logger.debug("Started watching order: '$orderId'", context = TAG)
+        try {
+            // Step 0: Starting
+            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_0) }
+            Logger.debug("LN setup step: $LN_SETUP_STEP_0", context = TAG)
+            delay(MIN_STEP_DELAY_MS)
 
-        viewModelScope.launch {
-            Logger.debug("Started to watch order '$orderId'", context = TAG)
+            // Poll until payment is confirmed (order state becomes PAID or EXECUTED)
+            val paidOrder = pollUntil(orderId) { order ->
+                order.state2 == BtOrderState2.PAID || order.state2 == BtOrderState2.EXECUTED
+            } ?: return Result.failure(Exception("Order not found or expired"))
 
-            while (!isSettled && error == null) {
-                try {
-                    Logger.debug("Refreshing order '$orderId'")
-                    val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
-                    if (order == null) {
-                        error = Exception("Order not found '$orderId'").also {
-                            Logger.error(it.message, context = TAG)
-                        }
-                        break
-                    }
+            // Step 1: Payment confirmed
+            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_1) }
+            Logger.debug("LN setup step: $LN_SETUP_STEP_1", context = TAG)
+            delay(MIN_STEP_DELAY_MS)
 
-                    val step = updateOrder(order)
-                    settingsStore.update { it.copy(lightningSetupStep = step) }
-                    Logger.debug("LN setup step: $step")
+            // Try to open channel (idempotent - safe to call multiple times)
+            blocktankRepo.openChannel(paidOrder.id)
 
-                    if (order.state2 == BtOrderState2.EXPIRED) {
-                        error = Exception("Order expired '$orderId'").also {
-                            Logger.error(it.message, context = TAG)
-                        }
-                        break
-                    }
-                    if (step > 2) {
-                        Logger.debug("Order settled, stopping watch order '$orderId'", context = TAG)
-                        isSettled = true
-                        break
-                    }
-                } catch (e: Throwable) {
-                    Logger.error("Failed to watch order '$orderId'", e, context = TAG)
-                    error = e
-                    break
-                }
-                delay(frequencyMs)
+            // Step 2: Channel opening requested
+            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_2) }
+            Logger.debug("LN setup step: $LN_SETUP_STEP_2", context = TAG)
+            delay(MIN_STEP_DELAY_MS)
+
+            // Poll until channel is ready (EXECUTED state or channel has state)
+            pollUntil(orderId) { order ->
+                order.state2 == BtOrderState2.EXECUTED || order.channel?.state != null
+            } ?: return Result.failure(Exception("Order not found or expired"))
+
+            // Step 3: Complete
+            transferRepo.syncTransferStates()
+            settingsStore.update { it.copy(lightningSetupStep = LN_SETUP_STEP_3) }
+            Logger.debug("LN setup step: $LN_SETUP_STEP_3", context = TAG)
+
+            Logger.debug("Order settled: '$orderId'", context = TAG)
+            return Result.success(true)
+        } catch (e: Throwable) {
+            Logger.error("Failed to watch order: '$orderId'", e, context = TAG)
+            return Result.failure(e)
+        } finally {
+            Logger.debug("Stopped watching order: '$orderId'", context = TAG)
+        }
+    }
+
+    private suspend fun pollUntil(orderId: String, condition: (IBtOrder) -> Boolean): IBtOrder? {
+        while (true) {
+            val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
+            if (order == null) {
+                Logger.error("Order not found: '$orderId'", context = TAG)
+                return null
             }
-            Logger.debug("Stopped watching order '$orderId'", context = TAG)
+            if (order.state2 == BtOrderState2.EXPIRED) {
+                Logger.error("Order expired: '$orderId'", context = TAG)
+                return null
+            }
+            if (condition(order)) {
+                return order
+            }
+            delay(POLL_INTERVAL_MS)
         }
     }
 
@@ -303,26 +325,6 @@ class TransferViewModel @Inject constructor(
                 Logger.error("Failure", exception)
                 setTransferEffect(TransferEffect.ToastException(exception))
             }
-        }
-    }
-
-    private suspend fun updateOrder(order: IBtOrder): Int {
-        if (order.channel != null) {
-            transferRepo.syncTransferStates()
-            return LN_SETUP_STEP_3
-        }
-
-        when (order.state2) {
-            BtOrderState2.CREATED -> return 0
-
-            BtOrderState2.PAID -> {
-                blocktankRepo.openChannel(order.id)
-                return 1
-            }
-
-            BtOrderState2.EXECUTED -> return 2
-
-            else -> return 0
         }
     }
 
@@ -490,6 +492,11 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
+        private const val MIN_STEP_DELAY_MS = 500L
+        private const val POLL_INTERVAL_MS = 2_500L
+        const val LN_SETUP_STEP_0 = 0
+        const val LN_SETUP_STEP_1 = 1
+        const val LN_SETUP_STEP_2 = 2
         const val LN_SETUP_STEP_3 = 3
     }
 }

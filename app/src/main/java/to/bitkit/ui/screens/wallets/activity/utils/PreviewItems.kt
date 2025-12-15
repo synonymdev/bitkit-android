@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import to.bitkit.ext.create
 import java.util.Calendar
 
 val previewActivityItems = buildList {
@@ -19,19 +20,17 @@ val previewActivityItems = buildList {
     // Today
     add(
         Activity.Onchain(
-            OnchainActivity(
+            OnchainActivity.create(
                 id = "1",
                 txType = PaymentType.RECEIVED,
                 txId = "01",
                 value = 42_000_u,
                 fee = 200_u,
-                feeRate = 1_u,
                 address = "bc1",
                 confirmed = true,
                 timestamp = today.epochSecond(),
                 isBoosted = true,
                 boostTxIds = listOf("02", "03"),
-                isTransfer = false,
                 doesExist = false,
                 confirmTimestamp = today.epochSecond(),
                 channelId = "channelId",
@@ -45,18 +44,16 @@ val previewActivityItems = buildList {
     // Yesterday
     add(
         Activity.Lightning(
-            LightningActivity(
+            LightningActivity.create(
                 id = "2",
                 txType = PaymentType.SENT,
                 status = PaymentState.PENDING,
                 value = 30_000_u,
-                fee = 15_u,
                 invoice = "lnbc2",
-                message = "Custom very long lightning activity message to test truncation",
                 timestamp = yesterday.epochSecond(),
+                fee = 15_u,
+                message = "Custom very long lightning activity message to test truncation",
                 preimage = "preimage1",
-                createdAt = yesterday.epochSecond(),
-                updatedAt = yesterday.epochSecond(),
             )
         )
     )
@@ -64,18 +61,15 @@ val previewActivityItems = buildList {
     // This Week
     add(
         Activity.Lightning(
-            LightningActivity(
+            LightningActivity.create(
                 id = "3",
                 txType = PaymentType.RECEIVED,
                 status = PaymentState.FAILED,
                 value = 217_000_u,
-                fee = 17_u,
                 invoice = "lnbc3",
-                message = "",
                 timestamp = thisWeek.epochSecond(),
+                fee = 17_u,
                 preimage = "preimage2",
-                createdAt = thisWeek.epochSecond(),
-                updatedAt = thisWeek.epochSecond(),
             )
         )
     )
@@ -83,25 +77,18 @@ val previewActivityItems = buildList {
     // This Month
     add(
         Activity.Onchain(
-            OnchainActivity(
+            OnchainActivity.create(
                 id = "4",
                 txType = PaymentType.SENT,
                 txId = "04",
                 value = 950_000_u,
                 fee = 110_u,
-                feeRate = 1_u,
                 address = "bc1",
-                confirmed = false,
                 timestamp = thisMonth.epochSecond(),
-                isBoosted = false,
-                boostTxIds = emptyList(),
                 isTransfer = true,
-                doesExist = true,
                 confirmTimestamp = today.epochSecond() + 3600u,
                 channelId = "channelId",
                 transferTxId = "transferTxId",
-                createdAt = thisMonth.epochSecond(),
-                updatedAt = thisMonth.epochSecond(),
             )
         )
     )
@@ -109,18 +96,14 @@ val previewActivityItems = buildList {
     // Last Year
     add(
         Activity.Lightning(
-            LightningActivity(
+            LightningActivity.create(
                 id = "5",
                 txType = PaymentType.SENT,
                 status = PaymentState.SUCCEEDED,
                 value = 200_000_u,
-                fee = 1_u,
                 invoice = "lnbc…",
-                message = "",
                 timestamp = lastYear.epochSecond(),
-                preimage = null,
-                createdAt = lastYear.epochSecond(),
-                updatedAt = lastYear.epochSecond(),
+                fee = 1_u,
             )
         )
     )

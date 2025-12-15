@@ -34,15 +34,19 @@ fun ChangePinResultScreen(
         onOkClick = {
             navController.popBackStack<Routes.SecuritySettings>(inclusive = false)
         },
+        onBackClick = {
+            navController.popBackStack()
+        }
     )
 }
 
 @Composable
 private fun ChangePinResultContent(
     onOkClick: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     ScreenColumn {
-        AppTopBar(stringResource(R.string.security__cp_changed_title), onBackClick = null)
+        AppTopBar(stringResource(R.string.security__cp_changed_title), onBackClick = onBackClick)
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
@@ -81,6 +85,7 @@ private fun Preview() {
     AppThemeSurface {
         ChangePinResultContent(
             onOkClick = {},
+            onBackClick = {},
         )
     }
 }

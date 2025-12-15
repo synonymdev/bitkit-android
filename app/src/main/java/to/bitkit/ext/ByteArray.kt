@@ -12,13 +12,11 @@ fun ByteArray.toHex(): String = this.toHexString()
 fun String.fromHex(): ByteArray = this.hexToByteArray()
 // endregion
 
-// region base64
 @OptIn(ExperimentalEncodingApi::class)
 fun ByteArray.toBase64(): String = Base64.encode(this)
 
 @OptIn(ExperimentalEncodingApi::class)
 fun String.fromBase64(): ByteArray = Base64.decode(this)
-// endregion
 
 val String.uByteList get() = this.toByteArray().map { it.toUByte() }
 

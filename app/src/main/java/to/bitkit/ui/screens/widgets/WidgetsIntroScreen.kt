@@ -27,11 +27,12 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun WidgetsIntroScreen(
     onContinue: () -> Unit,
+    onBackClick: () -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
             titleText = "",
-            onBackClick = null,
+            onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
 
@@ -68,7 +69,8 @@ fun WidgetsIntroScreen(
 private fun Preview() {
     AppThemeSurface {
         WidgetsIntroScreen(
-            onContinue = {}
+            onContinue = {},
+            onBackClick = {}
         )
     }
 }

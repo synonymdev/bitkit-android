@@ -39,7 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
@@ -47,6 +47,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
@@ -70,8 +71,8 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
 import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.clickableAlpha
 import to.bitkit.ui.sheets.BoostTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -824,18 +825,15 @@ private fun PreviewLightningSent() {
     AppThemeSurface {
         ActivityDetailContent(
             item = Activity.Lightning(
-                v1 = LightningActivity(
+                v1 = LightningActivity.create(
                     id = "test-lightning-1",
                     txType = PaymentType.SENT,
                     status = PaymentState.SUCCEEDED,
                     value = 50000UL,
-                    fee = 1UL,
                     invoice = "lnbc...",
-                    message = "Thanks for paying at the bar. Here's my share.",
                     timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    preimage = null,
-                    createdAt = null,
-                    updatedAt = null,
+                    fee = 1UL,
+                    message = "Thanks for paying at the bar. Here's my share.",
                 )
             ),
             tags = listOf("Lunch", "Drinks"),
@@ -855,25 +853,17 @@ private fun PreviewOnchain() {
     AppThemeSurface {
         ActivityDetailContent(
             item = Activity.Onchain(
-                v1 = OnchainActivity(
+                v1 = OnchainActivity.create(
                     id = "test-onchain-1",
                     txType = PaymentType.RECEIVED,
                     txId = "abc123",
                     value = 100000UL,
                     fee = 500UL,
-                    feeRate = 8UL,
                     address = "bc1...",
-                    confirmed = true,
                     timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
-                    isBoosted = false,
-                    boostTxIds = emptyList(),
-                    isTransfer = false,
-                    doesExist = true,
+                    confirmed = true,
+                    feeRate = 8UL,
                     confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                    channelId = null,
-                    transferTxId = null,
-                    createdAt = null,
-                    updatedAt = null,
                 )
             ),
             tags = emptyList(),
@@ -896,18 +886,15 @@ private fun PreviewSheetSmallScreen() {
         ) {
             ActivityDetailContent(
                 item = Activity.Lightning(
-                    v1 = LightningActivity(
+                    v1 = LightningActivity.create(
                         id = "test-lightning-1",
                         txType = PaymentType.SENT,
                         status = PaymentState.SUCCEEDED,
                         value = 50000UL,
-                        fee = 1UL,
                         invoice = "lnbc...",
-                        message = "Thanks for paying at the bar. Here's my share.",
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        preimage = null,
-                        createdAt = null,
-                        updatedAt = null,
+                        fee = 1UL,
+                        message = "Thanks for paying at the bar. Here's my share.",
                     )
                 ),
                 tags = listOf("Lunch", "Drinks"),

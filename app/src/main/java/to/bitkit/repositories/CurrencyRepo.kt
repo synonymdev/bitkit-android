@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -41,16 +40,19 @@ import java.math.RoundingMode
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @Suppress("TooManyFunctions")
+@OptIn(ExperimentalTime::class)
 @Singleton
 class CurrencyRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val currencyService: CurrencyService,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
-    @Named("enablePolling") private val enablePolling: Boolean,
     private val clock: Clock,
+    @Named("enablePolling") private val enablePolling: Boolean,
 ) : AmountInputHandler {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
     private val _currencyState = MutableStateFlow(CurrencyState())

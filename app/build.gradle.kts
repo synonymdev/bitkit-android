@@ -2,7 +2,7 @@ import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -40,11 +40,11 @@ val locales = listOf("en", "ar", "ca", "cs", "de", "el", "es", "fr", "it", "nl",
 
 android {
     namespace = "to.bitkit"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 15
         versionName = "0.0.15"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
@@ -127,8 +127,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    kotlin {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_11
+            freeCompilerArgs.addAll(
+                listOf(
+                    "-XXLanguage:+PropertyParamAnnotationDefaultTargetMode",
+                )
+            )
+        }
     }
     buildFeatures {
         buildConfig = true
@@ -168,8 +175,6 @@ android {
 
 composeCompiler {
     featureFlags = setOf(
-        ComposeFeatureFlag.StrongSkipping.disabled(),
-        ComposeFeatureFlag.OptimizeNonSkippingGroups,
     )
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
@@ -196,7 +201,7 @@ dependencies {
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     implementation(libs.bitkit.core)
-    implementation(libs.vss)
+    implementation(libs.vss.client)
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,7 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -36,6 +37,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -86,7 +89,9 @@ import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
-import to.bitkit.ui.screens.wallets.HomeNav
+import to.bitkit.ui.screens.wallets.HomeScreen
+import to.bitkit.ui.screens.wallets.SavingsWalletScreen
+import to.bitkit.ui.screens.wallets.SpendingWalletScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
@@ -166,6 +171,7 @@ import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.theme.TRANSITION_SHEET_MS
 import to.bitkit.ui.utils.AutoReadClipboardHandler
+import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.Transitions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
@@ -195,6 +201,7 @@ fun ContentView(
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -494,7 +501,7 @@ private fun RootNavHost(
             activityListViewModel = activityListViewModel,
             settingsViewModel = settingsViewModel,
             navController = navController,
-            drawerState = drawerState
+            drawerState = drawerState,
         )
         allActivity(
             activityListViewModel = activityListViewModel,
@@ -541,6 +548,7 @@ private fun RootNavHost(
                         navController.navigateToTransferFunding()
                         settingsViewModel.setHasSeenTransferIntro(true)
                     },
+                    onBackClick = {},
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsIntro> {
@@ -630,7 +638,9 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.SettingUp> {
                 SettingUpScreen(
                     viewModel = transferViewModel,
-                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = {
+                        navController.navigateToHome()
+                    }
                 )
             }
             composableWithDefaultTransitions<Routes.Funding> {
@@ -744,13 +754,77 @@ private fun NavGraphBuilder.home(
     drawerState: DrawerState,
 ) {
     composable<Routes.Home> {
-        HomeNav(
-            walletViewModel = walletViewModel,
-            appViewModel = appViewModel,
-            activityListViewModel = activityListViewModel,
-            settingsViewModel = settingsViewModel,
-            rootNavController = navController,
-            drawerState = drawerState,
+        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val hazeState = rememberHazeState()
+
+        RequestNotificationPermissions(
+            onPermissionChange = { granted ->
+                settingsViewModel.setNotificationPreference(granted)
+            }
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+        ) {
+            HomeScreen(
+                mainUiState = uiState,
+                drawerState = drawerState,
+                rootNavController = navController,
+                walletNavController = navController,
+                settingsViewModel = settingsViewModel,
+                walletViewModel = walletViewModel,
+                appViewModel = appViewModel,
+                activityListViewModel = activityListViewModel,
+            )
+        }
+    }
+    composable<Routes.Savings>(
+        enterTransition = { Transitions.slideInHorizontally },
+        exitTransition = { Transitions.slideOutHorizontally },
+    ) {
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
+        val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
+        val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
+
+        SavingsWalletScreen(
+            isGeoBlocked = isGeoBlocked,
+            onchainActivities = onchainActivities.orEmpty(),
+            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onTransferToSpendingClick = {
+                if (!hasSeenSpendingIntro) {
+                    navController.navigateToTransferSpendingIntro()
+                } else {
+                    navController.navigateToTransferSpendingAmount()
+                }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composable<Routes.Spending>(
+        enterTransition = { Transitions.slideInHorizontally },
+        exitTransition = { Transitions.slideOutHorizontally },
+    ) {
+        val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
+
+        SpendingWalletScreen(
+            uiState = uiState,
+            lightningActivities = lightningActivities.orEmpty(),
+            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onTransferToSavingsClick = {
+                if (!hasSeenSavingsIntro) {
+                    navController.navigateToTransferSavingsIntro()
+                } else {
+                    navController.navigateToTransferSavingsAvailability()
+                }
+            },
+            onBackClick = { navController.popBackStack() },
         )
     }
 }
@@ -818,7 +892,8 @@ private fun NavGraphBuilder.profile(
             onContinue = {
                 settingsViewModel.setHasSeenProfileIntro(true)
                 navController.navigate(Routes.CreateProfile)
-            }
+            },
+            onBackClick = { navController.popBackStack() }
         )
     }
     composableWithDefaultTransitions<Routes.CreateProfile> {
@@ -838,6 +913,9 @@ private fun NavGraphBuilder.shop(
             onContinue = {
                 settingsViewModel.setHasSeenShopIntro(true)
                 navController.navigate(Routes.ShopDiscover)
+            },
+            onBackClick = {
+                navController.popBackStack()
             }
         )
     }
@@ -1227,7 +1305,8 @@ private fun NavGraphBuilder.widgets(
             onContinue = {
                 settingsViewModel.setHasSeenWidgetsIntro(true)
                 navController.navigate(Routes.AddWidget)
-            }
+            },
+            onBackClick = {},
         )
     }
     composableWithDefaultTransitions<Routes.AddWidget> {
@@ -1243,6 +1322,7 @@ private fun NavGraphBuilder.widgets(
                 }
             },
             fiatSymbol = LocalCurrencies.current.currencySymbol,
+            onBackCLick = { navController.popBackStack() }
         )
     }
     composableWithDefaultTransitions<Routes.CalculatorPreview> {
@@ -1409,10 +1489,6 @@ inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
     }
 }
 
-fun NavController.navigateToSettings() = navigate(
-    route = Routes.Settings,
-)
-
 fun NavController.navigateToGeneralSettings() = navigate(
     route = Routes.GeneralSettings,
 )
@@ -1557,9 +1633,16 @@ fun NavController.navigateToAboutSettings() = navigate(
 )
 // endregion
 
+@Stable
 sealed interface Routes {
     @Serializable
     data object Home : Routes
+
+    @Serializable
+    data object Savings : Routes
+
+    @Serializable
+    data object Spending : Routes
 
     @Serializable
     data object Settings : Routes

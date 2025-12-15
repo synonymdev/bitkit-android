@@ -1,0 +1,28 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+### Business Layer Design Principles
+- Always prefer creating specialized methods over complex inline logic
+- If a feature implementation requires >5 lines of method chaining, extract to a new method
+- New feature implementations should read like the business requirement
+
+### API Design Guidelines
+- Create domain-specific methods that match the business language
+  - Method names should describe WHAT, not HOW
+  - Hide complexity behind simple, single-purpose APIs
+
+### Refactoring Triggers
+- When implementing new features, always ask: "Does the business layer need a new method to support this cleanly?"
+- If you see repeated patterns across different features, extract them into reusable methods
+- Prefer failing fast with meaningful defaults over complex null handling in business logic
+
+### Business Logic Method Design
+- Service methods should handle their own error cases and return simple types
+  - Let callers focus on business logic, not infrastructure concerns
+
+### Implementation Priority
+- Before writing complex feature logic, spend time designing the ideal API first
+- Ask: "What would the cleanest possible calling code look like?" then work backwards
+- Create the relevant methods needed to achieve that clean calling code

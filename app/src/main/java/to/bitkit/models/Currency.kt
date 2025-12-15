@@ -1,12 +1,13 @@
 package to.bitkit.models
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 const val STUB_RATE = 115_150.0
 const val BITCOIN_SYMBOL = "₿"
@@ -37,11 +38,10 @@ data class FxRate(
     val currencyFlag: String,
     val lastUpdatedAt: Long,
 ) {
-    val rate: Double
-        get() = lastPrice.toDoubleOrNull() ?: 0.0
+    val rate: Double get() = lastPrice.toDoubleOrNull() ?: 0.0
 
-    val timestamp: Instant
-        get() = Instant.fromEpochMilliseconds(lastUpdatedAt)
+    @OptIn(ExperimentalTime::class)
+    val timestamp: Instant get() = Instant.fromEpochMilliseconds(lastUpdatedAt)
 }
 
 /** aka. Unit */

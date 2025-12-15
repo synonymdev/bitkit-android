@@ -1078,6 +1078,7 @@
     <string name="wallet__boost_success_msg">The transaction was successfully boosted.</string>
     <string name="wallet__boost_error_title">Boost Failed</string>
     <string name="wallet__boost_error_msg">Bitkit was unable to boost the transaction.</string>
+    <string name="wallet__boost_error_msg_max">Unable to increase the fee any further. Otherwise, it will exceed half the current input balance</string>
     <string name="wallet__boost_fee_custom">Your transaction may settle faster if you include an additional network fee. Set your custom fee below.</string>
     <string name="wallet__boost_fee_recomended">Your transaction may settle faster if you include an additional network fee. Here is a recommendation:</string>
     <string name="wallet__boost_recomended_button">Use Suggested Fee</string>

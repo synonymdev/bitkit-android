@@ -142,7 +142,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { "[${e::class.simpleName}='${e.message}']" }.orEmpty()
+        val errMsg = e?.let { errLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.WARN, "$msg $errMsg", context, path, line)
         if (compact) Log.w(tag, message) else Log.w(tag, message, e)
         saver.save(message)
@@ -155,7 +155,7 @@ class LoggerImpl(
         path: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        val errMsg = e?.let { "[${e::class.simpleName}='${e.message}']" }.orEmpty()
+        val errMsg = e?.let { errLogOf(it) }.orEmpty()
         val message = formatLog(LogLevel.ERROR, "$msg $errMsg", context, path, line)
         if (compact) Log.e(tag, message) else Log.e(tag, message, e)
         saver.save(message)
@@ -339,3 +339,5 @@ val jsonLogger = Json(json) {
 inline fun <reified T> jsonLogOf(value: T): String = with(jsonLogger) {
     encodeToString(serializersModule.serializer(), value)
 }
+
+fun errLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"

@@ -10,11 +10,12 @@ import android.icu.text.RelativeDateTimeFormatter.AbsoluteUnit
 import android.icu.text.RelativeDateTimeFormatter.Direction
 import android.icu.text.RelativeDateTimeFormatter.RelativeUnit
 import android.icu.util.ULocale
-import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.number
 import kotlinx.datetime.toJavaLocalDate
+import kotlinx.datetime.toJavaMonth
 import kotlinx.datetime.toKotlinLocalDate
 import kotlinx.datetime.toLocalDateTime
 import java.text.SimpleDateFormat
@@ -26,9 +27,13 @@ import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant as KInstant
 
+@OptIn(ExperimentalTime::class)
 fun nowMillis(clock: Clock = Clock.System): Long = clock.now().toEpochMilliseconds()
 
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
@@ -63,6 +68,7 @@ fun Long.toLocalizedTimestamp(): String {
 }
 
 @Suppress("LongMethod")
+@OptIn(ExperimentalTime::class)
 fun Long.toRelativeTimeString(
     locale: Locale = Locale.getDefault(),
     clock: Clock = Clock.System,
@@ -102,7 +108,8 @@ fun Long.toRelativeTimeString(
 
 fun getDaysInMonth(month: LocalDate): List<LocalDate?> {
     val firstDayOfMonth = LocalDate(month.year, month.month, Constants.FIRST_DAY_OF_MONTH)
-    val daysInMonth = month.month.length(isLeapYear(month.year))
+    // FIXME fix month.number
+    val daysInMonth = month.month.toJavaMonth().length(isLeapYear(month.year))
 
     // Get the day of week for the first day (1 = Monday, 7 = Sunday)
     val firstDayOfWeek = firstDayOfMonth.dayOfWeek.ordinal + CalendarConstants.CALENDAR_WEEK_OFFSET
@@ -136,6 +143,7 @@ fun isLeapYear(year: Int): Boolean {
         (year % Constants.LEAP_YEAR_DIVISOR_400 == 0)
 }
 
+@OptIn(ExperimentalTime::class)
 fun isDateInRange(
     dateMillis: Long,
     startMillis: Long?,
@@ -145,9 +153,9 @@ fun isDateInRange(
     if (startMillis == null) return false
     val end = endMillis ?: startMillis
 
-    val normalizedDate = kotlinx.datetime.Instant.fromEpochMilliseconds(dateMillis).toLocalDateTime(zone).date
-    val normalizedStart = kotlinx.datetime.Instant.fromEpochMilliseconds(startMillis).toLocalDateTime(zone).date
-    val normalizedEnd = kotlinx.datetime.Instant.fromEpochMilliseconds(end).toLocalDateTime(zone).date
+    val normalizedDate = KInstant.fromEpochMilliseconds(dateMillis).toLocalDateTime(zone).date
+    val normalizedStart = KInstant.fromEpochMilliseconds(startMillis).toLocalDateTime(zone).date
+    val normalizedEnd = KInstant.fromEpochMilliseconds(end).toLocalDateTime(zone).date
 
     return normalizedDate in normalizedStart..normalizedEnd
 }
@@ -155,7 +163,7 @@ fun isDateInRange(
 fun LocalDate.toMonthYearString(locale: Locale = Locale.getDefault()): String {
     val formatter = SimpleDateFormat(DatePattern.MONTH_YEAR_FORMAT, locale)
     val calendar = Calendar.getInstance()
-    calendar.set(year, monthNumber - CalendarConstants.MONTH_INDEX_OFFSET, Constants.FIRST_DAY_OF_MONTH)
+    calendar.set(year, month.number - CalendarConstants.MONTH_INDEX_OFFSET, Constants.FIRST_DAY_OF_MONTH)
     return formatter.format(calendar.time)
 }
 
@@ -167,6 +175,7 @@ fun LocalDate.plusMonths(months: Int): LocalDate =
     toJavaLocalDate().plusMonths(months.toLong()).withDayOfMonth(1) // Always use first day of month for display
         .toKotlinLocalDate()
 
+@OptIn(ExperimentalTime::class)
 fun LocalDate.endOfDay(zone: TimeZone = TimeZone.currentSystemDefault()): Long =
     atStartOfDayIn(zone).plus(1.days).minus(1.milliseconds).toEpochMilliseconds()
 

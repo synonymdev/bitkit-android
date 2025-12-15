@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import to.bitkit.ui.shared.modifiers.alphaFeedback
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
@@ -72,56 +73,48 @@ fun PrimaryButton(
             containerColor = Color.Transparent,
             disabledContainerColor = Color.Transparent
         ),
-        contentPadding = PaddingValues(0.dp),
+        contentPadding = contentPadding,
         shape = buttonShape,
-        modifier = Modifier
+        modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
-            .then(modifier)
+            .primaryButtonStyle(
+                isEnabled = enabled && !isLoading,
+                shape = buttonShape,
+                primaryColor = color
+            )
+            .alphaFeedback(enabled = enabled && !isLoading)
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-                .requiredHeight(size.height)
-                .primaryButtonStyle(
-                    isEnabled = enabled && !isLoading,
-                    shape = buttonShape,
-                    primaryColor = color
-                )
-                .padding(contentPadding)
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    color = Colors.White32,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(size.height / 2)
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (icon != null) {
-                        Box(
-                            modifier = if (enabled) {
-                                Modifier
-                            } else {
-                                Modifier.graphicsLayer {
-                                    colorFilter = ColorFilter.tint(Colors.White32)
-                                }
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Colors.White32,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(size.height / 2)
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (icon != null) {
+                    Box(
+                        modifier = if (enabled) {
+                            Modifier
+                        } else {
+                            Modifier.graphicsLayer {
+                                colorFilter = ColorFilter.tint(Colors.White32)
                             }
-                        ) {
-                            icon()
                         }
+                    ) {
+                        icon()
                     }
-                    text?.let {
-                        Text(
-                            text = text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                }
+                text?.let {
+                    Text(
+                        text = text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -147,10 +140,9 @@ fun SecondaryButton(
         colors = AppButtonDefaults.secondaryColors,
         contentPadding = contentPadding,
         border = border,
-        modifier = Modifier
+        modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
-            .then(modifier)
     ) {
         if (isLoading) {
             CircularProgressIndicator(
@@ -205,10 +197,9 @@ fun TertiaryButton(
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.tertiaryColors,
         contentPadding = contentPadding,
-        modifier = Modifier
+        modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .requiredHeight(size.height)
-            .then(modifier)
     ) {
         if (isLoading) {
             CircularProgressIndicator(
@@ -259,6 +250,11 @@ private fun PrimaryButtonPreview() {
                 onClick = {},
             )
             PrimaryButton(
+                text = "Primary with padding",
+                modifier = Modifier.padding(horizontal = 32.dp),
+                onClick = {},
+            )
+            PrimaryButton(
                 text = "Primary With Icon",
                 onClick = {},
                 icon = {
@@ -292,6 +288,25 @@ private fun PrimaryButtonPreview() {
                 size = ButtonSize.Small,
                 onClick = {},
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PrimaryButton(
+                    text = "Primary Small",
+                    fullWidth = false,
+                    size = ButtonSize.Small,
+                    modifier = Modifier.weight(1f),
+                    onClick = {},
+                )
+                PrimaryButton(
+                    text = "Primary Small",
+                    fullWidth = false,
+                    size = ButtonSize.Small,
+                    modifier = Modifier.weight(1f),
+                    onClick = {},
+                )
+            }
             PrimaryButton(
                 text = "Primary Small Color Not Full",
                 size = ButtonSize.Small,
@@ -358,6 +373,11 @@ private fun SecondaryButtonPreview() {
         ) {
             SecondaryButton(
                 text = "Secondary",
+                onClick = {},
+            )
+            SecondaryButton(
+                text = "Secondary With padding",
+                modifier = Modifier.padding(horizontal = 32.dp),
                 onClick = {},
             )
             SecondaryButton(

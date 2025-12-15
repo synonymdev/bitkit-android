@@ -25,8 +25,8 @@ import javax.inject.Singleton
 
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
-    @param:ApplicationContext private val context: Context,
-    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @ApplicationContext private val context: Context,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,

@@ -24,6 +24,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.create
 import to.bitkit.ext.doesExist
 import to.bitkit.ext.isBoosting
 import to.bitkit.ext.isTransfer
@@ -131,8 +132,8 @@ fun CircularIcon(
     icon: Painter,
     iconColor: Color,
     backgroundColor: Color,
-    size: Dp = 32.dp,
     modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
 ) {
     Box(
         contentAlignment = Alignment.Center,
@@ -160,18 +161,14 @@ private fun Preview() {
             // Lightning Sent Succeeded
             ActivityIcon(
                 activity = Activity.Lightning(
-                    v1 = LightningActivity(
+                    v1 = LightningActivity.create(
                         id = "test-lightning-1",
                         txType = PaymentType.SENT,
                         status = PaymentState.SUCCEEDED,
                         value = 50000uL,
-                        fee = 1uL,
                         invoice = "lnbc...",
-                        message = "",
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        preimage = null,
-                        createdAt = null,
-                        updatedAt = null,
+                        fee = 1uL,
                     )
                 )
             )
@@ -179,18 +176,14 @@ private fun Preview() {
             // Lightning Received Failed
             ActivityIcon(
                 activity = Activity.Lightning(
-                    v1 = LightningActivity(
+                    v1 = LightningActivity.create(
                         id = "test-lightning-2",
                         txType = PaymentType.RECEIVED,
                         status = PaymentState.FAILED,
                         value = 50000uL,
-                        fee = 1uL,
                         invoice = "lnbc...",
-                        message = "",
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        preimage = null,
-                        createdAt = null,
-                        updatedAt = null,
+                        fee = 1uL,
                     )
                 )
             )
@@ -198,18 +191,14 @@ private fun Preview() {
             // Lightning Pending
             ActivityIcon(
                 activity = Activity.Lightning(
-                    v1 = LightningActivity(
+                    v1 = LightningActivity.create(
                         id = "test-lightning-3",
                         txType = PaymentType.SENT,
                         status = PaymentState.PENDING,
                         value = 50000uL,
-                        fee = 1uL,
                         invoice = "lnbc...",
-                        message = "",
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        preimage = null,
-                        createdAt = null,
-                        updatedAt = null,
+                        fee = 1uL,
                     )
                 )
             )
@@ -217,25 +206,17 @@ private fun Preview() {
             // Onchain Received
             ActivityIcon(
                 activity = Activity.Onchain(
-                    v1 = OnchainActivity(
+                    v1 = OnchainActivity.create(
                         id = "test-onchain-1",
                         txType = PaymentType.RECEIVED,
                         txId = "abc123",
                         value = 100000uL,
                         fee = 500uL,
-                        feeRate = 8uL,
                         address = "bc1...",
-                        confirmed = true,
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        isBoosted = false,
-                        boostTxIds = emptyList(),
-                        isTransfer = false,
-                        doesExist = true,
+                        confirmed = true,
+                        feeRate = 8uL,
                         confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        channelId = null,
-                        transferTxId = null,
-                        createdAt = null,
-                        updatedAt = null,
                     )
                 )
             )
@@ -243,25 +224,17 @@ private fun Preview() {
             // Onchain BOOST CPFP
             ActivityIcon(
                 activity = Activity.Onchain(
-                    v1 = OnchainActivity(
+                    v1 = OnchainActivity.create(
                         id = "test-onchain-1",
                         txType = PaymentType.RECEIVED,
                         txId = "abc123",
                         value = 100000uL,
                         fee = 500uL,
-                        feeRate = 8uL,
                         address = "bc1...",
-                        confirmed = false,
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        feeRate = 8uL,
                         isBoosted = true,
-                        boostTxIds = emptyList(),
-                        isTransfer = false,
-                        doesExist = true,
                         confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        channelId = null,
-                        transferTxId = null,
-                        createdAt = null,
-                        updatedAt = null,
                     )
                 )
             )
@@ -269,25 +242,17 @@ private fun Preview() {
             // Onchain BOOST RBF
             ActivityIcon(
                 activity = Activity.Onchain(
-                    v1 = OnchainActivity(
+                    v1 = OnchainActivity.create(
                         id = "test-onchain-1",
                         txType = PaymentType.SENT,
                         txId = "abc123",
                         value = 100000uL,
                         fee = 500uL,
-                        feeRate = 8uL,
                         address = "bc1...",
-                        confirmed = false,
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        feeRate = 8uL,
                         isBoosted = true,
-                        boostTxIds = emptyList(),
-                        isTransfer = false,
-                        doesExist = true,
                         confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        channelId = null,
-                        transferTxId = null,
-                        createdAt = null,
-                        updatedAt = null,
                     )
                 )
             )
@@ -295,25 +260,19 @@ private fun Preview() {
             // Onchain Transfer
             ActivityIcon(
                 activity = Activity.Onchain(
-                    v1 = OnchainActivity(
+                    v1 = OnchainActivity.create(
                         id = "test-onchain-2",
                         txType = PaymentType.SENT,
                         txId = "abc123",
                         value = 100000uL,
                         fee = 500uL,
-                        feeRate = 8uL,
                         address = "bc1...",
-                        confirmed = true,
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        isBoosted = false,
-                        boostTxIds = emptyList(),
+                        confirmed = true,
+                        feeRate = 8uL,
                         isTransfer = true,
-                        doesExist = true,
                         confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        channelId = null,
                         transferTxId = "transferTxId",
-                        createdAt = null,
-                        updatedAt = null,
                     )
                 )
             )
@@ -321,25 +280,20 @@ private fun Preview() {
             // Onchain Removed
             ActivityIcon(
                 activity = Activity.Onchain(
-                    v1 = OnchainActivity(
+                    v1 = OnchainActivity.create(
                         id = "test-onchain-2",
                         txType = PaymentType.SENT,
                         txId = "abc123",
                         value = 100000uL,
                         fee = 500uL,
-                        feeRate = 8uL,
                         address = "bc1...",
-                        confirmed = true,
                         timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        confirmed = true,
+                        feeRate = 8uL,
                         isBoosted = true,
-                        boostTxIds = emptyList(),
-                        isTransfer = false,
                         doesExist = false,
                         confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
-                        channelId = null,
                         transferTxId = "transferTxId",
-                        createdAt = null,
-                        updatedAt = null,
                     )
                 )
             )

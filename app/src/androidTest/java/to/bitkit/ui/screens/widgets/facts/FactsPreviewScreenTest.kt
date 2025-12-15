@@ -20,7 +20,6 @@ class FactsPreviewContentTest {
     @Test
     fun testFactsPreviewWithEnabledWidget() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -30,7 +29,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -77,7 +75,6 @@ class FactsPreviewContentTest {
     @Test
     fun testFactsPreviewWithDisabledWidget() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var editClicked = false
         var deleteClicked = false
@@ -87,7 +84,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = { editClicked = true },
                     onClickDelete = { deleteClicked = true },
@@ -122,7 +118,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -147,7 +142,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -179,13 +173,11 @@ class FactsPreviewContentTest {
     @Test
     fun testNavigationCallbacks() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
 
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickEdit = {},
                     onClickDelete = {},
@@ -210,7 +202,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -236,7 +227,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},
@@ -262,7 +252,6 @@ class FactsPreviewContentTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 FactsPreviewContent(
-                    onClose = {},
                     onBack = {},
                     onClickEdit = {},
                     onClickDelete = {},

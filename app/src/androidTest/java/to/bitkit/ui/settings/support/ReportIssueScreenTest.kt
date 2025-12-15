@@ -29,7 +29,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = {},
                     onUpdateMessage = {},
@@ -54,7 +53,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = { emailUpdated = it },
                     onUpdateMessage = {},
@@ -77,7 +75,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = {},
                     onUpdateMessage = { messageUpdated = it },
@@ -100,7 +97,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = { sendClicked = true },
                     onUpdateEmail = {},
                     onUpdateMessage = {},
@@ -121,7 +117,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = {},
                     onUpdateMessage = {},
@@ -140,7 +135,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = {},
                     onUpdateMessage = {},
@@ -163,7 +157,6 @@ class ReportIssueContentTest {
             AppThemeSurface {
                 ReportIssueContent(
                     onBack = {},
-                    onClose = {},
                     onConfirm = {},
                     onUpdateEmail = {},
                     onUpdateMessage = {},

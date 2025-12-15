@@ -31,7 +31,6 @@ class WeatherEditScreenTest {
     @Test
     fun testWeatherEditScreenWithDefaultPreferences() {
         // Arrange
-        var closeClicked = false
         var backClicked = false
         var titleClicked = false
         var descriptionClicked = false
@@ -44,7 +43,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = { closeClicked = true },
                     onBack = { backClicked = true },
                     onClickShowTitle = { titleClicked = true },
                     onClickShowDescription = { descriptionClicked = true },
@@ -106,7 +104,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},
@@ -136,7 +133,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},
@@ -166,7 +162,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},
@@ -203,7 +198,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = { titleClicked = true },
                     onClickShowDescription = { descriptionClicked = true },
@@ -251,7 +245,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},
@@ -277,7 +270,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},
@@ -326,7 +318,6 @@ class WeatherEditScreenTest {
         composeTestRule.setContent {
             AppThemeSurface {
                 WeatherEditContent(
-                    onClose = {},
                     onBack = {},
                     onClickShowTitle = {},
                     onClickShowDescription = {},

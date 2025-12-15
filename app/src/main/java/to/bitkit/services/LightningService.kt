@@ -24,7 +24,6 @@ import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
 import org.lightningdevkit.ldknode.Node
-import org.lightningdevkit.ldknode.NodeEntropy
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -118,43 +117,32 @@ class LightningService @Inject constructor(
         customRgsServerUrl: String?,
         config: Config,
     ): Node = ServiceQueue.LDK.background {
-        val nodeEntropy = NodeEntropy.fromBip39Mnemonic(
-            mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound,
-            passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
-        )
-
         val builder = Builder.fromConfig(config).apply {
             setCustomLogger(LdkLogWriter())
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
+            setEntropyBip39Mnemonic(
+                mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound,
+                passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name),
+            )
         }
         try {
             val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
-            val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
             val vssUrl = Env.vssServerUrl
-            Logger.verbose("Building ldk-node with vssUrl: '$vssUrl'")
-            Logger.verbose("Building ldk-node with lnurlAuthServerUrl: '$lnurlAuthServerUrl'")
+            val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
+            val fixedHeaders = emptyMap<String, String>()
+            Logger.verbose(
+                "Building ldk-node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'"
+            )
             if (lnurlAuthServerUrl.isNotEmpty()) {
-                builder.buildWithVssStore(
-                    vssUrl = vssUrl,
-                    storeId = vssStoreId,
-                    lnurlAuthServerUrl = lnurlAuthServerUrl,
-                    fixedHeaders = emptyMap(),
-                    nodeEntropy = nodeEntropy,
-                )
+                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
             } else {
-                builder.buildWithVssStoreAndFixedHeaders(
-                    vssUrl = vssUrl,
-                    storeId = vssStoreId,
-                    fixedHeaders = emptyMap(),
-                    nodeEntropy = nodeEntropy,
-                )
+                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
             }
         } catch (e: BuildException) {
             throw LdkError(e)
         } finally {
-            // cleanup sensitive data
-            nodeEntropy.destroy()
+            // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values
         }
     }
 
@@ -674,7 +662,7 @@ class LightningService @Inject constructor(
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup
 
-        Logger.debug(
+        Logger.verbose(
             "Calculating fee for $amountSats sats to $address, UTXOs=${utxosToSpend?.size}, satsPerVByte=$satsPerVByte"
         )
 
@@ -686,7 +674,7 @@ class LightningService @Inject constructor(
                     feeRate = convertVByteToKwu(satsPerVByte),
                     utxosToSpend = utxosToSpend,
                 )
-                Logger.info("Calculated fee=$fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
+                Logger.verbose("Calculated fee=$fee for $amountSats sats to $address, satsPerVByte=$satsPerVByte")
                 fee
             } catch (e: NodeException) {
                 throw LdkError(e)

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.create
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -98,18 +99,14 @@ class GiftViewModel @Inject constructor(
     private suspend fun insertGiftActivity(result: GiftClaimResult.SuccessWithoutLiquidity) {
         val nowTimestamp = nowTimestamp().epochSecond.toULong()
 
-        val lightningActivity = LightningActivity(
+        val lightningActivity = LightningActivity.create(
             id = result.paymentHashOrTxId,
             txType = PaymentType.RECEIVED,
             status = PaymentState.SUCCEEDED,
             value = result.sats.toULong(),
-            fee = 0u,
             invoice = result.invoice,
-            message = result.code,
             timestamp = nowTimestamp,
-            preimage = null,
-            createdAt = nowTimestamp,
-            updatedAt = null,
+            message = result.code,
         )
 
         activityRepo.insertActivity(Activity.Lightning(lightningActivity)).getOrThrow()

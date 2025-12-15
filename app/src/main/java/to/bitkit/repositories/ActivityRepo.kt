@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.datetime.Clock
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -40,11 +39,14 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 private const val SYNC_TIMEOUT_MS = 40_000L
 
-@Singleton
 @Suppress("LargeClass", "LongParameterList")
+@OptIn(ExperimentalTime::class)
+@Singleton
 class ActivityRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
@@ -138,7 +140,7 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    private suspend fun findOpenChannelForTransaction(txid: String): String? {
+    private fun findOpenChannelForTransaction(txid: String): String? {
         return try {
             val channels = lightningRepo.lightningState.value.channels
             if (channels.isEmpty()) return null
@@ -183,7 +185,7 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Checks if a transaction was replaced (RBF) by checking if the activity exists but doesExist=false.
+     * Checks if a transaction was replaced (RBF) by checking if the activity exists but `doesExist=false`.
      */
     suspend fun wasTransactionReplaced(txid: String): Boolean = withContext(bgDispatcher) {
         val onchainActivity = getOnchainActivityByTxId(txid) ?: return@withContext false
@@ -374,7 +376,7 @@ class ActivityRepo @Inject constructor(
     /**
      * Updates an activity and marks the old one as removed from mempool (for RBF).
      * In case of failure in the update or marking as removed, the data will be cached
-     * to try again on the next sync
+     * to try again on the next sync.
      */
     suspend fun replaceActivity(
         id: String,
@@ -460,9 +462,6 @@ class ActivityRepo @Inject constructor(
         }.awaitAll()
     }
 
-    /**
-     * Deletes an activity
-     */
     suspend fun deleteActivity(id: String): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
             val deleted = coreService.activity.delete(id)
@@ -477,9 +476,6 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    /**
-     * Inserts a new activity
-     */
     suspend fun insertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
             if (activity.rawId() in cacheStore.data.first().deletedActivities) {
@@ -493,9 +489,6 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    /**
-     * Upserts an activity (insert or update if exists)
-     */
     suspend fun upsertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
         return@withContext runCatching {
             if (activity.rawId() in cacheStore.data.first().deletedActivities) {
@@ -510,7 +503,7 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Inserts a new activity for a fulfilled (channel ready) cjit channel order
+     * Inserts a new activity for a fulfilled (channel ready) CJIT order
      */
     suspend fun insertActivityFromCjit(
         cjitEntry: IcJitEntry?,
@@ -536,6 +529,7 @@ class ActivityRepo @Inject constructor(
                         preimage = null,
                         createdAt = now,
                         updatedAt = null,
+                        seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
                     )
                 )
             )

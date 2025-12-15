@@ -172,6 +172,17 @@ Please focus on:
 - Thread safety in coroutines
 ```
 
+#### Local Development Setup (YOLO Mode)
+
+To enable auto-approved permissions for Claude Code during local development:
+
+```sh
+cp .claude/settings.local.template.json .claude/settings.local.json
+```
+
+This reduces confirmation prompts for common operations (Bash, Read, Edit, Write, etc.).
+Destructive operations like `rm -rf`, `git commit`, and `git push` still require confirmation.
+
 ## License
 
 This project is licensed under the MIT License.
