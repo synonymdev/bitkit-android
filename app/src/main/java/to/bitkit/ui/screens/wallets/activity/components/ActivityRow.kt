@@ -326,7 +326,6 @@ private fun formattedTime(timestamp: ULong): String {
 // TODO remove this method after transifex update
 private fun String.removeEstimationSymbol() = this.replace("±", "")
 
-
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
     override val values: Sequence<Activity> get() = previewActivityItems.asSequence()
 }
