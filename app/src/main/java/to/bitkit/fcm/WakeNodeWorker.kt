@@ -87,11 +87,9 @@ class WakeNodeWorker @AssistedInject constructor(
                     if (orderId == null) {
                         Logger.error("Missing orderId", context = TAG)
                     } else {
-                        try {
-                            Logger.info("Open channel request for order $orderId", context = TAG)
-                            coreService.blocktank.open(orderId = orderId)
-                        } catch (e: Exception) {
-                            Logger.error("failed to open channel", e, context = TAG)
+                        Logger.info("Open channel request for order $orderId", context = TAG)
+                        blocktankRepo.openChannel(orderId).onFailure { e ->
+                            Logger.error("Failed to open channel", e, context = TAG)
                             bestAttemptContent = NotificationDetails(
                                 title = appContext.getString(R.string.notification_channel_open_failed_title),
                                 body = e.message ?: appContext.getString(R.string.notification_unknown_error),
