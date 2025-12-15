@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
+import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -61,15 +62,15 @@ class WakeNodeWorker @AssistedInject constructor(
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
-        Logger.debug("Node wakeup from notification…")
+        Logger.debug("Node wakeup from notification…", context = TAG)
 
         notificationType = workerParams.inputData.getString("type")?.let { BlocktankNotificationType.valueOf(it) }
         notificationPayload = workerParams.inputData.getString("payload")?.let {
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Logger.debug("${this::class.simpleName} notification type: $notificationType")
-        Logger.debug("${this::class.simpleName} notification payload: $notificationPayload")
+        Logger.debug("$TAG notification type: $notificationType", context = TAG)
+        Logger.debug("$TAG notification payload: $notificationPayload", context = TAG)
 
         try {
             withPerformanceLogging {
@@ -248,5 +249,9 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         deliverSignal.complete(Unit)
+    }
+
+    companion object {
+        private const val TAG = "WakeNodeWorker"
     }
 }
