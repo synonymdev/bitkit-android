@@ -35,7 +35,6 @@ import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.services.CoreService
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.withPerformanceLogging
@@ -46,7 +45,6 @@ import kotlin.time.Duration.Companion.minutes
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
-    private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
