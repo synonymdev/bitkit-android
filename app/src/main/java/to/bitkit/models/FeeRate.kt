@@ -2,7 +2,9 @@ package to.bitkit.models
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import com.synonym.bitkitcore.FeeRates
 import to.bitkit.R
 import to.bitkit.ui.theme.Colors
@@ -69,7 +71,6 @@ enum class FeeRate(
             }
         }
 
-        // TODO use for confirmsIn text in ActivityRow.kt:125
         fun fromSatsPerVByte(satsPerVByte: ULong, feeRates: FeeRates): FeeRate {
             val value = satsPerVByte.toUInt()
             return when {
@@ -78,6 +79,18 @@ enum class FeeRate(
                 value >= feeRates.slow -> SLOW
                 else -> MINIMUM
             }
+        }
+
+        @Composable
+        fun getFeeDescription(
+            feeRate: ULong,
+            feeEstimates: FeeRates?,
+        ): String {
+            val feeRateEnum = feeEstimates?.let {
+                fromSatsPerVByte(feeRate, it)
+            } ?: NORMAL
+
+            return stringResource(feeRateEnum.shortDescription)
         }
     }
 }

@@ -34,12 +34,15 @@ import to.bitkit.ext.formatted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
+import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
+import to.bitkit.models.FeeRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.currencyViewModel
@@ -61,15 +64,17 @@ fun ActivityRow(
     onClick: (String) -> Unit,
     testTag: String,
 ) {
+    val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(null)
+    }
+    val feeRates = blocktankInfo?.onchain?.feeRates
+
     val status: PaymentState? = when (item) {
         is Activity.Lightning -> item.v1.status
         is Activity.Onchain -> null
     }
     val isLightning = item is Activity.Lightning
-    val timestamp = when (item) {
-        is Activity.Lightning -> item.v1.timestamp
-        is Activity.Onchain -> item.v1.timestamp
-    }
+    val timestamp = item.timestamp()
     val txType: PaymentType = item.txType()
     val isSent = item.isSent()
     val amountPrefix = if (isSent) "-" else "+"
@@ -123,24 +128,26 @@ fun ActivityRow(
                         isTransfer && isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_spending_done)
                         } else {
+                            val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_spending_pending)
-                                .replace("{duration}", "1h") // TODO: calculate confirmsIn text
+                                .replace("{duration}", duration.removeEstimationSymbol())
                         }
 
                         isTransfer && !isSent -> if (item.v1.confirmed) {
                             stringResource(R.string.wallet__activity_transfer_savings_done)
                         } else {
+                            val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_transfer_savings_pending)
-                                .replace("{duration}", "1h") // TODO: calculate confirmsIn text
+                                .replace("{duration}", duration.removeEstimationSymbol())
                         }
 
                         confirmed == true -> formattedTime(timestamp)
 
                         else -> {
-                            // TODO: calculate confirmsIn text
+                            val feeDescription = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
                             stringResource(R.string.wallet__activity_confirms_in).replace(
                                 "{feeRateDescription}",
-                                "± 1h"
+                                feeDescription
                             )
                         }
                     }
@@ -315,6 +322,9 @@ private fun formattedTime(timestamp: ULong): String {
         else -> instant.formatted(DatePattern.ACTIVITY_ROW_DATE_YEAR)
     }
 }
+
+// TODO remove this method after transifex update
+private fun String.removeEstimationSymbol() = this.replace("±", "")
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
     override val values: Sequence<Activity> get() = previewActivityItems.asSequence()

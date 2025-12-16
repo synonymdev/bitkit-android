@@ -71,6 +71,14 @@ fun Activity.Onchain.boostType() = when (this.v1.txType) {
     PaymentType.RECEIVED -> BoostType.CPFP
 }
 
+fun Activity.timestamp() = when (this) {
+    is Activity.Lightning -> v1.timestamp
+    is Activity.Onchain -> when (v1.confirmed) {
+        true -> v1.confirmTimestamp ?: v1.timestamp
+        else -> v1.timestamp
+    }
+}
+
 enum class BoostType { RBF, CPFP }
 
 @Suppress("LongParameterList")

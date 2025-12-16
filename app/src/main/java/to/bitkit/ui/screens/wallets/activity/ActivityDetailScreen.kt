@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
@@ -52,12 +53,15 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
+import to.bitkit.ext.timestamp
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
+import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
+import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -188,6 +192,10 @@ fun ActivityDetailScreen(
                 }
 
                 val context = LocalContext.current
+                val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
+                    mutableStateOf(null)
+                }
+                val feeRates = blocktankInfo?.onchain?.feeRates
 
                 Column(
                     modifier = Modifier.background(Colors.Black)
@@ -220,7 +228,8 @@ fun ActivityDetailScreen(
                                 title = copyToastTitle,
                                 description = text.ellipsisMiddle(40)
                             )
-                        }
+                        },
+                        feeRates = feeRates,
                     )
                     if (showAddTagSheet) {
                         ActivityAddTagSheet(
@@ -289,6 +298,7 @@ private fun ActivityDetailContent(
     isCpfpChild: Boolean = false,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit,
+    feeRates: FeeRates? = null,
 ) {
     val isLightning = item is Activity.Lightning
     val isSent = item.isSent()
@@ -303,13 +313,7 @@ private fun ActivityDetailContent(
     }
 
     val amountPrefix = if (isSent) "-" else "+"
-    val timestamp = when (item) {
-        is Activity.Lightning -> item.v1.timestamp
-        is Activity.Onchain -> when (item.v1.confirmed) {
-            true -> item.v1.confirmTimestamp ?: item.v1.timestamp
-            else -> item.v1.timestamp
-        }
-    }
+    val timestamp = item.timestamp()
     val paymentValue = when (item) {
         is Activity.Lightning -> item.v1.value
         is Activity.Onchain -> item.v1.value
@@ -369,7 +373,7 @@ private fun ActivityDetailContent(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        StatusSection(item, accentColor)
+        StatusSection(item, accentColor, feeRates)
         HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
 
         // Timestamp section: date and time
@@ -686,7 +690,11 @@ private fun ActivityDetailContent(
 }
 
 @Composable
-private fun StatusSection(item: Activity, accentColor: Color) {
+private fun StatusSection(
+    item: Activity,
+    accentColor: Color,
+    feeRates: FeeRates? = null,
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Caption13Up(
             text = stringResource(R.string.wallet__activity_status),
@@ -731,9 +739,10 @@ private fun StatusSection(item: Activity, accentColor: Color) {
                     var statusTestTag: String? = null
 
                     if (item.v1.isTransfer) {
-                        val duration = 0 // TODO get transfer duration
+                        val duration = FeeRate.getFeeDescription(item.v1.feeRate, feeRates)
+                            .removeEstimationSymbol()
                         statusText = stringResource(R.string.wallet__activity_transfer_pending)
-                            .replace("{duration}", "$duration")
+                            .replace("{duration}", duration)
                         statusTestTag = "StatusTransfer"
                     }
 
@@ -951,3 +960,6 @@ private fun isBoostCompleted(
 
     return false
 }
+
+// TODO remove this method after transifex update
+private fun String.removeEstimationSymbol() = this.replace("±", "")
