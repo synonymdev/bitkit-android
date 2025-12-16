@@ -249,7 +249,8 @@ fun ActivityDetailScreen(
                                 app.toast(
                                     type = Toast.ToastType.SUCCESS,
                                     title = context.getString(R.string.wallet__boost_success_title),
-                                    description = context.getString(R.string.wallet__boost_success_msg)
+                                    description = context.getString(R.string.wallet__boost_success_msg),
+                                    testTag = "BoostSuccessToast"
                                 )
                                 listViewModel.resync()
                                 onCloseClick()
@@ -258,7 +259,8 @@ fun ActivityDetailScreen(
                                 app.toast(
                                     type = Toast.ToastType.ERROR,
                                     title = context.getString(R.string.wallet__boost_error_title),
-                                    description = context.getString(R.string.wallet__boost_error_msg)
+                                    description = context.getString(R.string.wallet__boost_error_msg),
+                                    testTag = "BoostFailureToast"
                                 )
                                 detailViewModel.onDismissBoostSheet()
                             },
