@@ -835,15 +835,17 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val hasAmount = minSendable == maxSendable && minSendable > 0u
+        val initialAmount = if (hasAmount) minSendable else 0u
+
         _sendUiState.update {
             it.copy(
-                amount = minSendable,
+                amount = initialAmount,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(data),
             )
         }
 
-        val hasAmount = minSendable == maxSendable && minSendable > 0u
         if (hasAmount) {
             Logger.info("Found amount $$minSendable in lnurlPay, proceeding with payment", context = TAG)
 
