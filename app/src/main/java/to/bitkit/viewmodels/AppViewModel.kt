@@ -598,6 +598,19 @@ class AppViewModel @Inject constructor(
         }
 
         val lnurl = _sendUiState.value.lnurl
+        if (lnurl is LnurlParams.LnurlPay) {
+            val minSendable = lnurl.data.minSendableSat()
+            if (_sendUiState.value.amount < minSendable) {
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__lnurl_pay__error_min__title),
+                    description = context.getString(R.string.wallet__lnurl_pay__error_min__description)
+                        .replace("{amount}", minSendable.toString()),
+                    testTag = "LnurlPayAmountTooLowToast",
+                )
+                return
+            }
+        }
         if (lnurl is LnurlParams.LnurlWithdraw) {
             setSendEffect(SendEffect.NavigateToWithdrawConfirm)
             return
@@ -630,10 +643,9 @@ class AppViewModel @Inject constructor(
                 null -> lightningRepo.canSend(amount)
                 is LnurlParams.LnurlWithdraw -> amount < lnurl.data.maxWithdrawableSat()
                 is LnurlParams.LnurlPay -> {
-                    val minSat = lnurl.data.minSendableSat()
                     val maxSat = lnurl.data.maxSendableSat()
 
-                    amount in minSat..maxSat && lightningRepo.canSend(amount)
+                    amount <= maxSat && lightningRepo.canSend(amount)
                 }
             }
 
