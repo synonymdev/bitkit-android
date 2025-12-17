@@ -209,20 +209,16 @@ class BoostTransactionViewModel @Inject constructor(
 
     private suspend fun handleBoostSuccess(newTxId: Txid, isRBF: Boolean) {
         Logger.debug("Boost successful. newTxId: $newTxId", context = TAG)
-        updateActivity(newTxId = newTxId, isRBF = isRBF).fold(
-            onSuccess = {
-                lightningRepo.sync()
-                activityRepo.syncActivities()
-                _uiState.update { it.copy(boosting = false) }
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
-            },
-            onFailure = { error ->
-                // Boost succeeded but activity update failed - still consider it successful
+        updateActivity(newTxId = newTxId, isRBF = isRBF)
+            .onFailure { error ->
                 Logger.warn("Boost successful but activity update failed", e = error, context = TAG)
-                _uiState.update { it.copy(boosting = false) }
-                setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
             }
-        )
+
+        _uiState.update { it.copy(boosting = false) }
+        setBoostTransactionEffect(BoostTransactionEffects.OnBoostSuccess)
+
+        // Fire-and-forget sync to keep UI responsive even if LDK sync hangs.
+        lightningRepo.syncAsync()
     }
 
     fun onChangeAmount(increase: Boolean) {
