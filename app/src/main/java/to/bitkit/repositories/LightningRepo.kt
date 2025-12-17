@@ -94,7 +94,7 @@ class LightningRepo @Inject constructor(
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
-    private var _eventHandler: NodeEventHandler? = null
+    private val _eventHandlers = mutableSetOf<NodeEventHandler>()
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
@@ -144,11 +144,7 @@ class LightningRepo @Inject constructor(
             true
         } ?: false
 
-        if (!nodeRunning) {
-            return@withContext Result.failure(
-                Exception("Timeout waiting for node to be running to execute $operationName")
-            )
-        }
+        if (!nodeRunning) return@withContext Result.failure(NodeRunTimeoutException(operationName))
 
         return@withContext executeOperation(operationName, operation)
     }
@@ -192,10 +188,10 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
-            return@withContext Result.failure(
-                RecoveryModeException("App in recovery mode, skipping node start")
-            )
+            return@withContext Result.failure(RecoveryModeException())
         }
+
+        eventHandler?.let { _eventHandlers.add(it) }
 
         val initialLifecycleState = _lightningState.value.nodeLifecycleState
         if (initialLifecycleState.isRunningOrStarting()) {
@@ -206,9 +202,7 @@ class LightningRepo @Inject constructor(
         try {
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Starting) }
 
-            this@LightningRepo._eventHandler = eventHandler
-
-            // Setup if not already setup
+            // Setup if needed
             if (lightningService.node == null) {
                 val setupResult = setup(walletIndex, customServerUrl, customRgsServerUrl)
                 if (setupResult.isFailure) {
@@ -230,7 +224,7 @@ class LightningRepo @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
-            // Start the node service
+            // Start node
             lightningService.start(timeout, ::onEvent)
 
             _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
@@ -240,7 +234,7 @@ class LightningRepo @Inject constructor(
             updateGeoBlockState()
             refreshChannelCache()
 
-            // Perform post-startup tasks
+            // Post-startup tasks
             connectToTrustedPeers().onFailure { e ->
                 Logger.error("Failed to connect to trusted peers", e)
             }
@@ -260,7 +254,6 @@ class LightningRepo @Inject constructor(
                     shouldRetry = false,
                     customServerUrl = customServerUrl,
                     customRgsServerUrl = customRgsServerUrl,
-                    eventHandler = eventHandler,
                 )
             } else {
                 Logger.error("Node start error", e, context = TAG)
@@ -274,7 +267,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
-        _eventHandler?.invoke(event)
+        _eventHandlers.forEach { it.invoke(event) }
         _nodeEvents.emit(event)
     }
 
@@ -455,7 +448,6 @@ class LightningRepo @Inject constructor(
         start(
             shouldRetry = false,
             customServerUrl = newServerUrl,
-            eventHandler = _eventHandler,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -482,7 +474,6 @@ class LightningRepo @Inject constructor(
         start(
             shouldRetry = false,
             customRgsServerUrl = newRgsUrl,
-            eventHandler = _eventHandler,
         ).onFailure { startError ->
             Logger.warn("Failed ldk-node config change, attempting recovery…")
             restartWithPreviousConfig()
@@ -507,7 +498,6 @@ class LightningRepo @Inject constructor(
 
         start(
             shouldRetry = false,
-            eventHandler = _eventHandler,
         ).onSuccess {
             Logger.debug("Successfully started node with previous config")
         }.onFailure { e ->
@@ -522,7 +512,7 @@ class LightningRepo @Inject constructor(
                 _lightningState.first { it.nodeLifecycleState == NodeLifecycleState.Stopped }
             }
             if (stopped == null) {
-                val error = Exception("Timeout waiting for node to stop")
+                val error = NodeStopTimeoutException()
                 Logger.warn(error.message)
                 return@withContext Result.failure(error)
             }
@@ -728,9 +718,9 @@ class LightningRepo @Inject constructor(
         }.getOrNull()
     }
 
-    suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("Get payments") {
+    suspend fun getPayments(): Result<List<PaymentDetails>> = executeWhenNodeRunning("getPayments") {
         val payments = lightningService.payments
-            ?: return@executeWhenNodeRunning Result.failure(Exception("It wasn't possible get the payments"))
+            ?: return@executeWhenNodeRunning Result.failure(GetPaymentsException())
         Result.success(payments)
     }
 
@@ -740,7 +730,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> = executeWhenNodeRunning("List spendable outputs") {
+    suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> = executeWhenNodeRunning("listSpendableOutputs") {
         lightningService.listSpendableOutputs()
     }
 
@@ -890,7 +880,7 @@ class LightningRepo @Inject constructor(
     suspend fun bumpFeeByRbf(
         originalTxId: Txid,
         satsPerVByte: UInt,
-    ): Result<Txid> = executeWhenNodeRunning("Bump by RBF") {
+    ): Result<Txid> = executeWhenNodeRunning("bumpFeeByRbf") {
         try {
             if (originalTxId.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
@@ -930,7 +920,7 @@ class LightningRepo @Inject constructor(
         originalTxId: Txid,
         satsPerVByte: UInt,
         destinationAddress: Address,
-    ): Result<Txid> = executeWhenNodeRunning("Accelerate by CPFP") {
+    ): Result<Txid> = executeWhenNodeRunning("accelerateByCpfp") {
         try {
             if (originalTxId.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
@@ -1006,7 +996,10 @@ class LightningRepo @Inject constructor(
     }
 }
 
-class RecoveryModeException(override val message: String?) : AppError(message = message)
+class RecoveryModeException : AppError("App in recovery mode, skipping node start")
+class NodeStopTimeoutException : AppError("Timeout waiting for node to stop")
+class NodeRunTimeoutException(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
+class GetPaymentsException : AppError("It wasn't possible get the payments")
 
 data class LightningState(
     val nodeId: String = "",
