@@ -872,6 +872,8 @@ class LightningRepo @Inject constructor(
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
+            requireNotNull(token.takeIf { it.isNotEmpty() })
+
             if (cachedToken == token) {
                 Logger.debug("Skipped registering for notifications, current device token already registered")
                 return@executeWhenNodeRunning Result.success(Unit)
