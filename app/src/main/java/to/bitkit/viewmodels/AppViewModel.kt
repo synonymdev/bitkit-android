@@ -373,20 +373,8 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyPaymentReceived(event: Event) {
         val command = NotifyPaymentReceived.Command.from(event) ?: return
-        if (command is NotifyPaymentReceived.Command.Lightning) {
-            val cachedId = cacheStore.data.first().lastLightningPaymentId
-            // Skip if this is a replay by ldk-node on startup
-            if (command.event.paymentHash == cachedId) {
-                Logger.debug("Skipping notification for replayed event: $event", context = TAG)
-                return
-            }
-            // Cache to skip later as needed
-            cacheStore.setLastLightningPayment(command.event.paymentHash)
-        }
-
         val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
-
         showTransactionSheet(result.sheet)
     }
 
