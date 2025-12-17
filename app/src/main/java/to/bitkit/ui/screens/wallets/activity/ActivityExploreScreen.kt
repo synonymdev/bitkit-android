@@ -39,7 +39,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
-import org.lightningdevkit.ldknode.TransactionDetails
+import com.synonym.bitkitcore.TransactionDetails
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
