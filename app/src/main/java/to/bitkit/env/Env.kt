@@ -76,12 +76,6 @@ internal object Env {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }
 
-    fun buildBitrefillUri(
-        page: String,
-    ): String {
-        return "$BIT_REFILL_URL/$page/$BITREFILL_PARAMS"
-    }
-
     /**
      * Generates the storage path for a specified wallet index, network, and directory.
      *
@@ -177,13 +171,7 @@ internal object Env {
 
     const val RELEASE_URL = "https://github.com/synonymdev/bitkit-android/releases/download/updater/release.json"
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
-    const val BIT_REFILL_URL = "https://embed.bitrefill.com"
     const val BTC_MAP_URL = "https://btcmap.org/map"
-    private const val BITREFILL_REF = "AL6dyZYt"
-    private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
-    private const val BITREFILL_APP_NAME = "Bitkit"
-    private const val BITREFILL_PARAMS =
-        "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
     const val SYNONYM_CONTACT = "https://synonym.to/contact"
     const val SYNONYM_MEDIUM = "https://medium.com/synonym-to"
@@ -195,13 +183,10 @@ internal object Env {
     const val TERMS_OF_USE_URL = "https://bitkit.to/terms-of-use"
     const val PRIVACY_POLICY_URL = "https://bitkit.to/privacy-policy"
     const val STORING_BITCOINS_URL = "https://en.bitcoin.it/wiki/Storing_bitcoins"
-    const val BIT_REFILL_URL = "https://embed.bitrefill.com"
 
-    private const val BITREFILL_REF = "AL6dyZYt"
-    private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
-    private const val BITREFILL_APP_NAME = "Bitkit"
-    private const val BITREFILL_PARAMS =
-        "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
+    const val BITREFILL_URL = "https://embed.bitrefill.com"
+    const val BITREFILL_APP = "Bitkit"
+    const val BITREFILL_REF = "AL6dyZYt"
 
     // endregion
 }
@@ -217,13 +202,6 @@ object TransactionDefaults {
     val dustLimit = 546u
 }
 
-private object ElectrumServers {
-    const val BITCOIN = "ssl://fulcrum.bitkit.blocktank.to:8900"
-    const val TESTNET = "ssl://electrum.blockstream.info:60002"
-    const val REGTEST = "tcp://34.65.252.32:18483"
-    const val E2E = "tcp://127.0.0.1:60001"
-}
-
 object Peers {
     val staging =
         PeerDetails.parse("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
@@ -233,4 +211,11 @@ object Peers {
         PeerDetails.parse("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
     val mainnetLnd4 =
         PeerDetails.parse("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.186.40:9735")
+}
+
+private object ElectrumServers {
+    const val BITCOIN = "ssl://fulcrum.bitkit.blocktank.to:8900"
+    const val TESTNET = "ssl://electrum.blockstream.info:60002"
+    const val REGTEST = "tcp://34.65.252.32:18483"
+    const val E2E = "tcp://127.0.0.1:60001"
 }
