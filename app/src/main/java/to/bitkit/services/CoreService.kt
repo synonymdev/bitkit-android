@@ -50,6 +50,7 @@ import com.synonym.bitkitcore.upsertCjitEntries
 import com.synonym.bitkitcore.upsertClosedChannels
 import com.synonym.bitkitcore.upsertInfo
 import com.synonym.bitkitcore.upsertOrders
+import com.synonym.bitkitcore.upsertTransactionDetails
 import com.synonym.bitkitcore.wipeAllDatabases
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -77,6 +78,10 @@ import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
+import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
+import com.synonym.bitkitcore.TxInput as BitkitCoreTxInput
+import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
+import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
 
 // region Core
 
@@ -247,6 +252,48 @@ class ActivityService(
     suspend fun upsertList(activities: List<Activity>) = ServiceQueue.CORE.background {
         upsertActivities(activities)
     }
+
+    private fun mapToCoreTransactionDetails(
+        txid: String,
+        details: TransactionDetails,
+    ): BitkitCoreTransactionDetails {
+        val inputs = details.inputs.map { input ->
+            BitkitCoreTxInput(
+                txid = input.txid,
+                vout = input.vout,
+                scriptsig = input.scriptsig,
+                witness = input.witness,
+                sequence = input.sequence,
+            )
+        }
+        val outputs = details.outputs.map { output ->
+            BitkitCoreTxOutput(
+                scriptpubkey = output.scriptpubkey,
+                scriptpubkeyType = output.scriptpubkeyType,
+                scriptpubkeyAddress = output.scriptpubkeyAddress,
+                value = output.value,
+                n = output.n,
+            )
+        }
+        return BitkitCoreTransactionDetails(
+            txId = txid,
+            amountSats = details.amountSats,
+            inputs = inputs,
+            outputs = outputs,
+        )
+    }
+
+    suspend fun saveTransactionDetails(txid: String, details: TransactionDetails) {
+        ServiceQueue.CORE.background {
+            val coreDetails = mapToCoreTransactionDetails(txid, details)
+            upsertTransactionDetails(listOf(coreDetails))
+        }
+    }
+
+    suspend fun getTransactionDetails(txid: String): BitkitCoreTransactionDetails? =
+        ServiceQueue.CORE.background {
+            getBitkitCoreTransactionDetails(txid)
+        }
 
     suspend fun getActivity(id: String): Activity? {
         return ServiceQueue.CORE.background {
@@ -484,7 +531,7 @@ class ActivityService(
                 fee = (payment.feePaidMsat ?: 0u) / 1000u,
                 message = kind.description.orEmpty(),
                 preimage = kind.preimage,
-                seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
+                seenAt = null,
             )
         }
 
@@ -499,8 +546,15 @@ class ActivityService(
      * Check pre-activity metadata for addresses in the transaction
      * Returns the first address found in pre-activity metadata that matches a transaction output
      */
+    private suspend fun fetchTransactionDetails(txid: String): BitkitCoreTransactionDetails? =
+        runCatching { getTransactionDetails(txid) }
+            .onFailure { e ->
+                Logger.warn("Failed to fetch stored transaction details for $txid: $e", context = TAG)
+            }
+            .getOrNull()
+
     private suspend fun findAddressInPreActivityMetadata(
-        details: TransactionDetails
+        details: BitkitCoreTransactionDetails,
     ): String? {
         for (output in details.outputs) {
             val address = output.scriptpubkeyAddress ?: continue
@@ -519,14 +573,14 @@ class ActivityService(
         kind: PaymentKind.Onchain,
         existingActivity: Activity?,
         payment: PaymentDetails,
-        transactionDetails: TransactionDetails? = null,
+        transactionDetails: BitkitCoreTransactionDetails? = null,
     ): String? {
         if (existingActivity != null || payment.direction != PaymentDirection.INBOUND) {
             return null
         }
 
         // Get transaction details if not provided
-        val details = transactionDetails ?: lightningService.getTransactionDetails(kind.txid)
+        val details = transactionDetails ?: fetchTransactionDetails(kind.txid)
         if (details == null) {
             Logger.verbose("Transaction details not available for txid: ${kind.txid}", context = TAG)
             return null
@@ -609,7 +663,7 @@ class ActivityService(
             isTransfer = isTransfer,
             confirmTimestamp = confirmationData.confirmedTimestamp,
             channelId = channelId,
-            seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
+            seenAt = null,
         )
     }
 
@@ -618,7 +672,7 @@ class ActivityService(
         payment: PaymentDetails,
         forceUpdate: Boolean,
         channelId: String? = null,
-        transactionDetails: TransactionDetails? = null,
+        transactionDetails: BitkitCoreTransactionDetails? = null,
     ) {
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
@@ -769,6 +823,9 @@ class ActivityService(
     suspend fun handleOnchainTransactionReceived(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
             runCatching {
+                val coreDetails = mapToCoreTransactionDetails(txid, details)
+                upsertTransactionDetails(listOf(coreDetails))
+
                 val payments = lightningService.payments ?: run {
                     Logger.warn("No payments available for transaction $txid", context = TAG)
                     return@background
@@ -786,7 +843,7 @@ class ActivityService(
                     payment = payment,
                     forceUpdate = false,
                     channelId = null,
-                    transactionDetails = details,
+                    transactionDetails = coreDetails,
                 )
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction received for $txid", e, context = TAG)
@@ -797,6 +854,9 @@ class ActivityService(
     suspend fun handleOnchainTransactionConfirmed(txid: String, details: TransactionDetails) {
         ServiceQueue.CORE.background {
             runCatching {
+                val coreDetails = mapToCoreTransactionDetails(txid, details)
+                upsertTransactionDetails(listOf(coreDetails))
+
                 val payments = lightningService.payments ?: run {
                     Logger.warn("No payments available for transaction $txid", context = TAG)
                     return@background
@@ -814,7 +874,7 @@ class ActivityService(
                     payment = payment,
                     forceUpdate = false,
                     channelId = null,
-                    transactionDetails = details,
+                    transactionDetails = coreDetails,
                 )
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction confirmed for $txid", e, context = TAG)
@@ -1000,6 +1060,15 @@ class ActivityService(
             runCatching {
                 val onchain = getOnchainActivityByTxId(txid) ?: return@background true
 
+                // Check if activity has already been seen
+                if (onchain.seenAt != null) {
+                    Logger.info(
+                        "Skipping received sheet for transaction $txid - already seen at ${onchain.seenAt}",
+                        context = TAG
+                    )
+                    return@background false
+                }
+
                 if (onchain.boostTxIds.isEmpty()) {
                     return@background true
                 }
@@ -1021,6 +1090,40 @@ class ActivityService(
 
             return@background true
         }
+    }
+
+    suspend fun isActivitySeen(activityId: String): Boolean = ServiceQueue.CORE.background {
+        val activity = getActivityById(activityId) ?: return@background false
+        return@background when (activity) {
+            is Activity.Lightning -> activity.v1.seenAt != null
+            is Activity.Onchain -> activity.v1.seenAt != null
+        }
+    }
+
+    suspend fun markActivityAsSeen(activityId: String, seenAt: ULong? = null) = ServiceQueue.CORE.background {
+        val activity = getActivityById(activityId) ?: run {
+            Logger.warn("Cannot mark activity as seen - activity not found: $activityId", context = TAG)
+            return@background
+        }
+
+        val timestamp = seenAt ?: (System.currentTimeMillis().toULong() / 1000u)
+        val updatedActivity = when (activity) {
+            is Activity.Lightning -> Activity.Lightning(activity.v1.copy(seenAt = timestamp))
+            is Activity.Onchain -> Activity.Onchain(activity.v1.copy(seenAt = timestamp))
+        }
+
+        updateActivity(activityId, updatedActivity)
+        Logger.info("Marked activity $activityId as seen at $timestamp", context = TAG)
+    }
+
+    suspend fun markOnchainActivityAsSeen(txid: String, seenAt: ULong? = null) {
+        val activity = ServiceQueue.CORE.background {
+            getOnchainActivityByTxId(txid)
+        } ?: run {
+            Logger.warn("Cannot mark onchain activity as seen - activity not found for txid: $txid", context = TAG)
+            return
+        }
+        markActivityAsSeen(activity.id, seenAt)
     }
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
@@ -1071,7 +1174,7 @@ class ActivityService(
     private suspend fun findChannelForTransaction(
         txid: String,
         direction: PaymentDirection,
-        transactionDetails: TransactionDetails? = null,
+        transactionDetails: BitkitCoreTransactionDetails? = null,
     ): String? {
         return when (direction) {
             PaymentDirection.INBOUND -> {
@@ -1123,15 +1226,18 @@ class ActivityService(
         }.getOrNull()
     }
 
-    suspend fun findClosedChannelForTransaction(txid: String, transactionDetails: TransactionDetails? = null): String? {
+    suspend fun findClosedChannelForTransaction(
+        txid: String,
+        transactionDetails: BitkitCoreTransactionDetails? = null,
+    ): String? {
         return runCatching {
             val closedChannelsList = closedChannels(SortDirection.DESC)
             if (closedChannelsList.isEmpty()) {
                 return null
             }
 
-            // Use provided transaction details if available, otherwise try node
-            val details = transactionDetails ?: lightningService.getTransactionDetails(txid) ?: run {
+            // Use provided transaction details if available, otherwise fetch from bitkitcore
+            val details = transactionDetails ?: fetchTransactionDetails(txid) ?: run {
                 Logger.warn("Transaction details not available for $txid", context = TAG)
                 return null
             }

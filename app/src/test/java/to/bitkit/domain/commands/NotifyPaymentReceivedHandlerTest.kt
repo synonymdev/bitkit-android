@@ -69,7 +69,9 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val event = mock<Event.PaymentReceived> {
             on { amountMsat } doReturn 1000000uL
             on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
         }
+        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         val result = sut(command)
@@ -81,6 +83,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(1000L, paymentResult.sheet.sats)
+        verify(activityRepo).markActivityAsSeen("paymentId123")
     }
 
     @Test
@@ -88,7 +91,9 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val event = mock<Event.PaymentReceived> {
             on { amountMsat } doReturn 1000000uL
             on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
         }
+        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(
             event = event,
             includeNotification = true,
@@ -126,6 +131,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("txid456", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(5000L, paymentResult.sheet.sats)
+        verify(activityRepo).markOnchainActivityAsSeen("txid456")
     }
 
     @Test
@@ -148,7 +154,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onchain payment calls handleOnchainTransactionReceived before shouldShowReceivedSheet`() = test {
+    fun `onchain payment calls methods in correct order`() = test {
         val details = mock<TransactionDetails> {
             on { amountSats } doReturn 7500L
         }
@@ -164,7 +170,25 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         inOrder(activityRepo) {
             verify(activityRepo).handleOnchainTransactionReceived("txid789", details)
             verify(activityRepo).shouldShowReceivedSheet("txid789", 7500uL)
+            verify(activityRepo).markOnchainActivityAsSeen("txid789")
         }
+    }
+
+    @Test
+    fun `onchain payment does not mark as seen when shouldShowReceivedSheet returns false`() = test {
+        val details = mock<TransactionDetails> {
+            on { amountSats } doReturn 5000L
+        }
+        val event = mock<Event.OnchainTransactionReceived> {
+            on { txid } doReturn "txid456"
+            on { this.details } doReturn details
+        }
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(false)
+        val command = NotifyPaymentReceived.Command.Onchain(event = event)
+
+        sut(command)
+
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
     }
 
     @Test
@@ -172,12 +196,49 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val event = mock<Event.PaymentReceived> {
             on { amountMsat } doReturn 1000000uL
             on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
         }
+        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         sut(command)
 
         verify(activityRepo, never()).handleOnchainTransactionReceived(any(), any())
         verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+    }
+
+    @Test
+    fun `lightning payment returns Skip when already seen`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { amountMsat } doReturn 1000000uL
+            on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
+        }
+        whenever(activityRepo.isActivitySeen("paymentId123")).thenReturn(true)
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+
+        val result = sut(command)
+
+        assertTrue(result.isSuccess)
+        val paymentResult = result.getOrThrow()
+        assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).markActivityAsSeen(any())
+    }
+
+    @Test
+    fun `lightning payment returns Skip when paymentId is null`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { amountMsat } doReturn 1000000uL
+            on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn null
+        }
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+
+        val result = sut(command)
+
+        assertTrue(result.isSuccess)
+        val paymentResult = result.getOrThrow()
+        assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
     }
 }

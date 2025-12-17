@@ -28,7 +28,6 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val settingsStore = mock<SettingsStore>()
-    private val lightningRepo = mock<LightningRepo>()
 
     companion object Fixtures {
         const val ACTIVITY_ID = "test-activity-1"
@@ -48,7 +47,6 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             activityRepo = activityRepo,
             blocktankRepo = blocktankRepo,
             settingsStore = settingsStore,
-            lightningRepo = lightningRepo,
         )
     }
 
