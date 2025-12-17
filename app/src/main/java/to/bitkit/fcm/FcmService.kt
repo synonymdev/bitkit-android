@@ -46,7 +46,7 @@ class FcmService : FirebaseMessagingService() {
      * Act on received messages. [Debug](https://goo.gl/39bRNJ)
      */
     override fun onMessageReceived(message: RemoteMessage) {
-        Logger.debug("New FCM at: ${Date(message.sentTime)}")
+        Logger.debug("New FCM at: ${Date(message.sentTime)}", context = TAG)
 
         message.notification?.run {
             Logger.debug("FCM title: $title")
@@ -63,7 +63,7 @@ class FcmService : FirebaseMessagingService() {
                 }
                 isEncryptedNotification
             }.getOrElse {
-                Logger.error("Failed to read encrypted notification payload", it)
+                Logger.error("Failed to read encrypted notification payload", it, context = TAG)
                 // Let the node to spin up and handle incoming events
                 true
             }
@@ -90,21 +90,21 @@ class FcmService : FirebaseMessagingService() {
     }
 
     private fun handleNow(data: Map<String, String>) {
-        Logger.warn("FCM handler not implemented for: $data")
+        Logger.warn("FCM handler not implemented for: $data", context = TAG)
     }
 
     private fun decryptPayload(response: EncryptedNotification) {
         val ciphertext = runCatching { response.cipher.fromBase64() }.getOrElse {
-            Logger.error("Failed to decode cipher", it)
+            Logger.error("Failed to decode cipher", it, context = TAG)
             return
         }
         val privateKey = runCatching { keychain.load(Keychain.Key.PUSH_NOTIFICATION_PRIVATE_KEY.name)!! }.getOrElse {
-            Logger.error("Missing PUSH_NOTIFICATION_PRIVATE_KEY", it)
+            Logger.error("Missing PUSH_NOTIFICATION_PRIVATE_KEY", it, context = TAG)
             return
         }
         val password =
             runCatching { crypto.generateSharedSecret(privateKey, response.publicKey, DERIVATION_NAME) }.getOrElse {
-                Logger.error("Failed to generate shared secret", it)
+                Logger.error("Failed to generate shared secret", it, context = TAG)
                 return
             }
 
@@ -114,20 +114,20 @@ class FcmService : FirebaseMessagingService() {
         )
 
         val decoded = decrypted.decodeToString()
-        Logger.debug("Decrypted payload: $decoded")
+        Logger.debug("Decrypted payload: $decoded", context = TAG)
 
         val (payload, type) = runCatching { json.decodeFromString<DecryptedNotification>(decoded) }.getOrElse {
-            Logger.error("Failed to decode decrypted data", it)
+            Logger.error("Failed to decode decrypted data", it, context = TAG)
             return
         }
 
         if (payload == null) {
-            Logger.error("Missing payload")
+            Logger.error("Missing payload", context = TAG)
             return
         }
 
         if (type == null) {
-            Logger.error("Missing type")
+            Logger.error("Missing type", context = TAG)
             return
         }
 
