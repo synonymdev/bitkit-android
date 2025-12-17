@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.env.Env
+import to.bitkit.env.Peers
 import to.bitkit.ext.host
 import to.bitkit.ext.port
 import to.bitkit.ui.Routes
@@ -173,7 +173,7 @@ private fun InfoRow(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            uiState = LnurlChannelUiState(peer = Env.Peers.staging),
+            uiState = LnurlChannelUiState(peer = Peers.staging),
         )
     }
 }

@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.env.Env
+import to.bitkit.env.TransactionDefaults
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.TransactionSpeed
@@ -50,7 +50,7 @@ fun CustomFeeSettingsScreen(
     var input by remember {
         mutableStateOf((customFeeRate.value as? TransactionSpeed.Custom)?.satsPerVByte?.toString() ?: "")
     }
-    val totalFee = Env.TransactionDefaults.recommendedBaseFee * (input.toUIntOrNull() ?: 0u)
+    val totalFee = TransactionDefaults.recommendedBaseFee * (input.toUIntOrNull() ?: 0u)
 
     LaunchedEffect(input) {
         val inputNum = input.toLongOrNull() ?: 0

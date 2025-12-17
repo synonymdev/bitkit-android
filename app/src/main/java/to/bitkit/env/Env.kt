@@ -28,69 +28,11 @@ internal object Env {
     // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
+            Network.BITCOIN -> listOf(Peers.mainnetLnd1, Peers.mainnetLnd3, Peers.mainnetLnd4)
             Network.REGTEST -> listOf(Peers.staging)
             Network.TESTNET -> listOf(Peers.staging)
-            else -> TODO("Not yet implemented")
+            else -> emptyList()
         }
-
-    val ldkRgsServerUrl
-        get() = when (network) {
-            Network.BITCOIN -> "https://rgs.blocktank.to/snapshot"
-            Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/rgs/snapshot"
-            else -> null
-        }
-
-    val vssServerUrl
-        get() = when (network) {
-            Network.BITCOIN -> TODO("VSS server not implemented for mainnet")
-            // Network.REGTEST -> "http://localhost:5050/vss"
-            else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
-        }
-
-    val lnurlAuthServerUrl = when (network) {
-        Network.BITCOIN -> TODO("LNURL-auth server not implemented for mainnet")
-        // Network.REGTEST -> "http://localhost:5005/auth"
-        else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
-    }
-
-    val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
-
-    val esploraServerUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/electrs"
-            Network.TESTNET -> "https://blockstream.info/testnet/api"
-            else -> TODO("${network.name} network not implemented")
-        }
-
-    val blocktankBaseUrl
-        get() = when (network) {
-            Network.REGTEST -> "https://api.stag0.blocktank.to"
-            Network.TESTNET -> "https://api.stag0.blocktank.to"
-            Network.BITCOIN -> "https://api1.blocktank.to/"
-            else -> TODO("${network.name} network not implemented")
-        }
-    val blocktankApiUrl get() = "$blocktankBaseUrl/blocktank/api/v2"
-    val blocktankNotificationApiUrl
-        get() = when (network) {
-            Network.BITCOIN -> "$blocktankBaseUrl/api/notifications"
-            else -> "$blocktankBaseUrl/notifications/api"
-        }
-
-    const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
-    val blockExplorerUrl
-        get() = when (network) {
-            Network.BITCOIN -> "https://mempool.space"
-            Network.SIGNET -> "https://mutinynet.com"
-            Network.TESTNET -> "https://mempool.space/testnet"
-            Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
-        }
-
-    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
-    const val chatwootUrl = "https://synonym.to/api/chatwoot"
-    const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
-    const val mempoolBaseUrl = "https://mempool.space/api"
-    const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
 
     const val fxRateRefreshInterval: Long = 2 * 60 * 1000 // 2 minutes in milliseconds
     const val fxRateStaleThreshold: Long = 10 * 60 * 1000 // 10 minutes in milliseconds
@@ -106,16 +48,13 @@ internal object Env {
     )
     const val DERIVATION_NAME = "bitkit-notifications"
 
-    object TransactionDefaults {
-        /** Total recommended tx base fee in sats */
-        val recommendedBaseFee = 256u
+    const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
+    const val SUPPORT_EMAIL = "support@synonym.to"
+    const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
+    const val PIN_LENGTH = 4
+    const val PIN_ATTEMPTS = 8
 
-        /**
-         * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
-         * required to include them in a block would be greater than the value of the transaction itself.
-         * */
-        val dustLimit = 546u
-    }
+    // region File Paths
 
     private lateinit var appStoragePath: String
 
@@ -160,19 +99,11 @@ internal object Env {
         return path
     }
 
-    object Peers {
-        val staging =
-            PeerDetails.parse("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
-    }
+    // endregion
 
-    object ElectrumServers {
-        const val BITCOIN = "ssl://35.187.18.233:8900"
-        const val TESTNET = "ssl://electrum.blockstream.info:60002"
-        const val REGTEST = "tcp://34.65.252.32:18483"
-        const val E2E = "tcp://127.0.0.1:60001"
-    }
+    // region Server URLs
 
-    val defaultElectrumServer: String
+    val electrumServerUrl: String
         get() {
             if (isE2eTest) return ElectrumServers.E2E
             return when (network) {
@@ -183,10 +114,64 @@ internal object Env {
             }
         }
 
-    const val PIN_LENGTH = 4
-    const val PIN_ATTEMPTS = 8
-    const val DEFAULT_INVOICE_MESSAGE = "Bitkit"
-    const val FILE_PROVIDER_AUTHORITY = "${BuildConfig.APPLICATION_ID}.fileprovider"
+    val ldkRgsServerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://rgs.blocktank.to/snapshot"
+            Network.TESTNET -> "https://rapidsync.lightningdevkit.org/testnet/snapshot"
+            Network.REGTEST -> "https://bitkit.stag0.blocktank.to/rgs/snapshot"
+            else -> null
+        }
+
+    val vssServerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://bitkit.to/vss_rs_auth"
+            else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
+        }
+
+    val lnurlAuthServerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://bitkit.to/lnurl_auth/auth"
+            else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
+        }
+
+    val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
+
+    val blocktankBaseUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://api1.blocktank.to"
+            else -> "https://api.stag0.blocktank.to"
+        }
+    val blocktankApiUrl
+        get() = when (network) {
+            Network.BITCOIN -> "$blocktankBaseUrl/api"
+            else -> "$blocktankBaseUrl/blocktank/api/v2"
+        }
+    val blocktankNotificationApiUrl
+        get() = when (network) {
+            Network.BITCOIN -> "$blocktankBaseUrl/api/notifications"
+            else -> "$blocktankBaseUrl/notifications/api"
+        }
+
+    val btcRatesServer
+        get() = when (network) {
+            Network.BITCOIN -> "https://blocktank.synonym.to/fx/rates/btc"
+            else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
+        }
+
+    val blockExplorerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://mempool.space"
+            Network.SIGNET -> "https://mutinynet.com"
+            Network.TESTNET -> "https://mempool.space/testnet"
+            Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
+        }
+
+    const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
+    const val chatwootUrl = "https://synonym.to/api/chatwoot"
+    const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
+    const val mempoolBaseUrl = "https://mempool.space/api"
+    const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
+
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 
@@ -210,5 +195,42 @@ internal object Env {
     const val TERMS_OF_USE_URL = "https://bitkit.to/terms-of-use"
     const val PRIVACY_POLICY_URL = "https://bitkit.to/privacy-policy"
     const val STORING_BITCOINS_URL = "https://en.bitcoin.it/wiki/Storing_bitcoins"
-    const val SUPPORT_EMAIL = "support@synonym.to"
+    const val BIT_REFILL_URL = "https://embed.bitrefill.com"
+
+    private const val BITREFILL_REF = "AL6dyZYt"
+    private const val BITREFILL_PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
+    private const val BITREFILL_APP_NAME = "Bitkit"
+    private const val BITREFILL_PARAMS =
+        "?ref=${BITREFILL_REF}&paymentMethod=${BITREFILL_PAYMENT_METHOD}&theme=dark&utm_source=${BITREFILL_APP_NAME}"
+
+    // endregion
+}
+
+object TransactionDefaults {
+    /** Total recommended tx base fee in sats */
+    val recommendedBaseFee = 256u
+
+    /**
+     * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
+     * required to include them in a block would be greater than the value of the transaction itself.
+     * */
+    val dustLimit = 546u
+}
+
+private object ElectrumServers {
+    const val BITCOIN = "ssl://fulcrum.bitkit.blocktank.to:8900"
+    const val TESTNET = "ssl://electrum.blockstream.info:60002"
+    const val REGTEST = "tcp://34.65.252.32:18483"
+    const val E2E = "tcp://127.0.0.1:60001"
+}
+
+object Peers {
+    val staging =
+        PeerDetails.parse("028a8910b0048630d4eb17af25668cdd7ea6f2d8ae20956e7a06e2ae46ebcb69fc@34.65.86.104:9400")
+    val mainnetLnd1 =
+        PeerDetails.parse("039b8b4dd1d88c2c5db374290cda397a8f5d79f312d6ea5d5bfdfc7c6ff363eae3@34.65.111.104:9735")
+    val mainnetLnd3 =
+        PeerDetails.parse("03816141f1dce7782ec32b66a300783b1d436b19777e7c686ed00115bd4b88ff4b@34.65.191.64:9735")
+    val mainnetLnd4 =
+        PeerDetails.parse("02a371038863605300d0b3fc9de0cf5ccb57728b7f8906535709a831b16e311187@34.65.186.40:9735")
 }
