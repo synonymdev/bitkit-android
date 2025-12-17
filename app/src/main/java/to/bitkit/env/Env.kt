@@ -78,6 +78,14 @@ internal object Env {
         }
 
     const val btcRatesServer = "https://api1.blocktank.to/api/fx/rates/btc"
+    val blockExplorerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://mempool.space"
+            Network.SIGNET -> "https://mutinynet.com"
+            Network.TESTNET -> "https://mempool.space/testnet"
+            Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
+        }
+
     const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
