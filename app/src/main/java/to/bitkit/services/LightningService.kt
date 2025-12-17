@@ -108,6 +108,7 @@ class LightningService @Inject constructor(
                 trustedPeersNoReserve = trustedPeerNodeIds,
                 perChannelReserveSats = 1u,
             ),
+            includeUntrustedPendingInSpendable = true,
         )
     }
 
