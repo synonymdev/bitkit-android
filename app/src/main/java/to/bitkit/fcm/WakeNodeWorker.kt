@@ -67,8 +67,8 @@ class WakeNodeWorker @AssistedInject constructor(
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Logger.debug("$TAG notification type: $notificationType", context = TAG)
-        Logger.debug("$TAG notification payload: $notificationPayload", context = TAG)
+        Logger.debug("notification type: $notificationType", context = TAG)
+        Logger.debug("notification payload: $notificationPayload", context = TAG)
 
         try {
             withPerformanceLogging {
