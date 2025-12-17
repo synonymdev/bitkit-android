@@ -38,6 +38,7 @@ class LnurlExtTest : BaseUnitTest() {
         )
 
         assertEquals(100u, data.minSendableSat())
+        assertEquals(0u, data.copy(minSendable = 0u).minSendableSat())
     }
 
     @Test
@@ -54,6 +55,7 @@ class LnurlExtTest : BaseUnitTest() {
         )
 
         assertEquals(100u, data.maxSendableSat())
+        assertEquals(0u, data.copy(maxSendable = 0u).maxSendableSat())
     }
 
     @Test
