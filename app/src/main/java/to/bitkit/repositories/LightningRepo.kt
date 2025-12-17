@@ -728,12 +728,6 @@ class LightningRepo @Inject constructor(
         Result.success(payments)
     }
 
-    suspend fun getTransactionDetails(txid: Txid): Result<TransactionDetails?> = executeWhenNodeRunning(
-        "Get transaction details by txid"
-    ) {
-        Result.success(lightningService.getTransactionDetails(txid))
-    }
-
     suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("Get address balance") {
         runCatching {
             lightningService.getAddressBalance(address)

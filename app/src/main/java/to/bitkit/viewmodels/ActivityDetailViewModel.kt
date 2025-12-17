@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.TransactionDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -15,14 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
-import to.bitkit.repositories.LightningRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -34,7 +33,6 @@ class ActivityDetailViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val settingsStore: SettingsStore,
     private val blocktankRepo: BlocktankRepo,
-    private val lightningRepo: LightningRepo,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -167,13 +165,14 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun fetchTransactionDetails(txid: String) {
         viewModelScope.launch(bgDispatcher) {
-            runCatching {
-                val transactionDetails = lightningRepo.getTransactionDetails(txid).getOrNull()
-                _txDetails.update { transactionDetails }
-            }.onFailure { e ->
-                Logger.error("fetchTransactionDetails error", e, context = TAG)
-                _txDetails.update { null }
-            }
+            activityRepo.getTransactionDetails(txid)
+                .onSuccess { transactionDetails ->
+                    _txDetails.update { transactionDetails }
+                }
+                .onFailure { e ->
+                    Logger.error("fetchTransactionDetails error", e, context = TAG)
+                    _txDetails.update { null }
+                }
         }
     }
 

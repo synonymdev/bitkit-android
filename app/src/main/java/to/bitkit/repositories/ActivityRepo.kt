@@ -41,6 +41,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 
 private const val SYNC_TIMEOUT_MS = 40_000L
 
@@ -230,6 +231,24 @@ class ActivityRepo @Inject constructor(
 
     suspend fun shouldShowReceivedSheet(txid: String, value: ULong): Boolean {
         return coreService.activity.shouldShowReceivedSheet(txid, value)
+    }
+
+    suspend fun isActivitySeen(activityId: String): Boolean {
+        return coreService.activity.isActivitySeen(activityId)
+    }
+
+    suspend fun markActivityAsSeen(activityId: String) {
+        coreService.activity.markActivityAsSeen(activityId)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun markOnchainActivityAsSeen(txid: String) {
+        coreService.activity.markOnchainActivityAsSeen(txid)
+        notifyActivitiesChanged()
+    }
+
+    suspend fun getTransactionDetails(txid: String): Result<BitkitCoreTransactionDetails?> = runCatching {
+        coreService.activity.getTransactionDetails(txid)
     }
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
@@ -529,7 +548,7 @@ class ActivityRepo @Inject constructor(
                         preimage = null,
                         createdAt = now,
                         updatedAt = null,
-                        seenAt = null, // TODO implement synonymdev/bitkit-ios#270 changes
+                        seenAt = null,
                     )
                 )
             )
