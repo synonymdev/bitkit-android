@@ -91,29 +91,6 @@ fun NewTransactionSheetView(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
-        if (details.direction == NewTransactionSheetDirection.RECEIVED) {
-            Image(
-                painter = painterResource(R.drawable.coin_stack_5),
-                contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("transaction_received_image")
-                    .align(Alignment.BottomEnd)
-            )
-        } else {
-            Image(
-                painter = painterResource(R.drawable.check),
-                contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .testTag("transaction_sent_image")
-                    .align(Alignment.Center)
-            )
-        }
-
         val composition by rememberLottieComposition(
             if (details.type == NewTransactionSheetType.ONCHAIN) {
                 LottieCompositionSpec.RawRes(R.raw.confetti_orange)
@@ -129,6 +106,30 @@ fun NewTransactionSheetView(
                 .fillMaxSize()
                 .testTag("confetti_animation")
         )
+
+        if (details.direction == NewTransactionSheetDirection.RECEIVED) {
+            Image(
+                painter = painterResource(R.drawable.coin_stack_5),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("transaction_received_image")
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 32.dp)
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("transaction_sent_image")
+                    .align(Alignment.Center)
+            )
+        }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -155,7 +156,7 @@ fun NewTransactionSheetView(
 
             BalanceHeaderView(
                 sats = details.sats,
-                onClick = { onDetailClick },
+                onClick = onDetailClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("ReceivedTransaction")
