@@ -334,6 +334,12 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
+    fun syncAsync() = scope.launch {
+        sync().onFailure { error ->
+            Logger.warn("Sync failed", e = error, context = TAG)
+        }
+    }
+
     /** Clear pending sync flag. Called when manual pull-to-refresh takes priority. */
     fun clearPendingSync() {
         syncPending.set(false)
