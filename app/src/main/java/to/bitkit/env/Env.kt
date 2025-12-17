@@ -116,6 +116,8 @@ internal object Env {
             else -> null
         }
 
+    val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
+
     val vssServerUrl
         get() = when (network) {
             Network.BITCOIN -> "https://bitkit.to/vss_rs_auth"
@@ -128,7 +130,13 @@ internal object Env {
             else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
         }
 
-    val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
+    val blockExplorerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://mempool.space"
+            Network.SIGNET -> "https://mutinynet.com"
+            Network.TESTNET -> "https://mempool.space/testnet"
+            Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
+        }
 
     val blocktankBaseUrl
         get() = when (network) {
@@ -150,14 +158,6 @@ internal object Env {
         get() = when (network) {
             Network.BITCOIN -> "https://blocktank.synonym.to/fx/rates/btc"
             else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
-        }
-
-    val blockExplorerUrl
-        get() = when (network) {
-            Network.BITCOIN -> "https://mempool.space"
-            Network.SIGNET -> "https://mutinynet.com"
-            Network.TESTNET -> "https://mempool.space/testnet"
-            Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
 
     const val geoCheckUrl = "https://api1.blocktank.to/api/geocheck"
