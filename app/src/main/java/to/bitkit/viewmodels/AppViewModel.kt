@@ -311,8 +311,17 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleOnchainTransactionReplaced(event: Event.OnchainTransactionReplaced) {
+        // If the replaced transaction was just boosted via RBF from within the app, we already show a
+        // dedicated boost success toast; suppress the generic "transaction replaced" toast to avoid
+        // flakiness/noise (notably in E2E flows).
+        val shouldSuppressReplacedToast = activityRepo
+            .getOnchainActivityByTxId(event.txid)
+            ?.let { it.isBoosted && it.txType == PaymentType.SENT } == true
+
         activityRepo.handleOnchainTransactionReplaced(event.txid, event.conflicts)
-        notifyTransactionReplaced(event)
+        if (!shouldSuppressReplacedToast) {
+            notifyTransactionReplaced(event)
+        }
     }
 
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
