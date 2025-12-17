@@ -3,6 +3,7 @@ package to.bitkit.fcm
 import android.os.Bundle
 import androidx.core.os.toPersistableBundle
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -83,6 +84,7 @@ class FcmService : FirebaseMessagingService() {
                     "payload" to notificationPayload?.toString(),
                 )
             )
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         WorkManager.getInstance(this)
             .beginWith(work)
