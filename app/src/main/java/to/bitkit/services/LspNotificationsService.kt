@@ -52,7 +52,7 @@ class LspNotificationsService @Inject constructor(
                 isoTimestamp = "$timestamp",
                 signature = signature,
                 customUrl = Env.blocktankNotificationApiUrl,
-                isProduction = null,
+                isProduction = !Env.isDebug,
             )
         }
 
