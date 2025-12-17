@@ -91,7 +91,7 @@ private fun Content(
                 fullWidth = false,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("cancel_button")
+                    .testTag("LnurlAuthCancel")
             )
             // TODO add missing localized text
             PrimaryButton(
@@ -100,7 +100,7 @@ private fun Content(
                 fullWidth = false,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("continue_button")
+                    .testTag("LnurlAuthContinue")
             )
         }
         VerticalSpacer(16.dp)
