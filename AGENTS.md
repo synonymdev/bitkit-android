@@ -161,6 +161,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
+- PREFER to use `it` instead of explicit parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
