@@ -136,8 +136,8 @@ class LightningNodeService : Service() {
         when (intent?.action) {
             ACTION_STOP_SERVICE_AND_APP -> {
                 Logger.debug("ACTION_STOP_SERVICE_AND_APP detected", context = TAG)
-                // Close all activities
-                App.currentActivity?.value?.finishAndRemoveTask()
+                // Close activities gracefully without force-stopping the app
+                App.currentActivity?.value?.finishAffinity()
                 // Stop the service
                 stopSelf()
                 return START_NOT_STICKY
