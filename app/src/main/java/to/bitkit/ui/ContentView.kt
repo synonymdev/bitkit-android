@@ -548,7 +548,7 @@ private fun RootNavHost(
                         navController.navigateToTransferFunding()
                         settingsViewModel.setHasSeenTransferIntro(true)
                     },
-                    onBackClick = {},
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsIntro> {
@@ -1306,7 +1306,7 @@ private fun NavGraphBuilder.widgets(
                 settingsViewModel.setHasSeenWidgetsIntro(true)
                 navController.navigate(Routes.AddWidget)
             },
-            onBackClick = {},
+            onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.AddWidget> {
