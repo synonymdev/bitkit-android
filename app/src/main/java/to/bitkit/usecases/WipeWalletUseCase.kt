@@ -1,5 +1,6 @@
 package to.bitkit.usecases
 
+import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -27,7 +28,8 @@ class WipeWalletUseCase @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
-) {
+    private val firebaseMessaging: FirebaseMessaging,
+    ) {
     @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(
         walletIndex: Int = 0,
@@ -39,6 +41,7 @@ class WipeWalletUseCase @Inject constructor(
             backupRepo.reset()
 
             keychain.wipe()
+            firebaseMessaging.deleteToken()
 
             coreService.wipeData()
             db.clearAllTables()
