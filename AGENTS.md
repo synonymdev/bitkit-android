@@ -45,6 +45,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 ## Architecture Overview
 
 ### Tech Stack
+
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose with Material3
 - **Architecture**: MVVM with Hilt dependency injection
@@ -57,6 +58,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 - **Storage**: DataStore with json files
 
 ### Project Structure
+
 - **app/src/main/java/to/bitkit/**
   - **App.kt**: Application class with Hilt setup
   - **ui/**: All UI components
@@ -75,6 +77,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
   - **usecases/**: Domain layer: use cases
 
 ### Key Architecture Patterns
+
 1. **Single Activity Architecture**: MainActivity hosts all screens via Compose Navigation
 2. **Repository Pattern**: Repositories abstract data sources from ViewModels
 3. **Service Layer**: Core business logic in services (LightningService, WalletService)
@@ -82,6 +85,7 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 5. **Coroutine-based Async**: All async operations use Kotlin coroutines
 
 ### Build Variants
+
 - **dev**: Regtest network for development
 - **tnet**: Testnet network
 - **mainnet**: Production (currently commented out)
@@ -89,20 +93,26 @@ GEO=false E2E=true ./gradlew assembleDevRelease
 ## Common Pitfalls
 
 ### ❌ DON'T
+
 ```kotlin
 GlobalScope.launch { }                          // Use viewModelScope
 val result = nullable!!.doSomething()           // Use safe calls
 Text("Send Payment")                            // Use string resources
 class Service(@Inject val vm: ViewModel)        // Never inject VMs
+
 suspend fun getData() = runBlocking { }         // Use withContext
 ```
 
 ### ✅ DO
+
 ```kotlin
 viewModelScope.launch { }
 val result = nullable?.doSomething() ?: default
 Text(stringResource(R.string.send_payment))
-class Service { fun process(data: Data) }
+class Service {
+  fun process(data: Data)
+}
+
 suspend fun getData() = withContext(Dispatchers.IO) { }
 ```
 
@@ -117,29 +127,32 @@ suspend fun getData() = withContext(Dispatchers.IO) { }
 ## Common Patterns
 
 ### ViewModel State
+
 ```kotlin
 private val _uiState = MutableStateFlow(InitialState)
 val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
 fun updateState(action: Action) {
-    viewModelScope.launch {
-        _uiState.update { it.copy(/* fields */) }
-    }
+  viewModelScope.launch {
+    _uiState.update { it.copy(/* fields */) }
+  }
 }
 ```
 
 ### Repository
+
 ```kotlin
 suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
-    runCatching {
-        Result.success(apiService.fetchData())
-    }.onFailure { e ->
-        Logger.error("Failed", e = e, context = TAG)
-    }
+  runCatching {
+    Result.success(apiService.fetchData())
+  }.onFailure { e ->
+    Logger.error("Failed", e = e, context = TAG)
+  }
 }
 ```
 
 ### Rules
+
 - USE coding rules from `.cursor/default.rules.mdc`
 - ALWAYS run `./gradlew compileDevDebugKotlin` after code changes to verify code compiles
 - ALWAYS run `./gradlew testDevDebugUnitTest` after code changes to verify tests succeed and fix accordingly
@@ -150,7 +163,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
-- ALWAYS consider applying YAGNI (You Aren't Gonna Need It) principle for new code 
+- ALWAYS consider applying YAGNI (You Aren't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
@@ -161,6 +174,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
+- PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
@@ -179,15 +193,19 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - ALWAYS list 3 suggested commit messages after implementation work
-- NEVER use `wheneverBlocking` when in an unit test where you're using expression body and already wrapping the test with a `= test {}` lambda.
+- NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
+- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking { }`
 - ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS use services to wrap RUST code exposed via bindings
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice-versa for downstream
-- ALWAYS add new string string resources in alphabetical order in `strings.xml` 
+- ALWAYS add new localizable string string resources in alphabetical order in `strings.xml`
+- NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
+- PREFER to use one-liners with `run { }` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 
 ### Architecture Guidelines
+
 - Use `LightningNodeService` to manage background notifications while the node is running
 - Use `LightningService` to wrap node's RUST APIs and manage the inner lifecycle of the node
 - Use `LightningRepo` to defining the business logic for the node operations, usually delegating to `LightningService`

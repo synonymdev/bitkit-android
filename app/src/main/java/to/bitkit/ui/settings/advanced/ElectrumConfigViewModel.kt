@@ -111,7 +111,7 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun resetToDefault() {
-        val defaultServer = ElectrumServer.parse(Env.defaultElectrumServer)
+        val defaultServer = ElectrumServer.parse(Env.electrumServerUrl)
         _uiState.update {
             val newState = it.copy(
                 host = defaultServer.host,

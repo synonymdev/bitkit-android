@@ -85,6 +85,7 @@ import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityDetailScreen(
     listViewModel: ActivityListViewModel,

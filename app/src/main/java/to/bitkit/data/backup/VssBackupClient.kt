@@ -1,7 +1,10 @@
 package to.bitkit.data.backup
 
+import com.synonym.vssclient.KeyVersion
 import com.synonym.vssclient.VssItem
+import com.synonym.vssclient.vssDelete
 import com.synonym.vssclient.vssGet
+import com.synonym.vssclient.vssListKeys
 import com.synonym.vssclient.vssNewClient
 import com.synonym.vssclient.vssNewClientWithLnurlAuth
 import com.synonym.vssclient.vssStore
@@ -103,6 +106,52 @@ class VssBackupClient @Inject constructor(
             }
         }.onFailure { e ->
             Logger.verbose("VSS 'getObject' error for '$key'", e = e, context = TAG)
+        }
+    }
+
+    suspend fun listKeys(prefix: String? = null): Result<List<KeyVersion>> = withContext(ioDispatcher) {
+        isSetup.await()
+        Logger.verbose("VSS 'listKeys' call with prefix: '$prefix'", context = TAG)
+        runCatching {
+            vssListKeys(prefix = prefix)
+        }.onSuccess {
+            Logger.verbose("VSS 'listKeys' success - found ${it.size} key(s)", context = TAG)
+        }.onFailure { e ->
+            Logger.verbose("VSS 'listKeys' error", e = e, context = TAG)
+        }
+    }
+
+    suspend fun deleteObject(key: String): Result<Boolean> = withContext(ioDispatcher) {
+        isSetup.await()
+        Logger.verbose("VSS 'deleteObject' call for '$key'", context = TAG)
+        runCatching {
+            vssDelete(key = key)
+        }.onSuccess { wasDeleted ->
+            if (wasDeleted) {
+                Logger.verbose("VSS 'deleteObject' success for '$key' - key was deleted", context = TAG)
+            } else {
+                Logger.verbose("VSS 'deleteObject' success for '$key' - key did not exist", context = TAG)
+            }
+        }.onFailure { e ->
+            Logger.verbose("VSS 'deleteObject' error for '$key'", e = e, context = TAG)
+        }
+    }
+
+    suspend fun deleteAllKeys(): Result<Int> = withContext(ioDispatcher) {
+        isSetup.await()
+        Logger.verbose("VSS 'deleteAllKeys' call", context = TAG)
+        runCatching {
+            val keys = vssListKeys(prefix = null)
+            var deletedCount = 0
+            for (keyVersion in keys) {
+                val wasDeleted = vssDelete(key = keyVersion.key)
+                if (wasDeleted) deletedCount++
+            }
+            deletedCount
+        }.onSuccess {
+            Logger.verbose("VSS 'deleteAllKeys' success - deleted $it key(s)", context = TAG)
+        }.onFailure { e ->
+            Logger.verbose("VSS 'deleteAllKeys' error", e = e, context = TAG)
         }
     }
 

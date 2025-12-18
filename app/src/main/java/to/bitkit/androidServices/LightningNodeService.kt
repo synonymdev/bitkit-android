@@ -23,6 +23,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.ui.ID_NOTIFICATION_NODE
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
@@ -52,7 +53,7 @@ class LightningNodeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIFICATION_ID, createNotification())
+        startForeground(ID_NOTIFICATION_NODE, createNotification())
         setupService()
     }
 
@@ -65,7 +66,7 @@ class LightningNodeService : Service() {
                 }
             ).onSuccess {
                 val notification = createNotification()
-                startForeground(NOTIFICATION_ID, notification)
+                startForeground(ID_NOTIFICATION_NODE, notification)
 
                 walletRepo.setWalletExistsState()
                 walletRepo.refreshBip21()
@@ -78,9 +79,10 @@ class LightningNodeService : Service() {
         if (event !is Event.PaymentReceived && event !is Event.OnchainTransactionReceived) return
         val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
 
-        notifyPaymentReceivedHandler(command).onSuccess { result ->
-            if (result !is NotifyPaymentReceived.Result.ShowNotification) return
-            showPaymentNotification(result.sheet, result.notification)
+        notifyPaymentReceivedHandler(command).onSuccess {
+            Logger.debug("Payment notification result: $it", context = TAG)
+            if (it !is NotifyPaymentReceived.Result.ShowNotification) return
+            showPaymentNotification(it.sheet, it.notification)
         }
     }
 
@@ -88,7 +90,11 @@ class LightningNodeService : Service() {
         sheet: NewTransactionSheetDetails,
         notification: NotificationDetails,
     ) {
-        if (App.currentActivity?.value != null) return
+        if (App.currentActivity?.value != null) {
+            Logger.debug("Skipping payment notification: activity is active", context = TAG)
+            return
+        }
+        Logger.debug("Showing payment notification: ${notification.title}", context = TAG)
         serviceScope.launch { cacheStore.setBackgroundReceive(sheet) }
         pushNotification(notification.title, notification.body)
     }
@@ -99,23 +105,13 @@ class LightningNodeService : Service() {
         val notificationIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            notificationIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
 
         // Create stop action that will close both service and app
         val stopIntent = Intent(this, LightningNodeService::class.java).apply {
             action = ACTION_STOP_SERVICE_AND_APP
         }
-        val stopPendingIntent = PendingIntent.getService(
-            this,
-            0,
-            stopIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, CHANNEL_ID_NODE)
             .setContentTitle(getString(R.string.app_name))
@@ -130,7 +126,6 @@ class LightningNodeService : Service() {
             .build()
     }
 
-    // Update the onStartCommand method
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Logger.debug("onStartCommand", context = TAG)
         when (intent?.action) {
@@ -159,7 +154,6 @@ class LightningNodeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val NOTIFICATION_ID = 1
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
         const val ACTION_STOP_SERVICE_AND_APP = "to.bitkit.androidServices.action.STOP_SERVICE_AND_APP"

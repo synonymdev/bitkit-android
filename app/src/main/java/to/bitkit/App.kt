@@ -33,31 +33,17 @@ internal open class App : Application(), Configuration.Provider {
     }
 }
 
-// region currentActivity
 class CurrentActivity : ActivityLifecycleCallbacks {
     var value: Activity? = null
         private set
 
     override fun onActivityCreated(activity: Activity, bundle: Bundle?) = Unit
-
-    override fun onActivityStarted(activity: Activity) {
-        this.value = activity
-    }
-
-    override fun onActivityResumed(activity: Activity) {
-        this.value = activity
-    }
-
-    override fun onActivityPaused(activity: Activity) = Unit
-
-    override fun onActivityStopped(activity: Activity) {
-        if (this.value == activity) this.value = null
-    }
-
+    override fun onActivityStarted(activity: Activity) = run { this.value = activity }
+    override fun onActivityResumed(activity: Activity) = run { this.value = activity }
+    override fun onActivityPaused(activity: Activity) = clearIfCurrent(activity)
+    override fun onActivityStopped(activity: Activity) = clearIfCurrent(activity)
     override fun onActivitySaveInstanceState(activity: Activity, bundle: Bundle) = Unit
+    override fun onActivityDestroyed(activity: Activity) = clearIfCurrent(activity)
 
-    override fun onActivityDestroyed(activity: Activity) {
-        if (this.value == activity) this.value = null
-    }
+    private fun clearIfCurrent(activity: Activity) = run { if (this.value == activity) this.value = null }
 }
-// endregion

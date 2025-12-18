@@ -1,5 +1,6 @@
 package to.bitkit.ext
 
+import com.synonym.bitkitcore.ILspNode
 import org.lightningdevkit.ldknode.PeerDetails
 
 val PeerDetails.host get() = address.substringBefore(":")
@@ -35,3 +36,15 @@ fun PeerDetails.Companion.from(nodeId: String, host: String, port: String) = Pee
     isConnected = false,
     isPersisted = false,
 )
+
+fun ILspNode.toPeerDetails(): PeerDetails? {
+    val address = connectionStrings.firstOrNull() ?: return null
+    return PeerDetails(
+        nodeId = pubkey,
+        address = address,
+        isConnected = false,
+        isPersisted = false,
+    )
+}
+
+fun List<ILspNode>.toPeerDetailsList(): List<PeerDetails> = mapNotNull { it.toPeerDetails() }
