@@ -25,7 +25,6 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.SideEffect
 import to.bitkit.ui.screens.transfer.external.ExternalNodeContract.UiState
@@ -41,7 +40,6 @@ class ExternalNodeViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val settingsStore: SettingsStore,
     private val transferRepo: to.bitkit.repositories.TransferRepo,
-    private val preActivityMetadataRepo: to.bitkit.repositories.PreActivityMetadataRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
@@ -167,21 +165,7 @@ class ExternalNodeViewModel @Inject constructor(
                 channelAmountSats = _uiState.value.amount.sats.toULong(),
             ).mapCatching { result ->
                 awaitChannelPendingEvent(result.userChannelId).mapCatching { event ->
-                    val (txId, vout) = event.fundingTxo
-                    val transactionDetails = lightningRepo.getTransactionDetails(txId).getOrNull()
-                    val address = transactionDetails?.outputs?.getOrNull(vout.toInt())?.scriptpubkeyAddress ?: ""
-                    val feeRate = _uiState.value.customFeeRate ?: 0u
-
-                    preActivityMetadataRepo.savePreActivityMetadata(
-                        id = txId,
-                        txId = txId,
-                        address = address,
-                        isReceive = false,
-                        tags = emptyList(),
-                        feeRate = feeRate.toULong(),
-                        isTransfer = true,
-                        channelId = event.channelId,
-                    )
+                    val (txId, _) = event.fundingTxo
 
                     transferRepo.createTransfer(
                         type = TransferType.MANUAL_SETUP,

@@ -36,38 +36,13 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     ): Result<NotifyPaymentReceived.Result> = withContext(ioDispatcher) {
         runCatching {
             val shouldShow = when (command) {
-                is NotifyPaymentReceived.Command.Lightning -> true
-                is NotifyPaymentReceived.Command.Onchain -> {
-                    activityRepo.handleOnchainTransactionReceived(command.event.txid, command.event.details)
-                    if (command.event.details.amountSats > 0) {
-                        delay(DELAY_FOR_ACTIVITY_SYNC_MS)
-                        activityRepo.shouldShowReceivedSheet(
-                            command.event.txid,
-                            command.event.details.amountSats.toULong()
-                        )
-                    } else {
-                        false
-                    }
-                }
+                is NotifyPaymentReceived.Command.Lightning -> shouldShowLightning(command)
+                is NotifyPaymentReceived.Command.Onchain -> shouldShowOnchain(command)
             }
 
             if (!shouldShow) return@runCatching NotifyPaymentReceived.Result.Skip
 
-            val details = NewTransactionSheetDetails(
-                type = when (command) {
-                    is NotifyPaymentReceived.Command.Lightning -> NewTransactionSheetType.LIGHTNING
-                    is NotifyPaymentReceived.Command.Onchain -> NewTransactionSheetType.ONCHAIN
-                },
-                direction = NewTransactionSheetDirection.RECEIVED,
-                paymentHashOrTxId = when (command) {
-                    is NotifyPaymentReceived.Command.Lightning -> command.event.paymentHash
-                    is NotifyPaymentReceived.Command.Onchain -> command.event.txid
-                },
-                sats = when (command) {
-                    is NotifyPaymentReceived.Command.Lightning -> (command.event.amountMsat / 1000u).toLong()
-                    is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
-                },
-            )
+            val details = buildSheetDetails(command)
 
             if (command.includeNotification) {
                 val notification = buildNotificationContent(details.sats)
@@ -79,6 +54,45 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             Logger.error("Failed to process payment notification", e, context = TAG)
         }
     }
+
+    private suspend fun shouldShowLightning(command: NotifyPaymentReceived.Command.Lightning): Boolean {
+        val paymentId = command.event.paymentId ?: return false
+        delay(DELAY_FOR_ACTIVITY_SYNC_MS)
+        if (activityRepo.isActivitySeen(paymentId)) return false
+        activityRepo.markActivityAsSeen(paymentId)
+        return true
+    }
+
+    private suspend fun shouldShowOnchain(command: NotifyPaymentReceived.Command.Onchain): Boolean {
+        activityRepo.handleOnchainTransactionReceived(command.event.txid, command.event.details)
+        if (command.event.details.amountSats <= 0) return false
+
+        delay(DELAY_FOR_ACTIVITY_SYNC_MS)
+        val shouldShowSheet = activityRepo.shouldShowReceivedSheet(
+            command.event.txid,
+            command.event.details.amountSats.toULong()
+        )
+        if (shouldShowSheet) {
+            activityRepo.markOnchainActivityAsSeen(command.event.txid)
+        }
+        return shouldShowSheet
+    }
+
+    private fun buildSheetDetails(command: NotifyPaymentReceived.Command) = NewTransactionSheetDetails(
+        type = when (command) {
+            is NotifyPaymentReceived.Command.Lightning -> NewTransactionSheetType.LIGHTNING
+            is NotifyPaymentReceived.Command.Onchain -> NewTransactionSheetType.ONCHAIN
+        },
+        direction = NewTransactionSheetDirection.RECEIVED,
+        paymentHashOrTxId = when (command) {
+            is NotifyPaymentReceived.Command.Lightning -> command.event.paymentHash
+            is NotifyPaymentReceived.Command.Onchain -> command.event.txid
+        },
+        sats = when (command) {
+            is NotifyPaymentReceived.Command.Lightning -> (command.event.amountMsat / 1000u).toLong()
+            is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
+        },
+    )
 
     private suspend fun buildNotificationContent(sats: Long): NotificationDetails {
         val settings = settingsStore.data.first()

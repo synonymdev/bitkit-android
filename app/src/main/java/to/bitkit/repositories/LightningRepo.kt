@@ -334,6 +334,12 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
+    fun syncAsync() = scope.launch {
+        sync().onFailure { error ->
+            Logger.warn("Sync failed", e = error, context = TAG)
+        }
+    }
+
     /** Clear pending sync flag. Called when manual pull-to-refresh takes priority. */
     fun clearPendingSync() {
         syncPending.set(false)
@@ -726,12 +732,6 @@ class LightningRepo @Inject constructor(
         val payments = lightningService.payments
             ?: return@executeWhenNodeRunning Result.failure(Exception("It wasn't possible get the payments"))
         Result.success(payments)
-    }
-
-    suspend fun getTransactionDetails(txid: Txid): Result<TransactionDetails?> = executeWhenNodeRunning(
-        "Get transaction details by txid"
-    ) {
-        Result.success(lightningService.getTransactionDetails(txid))
     }
 
     suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("Get address balance") {

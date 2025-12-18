@@ -98,10 +98,6 @@ class CacheStore @Inject constructor(
         }
     }
 
-    suspend fun setLastLightningPayment(paymentId: String) {
-        store.updateData { it.copy(lastLightningPaymentId = paymentId) }
-    }
-
     suspend fun setBackgroundReceive(details: NewTransactionSheetDetails) = store.updateData {
         it.copy(backgroundReceive = details)
     }
@@ -130,7 +126,6 @@ data class AppCacheData(
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
     val deletedActivities: List<String> = listOf(),
-    val lastLightningPaymentId: String? = null,
     val pendingBoostActivities: List<PendingBoostActivity> = listOf(),
     val backgroundReceive: NewTransactionSheetDetails? = null,
 ) {

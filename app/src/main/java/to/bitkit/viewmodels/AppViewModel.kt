@@ -311,8 +311,17 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handleOnchainTransactionReplaced(event: Event.OnchainTransactionReplaced) {
+        // If the replaced transaction was just boosted via RBF from within the app, we already show a
+        // dedicated boost success toast; suppress the generic "transaction replaced" toast to avoid
+        // flakiness/noise (notably in E2E flows).
+        val shouldSuppressReplacedToast = activityRepo
+            .getOnchainActivityByTxId(event.txid)
+            ?.let { it.isBoosted && it.txType == PaymentType.SENT } == true
+
         activityRepo.handleOnchainTransactionReplaced(event.txid, event.conflicts)
-        notifyTransactionReplaced(event)
+        if (!shouldSuppressReplacedToast) {
+            notifyTransactionReplaced(event)
+        }
     }
 
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
@@ -373,20 +382,8 @@ class AppViewModel @Inject constructor(
 
     private suspend fun notifyPaymentReceived(event: Event) {
         val command = NotifyPaymentReceived.Command.from(event) ?: return
-        if (command is NotifyPaymentReceived.Command.Lightning) {
-            val cachedId = cacheStore.data.first().lastLightningPaymentId
-            // Skip if this is a replay by ldk-node on startup
-            if (command.event.paymentHash == cachedId) {
-                Logger.debug("Skipping notification for replayed event: $event", context = TAG)
-                return
-            }
-            // Cache to skip later as needed
-            cacheStore.setLastLightningPayment(command.event.paymentHash)
-        }
-
         val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
-
         showTransactionSheet(result.sheet)
     }
 

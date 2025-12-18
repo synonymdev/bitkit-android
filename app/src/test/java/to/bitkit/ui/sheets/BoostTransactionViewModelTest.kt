@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +63,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
             activityRepo = activityRepo
         )
         wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
+        whenever(lightningRepo.syncAsync()).thenReturn(Job())
     }
 
     @Test
@@ -224,6 +226,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         }
 
         verify(lightningRepo).accelerateByCpfp(any(), any(), any())
+        verify(lightningRepo).syncAsync()
         verify(activityRepo).updateActivity(any(), any(), any())
         verify(activityRepo, never()).deleteActivity(any())
     }
