@@ -25,7 +25,6 @@ internal object Env {
 
     val ldkLogLevel = LogLevel.TRACE
 
-    // TODO: remove this to load from BT API instead
     val trustedLnPeers
         get() = when (network) {
             Network.BITCOIN -> listOf(Peers.mainnetLnd1, Peers.mainnetLnd3, Peers.mainnetLnd4)
@@ -191,15 +190,16 @@ internal object Env {
     // endregion
 }
 
+@Suppress("ConstPropertyName")
 object TransactionDefaults {
     /** Total recommended tx base fee in sats */
-    val recommendedBaseFee = 256u
+    const val recommendedBaseFee = 256u
 
     /**
      * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
      * required to include them in a block would be greater than the value of the transaction itself.
      * */
-    val dustLimit = 546u
+    const val dustLimit = 546u
 }
 
 object Peers {

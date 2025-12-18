@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.vssclient.KeyVersion
 import to.bitkit.R
+import to.bitkit.env.Env
 import to.bitkit.models.BackupCategory
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.PrimaryButton
@@ -148,7 +149,7 @@ private fun LdkDebugContent(
                 enabled = !uiState.isLoading,
                 onClick = {
                     onExportNetworkGraph { file ->
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                        val uri = FileProvider.getUriForFile(context, Env.FILE_PROVIDER_AUTHORITY, file)
                         context.shareFile(uri, "text/plain")
                     }
                 },

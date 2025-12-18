@@ -37,7 +37,6 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
-import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -95,7 +94,7 @@ class LightningRepo @Inject constructor(
 
     private val scope = CoroutineScope(bgDispatcher + SupervisorJob())
 
-    private val _eventHandlers = mutableSetOf<NodeEventHandler>()
+    private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
