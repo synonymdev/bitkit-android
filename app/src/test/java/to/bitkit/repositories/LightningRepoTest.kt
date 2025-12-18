@@ -3,6 +3,8 @@ package to.bitkit.repositories
 import app.cash.turbine.test
 import com.google.firebase.messaging.FirebaseMessaging
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.ILspNode
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
@@ -13,9 +15,11 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
@@ -582,5 +586,67 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertEquals(serviceError, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `start should load trusted peers from blocktank info`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+
+        val mockNodes = listOf(
+            ILspNode(
+                alias = "LSP1",
+                pubkey = "node1pubkey",
+                connectionStrings = listOf("node1.example.com:9735"),
+                readonly = null,
+            ),
+            ILspNode(
+                alias = "LSP2",
+                pubkey = "node2pubkey",
+                connectionStrings = listOf("node2.example.com:9735"),
+                readonly = null,
+            ),
+        )
+        val mockInfo = mock<IBtInfo> { on { nodes } doReturn mockNodes }
+        whenever(blocktank.info(refresh = false)).thenReturn(mockInfo)
+
+        val result = sut.start()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).setup(
+            any(),
+            anyOrNull(),
+            anyOrNull(),
+            argThat { peers ->
+                peers?.size == 2 &&
+                    peers.any { it.nodeId == "node1pubkey" } &&
+                    peers.any { it.nodeId == "node2pubkey" }
+            }
+        )
+    }
+
+    @Test
+    fun `start should pass null trusted peers when blocktank returns null`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(refresh = false)).thenReturn(null)
+        whenever(blocktank.info(refresh = true)).thenReturn(null)
+
+        val result = sut.start()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull())
     }
 }
