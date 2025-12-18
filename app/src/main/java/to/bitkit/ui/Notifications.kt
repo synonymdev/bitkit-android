@@ -20,6 +20,9 @@ import to.bitkit.ext.requiresPermission
 import to.bitkit.utils.Logger
 import kotlin.random.Random
 
+const val ID_NOTIFICATION_SKIPPED = -1
+const val ID_NOTIFICATION_NODE = 1
+
 val Context.CHANNEL_MAIN get() = getString(R.string.app_notifications_channel_id)
 
 fun Context.initNotificationChannel(
@@ -59,13 +62,13 @@ internal fun Context.pushNotification(
     bigText: String? = null,
     id: Int = Random.nextInt(),
 ): Int {
-    Logger.debug("Push notification: $title, $text")
+    Logger.debug("Push notification requested: $title, $text", context = TAG)
 
     // Only check permission if running on Android 13+ (SDK 33+)
-    val requiresPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+    val needsPermissionGrant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         requiresPermission(Manifest.permission.POST_NOTIFICATIONS)
 
-    if (!requiresPermission) {
+    if (!needsPermissionGrant) {
         val builder = notificationBuilder(extras)
             .setContentTitle(title)
             .setContentText(text)
@@ -75,7 +78,13 @@ internal fun Context.pushNotification(
                 }
             }
         notificationManagerCompat.notify(id, builder.build())
-    }
+        Logger.debug("Push notification posted with id: $id", context = TAG)
 
-    return id
+        return id
+    } else {
+        Logger.debug("Push notification skipped: permission not granted", context = TAG)
+        return ID_NOTIFICATION_SKIPPED
+    }
 }
+
+private const val TAG = "Notifications"

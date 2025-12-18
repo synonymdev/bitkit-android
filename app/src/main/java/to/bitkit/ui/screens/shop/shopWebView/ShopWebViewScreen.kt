@@ -65,7 +65,7 @@ fun ShopWebViewScreen(
                         this.webViewClient = webViewClient
                         configureForBasicWebContent()
                         addJavascriptInterface(webViewInterface, "Android")
-                        loadUrl(Env.buildBitrefillUri(page = page))
+                        loadUrl(bitrefillUrlOf(page))
                         webView = this
                     }
                 },
@@ -95,10 +95,18 @@ private fun Preview() {
         ShopWebViewScreen(
             onClose = {},
             onBack = {},
-            onPaymentIntent = { uri ->
-            },
+            onPaymentIntent = {},
             page = "esims",
             title = "Gift Cards"
         )
     }
 }
+
+private fun bitrefillUrlOf(page: String) = "${Env.BITREFILL_URL}/$page/$BITREFILL_PARAMS"
+
+private const val PAYMENT_METHOD = "bitcoin" // Payment method "bitcoin" gives a unified invoice
+private const val THEME = "dark"
+private const val BITREFILL_PARAMS = "?ref=${Env.BITREFILL_REF}" +
+    "&paymentMethod=${PAYMENT_METHOD}" +
+    "&theme=$THEME" +
+    "&utm_source=${Env.BITREFILL_APP}"

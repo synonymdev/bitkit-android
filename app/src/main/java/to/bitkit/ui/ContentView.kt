@@ -65,6 +65,7 @@ import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
+import to.bitkit.ui.screens.settings.LdkDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
@@ -548,7 +549,7 @@ private fun RootNavHost(
                         navController.navigateToTransferFunding()
                         settingsViewModel.setHasSeenTransferIntro(true)
                     },
-                    onBackClick = {},
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsIntro> {
@@ -869,6 +870,9 @@ private fun NavGraphBuilder.settings(
     }
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.LdkDebug> {
+        LdkDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
@@ -1306,7 +1310,7 @@ private fun NavGraphBuilder.widgets(
                 settingsViewModel.setHasSeenWidgetsIntro(true)
                 navController.navigate(Routes.AddWidget)
             },
-            onBackClick = {},
+            onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.AddWidget> {
@@ -1750,6 +1754,9 @@ sealed interface Routes {
 
     @Serializable
     data object DevSettings : Routes
+
+    @Serializable
+    data object LdkDebug : Routes
 
     @Serializable
     data object FeeSettings : Routes

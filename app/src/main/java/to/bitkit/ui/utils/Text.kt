@@ -15,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
-import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.formatPlural
@@ -140,13 +139,8 @@ fun getBlockExplorerUrl(
     id: String,
     type: BlockExplorerType = BlockExplorerType.TX,
 ): String {
-    val service = "https://mempool.space"
-    val type = type.name.lowercase()
-
-    return when (Env.network) {
-        Network.TESTNET -> "$service/testnet/$type/$id"
-        else -> "$service/$type/$id"
-    }
+    val typePath = type.name.lowercase()
+    return "${Env.blockExplorerUrl}/$typePath/$id"
 }
 
 enum class BlockExplorerType { ADDRESS, TX }

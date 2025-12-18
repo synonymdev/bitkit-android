@@ -201,7 +201,7 @@ class BlocktankRepo @Inject constructor(
         description: String = Env.DEFAULT_INVOICE_MESSAGE,
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
         try {
-            if (coreService.checkGeoBlock().first) throw ServiceError.GeoBlocked
+            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
             val channelSizeSat = amountSats + lspBalance
@@ -230,7 +230,7 @@ class BlocktankRepo @Inject constructor(
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
         try {
-            if (coreService.checkGeoBlock().first) throw ServiceError.GeoBlocked
+            if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked
 
             val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
 

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -24,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
@@ -41,6 +41,7 @@ fun SettingsTextButtonRow(
     height: Dp = 52.dp,
     showDivider: Boolean = true,
     onClick: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Column {
         Column(
@@ -60,7 +61,7 @@ fun SettingsTextButtonRow(
                         tint = iconTint,
                         modifier = Modifier.size(32.dp),
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    HorizontalSpacer(10.dp)
                 }
                 Column(
                     verticalArrangement = Arrangement.Center,
@@ -74,7 +75,13 @@ fun SettingsTextButtonRow(
                         Caption(text = description, color = Colors.White64)
                     }
                 }
-                BodyM(text = value, color = Colors.White64)
+                if (value.isNotEmpty()) {
+                    BodyM(text = value, color = Colors.White64)
+                }
+                trailingContent?.run {
+                    HorizontalSpacer(10.dp)
+                    invoke()
+                }
             }
         }
         if (showDivider) {
@@ -114,6 +121,18 @@ private fun Preview() {
                     iconRes = R.drawable.ic_settings,
                     enabled = false,
                     onClick = {},
+                )
+                SettingsTextButtonRow(
+                    title = "With Trailing Content",
+                    value = "v1",
+                    trailingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_trash),
+                            contentDescription = null,
+                            tint = Colors.Red,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    },
                 )
             }
         }

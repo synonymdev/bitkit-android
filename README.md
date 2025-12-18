@@ -15,7 +15,13 @@ This repository contains a **new native Android app** which is **not ready for p
 
 ### Prerequisites
 
-#### 1. Download `google-services.json` to `app/` from FCM Console.
+#### 1. Firebase Configuration
+
+Download `google-services.json` from the Firebase Console for each build flavor:
+- **Dev/Testnet**: Place in `app/` (default location)
+- **Mainnet**: Place in `app/src/mainnet/google-services.json`
+
+> **Note**: Each flavor requires its own Firebase project configuration. The mainnet flavor will fail to build without its dedicated `google-services.json` file.
 
 #### 2. GitHub Packages setup
 
@@ -99,6 +105,17 @@ The build config supports building 3 different apps for the 3 bitcoin networks (
 - `dev` flavour = regtest
 - `mainnet` flavour = mainnet
 - `tnet` flavour = testnet
+
+### Build for Mainnet
+
+To build the mainnet flavor:
+
+```sh
+./gradlew assembleMainnetDebug   # debug build
+./gradlew assembleMainnetRelease # release build (requires signing config)
+```
+
+> **Important**: Ensure `app/src/mainnet/google-services.json` exists before building. See [Firebase Configuration](#1-firebase-configuration).
 
 ### Build for E2E Testing
 

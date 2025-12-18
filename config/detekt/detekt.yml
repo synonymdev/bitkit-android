@@ -44,10 +44,10 @@ console-reports:
 output-reports:
   active: true
   exclude:
-  # - 'TxtOutputReport'
+  - 'TxtOutputReport'
+  - 'MdOutputReport'
   # - 'XmlOutputReport'
   # - 'HtmlOutputReport'
-  # - 'MdOutputReport'
   # - 'SarifOutputReport'
 
 comments:
@@ -628,7 +628,7 @@ style:
   MagicNumber:
     active: true
     excludes: [ '**/test/**', '**/androidTest/**', '**/commonTest/**', '**/jvmTest/**', '**/androidUnitTest/**', '**/androidInstrumentedTest/**', '**/jsTest/**', '**/iosTest/**', '**/*.kts' ]
-    ignoreNumbers: [ '-1', '0', '0.25', '0.5', '1', '2', '3', '4', '5', '10', '25', '50', '100', '250', '500', '1000', '2500', '5000', '10000', '25000', '50000', '100000' ]
+    ignoreNumbers: [ '-1', '0', '0.25', '0.5', '1', '2', '3', '4', '5', '10', '20', '25', '30', '40', '50', '100', '250', '500', '1000', '2500', '5000', '10000', '25000', '50000', '100000' ]
     ignoreHashCodeFunction: true
     ignorePropertyDeclaration: true
     ignoreLocalVariableDeclaration: true

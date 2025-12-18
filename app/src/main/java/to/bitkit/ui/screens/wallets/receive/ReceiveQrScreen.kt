@@ -93,7 +93,7 @@ fun ReceiveQrScreen(
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val hasUsableChannels = walletState.channels.any { it.isUsable }
+    val hasUsableChannels = walletState.channels.any { it.isChannelReady }
 
     var showDetails by remember { mutableStateOf(false) }
 
@@ -159,6 +159,17 @@ fun ReceiveQrScreen(
             if (autoIndex != -1) {
                 lazyListState.animateScrollToItem(autoIndex)
                 selectedTab = ReceiveTab.AUTO
+            }
+        }
+    }
+
+    // Auto-switch to Spending tab when CJIT is not null
+    LaunchedEffect(cjitInvoice) {
+        if (cjitInvoice != null) {
+            val spendingIndex = visibleTabs.indexOf(ReceiveTab.SPENDING)
+            if (spendingIndex != -1) {
+                lazyListState.animateScrollToItem(spendingIndex)
+                selectedTab = ReceiveTab.SPENDING
             }
         }
     }

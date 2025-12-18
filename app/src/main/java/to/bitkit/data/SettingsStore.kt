@@ -117,7 +117,7 @@ data class SettingsData(
     val balanceWarningTimes: Int = 0,
     val coinSelectAuto: Boolean = true,
     val coinSelectPreference: CoinSelectionPreference = CoinSelectionPreference.BranchAndBound,
-    val electrumServer: String = Env.defaultElectrumServer,
+    val electrumServer: String = Env.electrumServerUrl,
     val rgsServerUrl: String? = Env.ldkRgsServerUrl,
 )
 
