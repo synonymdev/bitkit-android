@@ -63,3 +63,12 @@ fun Context.shareZipFile(uri: Uri) {
         Intent.createChooser(intent, this.getString(R.string.lightning__export_logs))
     )
 }
+
+fun Context.shareFile(uri: Uri, mimeType: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    startActivity(Intent.createChooser(intent, "Share file via"))
+}

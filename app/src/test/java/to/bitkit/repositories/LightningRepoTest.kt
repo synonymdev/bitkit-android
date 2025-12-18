@@ -81,9 +81,12 @@ class LightningRepoTest : BaseUnitTest() {
     private suspend fun startNodeForTesting() {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
         val result = sut.start()
         assertTrue(result.isSuccess)
     }
@@ -92,8 +95,11 @@ class LightningRepoTest : BaseUnitTest() {
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
 
         sut.lightningState.test {
             assertEquals(NodeLifecycleState.Initializing, awaitItem().nodeLifecycleState)
@@ -429,7 +435,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), eq(customServerUrl), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }

@@ -46,6 +46,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
@@ -170,13 +171,24 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
     ) = withContext(bgDispatcher) {
         return@withContext try {
-            lightningService.setup(walletIndex, customServerUrl, customRgsServerUrl)
+            val trustedPeers = getTrustedPeersFromBlocktank()
+            lightningService.setup(walletIndex, customServerUrl, customRgsServerUrl, trustedPeers)
             Result.success(Unit)
         } catch (e: Throwable) {
             Logger.error("Node setup error", e, context = TAG)
             Result.failure(e)
         }
     }
+
+    private suspend fun getTrustedPeersFromBlocktank(): List<PeerDetails>? = runCatching {
+        val info = coreService.blocktank.info(refresh = false)
+            ?: coreService.blocktank.info(refresh = true)
+        info?.nodes?.toPeerDetailsList()?.also {
+            Logger.info("Loaded ${it.size} trusted peers from blocktank", context = TAG)
+        }
+    }.onFailure {
+        Logger.warn("Failed to get trusted peers from blocktank", e = it, context = TAG)
+    }.getOrNull()
 
     @Suppress("LongMethod", "LongParameterList")
     suspend fun start(
@@ -988,6 +1000,29 @@ class LightningRepo @Inject constructor(
                     Logger.error("Routing fees estimation failed", it)
                 }
         }
+
+    // region debug
+    fun getNetworkGraphInfo() = lightningService.getNetworkGraphInfo()
+
+    suspend fun exportNetworkGraphToFile(outputDir: String): Result<java.io.File> =
+        executeWhenNodeRunning("exportNetworkGraphToFile") {
+            lightningService.exportNetworkGraphToFile(outputDir)
+        }
+
+    suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
+        Logger.info("Restarting LDK node", context = TAG)
+        stop().onFailure {
+            Logger.error("Failed to stop node during restart", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+        start(shouldRetry = false).onFailure {
+            Logger.error("Failed to start node during restart", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+        Logger.info("LDK node restarted successfully", context = TAG)
+        Result.success(Unit)
+    }
+    // endregion
 
     companion object {
         private const val TAG = "LightningRepo"
