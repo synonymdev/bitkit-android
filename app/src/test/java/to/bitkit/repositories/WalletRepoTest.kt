@@ -73,7 +73,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(false, false))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "", onchainAddress = ADDRESS)))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(MutableSharedFlow())
@@ -174,28 +174,6 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningRepo).newAddress()
-    }
-
-    @Test
-    fun `refreshBip21 should set receiveOnSpendingBalance false when shouldBlockLightning is true`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(true, true))
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
-
-        val result = sut.refreshBip21()
-
-        assertTrue(result.isSuccess)
-        assertEquals(false, sut.walletState.value.receiveOnSpendingBalance)
-    }
-
-    @Test
-    fun `refreshBip21 should set receiveOnSpendingBalance true when shouldBlockLightning is false`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(true, false))
-        whenever(lightningRepo.newAddress()).thenReturn(Result.success(ADDRESS_NEW))
-
-        val result = sut.refreshBip21()
-
-        assertTrue(result.isSuccess)
-        assertEquals(true, sut.walletState.value.receiveOnSpendingBalance)
     }
 
     @Test
@@ -334,28 +312,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `toggleReceiveOnSpendingBalance should toggle state`() = test {
-        val initialValue = sut.walletState.value.receiveOnSpendingBalance
-
-        sut.toggleReceiveOnSpendingBalance()
-
-        assertEquals(!initialValue, sut.walletState.value.receiveOnSpendingBalance)
-    }
-
-    @Test
-    fun `toggleReceiveOnSpendingBalance should return failure if shouldBlockLightning is true`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(true, true))
-
-        if (sut.walletState.value.receiveOnSpendingBalance) {
-            sut.toggleReceiveOnSpendingBalance()
-        }
-
-        val result = sut.toggleReceiveOnSpendingBalance()
-
-        assert(result.isFailure)
-    }
-
-    @Test
     fun `addTagToSelected should add tag and update lastUsedTags`() = test {
         // Set address in wallet state so paymentId() returns it
         sut.setOnchainAddress(ADDRESS)
@@ -429,19 +385,8 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `shouldRequestAdditionalLiquidity should return false when geoBlocked is true`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(true, false))
-        sut.toggleReceiveOnSpendingBalance() // Set to false (initial is true)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
     fun `shouldRequestAdditionalLiquidity should return false when geo status is true`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(true, false))
+        whenever(coreService.isGeoBlocked()).thenReturn(true)
 
         val result = sut.shouldRequestAdditionalLiquidity()
 
@@ -451,7 +396,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `shouldRequestAdditionalLiquidity should return true when amount exceeds inbound capacity`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(false, false))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         sut.updateBip21Invoice(amountSats = 1000uL)
 
@@ -463,7 +408,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `should not request additional liquidity for 0 channels`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(false, false))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         sut.updateBip21Invoice(amountSats = 1000uL)
 
@@ -475,7 +420,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `shouldRequestAdditionalLiquidity should return false when amount is less than inbound capacity`() = test {
-        whenever(coreService.checkGeoBlock()).thenReturn(Pair(false, false))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         sut.updateBip21Invoice(amountSats = 900uL)
 
