@@ -93,7 +93,7 @@ fun ReceiveQrScreen(
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val hasUsableChannels = walletState.channels.any { it.isUsable }
+    val hasUsableChannels = walletState.channels.any { it.isChannelReady }
 
     var showDetails by remember { mutableStateOf(false) }
 
