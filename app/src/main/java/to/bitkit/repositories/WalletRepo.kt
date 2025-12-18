@@ -121,9 +121,6 @@ class WalletRepo @Inject constructor(
             emptyList()
         }
 
-        _walletState.update {
-            it.copy(isGeoBlocked = coreService.isGeoBlocked())
-        }
         clearBip21State(clearTags = false)
         refreshAddressIfNeeded()
         updateBip21Invoice()
@@ -604,7 +601,6 @@ data class WalletState(
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
-    val isGeoBlocked: Boolean = false,
     val walletExists: Boolean = false,
 )
 
