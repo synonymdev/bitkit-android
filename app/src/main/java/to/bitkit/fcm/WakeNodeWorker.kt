@@ -70,6 +70,10 @@ class WakeNodeWorker @AssistedInject constructor(
         Logger.debug("notification type: $notificationType", context = TAG)
         Logger.debug("notification payload: $notificationPayload", context = TAG)
 
+        if (notificationType == null) {
+            Logger.warn("Notification type is null, proceeding with node wake", context = TAG)
+        }
+
         try {
             withPerformanceLogging {
                 lightningRepo.start(
