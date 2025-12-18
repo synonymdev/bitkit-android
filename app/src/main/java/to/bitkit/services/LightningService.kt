@@ -739,6 +739,7 @@ class LightningService @Inject constructor(
 /**
  * TODO remove, replace all usages with [FeeRate.fromSatPerVbUnchecked]
  * */
+@Deprecated("replace all usages with [FeeRate.fromSatPerVbUnchecked]")
 private fun convertVByteToKwu(satsPerVByte: UInt): FeeRate {
     // 1 vbyte = 4 weight units, so 1 sats/vbyte = 250 sats/kwu
     val satPerKwu = satsPerVByte.toULong() * 250u

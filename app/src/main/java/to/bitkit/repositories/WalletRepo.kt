@@ -121,9 +121,8 @@ class WalletRepo @Inject constructor(
             emptyList()
         }
 
-        val (_, shouldBlockLightningReceive) = coreService.checkGeoBlock()
         _walletState.update {
-            it.copy(receiveOnSpendingBalance = !shouldBlockLightningReceive)
+            it.copy(isGeoBlocked = coreService.isGeoBlocked())
         }
         clearBip21State(clearTags = false)
         refreshAddressIfNeeded()
@@ -429,16 +428,6 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun toggleReceiveOnSpendingBalance(): Result<Unit> = withContext(bgDispatcher) {
-        if (!_walletState.value.receiveOnSpendingBalance && coreService.checkGeoBlock().second) {
-            return@withContext Result.failure(ServiceError.GeoBlocked)
-        }
-
-        _walletState.update { it.copy(receiveOnSpendingBalance = !it.receiveOnSpendingBalance) }
-
-        return@withContext Result.success(Unit)
-    }
-
     // Payment ID management
     private suspend fun paymentHash(): String? = withContext(bgDispatcher) {
         val bolt11 = getBolt11()
@@ -553,7 +542,7 @@ class WalletRepo @Inject constructor(
             setBip21Description(description)
 
             val canReceive = lightningRepo.canReceive()
-            if (canReceive && _walletState.value.receiveOnSpendingBalance) {
+            if (canReceive) {
                 lightningRepo.createInvoice(amountSats, description).onSuccess {
                     setBolt11(it)
                 }
@@ -575,9 +564,7 @@ class WalletRepo @Inject constructor(
 
     suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
         return@withContext try {
-            if (!_walletState.value.receiveOnSpendingBalance) return@withContext Result.success(false)
-
-            if (coreService.checkGeoBlock().first) return@withContext Result.success(false)
+            if (coreService.isGeoBlocked()) return@withContext Result.success(false)
 
             val channels = lightningRepo.lightningState.value.channels
             if (channels.filterOpen().isEmpty()) return@withContext Result.success(false)
@@ -617,7 +604,7 @@ data class WalletState(
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
-    val receiveOnSpendingBalance: Boolean = true,
+    val isGeoBlocked: Boolean = false,
     val walletExists: Boolean = false,
 )
 

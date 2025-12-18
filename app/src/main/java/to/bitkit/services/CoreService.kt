@@ -135,7 +135,7 @@ class CoreService @Inject constructor(
     }
 
     @Suppress("KotlinConstantConditions")
-    private suspend fun isGeoBlocked(): Boolean {
+    suspend fun isGeoBlocked(): Boolean {
         if (!Env.isGeoblockingEnabled) {
             Logger.verbose("Geoblocking disabled via build config", context = "GeoCheck")
             return false
@@ -169,20 +169,6 @@ class CoreService @Inject constructor(
                 Logger.warn("Error. defaulting isGeoBlocked to false", context = "GeoCheck")
             }.getOrDefault(false)
         }
-    }
-
-    /**
-     * This method checks if the device is in a is geo blocked region and if lightning features should be blocked
-     * @return pair of `isGeoBlocked` to `shouldBlockLightningReceive`
-     * */
-    suspend fun checkGeoBlock(): Pair<Boolean, Boolean> {
-        val geoBlocked = isGeoBlocked()
-        val shouldBlockLightningReceive = when {
-            lightningService.hasExternalPeers() -> !lightningService.canReceive()
-            else -> geoBlocked
-        }
-
-        return Pair(geoBlocked, shouldBlockLightningReceive)
     }
 
     suspend fun wipeData(): Result<Unit> = ServiceQueue.CORE.background {
@@ -1182,6 +1168,7 @@ class ActivityService(
                 // a closed channel's funding UTXO
                 findClosedChannelForTransaction(txid, transactionDetails)
             }
+
             PaymentDirection.OUTBOUND -> {
                 // Check if this transaction is a channel open by checking if it's
                 // the funding transaction for an open channel

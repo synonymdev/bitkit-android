@@ -37,7 +37,6 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
-import org.lightningdevkit.ldknode.TransactionDetails
 import org.lightningdevkit.ldknode.Txid
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -283,9 +282,8 @@ class LightningRepo @Inject constructor(
     }
 
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
-        val (isGeoBlocked, shouldBlockLightning) = coreService.checkGeoBlock()
         _lightningState.update {
-            it.copy(isGeoBlocked = isGeoBlocked, shouldBlockLightningReceive = shouldBlockLightning)
+            it.copy(isGeoBlocked = coreService.isGeoBlocked())
         }
     }
 
@@ -355,7 +353,8 @@ class LightningRepo @Inject constructor(
     private fun handleLdkEvent(event: Event) {
         when (event) {
             is Event.ChannelPending,
-            is Event.ChannelReady -> scope.launch {
+            is Event.ChannelReady,
+            -> scope.launch {
                 refreshChannelCache()
             }
 
@@ -560,10 +559,6 @@ class LightningRepo @Inject constructor(
         expirySeconds: UInt = 86_400u,
     ): Result<String> = executeWhenNodeRunning("Create invoice") {
         updateGeoBlockState()
-        if (lightningState.value.shouldBlockLightningReceive) {
-            return@executeWhenNodeRunning Result.failure(ServiceError.GeoBlocked)
-        }
-
         val invoice = lightningService.receive(amountSats, description, expirySeconds)
         Result.success(invoice)
     }
@@ -1016,7 +1011,6 @@ data class LightningState(
     val channels: List<ChannelDetails> = emptyList(),
     val balances: BalanceDetails? = null,
     val isSyncingWallet: Boolean = false,
-    val shouldBlockLightningReceive: Boolean = false,
     val isGeoBlocked: Boolean = false,
 ) {
     fun block(): BestBlock? = nodeStatus?.currentBestBlock

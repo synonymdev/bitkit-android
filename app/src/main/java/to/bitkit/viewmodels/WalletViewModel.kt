@@ -85,7 +85,6 @@ class WalletViewModel @Inject constructor(
                         bip21AmountSats = state.bip21AmountSats,
                         bip21Description = state.bip21Description,
                         selectedTags = state.selectedTags,
-                        receiveOnSpendingBalance = state.receiveOnSpendingBalance,
                     )
                 }
                 if (state.walletExists && restoreState == RestoreState.InProgress.Wallet) {
@@ -306,7 +305,6 @@ data class MainUiState(
     val peers: List<PeerDetails> = emptyList(),
     val channels: List<ChannelDetails> = emptyList(),
     val isRefreshing: Boolean = false,
-    val receiveOnSpendingBalance: Boolean = true,
     val bip21AmountSats: ULong? = null,
     val bip21Description: String = "",
     val selectedTags: List<String> = listOf(),
