@@ -174,7 +174,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
-- PREFER to use `it` instead of explicit parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
+- PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
@@ -193,7 +193,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - ALWAYS list 3 suggested commit messages after implementation work
-- NEVER use `wheneverBlocking` when in an unit test where you're using expression body and already wrapping the test with a `= test {}` lambda.
+- NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
+- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking { }`
 - ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
 - ALWAYS use services to wrap RUST code exposed via bindings
 - ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice-versa for downstream
@@ -201,7 +202,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
-- PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value}`
+- PREFER to use one-liners with `run { }` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 
 ### Architecture Guidelines
 
