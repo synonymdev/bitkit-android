@@ -163,6 +163,17 @@ fun ReceiveQrScreen(
         }
     }
 
+    // Auto-switch to Spending tab when CJIT is not null
+    LaunchedEffect(cjitInvoice) {
+        if (cjitInvoice != null) {
+            val spendingIndex = visibleTabs.indexOf(ReceiveTab.SPENDING)
+            if (spendingIndex != -1) {
+                lazyListState.animateScrollToItem(spendingIndex)
+                selectedTab = ReceiveTab.SPENDING
+            }
+        }
+    }
+
     val showingCjitOnboarding = remember(walletState, cjitInvoice, hasUsableChannels) {
         !hasUsableChannels &&
             walletState.nodeLifecycleState.isRunning() &&
