@@ -41,6 +41,7 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -88,6 +89,7 @@ private fun LdkDebugContent(
     onRestartNode: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showDeleteAllConfirmation by remember { mutableStateOf(false) }
 
     ScreenColumn {
         AppTopBar(
@@ -202,8 +204,8 @@ private fun LdkDebugContent(
             SettingsTextButtonRow(
                 title = "Delete All",
                 iconRes = R.drawable.ic_trash,
-                enabled = !uiState.isLoading,
-                onClick = onDeleteAllVssKeys,
+                enabled = !uiState.isLoading && uiState.vssKeys.isNotEmpty(),
+                onClick = { showDeleteAllConfirmation = true },
             )
 
             SectionHeader("NODE")
@@ -216,6 +218,19 @@ private fun LdkDebugContent(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    if (showDeleteAllConfirmation) {
+        AppAlertDialog(
+            title = "Delete All VSS Keys?",
+            text = "This will permanently delete all ${uiState.vssKeys.size} VSS key(s). This action cannot be undone.",
+            confirmText = "Delete All",
+            onConfirm = {
+                showDeleteAllConfirmation = false
+                onDeleteAllVssKeys()
+            },
+            onDismiss = { showDeleteAllConfirmation = false },
+        )
     }
 }
 

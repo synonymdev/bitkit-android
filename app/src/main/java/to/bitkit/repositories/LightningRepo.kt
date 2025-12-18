@@ -278,7 +278,7 @@ class LightningRepo @Inject constructor(
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
-        _eventHandlers.forEach { it.invoke(event) }
+        _eventHandlers.toList().forEach { it.invoke(event) }
         _nodeEvents.emit(event)
     }
 

@@ -101,6 +101,8 @@ class LightningService @Inject constructor(
 
         trustedPeers?.takeIf { it.isNotEmpty() }?.let {
             this.trustedPeers = it
+        } ?: run {
+            Logger.info("Using fallback trusted peers from Env (${Env.trustedLnPeers.size})", context = TAG)
         }
         val trustedPeerNodeIds = this.trustedPeers.map { it.nodeId }
 
