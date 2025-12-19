@@ -8,6 +8,7 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
@@ -241,6 +242,15 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun deliver() {
+        // Send notification first
+        bestAttemptContent?.run {
+            appContext.pushNotification(title, body)
+            Logger.info("Delivered notification", context = TAG)
+        }
+
+        // Delay briefly to allow app to come to foreground if user clicked notification
+        delay(500)
+
         // Only stop node if app is not in foreground
         // LightningNodeService will keep node running in background when notifications are enabled
         if (App.currentActivity?.value == null) {
@@ -248,11 +258,6 @@ class WakeNodeWorker @AssistedInject constructor(
             lightningRepo.stop()
         } else {
             Logger.debug("App in foreground, keeping node running", context = TAG)
-        }
-
-        bestAttemptContent?.run {
-            appContext.pushNotification(title, body)
-            Logger.info("Delivered notification", context = TAG)
         }
 
         deliverSignal.complete(Unit)
