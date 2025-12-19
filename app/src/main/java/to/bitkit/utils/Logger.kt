@@ -306,13 +306,13 @@ private fun formatLog(level: LogLevel, msg: String?, context: String, path: Stri
     val timestamp = utcDateFormatterOf(DatePattern.LOG_LINE).format(Date())
     val message = msg?.trim().orEmpty()
     val contextString = if (context.isNotEmpty()) " - $context" else ""
+    val location = "[$path:$line]"
     return String.format(
         Locale.US,
-        "%s %-7s [%s:%d] %s%s",
+        "%s %-7s %-36s %s%s",
         timestamp,
         level.name,
-        path,
-        line,
+        location,
         message,
         contextString,
     )
