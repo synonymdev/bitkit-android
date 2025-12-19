@@ -1,5 +1,6 @@
 package to.bitkit.usecases
 
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -33,6 +34,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
+    private val firebaseMessaging = mock<FirebaseMessaging>()
 
     private lateinit var sut: WipeWalletUseCase
 
@@ -56,6 +58,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
             lightningRepo = lightningRepo,
+            firebaseMessaging = firebaseMessaging,
         )
     }
 
