@@ -40,6 +40,7 @@ import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.withPerformanceLogging
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LongParameterList")
 @HiltWorker
@@ -249,7 +250,7 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         // Delay briefly to allow app to come to foreground if user clicked notification
-        delay(500)
+        delay(1.seconds)
 
         // Only stop node if app is not in foreground
         // LightningNodeService will keep node running in background when notifications are enabled
