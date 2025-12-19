@@ -37,7 +37,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
-import to.bitkit.utils.withPerformanceLogging
+import to.bitkit.utils.measured
 import kotlin.time.Duration.Companion.minutes
 
 @Suppress("LongParameterList")
@@ -74,7 +74,7 @@ class WakeNodeWorker @AssistedInject constructor(
         Logger.debug("${this::class.simpleName} notification payload: $notificationPayload")
 
         try {
-            withPerformanceLogging {
+            measured(TAG) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,
@@ -251,5 +251,9 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         deliverSignal.complete(Unit)
+    }
+
+    companion object {
+        private const val TAG = "WakeNodeWorker"
     }
 }

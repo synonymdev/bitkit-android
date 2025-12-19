@@ -298,6 +298,27 @@ class LightningService @Inject constructor(
                     Logger.error("Peer connect error: $peer", LdkError(e))
                 }
             }
+
+            verifyTrustedPeersOrFallback(node)
+        }
+    }
+
+    private fun verifyTrustedPeersOrFallback(node: Node) {
+        val connectedPeerIds = node.listPeers().map { it.nodeId }.toSet()
+        val trustedConnected = trustedPeers.count { it.nodeId in connectedPeerIds }
+
+        if (trustedConnected == 0 && trustedPeers.isNotEmpty()) {
+            Logger.warn("No trusted peers connected, falling back to Env peers", context = TAG)
+            for (peer in Env.trustedLnPeers) {
+                try {
+                    node.connect(peer.nodeId, peer.address, persist = true)
+                    Logger.info("Connected to fallback peer: $peer")
+                } catch (e: NodeException) {
+                    Logger.error("Fallback peer connect error: $peer", LdkError(e))
+                }
+            }
+        } else {
+            Logger.info("Connected to $trustedConnected/${trustedPeers.size} trusted peers", context = TAG)
         }
     }
 

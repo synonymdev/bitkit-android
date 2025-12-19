@@ -6,6 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import org.lightningdevkit.ldknode.LogRecord
 import org.lightningdevkit.ldknode.LogWriter
@@ -98,13 +102,13 @@ class AppLogger(
         delegate?.verbose(msg, e, context, file, line)
     }
 
-    fun performance(
+    fun perf(
         msg: String?,
         context: String = "",
         file: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        delegate?.performance(msg, context, file, line)
+        delegate?.perf(msg, context, file, line)
     }
 }
 
@@ -175,7 +179,7 @@ class LoggerImpl(
         saver.save(message)
     }
 
-    fun performance(
+    fun perf(
         msg: String?,
         context: String = "",
         path: String = getCallerPath(),
@@ -302,13 +306,13 @@ private fun formatLog(level: LogLevel, msg: String?, context: String, path: Stri
     val timestamp = utcDateFormatterOf(DatePattern.LOG_LINE).format(Date())
     val message = msg?.trim().orEmpty()
     val contextString = if (context.isNotEmpty()) " - $context" else ""
+    val location = "[$path:$line]"
     return String.format(
         Locale.US,
-        "%s %-7s [%s:%d] %s%s",
+        "%s %-7s %-36s %s%s",
         timestamp,
         level.name,
-        path,
-        line,
+        location,
         message,
         contextString,
     )
@@ -336,8 +340,19 @@ val jsonLogger = Json(json) {
     prettyPrint = false
 }
 
-inline fun <reified T> jsonLogOf(value: T): String = with(jsonLogger) {
-    encodeToString(serializersModule.serializer(), value)
+inline fun <reified T : Any> jsonLogOf(value: T): String {
+    val jsonElement = jsonLogger.encodeToJsonElement(jsonLogger.serializersModule.serializer<T>(), value)
+    if (jsonElement !is JsonObject || "type" !in jsonElement) return jsonElement.toString()
+
+    return buildJsonObject {
+        jsonElement.forEach { (key, elem) ->
+            if (key == "type") {
+                put("type", value::class.simpleName ?: "Unknown")
+            } else {
+                put(key, elem)
+            }
+        }
+    }.toString()
 }
 
 fun errLogOf(e: Throwable): String = "[${e::class.simpleName}='${e.message}']"
