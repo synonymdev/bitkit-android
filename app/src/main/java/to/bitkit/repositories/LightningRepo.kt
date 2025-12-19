@@ -127,7 +127,7 @@ class LightningRepo @Inject constructor(
         if (!_lightningState.value.nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
                 Exception(
-                    "Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting"
+                    "Cannot execute '$operationName': Node is ${_lightningState.value.nodeLifecycleState} and not starting"
                 )
             )
         }
@@ -138,9 +138,9 @@ class LightningRepo @Inject constructor(
             }
 
             // Otherwise, wait for it to transition to running state
-            Logger.verbose("Waiting for node runs to execute $operationName", context = TAG)
+            Logger.verbose("Waiting for node runs to execute '$operationName'", context = TAG)
             _lightningState.first { it.nodeLifecycleState.isRunning() }
-            Logger.debug("Operation executed: $operationName", context = TAG)
+            Logger.debug("Operation executed: '$operationName'", context = TAG)
             true
         } ?: false
 
@@ -159,7 +159,7 @@ class LightningRepo @Inject constructor(
             // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
             throw e
         } catch (e: Throwable) {
-            Logger.error("$operationName error", e, context = TAG)
+            Logger.error("Error executing '$operationName'", e, context = TAG)
             Result.failure(e)
         }
     }
@@ -312,7 +312,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    suspend fun sync(): Result<Unit> = executeWhenNodeRunning("Sync") {
+    suspend fun sync(): Result<Unit> = executeWhenNodeRunning("sync") {
         // If sync is in progress, mark pending and skip
         if (!syncMutex.tryLock()) {
             syncPending.set(true)
@@ -531,7 +531,7 @@ class LightningRepo @Inject constructor(
         return@withContext Result.success(Unit)
     }
 
-    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("Connect to trusted peers") {
+    suspend fun connectToTrustedPeers(): Result<Unit> = executeWhenNodeRunning("connectToTrustedPeers") {
         lightningService.connectToTrustedPeers()
         Result.success(Unit)
     }
@@ -544,13 +544,13 @@ class LightningRepo @Inject constructor(
         Result.success(Unit)
     }
 
-    suspend fun disconnectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("Disconnect peer") {
+    suspend fun disconnectPeer(peer: PeerDetails): Result<Unit> = executeWhenNodeRunning("disconnectPeer") {
         lightningService.disconnectPeer(peer)
         syncState()
         Result.success(Unit)
     }
 
-    suspend fun newAddress(): Result<String> = executeWhenNodeRunning("New address") {
+    suspend fun newAddress(): Result<String> = executeWhenNodeRunning("newAddress") {
         val address = lightningService.newAddress()
         Result.success(address)
     }
@@ -559,7 +559,7 @@ class LightningRepo @Inject constructor(
         amountSats: ULong? = null,
         description: String,
         expirySeconds: UInt = 86_400u,
-    ): Result<String> = executeWhenNodeRunning("Create invoice") {
+    ): Result<String> = executeWhenNodeRunning("createInvoice") {
         updateGeoBlockState()
         val invoice = lightningService.receive(amountSats, description, expirySeconds)
         Result.success(invoice)
@@ -631,12 +631,14 @@ class LightningRepo @Inject constructor(
         Logger.error("Error requesting lnurl auth, k1: $k1, callback: $callback, domain: $domain", it)
     }
 
-    suspend fun payInvoice(bolt11: String, sats: ULong? = null): Result<PaymentId> =
-        executeWhenNodeRunning("Pay invoice") {
-            val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
-            syncState()
-            Result.success(paymentId)
-        }
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong? = null,
+    ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
+        val paymentId = lightningService.send(bolt11 = bolt11, sats = sats)
+        syncState()
+        Result.success(paymentId)
+    }
 
     @Suppress("LongParameterList")
     suspend fun sendOnChain(
@@ -649,46 +651,45 @@ class LightningRepo @Inject constructor(
         channelId: String? = null,
         isMaxAmount: Boolean = false,
         tags: List<String> = emptyList(),
-    ): Result<Txid> =
-        executeWhenNodeRunning("sendOnChain") {
-            require(address.isNotEmpty()) { "Send address cannot be empty" }
+    ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
+        require(address.isNotEmpty()) { "Send address cannot be empty" }
 
-            val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
-            val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
+        val transactionSpeed = speed ?: settingsStore.data.first().defaultTransactionSpeed
+        val satsPerVByte = getFeeRateForSpeed(transactionSpeed, feeRates).getOrThrow().toUInt()
 
-            // if utxos are manually specified, use them, otherwise run auto coin select if enabled
-            val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
-                sats = sats,
-                satsPerVByte = satsPerVByte,
-            )
+        // if utxos are manually specified, use them, otherwise run auto coin select if enabled
+        val finalUtxosToSpend = utxosToSpend ?: determineUtxosToSpend(
+            sats = sats,
+            satsPerVByte = satsPerVByte,
+        )
 
-            Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
+        Logger.debug("UTXOs selected to spend: $finalUtxosToSpend", context = TAG)
 
-            val txId = lightningService.send(
-                address = address,
-                sats = sats,
-                satsPerVByte = satsPerVByte,
-                utxosToSpend = finalUtxosToSpend,
-                isMaxAmount = isMaxAmount
-            )
+        val txId = lightningService.send(
+            address = address,
+            sats = sats,
+            satsPerVByte = satsPerVByte,
+            utxosToSpend = finalUtxosToSpend,
+            isMaxAmount = isMaxAmount
+        )
 
-            val preActivityMetadata = PreActivityMetadata(
-                paymentId = txId,
-                createdAt = nowTimestamp().toEpochMilli().toULong(),
-                tags = tags,
-                paymentHash = null,
-                txId = txId,
-                address = address,
-                isReceive = false,
-                feeRate = satsPerVByte.toULong(),
-                isTransfer = isTransfer,
-                channelId = channelId ?: "",
-            )
-            preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
+        val preActivityMetadata = PreActivityMetadata(
+            paymentId = txId,
+            createdAt = nowTimestamp().toEpochMilli().toULong(),
+            tags = tags,
+            paymentHash = null,
+            txId = txId,
+            address = address,
+            isReceive = false,
+            feeRate = satsPerVByte.toULong(),
+            isTransfer = isTransfer,
+            channelId = channelId ?: "",
+        )
+        preActivityMetadataRepo.addPreActivityMetadata(preActivityMetadata)
 
-            syncState()
-            Result.success(txId)
-        }
+        syncState()
+        Result.success(txId)
+    }
 
     suspend fun determineUtxosToSpend(
         sats: ULong,
@@ -731,7 +732,7 @@ class LightningRepo @Inject constructor(
         Result.success(payments)
     }
 
-    suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("Get address balance") {
+    suspend fun getAddressBalance(address: String): Result<ULong> = executeWhenNodeRunning("getAddressBalance") {
         runCatching {
             lightningService.getAddressBalance(address)
         }
@@ -787,7 +788,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun calculateCpfpFeeRate(
         parentTxId: Txid,
-    ): Result<ULong> = executeWhenNodeRunning("Calculate CPFP fee rate") {
+    ): Result<ULong> = executeWhenNodeRunning("calculateCpfpFeeRate") {
         Result.success(lightningService.calculateCpfpFeeRate(parentTxid = parentTxId).toSatPerVbCeil())
     }
 
@@ -796,7 +797,7 @@ class LightningRepo @Inject constructor(
         channelAmountSats: ULong,
         pushToCounterpartySats: ULong? = null,
         channelConfig: ChannelConfig? = null,
-    ): Result<OpenChannelResult> = executeWhenNodeRunning("Open channel") {
+    ): Result<OpenChannelResult> = executeWhenNodeRunning("openChannel") {
         val result = lightningService.openChannel(peer, channelAmountSats, pushToCounterpartySats, channelConfig)
         syncState()
         result
@@ -931,25 +932,19 @@ class LightningRepo @Inject constructor(
         try {
             if (originalTxId.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "originalTxId is null or empty: $originalTxId"
-                    )
+                    IllegalArgumentException("originalTxId is null or empty: $originalTxId")
                 )
             }
 
             if (destinationAddress.isBlank()) {
                 return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "destinationAddress is null or empty: $destinationAddress"
-                    )
+                    IllegalArgumentException("destinationAddress is null or empty: $destinationAddress")
                 )
             }
 
             if (satsPerVByte <= 0u) {
                 return@executeWhenNodeRunning Result.failure(
-                    IllegalArgumentException(
-                        "satsPerVByte invalid: $satsPerVByte"
-                    )
+                    IllegalArgumentException("satsPerVByte invalid: $satsPerVByte")
                 )
             }
 
