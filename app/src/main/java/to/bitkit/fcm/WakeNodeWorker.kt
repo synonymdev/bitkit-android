@@ -38,7 +38,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
-import to.bitkit.utils.withPerformanceLogging
+import to.bitkit.utils.measured
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -77,7 +77,7 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         try {
-            withPerformanceLogging {
+            measured(TAG) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,

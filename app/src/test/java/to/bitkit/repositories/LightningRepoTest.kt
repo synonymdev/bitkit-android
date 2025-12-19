@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -25,7 +26,6 @@ import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -51,23 +51,21 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LightningRepoTest : BaseUnitTest() {
-
     private lateinit var sut: LightningRepo
 
-    private val lightningService: LightningService = mock()
-    private val settingsStore: SettingsStore = mock()
-    private val coreService: CoreService = mock()
-    private val lspNotificationsService: LspNotificationsService = mock()
-    private val firebaseMessaging: FirebaseMessaging = mock()
-    private val keychain: Keychain = mock()
-    private val cacheStore: CacheStore = mock()
-    private val preActivityMetadataRepo: PreActivityMetadataRepo = mock()
-
-    private val lnurlService: LnurlService = mock()
+    private val lightningService = mock<LightningService>()
+    private val settingsStore = mock<SettingsStore>()
+    private val coreService = mock<CoreService>()
+    private val lspNotificationsService = mock<LspNotificationsService>()
+    private val firebaseMessaging = mock<FirebaseMessaging>()
+    private val keychain = mock<Keychain>()
+    private val cacheStore = mock<CacheStore>()
+    private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
+    private val lnurlService = mock<LnurlService>()
 
     @Before
-    fun setUp() {
-        wheneverBlocking { coreService.isGeoBlocked() }.thenReturn(false)
+    fun setUp() = runBlocking {
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
         sut = LightningRepo(
             bgDispatcher = testDispatcher,
             lightningService = lightningService,
@@ -381,9 +379,7 @@ class LightningRepoTest : BaseUnitTest() {
         )
         whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
 
-        wheneverBlocking {
-            preActivityMetadataRepo.addPreActivityMetadata(any())
-        }.thenReturn(Result.success(Unit))
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
 
         whenever(
             lightningService.send(
@@ -603,13 +599,13 @@ class LightningRepoTest : BaseUnitTest() {
             ILspNode(
                 alias = "LSP1",
                 pubkey = "node1pubkey",
-                connectionStrings = listOf("node1.example.com:9735"),
+                connectionStrings = listOf("node1pubkey@node1.example.com:9735"),
                 readonly = null,
             ),
             ILspNode(
                 alias = "LSP2",
                 pubkey = "node2pubkey",
-                connectionStrings = listOf("node2.example.com:9735"),
+                connectionStrings = listOf("node2pubkey@node2.example.com:9735"),
                 readonly = null,
             ),
         )
@@ -625,8 +621,8 @@ class LightningRepoTest : BaseUnitTest() {
             anyOrNull(),
             argThat { peers ->
                 peers?.size == 2 &&
-                    peers.any { it.nodeId == "node1pubkey" } &&
-                    peers.any { it.nodeId == "node2pubkey" }
+                    peers.any { it.nodeId == "node1pubkey" && it.address == "node1.example.com:9735" } &&
+                    peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
             }
         )
     }
