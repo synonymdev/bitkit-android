@@ -29,7 +29,7 @@ class WipeWalletUseCase @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val lightningRepo: LightningRepo,
     private val firebaseMessaging: FirebaseMessaging,
-    ) {
+) {
     @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(
         walletIndex: Int = 0,
