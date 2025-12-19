@@ -38,7 +38,16 @@ fun PeerDetails.Companion.from(nodeId: String, host: String, port: String) = Pee
 )
 
 fun ILspNode.toPeerDetails(): PeerDetails? {
-    val address = connectionStrings.firstOrNull() ?: return null
+    val connectionString = connectionStrings.firstOrNull() ?: return null
+
+    // Connection string can be either "host:port" or "nodeId@host:port"
+    // Extract just the "host:port" part
+    val address = if (connectionString.contains("@")) {
+        connectionString.substringAfter("@")
+    } else {
+        connectionString
+    }
+
     return PeerDetails(
         nodeId = pubkey,
         address = address,
