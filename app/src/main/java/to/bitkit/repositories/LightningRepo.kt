@@ -869,6 +869,8 @@ class LightningRepo @Inject constructor(
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
 
+            require(token.isNotEmpty()) { "FCM token is empty or null" }
+
             if (cachedToken == token) {
                 Logger.debug("Skipped registering for notifications, current device token already registered")
                 return@executeWhenNodeRunning Result.success(Unit)

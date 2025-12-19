@@ -8,6 +8,7 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
@@ -15,6 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
+import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -34,26 +36,23 @@ import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.services.CoreService
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("LongParameterList")
 @HiltWorker
 class WakeNodeWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted private val workerParams: WorkerParameters,
-    private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
 ) : CoroutineWorker(appContext, workerParams) {
-    private val self = this
-
     private var bestAttemptContent: NotificationDetails? = null
 
     private var notificationType: BlocktankNotificationType? = null
@@ -63,15 +62,19 @@ class WakeNodeWorker @AssistedInject constructor(
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
-        Logger.debug("Node wakeup from notification…")
+        Logger.debug("Node wakeup from notification…", context = TAG)
 
         notificationType = workerParams.inputData.getString("type")?.let { BlocktankNotificationType.valueOf(it) }
         notificationPayload = workerParams.inputData.getString("payload")?.let {
             runCatching { json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
 
-        Logger.debug("${this::class.simpleName} notification type: $notificationType")
-        Logger.debug("${this::class.simpleName} notification payload: $notificationPayload")
+        Logger.debug("notification type: $notificationType", context = TAG)
+        Logger.debug("notification payload: $notificationPayload", context = TAG)
+
+        if (notificationType == null) {
+            Logger.warn("Notification type is null, proceeding with node wake", context = TAG)
+        }
 
         try {
             measured(TAG) {
@@ -80,25 +83,22 @@ class WakeNodeWorker @AssistedInject constructor(
                     timeout = timeout,
                     eventHandler = { event -> handleLdkEvent(event) }
                 )
-                lightningRepo.connectToTrustedPeers()
 
                 // Once node is started, handle the manual channel opening if needed
-                if (self.notificationType == orderPaymentConfirmed) {
+                if (notificationType == orderPaymentConfirmed) {
                     val orderId = (notificationPayload?.get("orderId") as? JsonPrimitive)?.contentOrNull
 
                     if (orderId == null) {
-                        Logger.error("Missing orderId")
+                        Logger.error("Missing orderId", context = TAG)
                     } else {
-                        try {
-                            Logger.info("Open channel request for order $orderId")
-                            coreService.blocktank.open(orderId = orderId)
-                        } catch (e: Exception) {
-                            Logger.error("failed to open channel", e)
-                            self.bestAttemptContent = NotificationDetails(
+                        Logger.info("Open channel request for order $orderId", context = TAG)
+                        blocktankRepo.openChannel(orderId).onFailure { e ->
+                            Logger.error("Failed to open channel", e, context = TAG)
+                            bestAttemptContent = NotificationDetails(
                                 title = appContext.getString(R.string.notification_channel_open_failed_title),
                                 body = e.message ?: appContext.getString(R.string.notification_unknown_error),
                             )
-                            self.deliver()
+                            deliver()
                         }
                     }
                 }
@@ -108,12 +108,12 @@ class WakeNodeWorker @AssistedInject constructor(
         } catch (e: Exception) {
             val reason = e.message ?: appContext.getString(R.string.notification_unknown_error)
 
-            self.bestAttemptContent = NotificationDetails(
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_lightning_error_title),
                 body = reason,
             )
-            Logger.error("Lightning error", e)
-            self.deliver()
+            Logger.error("Lightning error", e, context = TAG)
+            deliver()
 
             return Result.failure(workDataOf("Reason" to reason))
         }
@@ -130,7 +130,7 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.PaymentReceived -> onPaymentReceived(event, showDetails, hiddenBody)
 
             is Event.ChannelPending -> {
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification_channel_opened_title),
                     body = appContext.getString(R.string.notification_channel_pending_body),
                 )
@@ -141,13 +141,13 @@ class WakeNodeWorker @AssistedInject constructor(
             is Event.ChannelClosed -> onChannelClosed(event)
 
             is Event.PaymentFailed -> {
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = appContext.getString(R.string.notification_payment_failed_title),
                     body = "⚡ ${event.reason}",
                 )
 
-                if (self.notificationType == wakeToTimeout) {
-                    self.deliver()
+                if (notificationType == wakeToTimeout) {
+                    deliver()
                 }
             }
 
@@ -156,7 +156,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private suspend fun onChannelClosed(event: Event.ChannelClosed) {
-        self.bestAttemptContent = when (self.notificationType) {
+        bestAttemptContent = when (notificationType) {
             mutualClose -> NotificationDetails(
                 title = appContext.getString(R.string.notification_channel_closed_title),
                 body = appContext.getString(R.string.notification_channel_closed_mutual_body),
@@ -173,7 +173,7 @@ class WakeNodeWorker @AssistedInject constructor(
             )
         }
 
-        self.deliver()
+        deliver()
     }
 
     private suspend fun onPaymentReceived(
@@ -196,8 +196,8 @@ class WakeNodeWorker @AssistedInject constructor(
             title = appContext.getString(R.string.notification_received_title),
             body = content,
         )
-        if (self.notificationType == incomingHtlc) {
-            self.deliver()
+        if (notificationType == incomingHtlc) {
+            deliver()
         }
     }
 
@@ -207,8 +207,8 @@ class WakeNodeWorker @AssistedInject constructor(
         hiddenBody: String,
     ) {
         val viaNewChannel = appContext.getString(R.string.notification_via_new_channel_body)
-        if (self.notificationType == cjitPaymentArrived) {
-            self.bestAttemptContent = NotificationDetails(
+        if (notificationType == cjitPaymentArrived) {
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_received_title),
                 body = viaNewChannel,
             )
@@ -216,7 +216,7 @@ class WakeNodeWorker @AssistedInject constructor(
             lightningRepo.getChannels()?.find { it.channelId == event.channelId }?.let { channel ->
                 val sats = channel.amountOnClose
                 val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
-                self.bestAttemptContent = NotificationDetails(
+                bestAttemptContent = NotificationDetails(
                     title = content,
                     body = viaNewChannel,
                 )
@@ -233,21 +233,32 @@ class WakeNodeWorker @AssistedInject constructor(
                     activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
                 }
             }
-        } else if (self.notificationType == orderPaymentConfirmed) {
-            self.bestAttemptContent = NotificationDetails(
+        } else if (notificationType == orderPaymentConfirmed) {
+            bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification_channel_opened_title),
                 body = appContext.getString(R.string.notification_channel_ready_body),
             )
         }
-        self.deliver()
+        deliver()
     }
 
     private suspend fun deliver() {
-        lightningRepo.stop()
-
+        // Send notification first
         bestAttemptContent?.run {
             appContext.pushNotification(title, body)
-            Logger.info("Delivered notification")
+            Logger.info("Delivered notification", context = TAG)
+        }
+
+        // Delay briefly to allow app to come to foreground if user clicked notification
+        delay(1.seconds)
+
+        // Only stop node if app is not in foreground
+        // LightningNodeService will keep node running in background when notifications are enabled
+        if (App.currentActivity?.value == null) {
+            Logger.debug("App in background, stopping node after notification delivery", context = TAG)
+            lightningRepo.stop()
+        } else {
+            Logger.debug("App in foreground, keeping node running", context = TAG)
         }
 
         deliverSignal.complete(Unit)
