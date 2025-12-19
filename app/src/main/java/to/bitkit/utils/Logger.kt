@@ -102,13 +102,13 @@ class AppLogger(
         delegate?.verbose(msg, e, context, file, line)
     }
 
-    fun performance(
+    fun perf(
         msg: String?,
         context: String = "",
         file: String = getCallerPath(),
         line: Int = getCallerLine(),
     ) {
-        delegate?.performance(msg, context, file, line)
+        delegate?.perf(msg, context, file, line)
     }
 }
 
@@ -179,7 +179,7 @@ class LoggerImpl(
         saver.save(message)
     }
 
-    fun performance(
+    fun perf(
         msg: String?,
         context: String = "",
         path: String = getCallerPath(),

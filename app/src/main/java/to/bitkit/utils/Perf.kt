@@ -1,34 +1,26 @@
 package to.bitkit.utils
 
-import java.time.Instant
-import kotlin.system.measureTimeMillis
+import kotlin.time.Duration
+import kotlin.time.measureTime
+
+fun Duration.formatted(): String = toComponents { hours, minutes, seconds, nanoseconds ->
+    val ms = nanoseconds / 1_000_000
+    buildString {
+        if (hours > 0) append("${hours}h ")
+        if (minutes > 0) append("${minutes}m ")
+        if (seconds > 0) append("${seconds}s ")
+        if (ms > 0 || isEmpty()) append("${ms}ms")
+    }.trim()
+}
 
 internal inline fun <T> measured(
     label: String,
     block: () -> T,
 ): T {
     var result: T
-
-    val elapsedMs = measureTimeMillis {
+    val elapsed = measureTime {
         result = block()
     }
-
-    Logger.debug("$label took ${elapsedMs}ms")
-
-    return result
-}
-
-internal inline fun <T> withPerformanceLogging(block: () -> T): T {
-    val startTime = System.currentTimeMillis()
-    val startTimestamp = Instant.ofEpochMilli(startTime)
-    Logger.performance("Start Time: $startTimestamp")
-
-    val result: T = block()
-
-    val endTime = System.currentTimeMillis()
-    val endTimestamp = Instant.ofEpochMilli(endTime)
-    val duration = (endTime - startTime) / 1000.0
-    Logger.performance("End Time: $endTimestamp, Duration: $duration seconds")
-
+    Logger.perf("$label took ${elapsed.formatted()}")
     return result
 }
