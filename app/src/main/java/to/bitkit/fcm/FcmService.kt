@@ -50,13 +50,13 @@ class FcmService : FirebaseMessagingService() {
         Logger.debug("New FCM at: ${Date(message.sentTime)}", context = TAG)
 
         message.notification?.run {
-            Logger.debug("FCM title: $title")
-            Logger.debug("FCM body: $body")
+            Logger.debug("FCM title: $title", context = TAG)
+            Logger.debug("FCM body: $body", context = TAG)
             sendNotification(title, body, Bundle(message.data.toPersistableBundle()))
         }
 
         if (message.data.isNotEmpty()) {
-            Logger.debug("FCM data: ${message.data}")
+            Logger.debug("FCM data: ${message.data}", context = TAG)
 
             val shouldSchedule = runCatching {
                 val isEncryptedNotification = message.data.tryAs<EncryptedNotification> {
