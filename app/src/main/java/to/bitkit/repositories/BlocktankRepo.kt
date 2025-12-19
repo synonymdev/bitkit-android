@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.CacheStore
@@ -53,7 +52,6 @@ import javax.inject.Named
 import javax.inject.Singleton
 import kotlin.math.ceil
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -284,11 +282,6 @@ class BlocktankRepo @Inject constructor(
     suspend fun openChannel(orderId: String): Result<IBtOrder> = withContext(bgDispatcher) {
         try {
             Logger.debug("Opening channel for order: '$orderId'", context = TAG)
-
-            withTimeout(1.minutes) {
-                lightningRepo.lightningState.first { it.nodeStatus?.isRunning ?: false }
-            }
-
             val order = coreService.blocktank.open(orderId)
 
             // Update the order in state
