@@ -119,26 +119,25 @@ class LightningRepo @Inject constructor(
     ): Result<T> = withContext(bgDispatcher) {
         Logger.verbose("Operation called: $operationName", context = TAG)
 
-        if (_lightningState.value.nodeLifecycleState.isRunning()) {
+        val nodeLifecycleState = _lightningState.value.nodeLifecycleState
+        if (nodeLifecycleState.isRunning()) {
             return@withContext executeOperation(operationName, operation)
         }
 
         // If node is not in a state that can become running, fail fast
-        if (!_lightningState.value.nodeLifecycleState.canRun()) {
+        if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                Exception(
-                    "Cannot execute '$operationName': Node is ${_lightningState.value.nodeLifecycleState} and not starting"
-                )
+                Exception("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
             )
         }
 
         val nodeRunning = withTimeoutOrNull(waitTimeout) {
-            if (_lightningState.value.nodeLifecycleState.isRunning()) {
+            if (nodeLifecycleState.isRunning()) {
                 return@withTimeoutOrNull true
             }
 
             // Otherwise, wait for it to transition to running state
-            Logger.verbose("Waiting for node runs to execute '$operationName'", context = TAG)
+            Logger.verbose("Waiting for node to run before executing '$operationName'", context = TAG)
             _lightningState.first { it.nodeLifecycleState.isRunning() }
             Logger.debug("Operation executed: '$operationName'", context = TAG)
             true
