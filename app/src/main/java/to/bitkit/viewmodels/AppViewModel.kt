@@ -472,6 +472,9 @@ class AppViewModel @Inject constructor(
                     SendEvent.SwipeToPay -> onSwipeToPay()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
+                    SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
+                        estimateMaxAmountRoutingFee()
+                    }
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
@@ -1458,6 +1461,41 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private suspend fun estimateMaxAmountRoutingFee() {
+        val currentState = _sendUiState.value
+        if (currentState.payMethod != SendMethod.LIGHTNING) return
+
+        val decodedInvoice = currentState.decodedInvoice ?: return
+        val bolt11 = decodedInvoice.bolt11
+
+        val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
+        if (maxSendLightning == 0uL) {
+            _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }
+            return
+        }
+
+        val buffer = 2uL
+        val amountToEstimate = if (maxSendLightning > buffer) {
+            maxSendLightning - buffer
+        } else {
+            maxSendLightning
+        }
+
+        val feeResult = lightningRepo.estimateRoutingFeesForAmount(
+            bolt11 = bolt11,
+            amountSats = amountToEstimate
+        )
+
+        feeResult.onSuccess { fee ->
+            _sendUiState.update {
+                it.copy(estimatedRoutingFee = fee + buffer)
+            }
+        }.onFailure { e ->
+            Logger.error("Failed to estimate routing fee for max amount", e, context = TAG)
+            _sendUiState.update { it.copy(estimatedRoutingFee = 0uL) }
+        }
+    }
+
     private suspend fun getFeeEstimate(speed: TransactionSpeed? = null): Long {
         val currentState = _sendUiState.value
         return lightningRepo.calculateTotalFee(
@@ -2001,6 +2039,7 @@ data class SendUiState(
     val feeRates: FeeRates? = null,
     val fee: SendFee? = null,
     val fees: Map<FeeRate, Long> = emptyMap(),
+    val estimatedRoutingFee: ULong = 0uL,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
@@ -2064,6 +2103,7 @@ sealed interface SendEvent {
     data object SpeedAndFee : SendEvent
     data object PaymentMethodSwitch : SendEvent
     data class ConfirmAmountWarning(val warning: SanityWarning) : SendEvent
+    data object EstimateMaxRoutingFee : SendEvent
     data object DismissAmountWarning : SendEvent
     data object PayConfirmed : SendEvent
     data object ClearPayConfirmation : SendEvent
