@@ -756,9 +756,11 @@ private fun NavGraphBuilder.home(
 ) {
     composable<Routes.Home> {
         val uiState by walletViewModel.uiState.collectAsStateWithLifecycle()
+        val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
 
         RequestNotificationPermissions(
+            showPermissionDialog = !isRecoveryMode,
             onPermissionChange = { granted ->
                 settingsViewModel.setNotificationPreference(granted)
             }
