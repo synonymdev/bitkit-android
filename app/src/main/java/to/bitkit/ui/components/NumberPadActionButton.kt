@@ -1,7 +1,7 @@
 package to.bitkit.ui.components
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,32 +75,30 @@ fun NumberPadActionButton(
             }
         }
     } else {
-        OutlinedButton(
-            onClick = onClick,
-            shape = buttonShape,
-            colors = AppButtonDefaults.secondaryColors,
-            contentPadding = contentPadding,
-            border = BorderStroke(width = 1.dp, color = color),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
                 .requiredHeight(height)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) {
-                    Icon(
-                        painter = painterResource(icon),
-                        contentDescription = text,
-                        tint = color,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Caption13Up(
-                    text = text,
+                .border(
+                    width = 1.dp,
                     color = color,
+                    shape = buttonShape
+                )
+                .padding(contentPadding)
+        ) {
+            if (icon != null) {
+                Icon(
+                    painter = painterResource(icon),
+                    contentDescription = text,
+                    tint = color,
+                    modifier = Modifier.size(16.dp)
                 )
             }
+            Caption13Up(
+                text = text,
+                color = color,
+            )
         }
     }
 }
