@@ -77,7 +77,7 @@ fun NumberPadActionButton(
         }
     } else {
         OutlinedButton(
-            onClick = onClick,
+            onClick = {},
             shape = buttonShape,
             colors = AppButtonDefaults.secondaryColors,
             contentPadding = contentPadding,
