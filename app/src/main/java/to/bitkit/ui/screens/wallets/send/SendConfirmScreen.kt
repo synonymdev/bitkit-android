@@ -289,6 +289,10 @@ fun ContentRunning(
 
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
+            color = when (uiState.payMethod) {
+                SendMethod.ONCHAIN -> Colors.Brand
+                SendMethod.LIGHTNING -> Colors.Purple
+            },
             loading = isLoading,
             confirmed = isLoading,
             onConfirm = onSwipeToConfirm,
