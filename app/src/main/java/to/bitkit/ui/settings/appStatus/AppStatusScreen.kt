@@ -26,18 +26,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.HealthState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.AppHealthState
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -50,7 +50,7 @@ import kotlin.time.ExperimentalTime
 
 @Composable
 fun AppStatusScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: AppStatusViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -58,12 +58,12 @@ fun AppStatusScreen(
 
     Content(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onInternetClick = { context.startActivityAppSettings() },
-        onElectrumClick = { navController.navigate(Routes.ElectrumConfig) },
-        onNodeClick = { navController.navigate(Routes.NodeInfo) },
-        onChannelsClick = { navController.navigate(Routes.LightningConnections) },
-        onBackupClick = { navController.navigate(Routes.BackupSettings) },
+        onElectrumClick = { navigator.navigate(Routes.ElectrumConfig) },
+        onNodeClick = { navigator.navigate(Routes.NodeInfo) },
+        onChannelsClick = { navigator.navigate(Routes.LightningConnections) },
+        onBackupClick = { navigator.navigate(Routes.BackupSettings) },
     )
 }
 

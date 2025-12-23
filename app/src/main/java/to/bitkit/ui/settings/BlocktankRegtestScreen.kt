@@ -25,7 +25,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
@@ -35,6 +34,7 @@ import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -44,8 +44,19 @@ import to.bitkit.utils.Logger
 
 @Composable
 fun BlocktankRegtestScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: BlocktankRegtestViewModel = hiltViewModel(),
+) {
+    BlocktankRegtestContent(
+        onBack = { navigator.goBack() },
+        viewModel = viewModel,
+    )
+}
+
+@Composable
+private fun BlocktankRegtestContent(
+    onBack: () -> Unit,
+    viewModel: BlocktankRegtestViewModel,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val wallet = walletViewModel ?: return
@@ -55,7 +66,7 @@ fun BlocktankRegtestScreen(
     ScreenColumn {
         AppTopBar(
             titleText = "Blocktank Regtest",
-            onBackClick = { navController.popBackStack() },
+            onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
         Column(

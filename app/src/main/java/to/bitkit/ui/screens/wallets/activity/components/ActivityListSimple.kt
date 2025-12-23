@@ -22,7 +22,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun ActivityListSimple(
     items: List<Activity>?,
     onAllActivityClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
     Column(

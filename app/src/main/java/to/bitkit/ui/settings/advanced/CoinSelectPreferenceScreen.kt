@@ -14,12 +14,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -38,14 +38,14 @@ object CoinSelectPreferenceTestTags {
 
 @Composable
 fun CoinSelectPreferenceScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: CoinSelectPreferenceViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Content(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onClickManual = { viewModel.setAutoMode(false) },
         onClickAutopilot = { viewModel.setAutoMode(true) },
         onClickCoinSelectionPreference = { preference -> viewModel.setCoinSelectionPreference(preference) },

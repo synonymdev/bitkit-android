@@ -33,7 +33,6 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
-import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
@@ -61,7 +60,7 @@ import java.time.ZoneId
 @Composable
 fun ActivityRow(
     item: Activity,
-    onClick: (String) -> Unit,
+    onClick: (Activity) -> Unit,
     testTag: String,
 ) {
     val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
@@ -99,7 +98,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick(item.rawId()) }
+            .clickableAlpha { onClick(item) }
             .background(color = Colors.Gray6, shape = Shapes.medium)
             .padding(16.dp)
             .testTag(testTag)

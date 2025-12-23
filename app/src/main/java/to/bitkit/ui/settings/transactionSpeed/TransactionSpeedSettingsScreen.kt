@@ -11,13 +11,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.navigateToCustomFeeSettings
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -27,7 +27,7 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun TransactionSpeedSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val settings = settingsViewModel ?: return
     val defaultTransactionSpeed = settings.defaultTransactionSpeed.collectAsStateWithLifecycle()
@@ -36,10 +36,10 @@ fun TransactionSpeedSettingsScreen(
         selectedSpeed = defaultTransactionSpeed.value,
         onSpeedSelected = {
             settings.setDefaultTransactionSpeed(it)
-            navController.popBackStack()
+            navigator.goBack()
         },
-        onCustomFeeClick = { navController.navigateToCustomFeeSettings() },
-        onBackClick = { navController.popBackStack() },
+        onCustomFeeClick = { navigator.navigate(Routes.CustomFeeSettings) },
+        onBackClick = { navigator.goBack() },
     )
 }
 

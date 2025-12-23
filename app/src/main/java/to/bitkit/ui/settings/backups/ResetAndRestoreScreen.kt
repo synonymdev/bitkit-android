@@ -23,13 +23,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -47,19 +46,18 @@ object ResetAndRestoreTestTags {
 
 @Composable
 fun ResetAndRestoreScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
-    val app = appViewModel ?: return
     val wallet = walletViewModel ?: return
     var showDialog by remember { mutableStateOf(false) }
 
     Content(
         showConfirmDialog = showDialog,
-        onClickBackup = { app.showSheet(Sheet.Backup()) },
+        onClickBackup = { navigator.navigate(Routes.BackupIntro) },
         onClickReset = { showDialog = true },
         onResetConfirm = { wallet.wipeWallet() },
         onResetDismiss = { showDialog = false },
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
     )
 }
 

@@ -26,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,7 +35,6 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,16 +54,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -74,13 +68,11 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.ui.LocalBalances
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.HorizontalSpacer
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.TabBar
@@ -91,10 +83,8 @@ import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
 import to.bitkit.ui.currencyViewModel
-import to.bitkit.ui.navigateToActivityItem
-import to.bitkit.ui.navigateToAllActivity
-import to.bitkit.ui.navigateToTransferFunding
-import to.bitkit.ui.navigateToTransferIntro
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListSimple
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
@@ -108,8 +98,6 @@ import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
-import to.bitkit.ui.sheets.BackupRoute
-import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -123,8 +111,7 @@ import to.bitkit.viewmodels.WalletViewModel
 fun HomeScreen(
     mainUiState: MainUiState,
     drawerState: DrawerState,
-    rootNavController: NavController,
-    walletNavController: NavHostController,
+    navigator: Navigator,
     settingsViewModel: SettingsViewModel,
     walletViewModel: WalletViewModel,
     appViewModel: AppViewModel,
@@ -156,12 +143,11 @@ fun HomeScreen(
         DeleteWidgetAlert(type, homeViewModel)
     }
 
+    val scope = rememberCoroutineScope()
+
     Content(
         mainUiState = mainUiState,
         homeUiState = homeUiState,
-        rootNavController = rootNavController,
-        walletNavController = walletNavController,
-        drawerState = drawerState,
         latestActivities = latestActivities,
         onRefresh = {
             activityListViewModel.resync()
@@ -170,9 +156,9 @@ fun HomeScreen(
         },
         onClickProfile = {
             if (!hasSeenProfileIntro) {
-                rootNavController.navigate(Routes.ProfileIntro)
+                navigator.navigate(Routes.ProfileIntro)
             } else {
-                rootNavController.navigate(Routes.CreateProfile)
+                navigator.navigate(Routes.CreateProfile)
             }
         },
         onRemoveSuggestion = { suggestion ->
@@ -181,27 +167,27 @@ fun HomeScreen(
         onClickSuggestion = { suggestion ->
             when (suggestion) {
                 Suggestion.BUY -> {
-                    rootNavController.navigate(Routes.BuyIntro)
+                    navigator.navigate(Routes.BuyIntro)
                 }
 
                 Suggestion.LIGHTNING -> {
                     if (!hasSeenTransferIntro) {
-                        rootNavController.navigateToTransferIntro()
+                        navigator.navigate(Routes.TransferIntro)
                     } else {
-                        rootNavController.navigateToTransferFunding()
+                        navigator.navigate(Routes.Funding)
                     }
                 }
 
                 Suggestion.BACK_UP -> {
-                    appViewModel.showSheet(Sheet.Backup(BackupRoute.Intro))
+                    navigator.navigate(Routes.BackupIntro)
                 }
 
                 Suggestion.SECURE -> {
-                    appViewModel.showSheet(Sheet.Pin(PinRoute.Prompt(showLaterButton = true)))
+                    navigator.navigate(Routes.PinPrompt(showLaterButton = true))
                 }
 
                 Suggestion.SUPPORT -> {
-                    rootNavController.navigate(Routes.Support)
+                    navigator.navigate(Routes.Support)
                 }
 
                 Suggestion.INVITE -> {
@@ -215,54 +201,54 @@ fun HomeScreen(
 
                 Suggestion.PROFILE -> {
                     if (!hasSeenProfileIntro) {
-                        rootNavController.navigate(Routes.ProfileIntro)
+                        navigator.navigate(Routes.ProfileIntro)
                     } else {
-                        rootNavController.navigate(Routes.CreateProfile)
+                        navigator.navigate(Routes.CreateProfile)
                     }
                 }
 
                 Suggestion.SHOP -> {
                     if (!hasSeenShopIntro) {
-                        rootNavController.navigate(Routes.ShopIntro)
+                        navigator.navigate(Routes.ShopIntro)
                     } else {
-                        rootNavController.navigate(Routes.ShopDiscover)
+                        navigator.navigate(Routes.ShopDiscover)
                     }
                 }
 
                 Suggestion.QUICK_PAY -> {
                     if (!quickPayIntroSeen) {
-                        rootNavController.navigate(Routes.QuickPayIntro)
+                        navigator.navigate(Routes.QuickPayIntro)
                     } else {
-                        rootNavController.navigate(Routes.QuickPaySettings)
+                        navigator.navigateToQuickPaySettings()
                     }
                 }
 
                 Suggestion.NOTIFICATIONS -> {
                     if (bgPaymentsIntroSeen) {
-                        rootNavController.navigate(Routes.BackgroundPaymentsSettings)
+                        navigator.navigate(Routes.BackgroundPaymentsSettings)
                     } else {
-                        rootNavController.navigate(Routes.BackgroundPaymentsIntro)
+                        navigator.navigate(Routes.BackgroundPaymentsIntro)
                     }
                 }
             }
         },
         onClickAddWidget = {
             if (!hasSeenWidgetsIntro) {
-                rootNavController.navigate(Routes.WidgetsIntro)
+                navigator.navigate(Routes.WidgetsIntro)
             } else {
-                rootNavController.navigate(Routes.AddWidget)
+                navigator.navigate(Routes.AddWidget)
             }
         },
         onClickEditWidgetList = homeViewModel::onClickEditWidgetList,
         onClickEditWidget = { widgetType ->
             homeViewModel.disableEditMode()
             when (widgetType) {
-                WidgetType.BLOCK -> rootNavController.navigate(Routes.BlocksPreview)
-                WidgetType.CALCULATOR -> rootNavController.navigate(Routes.CalculatorPreview)
-                WidgetType.FACTS -> rootNavController.navigate(Routes.FactsPreview)
-                WidgetType.NEWS -> rootNavController.navigate(Routes.HeadlinesPreview)
-                WidgetType.PRICE -> rootNavController.navigate(Routes.PricePreview)
-                WidgetType.WEATHER -> rootNavController.navigate(Routes.WeatherPreview)
+                WidgetType.BLOCK -> navigator.navigate(Routes.BlocksPreview)
+                WidgetType.CALCULATOR -> navigator.navigate(Routes.CalculatorPreview)
+                WidgetType.FACTS -> navigator.navigate(Routes.FactsPreview)
+                WidgetType.NEWS -> navigator.navigate(Routes.HeadlinesPreview)
+                WidgetType.PRICE -> navigator.navigate(Routes.PricePreview)
+                WidgetType.WEATHER -> navigator.navigate(Routes.WeatherPreview)
             }
         },
         onClickDeleteWidget = { widgetType ->
@@ -272,7 +258,14 @@ fun HomeScreen(
             homeViewModel.moveWidget(fromIndex, toIndex)
         },
         onDismissEmptyState = homeViewModel::dismissEmptyState,
-        onClickEmptyActivityRow = { appViewModel.showSheet(Sheet.Receive) },
+        onClickEmptyActivityRow = { navigator.navigate(Routes.ReceiveQr) },
+        onClickSavings = { navigator.navigate(Routes.Savings) },
+        onClickSpending = { navigator.navigate(Routes.Spending) },
+        onAllActivityClick = { navigator.navigate(Routes.AllActivity) },
+        onActivityItemClick = { navigator.navigate(Routes.ActivityDetail(it)) },
+        onClickSettingUp = { navigator.navigate(Routes.SettingUp) },
+        onClickAppStatus = { navigator.navigate(Routes.AppStatus) },
+        onOpenDrawer = { scope.launch { drawerState.open() } },
     )
 }
 
@@ -281,9 +274,6 @@ fun HomeScreen(
 private fun Content(
     mainUiState: MainUiState,
     homeUiState: HomeUiState,
-    rootNavController: NavController,
-    walletNavController: NavController,
-    drawerState: DrawerState,
     hazeState: HazeState = rememberHazeState(),
     latestActivities: List<Activity>?,
     onClickProfile: () -> Unit = {},
@@ -297,6 +287,13 @@ private fun Content(
     onMoveWidget: (Int, Int) -> Unit = { _, _ -> },
     onDismissEmptyState: () -> Unit = {},
     onClickEmptyActivityRow: () -> Unit = {},
+    onClickSavings: () -> Unit = {},
+    onClickSpending: () -> Unit = {},
+    onAllActivityClick: () -> Unit = {},
+    onActivityItemClick: (Activity) -> Unit = {},
+    onClickSettingUp: () -> Unit = {},
+    onClickAppStatus: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
     balances: BalanceState = LocalBalances.current,
 ) {
     val scope = rememberCoroutineScope()
@@ -306,9 +303,8 @@ private fun Content(
         TopBar(
             hazeState = hazeState,
             onClickProfile = onClickProfile,
-            rootNavController = rootNavController,
-            scope = scope,
-            drawerState = drawerState,
+            onClickAppStatus = onClickAppStatus,
+            onOpenDrawer = onOpenDrawer,
         )
         val pullToRefreshState = rememberPullToRefreshState()
         PullToRefreshBox(
@@ -359,7 +355,7 @@ private fun Content(
                             sats = balances.totalOnchainSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_btc_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Savings) }
+                                .clickableAlpha { onClickSavings() }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySavings")
                         )
@@ -370,7 +366,7 @@ private fun Content(
                             sats = balances.totalLightningSats.toLong(),
                             icon = painterResource(id = R.drawable.ic_ln_circle),
                             modifier = Modifier
-                                .clickableAlpha { walletNavController.navigate(Routes.Spending) }
+                                .clickableAlpha { onClickSpending() }
                                 .padding(vertical = 4.dp)
                                 .testTag("ActivitySpending")
                         )
@@ -490,7 +486,7 @@ private fun Content(
                                     icon = banner.icon,
                                     onClick = {
                                         when (banner) {
-                                            ActivityBannerType.SPENDING -> rootNavController.navigate(Routes.SettingUp)
+                                            ActivityBannerType.SPENDING -> onClickSettingUp()
                                             ActivityBannerType.SAVINGS -> Unit
                                         }
                                     },
@@ -502,8 +498,8 @@ private fun Content(
 
                     ActivityListSimple(
                         items = latestActivities,
-                        onAllActivityClick = { rootNavController.navigateToAllActivity() },
-                        onActivityItemClick = { rootNavController.navigateToActivityItem(it) },
+                        onAllActivityClick = onAllActivityClick,
+                        onActivityItemClick = onActivityItemClick,
                         onEmptyActivityRowClick = onClickEmptyActivityRow,
                     )
 
@@ -625,9 +621,8 @@ private fun Widgets(homeUiState: HomeUiState) {
 private fun TopBar(
     hazeState: HazeState,
     onClickProfile: () -> Unit,
-    rootNavController: NavController,
-    scope: CoroutineScope,
-    drawerState: DrawerState,
+    onClickAppStatus: () -> Unit,
+    onOpenDrawer: () -> Unit,
 ) {
     val topbarGradient = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -667,10 +662,10 @@ private fun TopBar(
                 }
             },
             actions = {
-                AppStatus(onClick = { rootNavController.navigate(Routes.AppStatus) })
+                AppStatus(onClick = onClickAppStatus)
                 HorizontalSpacer(4.dp)
                 IconButton(
-                    onClick = { scope.launch { drawerState.open() } },
+                    onClick = onOpenDrawer,
                     modifier = Modifier.testTag("HeaderMenu")
                 ) {
                     Icon(
@@ -713,9 +708,6 @@ private fun Preview() {
                 homeUiState = HomeUiState(
                     showWidgets = true,
                 ),
-                rootNavController = rememberNavController(),
-                walletNavController = rememberNavController(),
-                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
                 balances = BalanceState(
                     totalOnchainSats = 165_000u,
@@ -737,9 +729,6 @@ private fun PreviewEmpty() {
                 homeUiState = HomeUiState(
                     showEmptyState = true,
                 ),
-                rootNavController = rememberNavController(),
-                walletNavController = rememberNavController(),
-                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewActivityItems.take(3),
                 balances = BalanceState()
             )

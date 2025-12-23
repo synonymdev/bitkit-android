@@ -31,7 +31,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import com.synonym.bitkitcore.BtBolt11InvoiceState
 import com.synonym.bitkitcore.BtOpenChannelState
 import com.synonym.bitkitcore.BtOrderState
@@ -56,7 +55,6 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
@@ -67,6 +65,8 @@ import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -83,7 +83,7 @@ import java.util.Locale
 
 @Composable
 fun ChannelDetailScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
@@ -123,7 +123,7 @@ fun ChannelDetailScreen(
         txTime = txTime,
         isRefreshing = uiState.isRefreshing,
         isClosedChannel = isClosedChannel,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onRefresh = {
             viewModel.onPullToRefresh()
         },
@@ -141,7 +141,7 @@ fun ChannelDetailScreen(
             context.startActivity(intent)
         },
         onSupport = { order -> contactSupport(order, channel, walletState.nodeId, context) },
-        onCloseConnection = { navController.navigate(Routes.CloseConnection) },
+        onCloseConnection = { navigator.navigate(Routes.CloseConnection) },
     )
 }
 

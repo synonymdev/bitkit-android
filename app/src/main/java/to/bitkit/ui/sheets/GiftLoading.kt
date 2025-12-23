@@ -33,6 +33,8 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 
+internal const val IMAGE_WIDTH_FRACTION = 0.8f
+
 @Composable
 fun GiftLoading(
     viewModel: GiftViewModel,

@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -58,6 +57,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -72,7 +72,7 @@ import kotlin.time.ExperimentalTime
 
 @Composable
 fun NodeInfoScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val wallet = walletViewModel ?: return
     val app = appViewModel ?: return
@@ -87,7 +87,7 @@ fun NodeInfoScreen(
         uiState = uiState,
         isDevModeEnabled = isDevModeEnabled,
         balanceDetails = lightningState.balances,
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
         onRefresh = { wallet.onPullToRefresh() },
         onDisconnectPeer = { wallet.disconnectPeer(it) },
         onCopy = { text ->
