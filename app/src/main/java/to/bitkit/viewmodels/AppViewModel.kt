@@ -1745,7 +1745,7 @@ class AppViewModel @Inject constructor(
         if (backupRepo.isRestoring.value) return
 
         if (currentTimedSheet != null || timedSheetQueue.isNotEmpty()) {
-            Logger.debug("Timed sheet already active, skipping check")
+            Logger.debug("Timed sheet already active, skipping check", context = TAG)
             return
         }
 
@@ -1755,7 +1755,7 @@ class AppViewModel @Inject constructor(
             delay(CHECK_DELAY_MILLIS)
 
             if (currentTimedSheet != null || timedSheetQueue.isNotEmpty()) {
-                Logger.debug("Timed sheet became active during delay, skipping")
+                Logger.debug("Timed sheet became active during delay, skipping", context = TAG)
                 return@launch
             }
 
@@ -1766,25 +1766,25 @@ class AppViewModel @Inject constructor(
             if (eligibleSheets.isNotEmpty()) {
                 Logger.debug(
                     "Building timed sheet queue: ${eligibleSheets.joinToString { it.name }}",
-                    context = "Timed sheet"
+                    context = TAG
                 )
                 timedSheetQueue = eligibleSheets
                 currentTimedSheet = eligibleSheets.first()
                 showSheet(Sheet.TimedSheet(eligibleSheets.first()))
             } else {
-                Logger.debug("No timed sheet eligible, skipping", context = "Timed sheet")
+                Logger.debug("No timed sheet eligible, skipping", context = TAG)
             }
         }
     }
 
     fun onLeftHome() {
-        Logger.debug("Left home, skipping timed sheet check")
+        Logger.debug("Left home, skipping timed sheet check", context = TAG)
         timedSheetsScope?.cancel()
         timedSheetsScope = null
     }
 
     fun dismissTimedSheet(skipQueue: Boolean = false) {
-        Logger.debug("dismissTimedSheet called", context = "Timed sheet")
+        Logger.debug("dismissTimedSheet called", context = TAG)
 
         val currentQueue = timedSheetQueue
         val currentSheet = currentTimedSheet
@@ -1830,11 +1830,11 @@ class AppViewModel @Inject constructor(
         val nextIndex = currentIndex + 1
 
         if (nextIndex < currentQueue.size) {
-            Logger.debug("Moving to next timed sheet in queue: ${currentQueue[nextIndex].name}")
+            Logger.debug("Moving to next timed sheet in queue: ${currentQueue[nextIndex].name}", context = TAG)
             currentTimedSheet = currentQueue[nextIndex]
             showSheet(Sheet.TimedSheet(currentQueue[nextIndex]))
         } else {
-            Logger.debug("Timed sheet queue exhausted")
+            Logger.debug("Timed sheet queue exhausted", context = TAG)
             clearTimedSheets()
         }
     }
@@ -1905,7 +1905,7 @@ class AppViewModel @Inject constructor(
 
             return@withContext true
         } catch (e: Exception) {
-            Logger.warn("Failure fetching new releases", e = e)
+            Logger.warn("Failure fetching new releases", e = e, context = TAG)
             return@withContext false
         }
     }
