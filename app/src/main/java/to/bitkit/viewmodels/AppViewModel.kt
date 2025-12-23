@@ -475,6 +475,7 @@ class AppViewModel @Inject constructor(
                     SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
                         estimateMaxAmountRoutingFee()
                     }
+
                     SendEvent.PayConfirmed -> onConfirmPay()
                     SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                     SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
