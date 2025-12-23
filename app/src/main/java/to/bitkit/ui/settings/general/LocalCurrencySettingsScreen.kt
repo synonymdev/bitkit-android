@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.FxRate
 import to.bitkit.ui.LocalCurrencies
@@ -24,6 +23,7 @@ import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -34,7 +34,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 @Composable
 fun LocalCurrencySettingsScreen(
     currencyViewModel: CurrencyViewModel,
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val (rates, _, _, selectedCurrency) = LocalCurrencies.current
     var searchText by remember { mutableStateOf("") }
@@ -74,7 +74,7 @@ fun LocalCurrencySettingsScreen(
         otherCurrencies = otherCurrencies,
         selectedCurrency = selectedCurrency,
         onCurrencyClick = { currencyViewModel.setSelectedCurrency(it) },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 

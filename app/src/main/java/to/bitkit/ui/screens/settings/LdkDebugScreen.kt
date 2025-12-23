@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import com.synonym.vssclient.KeyVersion
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -41,6 +40,7 @@ import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -54,14 +54,14 @@ import java.io.File
 
 @Composable
 fun LdkDebugScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: LdkDebugViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LdkDebugContent(
         uiState = uiState,
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
         onNodeUriChange = viewModel::updateNodeUri,
         onAddPeer = viewModel::addPeer,
         onPasteAndAddPeer = viewModel::pasteAndAddPeer,

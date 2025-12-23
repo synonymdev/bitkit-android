@@ -13,10 +13,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -25,7 +25,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun TagsSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val settings = settingsViewModel ?: return
 
@@ -36,10 +36,10 @@ fun TagsSettingsScreen(
         onClickTag = { tag ->
             settings.deleteLastUsedTag(tag)
             if (tags.size == 1) {
-                navController.popBackStack()
+                navigator.goBack()
             }
         },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 

@@ -14,23 +14,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.Language
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.transactionSpeedUiText
 import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.navigateToDefaultUnitSettings
-import to.bitkit.ui.navigateToLanguageSettings
-import to.bitkit.ui.navigateToLocalCurrencySettings
-import to.bitkit.ui.navigateToQuickPaySettings
-import to.bitkit.ui.navigateToTagsSettings
-import to.bitkit.ui.navigateToTransactionSpeedSettings
-import to.bitkit.ui.navigateToWidgetsSettings
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,7 +33,7 @@ import to.bitkit.viewmodels.LanguageViewModel
 
 @Composable
 fun GeneralSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
     languageViewModel: LanguageViewModel = hiltViewModel(),
 ) {
     val settings = settingsViewModel ?: return
@@ -59,19 +52,19 @@ fun GeneralSettingsScreen(
         primaryDisplay = currencies.primaryDisplay,
         defaultTransactionSpeed = defaultTransactionSpeed,
         showTagsButton = lastUsedTags.isNotEmpty(),
-        onBackClick = { navController.popBackStack() },
-        onLocalCurrencyClick = { navController.navigateToLocalCurrencySettings() },
-        onDefaultUnitClick = { navController.navigateToDefaultUnitSettings() },
-        onTransactionSpeedClick = { navController.navigateToTransactionSpeedSettings() },
-        onWidgetsClick = { navController.navigateToWidgetsSettings() },
-        onQuickPayClick = { navController.navigateToQuickPaySettings(quickPayIntroSeen) },
-        onTagsClick = { navController.navigateToTagsSettings() },
-        onLanguageSettingsClick = { navController.navigateToLanguageSettings() },
+        onBackClick = { navigator.goBack() },
+        onLocalCurrencyClick = { navigator.navigate(Routes.LocalCurrencySettings) },
+        onDefaultUnitClick = { navigator.navigate(Routes.DefaultUnitSettings) },
+        onTransactionSpeedClick = { navigator.navigate(Routes.TransactionSpeedSettings) },
+        onWidgetsClick = { navigator.navigate(Routes.WidgetsSettings) },
+        onQuickPayClick = { navigator.navigateToQuickPaySettings(quickPayIntroSeen) },
+        onTagsClick = { navigator.navigate(Routes.TagsSettings) },
+        onLanguageSettingsClick = { navigator.navigate(Routes.LanguageSettings) },
         onBgPaymentsClick = {
             if (bgPaymentsIntroSeen || notificationsGranted) {
-                navController.navigate(Routes.BackgroundPaymentsSettings)
+                navigator.navigate(Routes.BackgroundPaymentsSettings)
             } else {
-                navController.navigate(Routes.BackgroundPaymentsIntro)
+                navigator.navigate(Routes.BackgroundPaymentsIntro)
             }
         },
         selectedLanguage = languageUiState.selectedLanguage.displayName,

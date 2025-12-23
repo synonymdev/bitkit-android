@@ -30,7 +30,6 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,7 +39,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
-import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -48,10 +46,10 @@ enum class SavingsProgressState { PROGRESS, SUCCESS, INTERRUPTED }
 
 @Composable
 fun SavingsProgressScreen(
-    app: AppViewModel,
     transfer: TransferViewModel,
     wallet: WalletViewModel,
     onContinueClick: () -> Unit = {},
+    onForceTransfer: () -> Unit = {},
 ) {
     val window = LocalActivity.current?.window
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
@@ -69,7 +67,7 @@ fun SavingsProgressScreen(
             progressState = SavingsProgressState.SUCCESS
         } else {
             transfer.startCoopCloseRetries(channelsFailedToCoopClose) {
-                app.showSheet(Sheet.ForceTransfer)
+                onForceTransfer()
             }
             delay(2500)
             progressState = SavingsProgressState.INTERRUPTED

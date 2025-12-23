@@ -33,10 +33,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.navigation.NavController
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption
-import to.bitkit.ui.navigateToLogDetail
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -45,7 +45,7 @@ import to.bitkit.viewmodels.LogsViewModel
 
 @Composable
 fun LogsScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val logs by viewModel.logs.collectAsState()
@@ -58,7 +58,7 @@ fun LogsScreen(
     ScreenColumn {
         AppTopBar(
             titleText = "Log Files",
-            onBackClick = { navController.popBackStack() },
+            onBackClick = { navigator.goBack() },
             actions = {
                 IconButton(
                     onClick = { showDeleteConfirmation = true },
@@ -85,7 +85,7 @@ fun LogsScreen(
                         )
                     },
                     modifier = Modifier.clickableAlpha {
-                        navController.navigateToLogDetail(logFile.fileName)
+                        navigator.navigate(Routes.LogDetail(logFile.fileName))
                     }
                 )
                 HorizontalDivider()
@@ -120,7 +120,7 @@ fun LogsScreen(
 
 @Composable
 fun LogDetailScreen(
-    navController: NavController,
+    navigator: Navigator,
     fileName: String,
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
@@ -152,7 +152,7 @@ fun LogDetailScreen(
     ScreenColumn {
         AppTopBar(
             titleText = logs.find { it.fileName == fileName }?.displayName ?: "Log Content",
-            onBackClick = { navController.popBackStack() },
+            onBackClick = { navigator.goBack() },
             actions = {
                 IconButton(
                     onClick = {

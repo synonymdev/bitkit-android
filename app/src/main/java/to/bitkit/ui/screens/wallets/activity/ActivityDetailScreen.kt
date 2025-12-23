@@ -59,7 +59,6 @@ import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate
 import to.bitkit.models.Toast
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BalanceHeaderView
@@ -71,6 +70,8 @@ import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
@@ -85,12 +86,30 @@ import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
-@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ActivityDetailScreen(
+    navigator: Navigator,
+    activityId: String,
     listViewModel: ActivityListViewModel,
     detailViewModel: ActivityDetailViewModel = hiltViewModel(),
-    route: Routes.ActivityDetail,
+) {
+    ActivityDetailScreenContent(
+        activityId = activityId,
+        listViewModel = listViewModel,
+        detailViewModel = detailViewModel,
+        onExploreClick = { id -> navigator.navigate(Routes.ActivityExplore(id)) },
+        onBackClick = { navigator.goBack() },
+        onCloseClick = { navigator.navigateToHome() },
+        onChannelClick = { navigator.navigate(Routes.ChannelDetail) },
+    )
+}
+
+@Suppress("CyclomaticComplexMethod")
+@Composable
+private fun ActivityDetailScreenContent(
+    activityId: String,
+    listViewModel: ActivityListViewModel,
+    detailViewModel: ActivityDetailViewModel,
     onExploreClick: (String) -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -99,8 +118,8 @@ fun ActivityDetailScreen(
     val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
 
     // Load activity on composition
-    LaunchedEffect(route.id) {
-        detailViewModel.loadActivity(route.id)
+    LaunchedEffect(activityId) {
+        detailViewModel.loadActivity(activityId)
     }
 
     // Clear state on disposal

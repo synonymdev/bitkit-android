@@ -12,18 +12,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
-import to.bitkit.ui.navigateToAuthCheck
-import to.bitkit.ui.navigateToChangePin
-import to.bitkit.ui.navigateToDisablePin
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -34,10 +30,9 @@ import to.bitkit.ui.utils.rememberBiometricAuthSupported
 
 @Composable
 fun SecuritySettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val settings = settingsViewModel ?: return
-    val app = appViewModel ?: return
 
     val isPinEnabled by settings.isPinEnabled.collectAsStateWithLifecycle()
     val isPinOnLaunchEnabled by settings.isPinOnLaunchEnabled.collectAsStateWithLifecycle()
@@ -62,33 +57,35 @@ fun SecuritySettingsScreen(
         isBiometrySupported = rememberBiometricAuthSupported(),
         onPinClick = {
             if (!isPinEnabled) {
-                app.showSheet(Sheet.Pin())
+                navigator.navigate(Routes.PinPrompt())
             } else {
-                navController.navigateToDisablePin()
+                navigator.navigate(Routes.DisablePin)
             }
         },
         onChangePinClick = {
-            navController.navigateToChangePin()
+            navigator.navigate(Routes.ChangePin)
         },
         onPinOnLaunchClick = {
-            navController.navigateToAuthCheck(
-                onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH,
+            navigator.navigate(
+                Routes.AuthCheck(onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_LAUNCH)
             )
         },
         onPinOnIdleClick = {
-            navController.navigateToAuthCheck(
-                onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_IDLE,
+            navigator.navigate(
+                Routes.AuthCheck(onSuccessActionId = AuthCheckAction.TOGGLE_PIN_ON_IDLE)
             )
         },
         onPinForPaymentsClick = {
-            navController.navigateToAuthCheck(
-                onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS,
+            navigator.navigate(
+                Routes.AuthCheck(onSuccessActionId = AuthCheckAction.TOGGLE_PIN_FOR_PAYMENTS)
             )
         },
         onUseBiometricsClick = {
-            navController.navigateToAuthCheck(
-                requireBiometrics = true,
-                onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
+            navigator.navigate(
+                Routes.AuthCheck(
+                    requireBiometrics = true,
+                    onSuccessActionId = AuthCheckAction.TOGGLE_BIOMETRICS,
+                )
             )
         },
         onSwipeToHideBalanceClick = {
@@ -103,7 +100,7 @@ fun SecuritySettingsScreen(
         onSendAmountWarningClick = {
             settings.setEnableSendAmountWarning(!enableSendAmountWarning)
         },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 

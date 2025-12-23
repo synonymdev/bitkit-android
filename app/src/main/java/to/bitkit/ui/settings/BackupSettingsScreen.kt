@@ -25,24 +25,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.toRelativeTimeString
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
-import to.bitkit.ui.Routes
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.backupsViewModel
 import to.bitkit.ui.components.AuthCheckAction
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.navigateToAuthCheck
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -57,9 +54,8 @@ import kotlin.time.ExperimentalTime
 
 @Composable
 fun BackupSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
-    val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
     val viewModel = backupsViewModel ?: return
 
@@ -68,16 +64,16 @@ fun BackupSettingsScreen(
 
     BackupSettingsScreenContent(
         uiState = uiState,
-        onBackupClick = { app.showSheet(Sheet.Backup()) },
+        onBackupClick = { navigator.navigate(Routes.BackupIntro) },
         onResetAndRestoreClick = {
             if (isPinEnabled) {
-                navController.navigateToAuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET)
+                navigator.navigate(Routes.AuthCheck(onSuccessActionId = AuthCheckAction.NAV_TO_RESET))
             } else {
-                navController.navigate(Routes.ResetAndRestoreSettings)
+                navigator.navigate(Routes.ResetAndRestoreSettings)
             }
         },
         onRetryBackup = { category -> viewModel.retryBackup(category) },
-        onBack = { navController.popBackStack() },
+        onBack = { navigator.goBack() },
     )
 }
 
