@@ -12,7 +12,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -21,6 +20,7 @@ import to.bitkit.ui.components.settings.SectionFooter
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -30,7 +30,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 @Composable
 fun DefaultUnitSettingsScreen(
     currencyViewModel: CurrencyViewModel,
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val (_, _, _, selectedCurrency, _, displayUnit, primaryDisplay) = LocalCurrencies.current
 
@@ -40,7 +40,7 @@ fun DefaultUnitSettingsScreen(
         primaryDisplay = primaryDisplay,
         onPrimaryUnitClick = currencyViewModel::setPrimaryDisplayUnit,
         onBitcoinUnitClick = currencyViewModel::setBtcDisplayUnit,
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 

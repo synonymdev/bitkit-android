@@ -9,9 +9,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.ui.components.settings.SettingsSwitchRow
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -20,7 +20,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @Composable
 fun WidgetsSettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val settings = settingsViewModel ?: return
 
@@ -28,7 +28,7 @@ fun WidgetsSettingsScreen(
     val showWidgetTitles by settings.showWidgetTitles.collectAsStateWithLifecycle()
 
     WidgetsSettingsContent(
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
         showWidgets = showWidgets,
         showWidgetTitles = showWidgetTitles,
         onShowWidgetsClick = { settings.setShowWidgets(!showWidgets) },

@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ui.components.BodyM
@@ -24,7 +23,8 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
-import to.bitkit.ui.navigateToChangePinConfirm
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -33,13 +33,13 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun ChangePinNewScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     var pin by remember { mutableStateOf("") }
 
     LaunchedEffect(pin) {
         if (pin.length == Env.PIN_LENGTH) {
-            navController.navigateToChangePinConfirm(pin)
+            navigator.navigate(Routes.ChangePinConfirm(pin))
         }
     }
 
@@ -54,7 +54,7 @@ fun ChangePinNewScreen(
                 pin += key
             }
         },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 

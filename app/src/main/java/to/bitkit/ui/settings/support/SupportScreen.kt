@@ -16,33 +16,49 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.env.Env
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.settings.Links
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
+/**
+ * Support screen composable.
+ */
 @Composable
 fun SupportScreen(
-    navController: NavController,
+    onBack: () -> Unit,
+    onClickHelpCenter: () -> Unit,
+) {
+    Content(
+        onBack = onBack,
+        onClickReportIssue = {},
+        onClickHelpCenter = onClickHelpCenter,
+        onClickAppStatus = {},
+    )
+}
+
+@Composable
+fun SupportScreen(
+    navigator: Navigator,
 ) {
     val context = LocalContext.current
 
     Content(
-        onBack = { navController.popBackStack() },
-        onClickReportIssue = { navController.navigate(Routes.ReportIssue) },
+        onBack = { navigator.goBack() },
+        onClickReportIssue = { navigator.navigate(Routes.ReportIssue) },
         onClickHelpCenter = {
             val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_HELP_CENTER.toUri())
             context.startActivity(intent)
         },
-        onClickAppStatus = { navController.navigate(Routes.AppStatus) },
+        onClickAppStatus = { navigator.navigate(Routes.AppStatus) },
     )
 }
 

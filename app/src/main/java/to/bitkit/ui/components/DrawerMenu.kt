@@ -23,7 +23,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,14 +37,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.navigation.NavController
-import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ui.Routes
-import to.bitkit.ui.navigateIfNotCurrent
-import to.bitkit.ui.navigateToHome
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
@@ -61,7 +56,7 @@ private val drawerWidth = 200.dp
 @Composable
 fun DrawerMenu(
     drawerState: DrawerState,
-    rootNavController: NavController,
+    navigator: Navigator,
     hasSeenWidgetsIntro: Boolean,
     hasSeenShopIntro: Boolean,
     modifier: Modifier = Modifier,
@@ -95,36 +90,57 @@ fun DrawerMenu(
                 .blockPointerInputPassthrough()
         )
     ) {
-        Menu(
-            rootNavController = rootNavController,
-            drawerState = drawerState,
-            onClickAddWidget = {
-                if (!hasSeenWidgetsIntro) {
-                    rootNavController.navigateIfNotCurrent(Routes.WidgetsIntro)
-                } else {
-                    rootNavController.navigateIfNotCurrent(Routes.AddWidget)
-                }
+        MenuContent(
+            onWalletClick = {
+                if (!navigator.isAtHome()) navigator.navigateToHome()
+                scope.launch { drawerState.close() }
             },
-            onClickShop = {
-                if (!hasSeenShopIntro) {
-                    rootNavController.navigateIfNotCurrent(Routes.ShopIntro)
+            onActivityClick = {
+                navigator.navigate(Routes.AllActivity)
+                scope.launch { drawerState.close() }
+            },
+            onContactsClick = null, // TODO IMPLEMENT CONTACTS
+            onProfileClick = null, // TODO IMPLEMENT PROFILE
+            onWidgetsClick = {
+                if (!hasSeenWidgetsIntro) {
+                    navigator.navigate(Routes.WidgetsIntro)
                 } else {
-                    rootNavController.navigateIfNotCurrent(Routes.ShopDiscover)
+                    navigator.navigate(Routes.AddWidget)
                 }
+                scope.launch { drawerState.close() }
+            },
+            onShopClick = {
+                if (!hasSeenShopIntro) {
+                    navigator.navigate(Routes.ShopIntro)
+                } else {
+                    navigator.navigate(Routes.ShopDiscover)
+                }
+                scope.launch { drawerState.close() }
+            },
+            onSettingsClick = {
+                navigator.navigate(Routes.Settings)
+                scope.launch { drawerState.close() }
+            },
+            onAppStatusClick = {
+                navigator.navigate(Routes.AppStatus)
+                scope.launch { drawerState.close() }
             },
         )
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
-private fun Menu(
-    rootNavController: NavController,
-    drawerState: DrawerState,
-    onClickAddWidget: () -> Unit,
-    onClickShop: () -> Unit,
+private fun MenuContent(
+    onWalletClick: () -> Unit,
+    onActivityClick: () -> Unit,
+    onContactsClick: (() -> Unit)?,
+    onProfileClick: (() -> Unit)?,
+    onWidgetsClick: () -> Unit,
+    onShopClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onAppStatusClick: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-
     Column(
         modifier = Modifier
             .width(drawerWidth)
@@ -137,65 +153,49 @@ private fun Menu(
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__wallet),
             iconRes = R.drawable.ic_coins,
-            onClick = {
-                val isInHome = rootNavController.currentBackStackEntry?.destination?.hasRoute<Routes.Home>() ?: false
-                if (!isInHome) rootNavController.navigateToHome()
-                scope.launch { drawerState.close() }
-            },
+            onClick = onWalletClick,
             modifier = Modifier.testTag("DrawerWallet")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__activity),
             iconRes = R.drawable.ic_heartbeat,
-            onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.AllActivity)
-                scope.launch { drawerState.close() }
-            },
+            onClick = onActivityClick,
             modifier = Modifier.testTag("DrawerActivity")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__contacts),
             iconRes = R.drawable.ic_users,
-            onClick = null, // TODO IMPLEMENT CONTACTS
+            onClick = onContactsClick,
             modifier = Modifier.testTag("DrawerContacts")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__profile),
             iconRes = R.drawable.ic_user_square,
-            onClick = null, // TODO IMPLEMENT PROFILE
+            onClick = onProfileClick,
             modifier = Modifier.testTag("DrawerProfile")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__widgets),
             iconRes = R.drawable.ic_stack,
-            onClick = {
-                onClickAddWidget()
-                scope.launch { drawerState.close() }
-            },
+            onClick = onWidgetsClick,
             modifier = Modifier.testTag("DrawerWidgets")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__shop),
             iconRes = R.drawable.ic_store_front,
-            onClick = {
-                onClickShop()
-                scope.launch { drawerState.close() }
-            },
+            onClick = onShopClick,
             modifier = Modifier.testTag("DrawerShop")
         )
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__settings),
             iconRes = R.drawable.ic_settings,
-            onClick = {
-                rootNavController.navigateIfNotCurrent(Routes.Settings)
-                scope.launch { drawerState.close() }
-            },
+            onClick = onSettingsClick,
             modifier = Modifier.testTag("DrawerSettings")
         )
 
@@ -205,10 +205,7 @@ private fun Menu(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickableAlpha {
-                    rootNavController.navigateIfNotCurrent(Routes.AppStatus)
-                    scope.launch { drawerState.close() }
-                }
+                .clickableAlpha(onClick = onAppStatusClick)
         ) {
             AppStatus(
                 showText = true,
@@ -297,14 +294,16 @@ private fun DrawerItem(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        val navController = rememberNavController()
         Box {
-            DrawerMenu(
-                rootNavController = navController,
-                drawerState = rememberDrawerState(initialValue = DrawerValue.Open),
-                hasSeenWidgetsIntro = false,
-                hasSeenShopIntro = false,
-                modifier = Modifier.align(Alignment.TopEnd),
+            MenuContent(
+                onWalletClick = {},
+                onActivityClick = {},
+                onContactsClick = null,
+                onProfileClick = null,
+                onWidgetsClick = {},
+                onShopClick = {},
+                onSettingsClick = {},
+                onAppStatusClick = {},
             )
         }
     }

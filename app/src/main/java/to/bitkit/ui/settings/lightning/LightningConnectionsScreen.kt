@@ -39,13 +39,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
-import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.formatToModernDisplay
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ChannelStatusUi
@@ -57,7 +54,8 @@ import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.navigateToTransferFunding
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -66,7 +64,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val CLOSED_CHANNEL_ALPHA = 0.64f
-private const val CHANNEL_SELECTION_DELAY_MS = 200L
 
 object LightningConnectionsTestTags {
     const val SCREEN = "lightning_connections_screen"
@@ -78,7 +75,7 @@ object LightningConnectionsTestTags {
 
 @Composable
 fun LightningConnectionsScreen(
-    navController: NavController,
+    navigator: Navigator,
     viewModel: LightningConnectionsViewModel,
 ) {
     val context = LocalContext.current
@@ -90,30 +87,16 @@ fun LightningConnectionsScreen(
         viewModel.clearTransactionDetails()
     }
 
-    LaunchedEffect(navController.currentBackStackEntry) {
-        val selectedChannelId = navController.previousBackStackEntry?.savedStateHandle?.get<String>("selectedChannelId")
-        if (selectedChannelId == null) return@LaunchedEffect
-
-        navController.previousBackStackEntry?.savedStateHandle?.remove<String>("selectedChannelId")
-        delay(CHANNEL_SELECTION_DELAY_MS)
-        if (viewModel.findAndSelectChannel(selectedChannelId)) {
-            navController.navigate(Routes.ChannelDetail) {
-                launchSingleTop = true
-                popUpTo(Routes.ConnectionsNav) { inclusive = false }
-            }
-        }
-    }
-
     Content(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
-        onClickAddConnection = { navController.navigateToTransferFunding() },
+        onBack = { navigator.goBack() },
+        onClickAddConnection = { navigator.navigate(Routes.Funding) },
         onClickExportLogs = {
             viewModel.zipLogsForSharing { uri -> context.shareZipFile(uri) }
         },
         onClickChannel = { channelUi ->
             viewModel.setSelectedChannel(channelUi)
-            navController.navigate(Routes.ChannelDetail)
+            navigator.navigate(Routes.ChannelDetail)
         },
         onRefresh = {
             viewModel.onPullToRefresh()

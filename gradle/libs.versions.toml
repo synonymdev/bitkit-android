@@ -8,6 +8,7 @@ kotlin = "2.2.21"
 ktor = "3.3.3"
 lifecycle = "2.10.0"
 navCompose = "2.9.6"
+navigation3 = "1.0.0"
 room = "2.8.4"
 slf4j = "2.0.17"
 haze = "1.7.1"
@@ -67,6 +68,8 @@ lifecycle-viewmodel-savedstate = { module = "androidx.lifecycle:lifecycle-viewmo
 material = { module = "com.google.android.material:material", version = "1.13.0" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navCompose" }
 navigation-testing = { module = "androidx.navigation:navigation-testing", version.ref = "navCompose" }
+navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
+navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

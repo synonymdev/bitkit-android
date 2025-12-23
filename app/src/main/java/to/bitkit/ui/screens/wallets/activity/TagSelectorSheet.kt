@@ -42,7 +42,7 @@ fun TagSelectorSheet() {
         activity.updateAvailableTags()
     }
 
-    Content(
+    TagSelectorContent(
         availableTags = availableTags,
         selectedTags = selectedTags,
         onTagClick = {
@@ -53,7 +53,7 @@ fun TagSelectorSheet() {
 }
 
 @Composable
-private fun Content(
+internal fun TagSelectorContent(
     availableTags: List<String>,
     selectedTags: Set<String>,
     onTagClick: (String) -> Unit = {},
@@ -102,7 +102,7 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            TagSelectorContent(
                 availableTags = listOf("Bitcoin", "Lightning", "Sent", "Received"),
                 selectedTags = setOf("Bitcoin", "Received"),
             )

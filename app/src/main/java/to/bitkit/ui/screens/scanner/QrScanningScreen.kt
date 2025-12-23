@@ -50,7 +50,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
@@ -71,6 +70,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -80,16 +80,25 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
-const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
-const val SCAN_RESULT_KEY = "SCAN_RESULT"
-
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    navController: NavController,
-    inSheet: Boolean = false,
-    onBack: () -> Unit = { navController.popBackStack() },
+    navigator: Navigator,
     onScanSuccess: (String) -> Unit,
+) {
+    QrScanningScreenContent(
+        onBack = { navigator.goBack() },
+        onScanSuccess = onScanSuccess,
+        inSheet = false,
+    )
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+private fun QrScanningScreenContent(
+    onBack: () -> Unit,
+    onScanSuccess: (String) -> Unit,
+    inSheet: Boolean,
 ) {
     val app = appViewModel ?: return
 
@@ -99,18 +108,8 @@ fun QrScanningScreen(
     LaunchedEffect(scanResult) {
         scanResult?.let { qrCode ->
             delay(100) // wait to prevent navigation result race conditions
-
-            val prev = navController.previousBackStackEntry
-            val wasCalledForResult = prev?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
-            if (wasCalledForResult) {
-                prev.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                onBack()
-                prev.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
-            } else {
-                onBack()
-                onScanSuccess(qrCode)
-            }
-
+            onBack()
+            onScanSuccess(qrCode)
             // Reset scan result to allow new scans
             setScanResult(null)
         }

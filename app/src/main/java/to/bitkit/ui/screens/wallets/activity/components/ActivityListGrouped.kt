@@ -37,7 +37,7 @@ import java.util.Locale
 @Composable
 fun ActivityListGrouped(
     items: List<Activity>?,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     modifier: Modifier = Modifier,
     showFooter: Boolean = false,

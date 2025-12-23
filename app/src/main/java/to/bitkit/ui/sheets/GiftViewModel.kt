@@ -21,6 +21,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.GiftClaimResult
+import to.bitkit.ui.nav.Routes
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
@@ -32,7 +33,7 @@ class GiftViewModel @Inject constructor(
     private val activityRepo: ActivityRepo,
 ) : ViewModel() {
 
-    private val _navigationEvent = MutableSharedFlow<GiftRoute>(extraBufferCapacity = 1)
+    private val _navigationEvent = MutableSharedFlow<Routes>(extraBufferCapacity = 1)
     val navigationEvent = _navigationEvent.asSharedFlow()
 
     private val _successEvent = MutableSharedFlow<NewTransactionSheetDetails>(extraBufferCapacity = 1)
@@ -46,11 +47,6 @@ class GiftViewModel @Inject constructor(
     private var isClaiming: Boolean = false
 
     fun initialize(code: String, amount: ULong) {
-        if (!isClaiming) {
-            viewModelScope.launch {
-                _navigationEvent.emit(GiftRoute.Loading)
-            }
-        }
         this.code = code
         this.amount = amount
         viewModelScope.launch(bgDispatcher) {
@@ -71,7 +67,7 @@ class GiftViewModel @Inject constructor(
                 onSuccess = { result ->
                     when (result) {
                         is GiftClaimResult.SuccessWithLiquidity -> {
-                            _navigationEvent.emit(GiftRoute.Success)
+                            _navigationEvent.emit(Routes.GiftSuccess)
                         }
                         is GiftClaimResult.SuccessWithoutLiquidity -> {
                             insertGiftActivity(result)
@@ -83,7 +79,7 @@ class GiftViewModel @Inject constructor(
                                     sats = result.sats,
                                 )
                             )
-                            _navigationEvent.emit(GiftRoute.Success)
+                            _navigationEvent.emit(Routes.GiftSuccess)
                         }
                     }
                 },
@@ -116,9 +112,9 @@ class GiftViewModel @Inject constructor(
         Logger.error("Gift claim failed: $error", error, context = TAG)
 
         val route = when {
-            errorContains(error, "GIFT_CODE_ALREADY_USED") -> GiftRoute.Used
-            errorContains(error, "GIFT_CODE_USED_UP") -> GiftRoute.UsedUp
-            else -> GiftRoute.Error
+            errorContains(error, "GIFT_CODE_ALREADY_USED") -> Routes.GiftUsed
+            errorContains(error, "GIFT_CODE_USED_UP") -> Routes.GiftUsedUp
+            else -> Routes.GiftError
         }
 
         _navigationEvent.emit(route)

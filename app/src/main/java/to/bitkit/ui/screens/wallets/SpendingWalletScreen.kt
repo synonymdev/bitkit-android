@@ -50,7 +50,7 @@ fun SpendingWalletScreen(
     uiState: MainUiState,
     lightningActivities: List<Activity>,
     onAllActivityButtonClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     onTransferToSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
