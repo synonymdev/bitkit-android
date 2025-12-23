@@ -127,7 +127,7 @@ fun OnboardingSlidesScreen(
                 .offset { IntOffset(0, yOffset.roundToPx()) }
                 .alpha(alpha)
         ) {
-            repeat(5) { index ->
+            repeat(LAST_PAGE_INDEX + 1) { index ->
                 val size by animateDpAsState(
                     targetValue = if (index == pagerState.currentPage) 10.dp else 7.dp,
                     animationSpec = tween(durationMillis = 300),
