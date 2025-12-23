@@ -33,7 +33,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.ui.nav.MS_TRANSITION_SCREEN
 import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendUiState
 
@@ -46,7 +46,7 @@ fun SendAddressScreen(
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        delay(TRANSITION_SCREEN_MS)
+        delay(MS_TRANSITION_SCREEN)
         focusRequester.requestFocus()
     }
     Column(

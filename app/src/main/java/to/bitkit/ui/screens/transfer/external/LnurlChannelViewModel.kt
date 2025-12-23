@@ -14,7 +14,6 @@ import to.bitkit.R
 import to.bitkit.ext.parse
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.ui.Routes
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -27,16 +26,20 @@ class LnurlChannelViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LnurlChannelUiState())
     val uiState = _uiState.asStateFlow()
 
-    private lateinit var params: Routes.LnurlChannel
+    private lateinit var uri: String
+    private lateinit var callback: String
+    private lateinit var k1: String
 
-    fun init(route: Routes.LnurlChannel) {
-        this.params = route
+    fun init(uri: String, callback: String, k1: String) {
+        this.uri = uri
+        this.callback = callback
+        this.k1 = k1
         fetchChannelInfo()
     }
 
     private fun fetchChannelInfo() {
         viewModelScope.launch {
-            lightningRepo.fetchLnurlChannelInfo(params.uri)
+            lightningRepo.fetchLnurlChannelInfo(uri)
                 .onSuccess { channelInfo ->
                     val peer = runCatching { PeerDetails.parse(channelInfo.uri) }.getOrElse {
                         errorToast(it)
@@ -66,7 +69,7 @@ class LnurlChannelViewModel @Inject constructor(
             // Connect to peer if not connected
             lightningRepo.connectPeer(peer)
 
-            lightningRepo.requestLnurlChannel(callback = params.callback, k1 = params.k1, nodeId = nodeId)
+            lightningRepo.requestLnurlChannel(callback = callback, k1 = k1, nodeId = nodeId)
                 .onSuccess {
                     ToastEventBus.send(
                         type = Toast.ToastType.SUCCESS,

@@ -26,7 +26,6 @@ import to.bitkit.R
 import to.bitkit.env.Peers
 import to.bitkit.ext.host
 import to.bitkit.ext.port
-import to.bitkit.ui.Routes
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
@@ -45,16 +44,39 @@ import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun LnurlChannelScreen(
-    route: Routes.LnurlChannel,
+    uri: String,
+    callback: String,
+    k1: String,
     onConnected: () -> Unit,
     onBack: () -> Unit,
     onClose: () -> Unit,
     viewModel: LnurlChannelViewModel = hiltViewModel(),
 ) {
+    LnurlChannelScreenContent(
+        uri = uri,
+        callback = callback,
+        k1 = k1,
+        onConnected = onConnected,
+        onBack = onBack,
+        onClose = onClose,
+        viewModel = viewModel,
+    )
+}
+
+@Composable
+private fun LnurlChannelScreenContent(
+    uri: String,
+    callback: String,
+    k1: String,
+    onConnected: () -> Unit,
+    onBack: () -> Unit,
+    onClose: () -> Unit,
+    viewModel: LnurlChannelViewModel,
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        viewModel.init(route)
+        viewModel.init(uri, callback, k1)
     }
 
     LaunchedEffect(uiState.isConnected) {

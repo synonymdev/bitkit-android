@@ -29,6 +29,7 @@ import to.bitkit.repositories.RecoveryModeException
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.onboarding.LOADING_MS
+import to.bitkit.ui.screens.wallets.receive.CjitEntryDetails
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.isTxSyncTimeout
@@ -292,6 +293,23 @@ class WalletViewModel @Inject constructor(
             settingsStore.update { it.copy(hideBalance = true) }
         }
     }
+
+    // region Receive Flow State
+    private val _pendingCjitEntry = MutableStateFlow<CjitEntryDetails?>(null)
+    val pendingCjitEntry = _pendingCjitEntry.asStateFlow()
+
+    private val _pendingCjitInvoice = MutableStateFlow<String?>(null)
+    val pendingCjitInvoice = _pendingCjitInvoice.asStateFlow()
+
+    fun setPendingCjitEntry(entry: CjitEntryDetails?) = _pendingCjitEntry.update { entry }
+
+    fun setPendingCjitInvoice(invoice: String?) = _pendingCjitInvoice.update { invoice }
+
+    fun resetReceiveFlowState() {
+        _pendingCjitEntry.update { null }
+        _pendingCjitInvoice.update { null }
+    }
+    // endregion
 }
 
 // TODO rename to walletUiState

@@ -24,18 +24,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import to.bitkit.R
 import to.bitkit.models.Toast
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.navigateToAboutSettings
-import to.bitkit.ui.navigateToAdvancedSettings
-import to.bitkit.ui.navigateToBackupSettings
-import to.bitkit.ui.navigateToDevSettings
-import to.bitkit.ui.navigateToGeneralSettings
-import to.bitkit.ui.navigateToSecuritySettings
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -47,7 +41,7 @@ private const val DEV_MODE_TAP_THRESHOLD = 5
 
 @Composable
 fun SettingsScreen(
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
@@ -58,14 +52,14 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         isDevModeEnabled = isDevModeEnabled,
-        onGeneralClick = { navController.navigateToGeneralSettings() },
-        onSecurityClick = { navController.navigateToSecuritySettings() },
-        onBackupClick = { navController.navigateToBackupSettings() },
-        onAdvancedClick = { navController.navigateToAdvancedSettings() },
-        onSupportClick = { navController.navigate(Routes.Support) },
-        onAboutClick = { navController.navigateToAboutSettings() },
-        onDevClick = { navController.navigateToDevSettings() },
-        onBackClick = { navController.popBackStack() },
+        onGeneralClick = { navigator.navigate(Routes.GeneralSettings) },
+        onSecurityClick = { navigator.navigate(Routes.SecuritySettings) },
+        onBackupClick = { navigator.navigate(Routes.BackupSettings) },
+        onAdvancedClick = { navigator.navigate(Routes.AdvancedSettings) },
+        onSupportClick = { navigator.navigate(Routes.Support) },
+        onAboutClick = { navigator.navigate(Routes.AboutSettings) },
+        onDevClick = { navigator.navigate(Routes.DevSettings) },
+        onBackClick = { navigator.goBack() },
         onCogTap = {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
             enableDevModeTapCount = enableDevModeTapCount + 1

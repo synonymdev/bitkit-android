@@ -21,10 +21,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
-import kotlinx.coroutines.flow.filterNotNull
 import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.appViewModel
@@ -35,32 +32,27 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.navigateToScanner
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.ScanNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.scanner.SCAN_RESULT_KEY
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun RgsServerScreen(
-    savedStateHandle: SavedStateHandle,
-    navController: NavController,
+    navigator: Navigator,
+    scanResult: String? = null,
     viewModel: RgsServerViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val app = appViewModel ?: return
     val context = LocalContext.current
 
-    // Handle result from Scanner
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(SCAN_RESULT_KEY, null)
-            .filterNotNull()
-            .collect { scannedData ->
-                viewModel.onScan(scannedData)
-                savedStateHandle.remove<String>(SCAN_RESULT_KEY)
-            }
+    // Handle scan result passed via navigation
+    LaunchedEffect(scanResult) {
+        scanResult?.let { viewModel.onScan(it) }
     }
 
     // Monitor connection results
@@ -87,8 +79,8 @@ fun RgsServerScreen(
 
     Content(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
-        onScan = { navController.navigateToScanner(isCalledForResult = true) },
+        onBack = { navigator.goBack() },
+        onScan = { navigator.navigate(Routes.QrScanner) },
         onChangeUrl = viewModel::setRgsUrl,
         onClickReset = viewModel::resetToDefault,
         onClickConnect = viewModel::onClickConnect,

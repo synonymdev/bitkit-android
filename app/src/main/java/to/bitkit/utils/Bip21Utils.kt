@@ -1,6 +1,7 @@
 package to.bitkit.utils
 
 import to.bitkit.models.SATS_IN_BTC
+import to.bitkit.ui.nav.UriScheme
 
 object Bip21Utils {
 
@@ -11,7 +12,7 @@ object Bip21Utils {
         message: String? = "Bitkit",
         lightningInvoice: String? = null
     ): String {
-        val builder = StringBuilder("bitcoin:$bitcoinAddress")
+        val builder = StringBuilder("${UriScheme.BITCOIN.withColon}$bitcoinAddress")
 
         val queryParams = mutableListOf<String>()
 

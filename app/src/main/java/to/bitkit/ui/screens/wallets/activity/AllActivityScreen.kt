@@ -20,8 +20,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
-import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
@@ -38,9 +36,11 @@ import to.bitkit.viewmodels.ActivityListViewModel
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
     onBack: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
+    onTagClick: () -> Unit,
+    onDateRangeClick: () -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
 ) {
-    val app = appViewModel ?: return
     val filteredActivities by viewModel.filteredActivities.collectAsStateWithLifecycle()
 
     val searchText by viewModel.searchText.collectAsStateWithLifecycle()
@@ -65,10 +65,10 @@ fun AllActivityScreen(
         onRemoveTag = { viewModel.toggleTag(it) },
         onTabChange = { viewModel.setTab(tabs[it]) },
         onBackClick = onBack,
-        onTagClick = { app.showSheet(Sheet.ActivityTagSelector) },
-        onDateRangeClick = { app.showSheet(Sheet.ActivityDateRangeSelector) },
+        onTagClick = onTagClick,
+        onDateRangeClick = onDateRangeClick,
         onActivityItemClick = onActivityItemClick,
-        onEmptyActivityRowClick = { app.showSheet(Sheet.Receive) },
+        onEmptyActivityRowClick = onEmptyActivityRowClick,
     )
 }
 
@@ -88,7 +88,7 @@ private fun AllActivityScreenContent(
     onBackClick: () -> Unit,
     onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
     Column(

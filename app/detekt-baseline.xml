@@ -7,14 +7,13 @@
     <ID>ComplexCondition:MapWebViewClient.kt$MapWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
     <ID>ComplexCondition:ShopWebViewClient.kt$ShopWebViewClient$it.errorCode == ERROR_HOST_LOOKUP || it.errorCode == ERROR_CONNECT || it.errorCode == ERROR_TIMEOUT || it.errorCode == ERROR_FILE_NOT_FOUND</ID>
     <ID>CyclomaticComplexMethod:ActivityListGrouped.kt$private fun groupActivityItems(activityItems: List&lt;Activity&gt;): List&lt;Any&gt;</ID>
-    <ID>CyclomaticComplexMethod:ActivityRow.kt$@Composable fun ActivityRow( item: Activity, onClick: (String) -&gt; Unit, testTag: String, )</ID>
+    <ID>CyclomaticComplexMethod:ActivityRow.kt$@Composable fun ActivityRow( item: Activity, onClick: (Activity) -&gt; Unit, testTag: String, )</ID>
     <ID>CyclomaticComplexMethod:AppViewModel.kt$AppViewModel$private fun observeSendEvents()</ID>
     <ID>CyclomaticComplexMethod:AppViewModel.kt$AppViewModel$private suspend fun handleSanityChecks(amountSats: ULong)</ID>
-    <ID>CyclomaticComplexMethod:BlocktankRegtestScreen.kt$@Composable fun BlocktankRegtestScreen( navController: NavController, viewModel: BlocktankRegtestViewModel = hiltViewModel(), )</ID>
+    <ID>CyclomaticComplexMethod:BlocktankRegtestScreen.kt$@Composable private fun BlocktankRegtestContent( onBack: () -&gt; Unit, viewModel: BlocktankRegtestViewModel, )</ID>
     <ID>CyclomaticComplexMethod:ConfirmMnemonicScreen.kt$@Composable fun ConfirmMnemonicScreen( uiState: BackupContract.UiState, onContinue: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:HealthRepo.kt$HealthRepo$private fun collectState()</ID>
-    <ID>CyclomaticComplexMethod:HomeScreen.kt$@Composable fun HomeScreen( mainUiState: MainUiState, drawerState: DrawerState, rootNavController: NavController, walletNavController: NavHostController, settingsViewModel: SettingsViewModel, walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, homeViewModel: HomeViewModel = hiltViewModel(), )</ID>
-    <ID>CyclomaticComplexMethod:SendSheet.kt$@Composable fun SendSheet( appViewModel: AppViewModel, walletViewModel: WalletViewModel, startDestination: SendRoute = SendRoute.Recipient, )</ID>
+    <ID>CyclomaticComplexMethod:HomeScreen.kt$@Composable fun HomeScreen( mainUiState: MainUiState, drawerState: DrawerState, navigator: Navigator, settingsViewModel: SettingsViewModel, walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, homeViewModel: HomeViewModel = hiltViewModel(), )</ID>
     <ID>CyclomaticComplexMethod:SettingsButtonRow.kt$@Composable fun SettingsButtonRow( title: String, modifier: Modifier = Modifier, subtitle: String? = null, value: SettingsButtonValue = SettingsButtonValue.None, description: String? = null, iconRes: Int? = null, iconTint: Color = Color.Unspecified, iconSize: Dp = 32.dp, maxLinesSubtitle: Int = Int.MAX_VALUE, enabled: Boolean = true, loading: Boolean = false, onClick: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:Slider.kt$@Composable fun StepSlider( value: Int, steps: List&lt;Int&gt;, onValueChange: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:ActivityRow.kt$val (_, _, _, _, _, displayUnit, primaryDisplay) = LocalCurrencies.current</ID>
@@ -34,7 +33,6 @@
     <ID>EnumNaming:BlocktankNotificationType.kt$BlocktankNotificationType$wakeToTimeout</ID>
     <ID>ForbiddenComment:ActivityDetailScreen.kt$/* TODO: Implement assign functionality */</ID>
     <ID>ForbiddenComment:BoostTransactionViewModel.kt$BoostTransactionUiState$// TODO: Implement dynamic time estimation</ID>
-    <ID>ForbiddenComment:ContentView.kt$// TODO: display as sheet</ID>
     <ID>ForbiddenComment:ExternalNodeViewModel.kt$ExternalNodeViewModel$// TODO: pass customFeeRate to ldk-node when supported</ID>
     <ID>ForbiddenComment:LightningConnectionsViewModel.kt$LightningConnectionsViewModel$// TODO: sort channels to get consistent index; node.listChannels returns a list in random order</ID>
     <ID>ForbiddenComment:LightningService.kt$LightningService$// TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values</ID>
@@ -43,12 +41,11 @@
     <ID>FunctionOnlyReturningConstant:ShopWebViewInterface.kt$ShopWebViewInterface$@JavascriptInterface fun isReady(): Boolean</ID>
     <ID>ImplicitDefaultLocale:BlocksService.kt$BlocksService$String.format("%.2f", blockInfo.difficulty / 1_000_000_000_000.0)</ID>
     <ID>ImplicitDefaultLocale:PriceService.kt$PriceService$String.format("%.2f", price)</ID>
+    <ID>ImportOrdering:TransferEntries.kt$import androidx.compose.runtime.Composable import androidx.compose.runtime.getValue import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel import androidx.lifecycle.compose.collectAsStateWithLifecycle import androidx.navigation3.runtime.EntryProviderScope import androidx.navigation3.runtime.NavKey import to.bitkit.models.Toast import to.bitkit.ui.nav.Navigator import to.bitkit.ui.nav.Routes import to.bitkit.ui.screens.transfer.FundingAdvancedScreen import to.bitkit.ui.screens.transfer.FundingScreen import to.bitkit.ui.screens.transfer.LiquidityScreen import to.bitkit.ui.screens.transfer.SavingsAdvancedScreen import to.bitkit.ui.screens.transfer.SavingsAvailabilityScreen import to.bitkit.ui.screens.transfer.SavingsConfirmScreen import to.bitkit.ui.screens.transfer.SavingsIntroScreen import to.bitkit.ui.screens.transfer.SavingsProgressScreen import to.bitkit.ui.screens.transfer.SettingUpScreen import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen import to.bitkit.ui.screens.transfer.SpendingAmountScreen import to.bitkit.ui.screens.transfer.SpendingConfirmScreen import to.bitkit.ui.screens.transfer.SpendingIntroScreen import to.bitkit.ui.screens.transfer.TransferIntroScreen import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen import to.bitkit.ui.screens.transfer.external.ExternalConfirmScreen import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen import to.bitkit.ui.screens.transfer.external.ExternalFeeCustomScreen import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen import to.bitkit.ui.screens.scanner.QrScanningScreen import to.bitkit.viewmodels.AppViewModel import to.bitkit.viewmodels.SettingsViewModel import to.bitkit.viewmodels.TransferViewModel import to.bitkit.viewmodels.WalletViewModel</ID>
     <ID>InstanceOfCheckForException:LightningService.kt$LightningService$e is NodeException</ID>
     <ID>LargeClass:AppViewModel.kt$AppViewModel : ViewModel</ID>
     <ID>LargeClass:LightningRepo.kt$LightningRepo</ID>
     <ID>LongMethod:AppViewModel.kt$AppViewModel$private suspend fun proceedWithPayment()</ID>
-    <ID>LongMethod:ContentView.kt$@Suppress("LongParameterList") private fun NavGraphBuilder.home( walletViewModel: WalletViewModel, appViewModel: AppViewModel, activityListViewModel: ActivityListViewModel, settingsViewModel: SettingsViewModel, navController: NavHostController, drawerState: DrawerState, )</ID>
-    <ID>LongMethod:ContentView.kt$private fun NavGraphBuilder.widgets( navController: NavHostController, settingsViewModel: SettingsViewModel, currencyViewModel: CurrencyViewModel, )</ID>
     <ID>LongMethod:CoreService.kt$ActivityService$suspend fun generateRandomTestData(count: Int = 100)</ID>
     <ID>LongMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>LongParameterList:BiometricPrompt.kt$( activity: Context, title: String, cancelButtonText: String, onAuthSucceed: () -&gt; Unit, onAuthFailed: (() -&gt; Unit), onAuthError: ((errorCode: Int, errString: CharSequence) -&gt; Unit), )</ID>
@@ -112,6 +109,7 @@
     <ID>MaxLineLength:HeadlineCard.kt$headline = "How Bitcoin changed El Salvador in more ways a big headline to test the text overflooooooow"</ID>
     <ID>MaxLineLength:LightningBalance.kt$is LightningBalance.ClaimableAwaitingConfirmations -&gt; "Claimable Awaiting Confirmations (Height: $confirmationHeight)"</ID>
     <ID>MaxLineLength:LightningConnectionsScreen.kt$if (showClosed) R.string.lightning__conn_closed_hide else R.string.lightning__conn_closed_show</ID>
+    <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"Cannot execute $operationName: Node is ${_lightningState.value.nodeLifecycleState} and not starting"</ID>
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"accelerateByCpfp error originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"</ID>
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"accelerateByCpfp success, newDestinationTxId: $newDestinationTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte destinationAddress: $destinationAddress"</ID>
     <ID>MaxLineLength:LightningRepo.kt$LightningRepo$"bumpFeeByRbf success, replacementTxId: $replacementTxId originalTxId: $originalTxId, satsPerVByte: $satsPerVByte"</ID>
@@ -190,7 +188,6 @@
     <ID>TooManyFunctions:BackupNavSheetViewModel.kt$BackupNavSheetViewModel : ViewModel</ID>
     <ID>TooManyFunctions:BlocktankRepo.kt$BlocktankRepo</ID>
     <ID>TooManyFunctions:CacheStore.kt$CacheStore</ID>
-    <ID>TooManyFunctions:ContentView.kt$to.bitkit.ui.ContentView.kt</ID>
     <ID>TooManyFunctions:CoreService.kt$ActivityService</ID>
     <ID>TooManyFunctions:CoreService.kt$BlocktankService</ID>
     <ID>TooManyFunctions:DevSettingsViewModel.kt$DevSettingsViewModel : ViewModel</ID>

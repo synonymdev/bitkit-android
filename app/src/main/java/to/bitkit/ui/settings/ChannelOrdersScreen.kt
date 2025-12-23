@@ -42,7 +42,6 @@ import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.coroutines.launch
 import to.bitkit.models.formatToModernDisplay
-import to.bitkit.ui.Routes
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -135,12 +134,12 @@ private fun Content(
 
 @Composable
 fun OrderDetailScreen(
-    orderItem: Routes.OrderDetail,
+    orderId: String,
     onBackClick: () -> Unit = {},
 ) {
     val blocktank = blocktankViewModel ?: return
     val orders by blocktank.orders.collectAsStateWithLifecycle()
-    val order = orders.find { it.id == orderItem.id } ?: return
+    val order = orders.find { it.id == orderId } ?: return
     val coroutineScope = rememberCoroutineScope()
 
     OrderDetailContent(
@@ -239,12 +238,12 @@ private fun OrderDetailContent(
 
 @Composable
 fun CJitDetailScreen(
-    cjitItem: Routes.CjitDetail,
+    entryId: String,
     onBackClick: () -> Unit = {},
 ) {
     val blocktank = blocktankViewModel ?: return
     val cJitEntries by blocktank.cJitEntries.collectAsStateWithLifecycle()
-    val entry = cJitEntries.find { it.id == cjitItem.id } ?: return
+    val entry = cJitEntries.find { it.id == entryId } ?: return
     CJitDetailContent(
         entry = entry,
         onBack = onBackClick,

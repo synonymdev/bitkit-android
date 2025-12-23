@@ -119,7 +119,7 @@ fun DateRangeSelectorSheet() {
         app.hideSheet()
     }
 
-    Content(
+    DateRangeSelectorContent(
         initialStartDate = startDate,
         initialEndDate = endDate,
         onClearClick = {
@@ -137,7 +137,7 @@ fun DateRangeSelectorSheet() {
 
 @Suppress("MaxLineLength", "CyclomaticComplexMethod")
 @Composable
-private fun Content(
+internal fun DateRangeSelectorContent(
     initialStartDate: Long? = null,
     initialEndDate: Long? = null,
     onClearClick: () -> Unit = {},
@@ -638,7 +638,7 @@ private fun LocalDate.toFormattedString(): String {
 private fun PreviewEmpty() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content()
+            DateRangeSelectorContent()
         }
     }
 }
@@ -648,7 +648,7 @@ private fun PreviewEmpty() {
 private fun PreviewWithSelection() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            DateRangeSelectorContent(
                 initialStartDate = now()
                     .minus(CalendarConstants.DAYS_IN_WEEK.days)
                     .toEpochMilliseconds(),

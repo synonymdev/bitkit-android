@@ -46,12 +46,12 @@ import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
-import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.nav.Navigator
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -67,15 +67,28 @@ import to.bitkit.viewmodels.ActivityDetailViewModel
 
 @Composable
 fun ActivityExploreScreen(
+    navigator: Navigator,
+    activityId: String,
     detailViewModel: ActivityDetailViewModel = hiltViewModel(),
-    route: Routes.ActivityExplore,
+) {
+    ActivityExploreScreenContent(
+        activityId = activityId,
+        detailViewModel = detailViewModel,
+        onBackClick = { navigator.goBack() },
+    )
+}
+
+@Composable
+private fun ActivityExploreScreenContent(
+    activityId: String,
+    detailViewModel: ActivityDetailViewModel,
     onBackClick: () -> Unit,
 ) {
     val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
 
     // Load activity on composition
-    LaunchedEffect(route.id) {
-        detailViewModel.loadActivity(route.id)
+    LaunchedEffect(activityId) {
+        detailViewModel.loadActivity(activityId)
     }
 
     // Clear state on disposal

@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -18,18 +19,15 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.ui.NavDisplay
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
@@ -37,17 +35,14 @@ import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.InactivityTracker
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
-import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
-import to.bitkit.ui.onboarding.IntroScreen
-import to.bitkit.ui.onboarding.OnboardingSlidesScreen
-import to.bitkit.ui.onboarding.RestoreWalletScreen
-import to.bitkit.ui.onboarding.TermsOfUseScreen
-import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
+import to.bitkit.ui.nav.Transitions
+import to.bitkit.ui.nav.entries.onboardingEntries
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -111,8 +106,7 @@ class MainActivity : FragmentActivity() {
                 }
 
                 if (!walletViewModel.walletExists && !isRecoveryMode) {
-                    OnboardingNav(
-                        startupNavController = rememberNavController(),
+                    OnboardingContent(
                         scope = scope,
                         appViewModel = appViewModel,
                         walletViewModel = walletViewModel,
@@ -218,119 +212,43 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun OnboardingNav(
-    startupNavController: NavHostController,
+private fun OnboardingContent(
     scope: CoroutineScope,
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
 ) {
-    NavHost(
-        navController = startupNavController,
-        startDestination = StartupRoutes.Terms,
-    ) {
-        composable<StartupRoutes.Terms> {
-            TermsOfUseScreen(
-                onNavigateToIntro = {
-                    startupNavController.navigate(StartupRoutes.Intro)
-                }
-            )
-        }
-        composableWithDefaultTransitions<StartupRoutes.Intro> {
-            IntroScreen(
-                onStartClick = {
-                    startupNavController.navigate(StartupRoutes.Slides())
-                },
-                onSkipClick = {
-                    startupNavController.navigate(StartupRoutes.Slides(StartupRoutes.LAST_SLIDE_INDEX))
-                },
-            )
-        }
-        composableWithDefaultTransitions<StartupRoutes.Slides> { navBackEntry ->
-            val route = navBackEntry.toRoute<StartupRoutes.Slides>()
-            val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
-            OnboardingSlidesScreen(
-                currentTab = route.tab,
+    val backStack = rememberNavBackStack(Routes.Terms)
+    val navigator = remember(backStack) { Navigator(backStack) }
+    val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
+
+    NavDisplay(
+        backStack = backStack,
+        onBack = { navigator.goBack() },
+        transitionSpec = Transitions.screenDefault,
+        popTransitionSpec = Transitions.screenDefaultPop,
+        predictivePopTransitionSpec = Transitions.screenDefaultPredictivePop,
+        entryProvider = entryProvider {
+            onboardingEntries(
+                navigator = navigator,
                 isGeoBlocked = isGeoBlocked,
-                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Advanced) },
-                onCreateClick = {
+                onCreateWallet = { passphrase ->
                     scope.launch {
                         runCatching {
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.setInitNodeLifecycleState()
-                            walletViewModel.createWallet(bip39Passphrase = null)
-                        }.onFailure {
-                            appViewModel.toast(it)
-                        }
+                            walletViewModel.createWallet(bip39Passphrase = passphrase)
+                        }.onFailure { appViewModel.toast(it) }
                     }
                 },
-                onRestoreClick = {
-                    startupNavController.navigate(
-                        StartupRoutes.WarningMultipleDevices
-                    )
-                },
-            )
-        }
-        composableWithDefaultTransitions<StartupRoutes.WarningMultipleDevices> {
-            WarningMultipleDevicesScreen(
-                onBackClick = {
-                    startupNavController.popBackStack()
-                },
-                onConfirmClick = {
-                    startupNavController.navigate(StartupRoutes.Restore)
-                }
-            )
-        }
-        composableWithDefaultTransitions<StartupRoutes.Restore> {
-            RestoreWalletScreen(
-                onBackClick = { startupNavController.popBackStack() },
-                onRestoreClick = { mnemonic, passphrase ->
+                onRestoreWallet = { mnemonic, passphrase ->
                     scope.launch {
                         runCatching {
                             appViewModel.resetIsAuthenticatedState()
                             walletViewModel.restoreWallet(mnemonic, passphrase)
-                        }.onFailure {
-                            appViewModel.toast(it)
-                        }
-                    }
-                }
-            )
-        }
-        composableWithDefaultTransitions<StartupRoutes.Advanced> {
-            CreateWalletWithPassphraseScreen(
-                onBackClick = { startupNavController.popBackStack() },
-                onCreateClick = { passphrase ->
-                    scope.launch {
-                        runCatching {
-                            appViewModel.resetIsAuthenticatedState()
-                            walletViewModel.createWallet(bip39Passphrase = passphrase)
-                        }.onFailure {
-                            appViewModel.toast(it)
-                        }
+                        }.onFailure { appViewModel.toast(it) }
                     }
                 },
             )
         }
-    }
-}
-
-private object StartupRoutes {
-    const val LAST_SLIDE_INDEX = 4
-
-    @Serializable
-    data object Terms
-
-    @Serializable
-    data object Intro
-
-    @Serializable
-    data class Slides(val tab: Int = 0)
-
-    @Serializable
-    data object Restore
-
-    @Serializable
-    data object Advanced
-
-    @Serializable
-    data object WarningMultipleDevices
+    )
 }

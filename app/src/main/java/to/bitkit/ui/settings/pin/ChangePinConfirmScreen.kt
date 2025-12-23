@@ -19,7 +19,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -30,7 +29,8 @@ import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
 import to.bitkit.ui.components.PinDots
-import to.bitkit.ui.navigateToChangePinResult
+import to.bitkit.ui.nav.Navigator
+import to.bitkit.ui.nav.Routes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -40,7 +40,7 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun ChangePinConfirmScreen(
     newPin: String,
-    navController: NavController,
+    navigator: Navigator,
 ) {
     val app = appViewModel ?: return
     var pin by remember { mutableStateOf("") }
@@ -50,7 +50,7 @@ fun ChangePinConfirmScreen(
         if (pin.length == Env.PIN_LENGTH) {
             if (pin == newPin) {
                 app.editPin(newPin)
-                navController.navigateToChangePinResult()
+                navigator.navigate(Routes.ChangePinResult)
             } else {
                 showError = true
                 delay(500)
@@ -71,7 +71,7 @@ fun ChangePinConfirmScreen(
                 pin += key
             }
         },
-        onBackClick = { navController.popBackStack() },
+        onBackClick = { navigator.goBack() },
     )
 }
 
