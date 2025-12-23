@@ -83,6 +83,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.safe
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toTxType
 import to.bitkit.repositories.ActivityRepo
@@ -1479,11 +1480,7 @@ class AppViewModel @Inject constructor(
         }
 
         val buffer = 2uL
-        val amountToEstimate = if (maxSendLightning > buffer) {
-            maxSendLightning - buffer
-        } else {
-            maxSendLightning
-        }
+        val amountToEstimate = maxSendLightning.safe() - buffer.safe()
 
         val feeResult = lightningRepo.estimateRoutingFeesForAmount(
             bolt11 = bolt11,
