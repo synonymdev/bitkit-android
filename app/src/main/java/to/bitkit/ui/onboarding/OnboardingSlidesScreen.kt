@@ -49,7 +49,9 @@ import to.bitkit.ui.shared.util.screen
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+
 private const val LAST_PAGE_INDEX = 3
+
 @Composable
 fun OnboardingSlidesScreen(
     currentTab: Int = 0,
